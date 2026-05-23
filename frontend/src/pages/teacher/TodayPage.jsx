@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, BookOpen, Activity, ArrowRight, Calendar, AlertCircle, Upload, FileQuestion, MessageSquare, UserPlus } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
-import NotificationBell from '../../components/shared/NotificationBell';
 import { Avatar, SectionHeader, Skeleton } from '../../components/ui';
 import { apiClient, attendanceApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
@@ -99,7 +98,6 @@ export default function TodayPage() {
       <TopBar
         title="Today"
         subtitle={now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}
-        action={<NotificationBell />}
       />
       <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
         <h2 className="text-2xl font-semibold tracking-tight mb-1">{greeting}, {displayName}</h2>

@@ -4,6 +4,113 @@ Format: newest first. Each entry includes what changed, which files, and why.
 
 ---
 
+## May 2026 — Standard Termination: Full Storage Lifecycle Fix
+
+### Bugfix: Orphaned Storage files after standard termination
+
+**File:** `backend/main.py` — `DELETE /api/standards/{standard_id}`
+
+**Problem (before fix):**
+When a standard was terminated, DB rows and auth accounts were deleted but Supabase Storage files were never touched. Over time this caused:
+- Avatar files (`avatars/` bucket) left behind with no owner
+- Fallback video files (`videos/` bucket) left behind with no owner
+- `invite_requests` rows orphaned (no FK cascade)
+- `notifications` rows orphaned for deleted students
+- Storage bucket kept growing indefinitely
+- Higher storage costs, messy buckets, impossible to maintain
+
+**Fix — termination now performs full lifecycle cleanup in order:**
+1. Collect student avatar URLs and invite link codes upfront (before any CASCADE removes them)
+2. Delete Cloudflare Stream videos (existing)
+3. **Delete Supabase Storage video files** — detects fallback-uploaded videos by `startsWith('https://')` vs short Cloudflare UIDs, extracts path, calls `storage.from_("videos").remove()`
+4. Delete `test_attempts`, `broadcast_reads` (existing)
+5. **Delete `notifications`** for all students in this standard
+6. **Delete `invite_requests`** matched by invite link codes
+7. **Delete Supabase Storage avatar files** — extracts path from avatar URL, calls `storage.from_("avatars").remove()`
+8. Delete Supabase Auth accounts, then students DB rows (existing)
+9. Delete standard → PostgreSQL CASCADE cleans up subject_classes, videos, tests, attendance, broadcasts, invite_links, video_progress, student_sessions
+
+All Storage operations wrapped in `asyncio.to_thread` (sync supabase-py client, non-blocking).
+
+---
+
+## May 2026 — Student Profile Photos
+
+### Feature: Student profile photo — full app-wide display
+
+**Files changed:**
+- `backend/main.py` — `verify_token()`, `GET /leaderboard`
+- `frontend/src/components/ui.jsx` — `Avatar` component
+- `frontend/src/pages/student/StudentLeaderboardPage.jsx`
+- `frontend/src/pages/teacher/StudentDetailPage.jsx`
+
+**Backend fixes:**
+- `verify_token()`: Added `avatar_url` to the student select query and to the returned result dict. `/auth/me` now includes `avatar_url` — previously the profile page lost the photo on every page reload because the field was never returned.
+- `GET /leaderboard`: Added `avatar_url` to both select branches (by standard and global top-50).
+
+**Frontend — `Avatar` component (`ui.jsx`):**
+- Added `src` prop with `imgError` fallback state. When `src` is provided and loads successfully, renders `<img>` with `rounded-full object-cover`. On load error (or no src), falls back to the existing colored initials circle. Fully backward-compatible — all existing `<Avatar name=...>` usages unchanged.
+
+**Frontend — pages updated to pass `src`:**
+- `StudentLeaderboardPage`: All 4 Avatar instances (podium 1st/2nd/3rd + full list row) now pass `src={...avatar_url}`
+- `StudentDetailPage` (teacher view): Student header Avatar now passes `src={student.avatar_url}` — data already came from `GET /students/{id}` which returns `*`
+
+**No database changes** — `students.avatar_url TEXT` already existed in schema.sql. Upload endpoint (`POST /api/students/me/avatar`) and profile page upload UI were already complete.
+
+---
+
+## May 2026 — Branding, Video Storage Fallback, Broadcast Fixes
+
+### Feature: LMS Branding (custom name + logo)
+- **Files:** `frontend/src/store.js`, `frontend/src/pages/teacher/SettingsPage.jsx`, `frontend/src/pages/LoginPage.jsx`, `frontend/src/components/shared/Sidebar.jsx`, `frontend/index.html`
+- Added `lmsName` (text) and `lmsLogo` (base64 data URL) to `useSettingsStore` (persisted to `tutoria-settings` localStorage key)
+- SettingsPage: new Branding section — logo upload (FileReader → base64 data URL) + name input with Save button
+- LoginPage and Sidebar dynamically read `lmsName`/`lmsLogo` and display them; fall back to "Tutoria" / diamond icon if unset
+- `document.title` in LoginPage updates from `lmsName` on mount
+- `index.html` `<title>` changed from "Tutoria" to "LMS" (JS overrides at runtime from the store)
+- **No PostgreSQL change** — stored entirely in localStorage via Zustand persist
+
+### Feature: Video Supabase Storage fallback
+- **Files:** `backend/main.py` (`upload_video`), `frontend/src/pages/student/StudentVideoPlayerPage.jsx`, `frontend/src/pages/teacher/SubjectDetailPage.jsx`
+- When `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_STREAM_API_TOKEN` are not set, videos upload to Supabase Storage `videos` bucket (auto-created on first upload if missing)
+- Public HTTPS URL stored in `videos.cloudflare_video_id` (dual-purpose — CF UID or Storage HTTPS URL)
+- `StudentVideoPlayerPage` detects storage URLs (`startsWith('https://')`) and renders a native `<video>` tag instead of the Cloudflare Stream embed
+- Teacher upload progress label changed from "Uploading to Cloudflare Stream…" to "Uploading…"
+- Offline save disabled for storage-backed videos (download security)
+
+### Bugfix: Video/avatar upload "Network error" on Windows
+- **File:** `backend/main.py` (`upload_video`, `upload_student_avatar`)
+- Root cause: synchronous Supabase Storage calls (`create_bucket`, `upload`, `get_public_url`) were running inside `async def` endpoints, blocking the uvicorn event loop (Windows ProactorEventLoop). The ASGI transport reset the connection before a response was sent, causing the browser XHR `onerror` to fire with "Network error."
+- Fixed by wrapping all sync storage calls in `asyncio.to_thread(lambda: ...)` so they run in a thread-pool worker
+
+### Feature: Student avatar upload
+- **File:** `backend/main.py` (`upload_student_avatar` — `POST /api/students/me/avatar`)
+- Now fully working after `asyncio.to_thread` fix
+- Stores file in Supabase Storage `avatars` bucket; saves public URL to `students.avatar_url`
+- `students.avatar_url TEXT` column already existed in schema — no migration needed
+
+### Bugfix: Broadcast context menu clipping
+- **File:** `frontend/src/components/teacher/BroadcastThread.jsx`
+- Context menu was rendered inside the `overflow-y-auto` scroll container and clipped at the container boundary
+- Fixed: menu now uses `position: fixed` anchored with `getBoundingClientRect()` coordinates, rendering above the scroll container at viewport level
+
+### Bugfix: "Delete for everyone" message persisting
+- **File:** `frontend/src/components/teacher/BroadcastThread.jsx`
+- Two causes: (1) WebSocket `history` handler hardcoded `deleted: false` on every reconnect, overriding actual deleted state. Fixed to `deleted: !!b.deleted` and `edited: !!b.edited`. (2) `onUpdate` was called before the DELETE API call succeeded. Fixed: moved inside the `try` block — only fires on API success.
+- Added `delete_broadcast` and `edit_broadcast` WebSocket event handlers (were missing)
+
+### Bugfix: Broadcast menu always empty
+- **File:** `frontend/src/components/teacher/BroadcastThread.jsx`
+- Fixed menu item lookup referencing undefined `broadcastsByStandard_ref.current` → corrected to `broadcasts.find(x => x.id === menuId)` (the correct prop)
+
+### Feature: Broadcast read count display (teacher view)
+- **File:** `frontend/src/components/teacher/BroadcastThread.jsx`
+- Each broadcast bubble now shows `✓✓ N/Total read` (blue tint when any student has read, grey when zero)
+- Uses `broadcastApi.getReadCounts(standard_id)` → `GET /broadcasts/reads`
+- Refreshes whenever the broadcasts list changes (standard switch or new message)
+
+---
+
 ## May 2026 — Security Hardening + Bulk Import Fix
 
 ### Security: WebSocket Authentication

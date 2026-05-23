@@ -14,7 +14,7 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 |---|---|---|---|---|
 | POST | `/auth/login` | public | `{ email_or_username, password, device_fingerprint? }` | `{ token, user: { id, name, role, email, username, must_change_pwd } }` |
 | POST | `/auth/logout` | any | — | `{ message }` |
-| GET | `/auth/me` | any | — | `{ user_id, role, email, name, username, must_change_pwd }` |
+| GET | `/auth/me` | any | — | `{ user_id, role, email, name, username, avatar_url, must_change_pwd }` (students also get `points, avg_score, attendance_pct, phone, standard_id, standard_name`) |
 | POST | `/auth/verify-device` | student | `{ device_fingerprint }` | `{ allowed: bool }` |
 | PATCH | `/auth/profile` | any | `{ name?, email?, phone? }` | `{ message }` |
 | POST | `/auth/change-password` | any | `{ password }` | `{ message }` |
@@ -95,14 +95,16 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 |---|---|---|---|---|
 | GET | `/videos` | any | `?class_id=` | `[{ id, class_id, title, description, cloudflare_video_id, duration_secs, allow_download, created_by, created_at }]` |
 | POST | `/videos` | teacher | `{ class_id, title, description?, cloudflare_video_id?, duration_secs?, allow_download? }` | Created video |
-| POST | `/videos/upload` | teacher | multipart: `file, class_id, title, description?, allow_download?` | Video object with `cloudflare_video_id` |
+| POST | `/videos/upload` | teacher | multipart: `file, class_id, title, description?, allow_download?` | Video object with `cloudflare_video_id` (CF UID or Supabase Storage HTTPS URL) |
+| POST | `/students/me/avatar` | student | multipart: `file` | `{ avatar_url }` — Supabase Storage URL |
 | PATCH | `/videos/{video_id}` | teacher | `{ title?, description?, allow_download? }` | Updated video |
 | DELETE | `/videos/{video_id}` | teacher | — | `{ message }` — also deletes from Cloudflare |
 | GET | `/videos/{video_id}/stats` | teacher | — | `{ watch_count, completion_count, download_count }` |
 | POST | `/videos/{video_id}/complete` | student | `{ progress_secs?, downloaded? }` | `{ message }` — awards points |
 
 **Notes:**
-- `POST /videos/upload` requires `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_STREAM_API_TOKEN` in env
+- `POST /videos/upload` uses Cloudflare Stream when `CLOUDFLARE_ACCOUNT_ID`+`CLOUDFLARE_STREAM_API_TOKEN` are set; otherwise falls back to Supabase Storage `videos` bucket (auto-created). In the fallback path, `cloudflare_video_id` contains a full HTTPS URL — detect with `startsWith('https://')`.
+- `POST /students/me/avatar` stores in Supabase Storage `avatars` bucket and writes URL to `students.avatar_url`.
 - PATCH/DELETE verify `created_by == current user`
 - `POST /videos` (JSON) is for manually adding video records without uploading
 
@@ -158,19 +160,26 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 | Method | Path | Auth | Body / Query | Response |
 |---|---|---|---|---|
 | WS | `/ws/broadcasts/{standard_id}?token=<jwt>` | any | — | Real-time stream. Closes 4001 if token invalid. Sends history on connect. |
-| POST | `/broadcasts` | teacher | `{ standard_id, message, attachment_url?, attachment_type? }` | Broadcast object |
+| POST | `/broadcasts` | teacher | `{ standard_id, message, attachment_url?, attachment_type?, scheduled_for? }` | Broadcast object |
 | GET | `/broadcasts` | any | `?standard_id=` | `[broadcast objects]` ordered by created_at |
-| DELETE | `/broadcasts/{broadcast_id}` | teacher | — | Soft-delete (`deleted = true`) |
-| PATCH | `/broadcasts/{broadcast_id}` | teacher | `{ message }` | Sets `edited = true` |
+| DELETE | `/broadcasts/{broadcast_id}` | teacher | — | Soft-delete (`deleted = true`), pushes `delete_broadcast` WS event |
+| PATCH | `/broadcasts/{broadcast_id}` | teacher | `{ message }` | Sets `edited = true`, pushes `edit_broadcast` WS event |
+| GET | `/broadcasts/reads` | teacher | `?standard_id=` | `{ broadcast_id: read_count }` map |
+| POST | `/broadcast-reads` | student | `{ broadcast_ids: [uuid] }` | `{ message }` — upserts read receipts |
 
-**WS message format:**
+**WS event types received by client:**
 ```json
-{ "id": "uuid", "standard_id": "uuid", "message": "text",
-  "sender_name": "Name", "created_at": "ISO8601",
-  "attachment_url": null, "attachment_type": null }
+{ "type": "history",          "data": [broadcast, ...] }
+{ "type": "new_broadcast",    "data": broadcast }
+{ "type": "delete_broadcast", "id": "uuid" }
+{ "type": "edit_broadcast",   "data": { "id": "uuid", "message": "text" } }
 ```
 
-**Notes:** Token must be passed as query param `?token=` — browsers cannot set headers for WebSocket connections.
+**Notes:**
+- Token must be passed as query param `?token=` — browsers cannot send custom headers for WebSocket connections
+- `deleted` and `edited` flags in history events reflect actual DB state — do not hardcode them on the client
+- `GET /broadcasts/reads` returns a flat object keyed by broadcast UUID; used by teacher to show `N/Total read`
+- `scheduled_for` (ISO datetime) — if set and in the future, the broadcast is saved but NOT pushed via WebSocket. Students cannot see future-scheduled broadcasts. Teachers see all.
 
 ---
 
@@ -191,7 +200,7 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 |---|---|---|---|---|
 | GET | `/reports/attendance` | teacher | `?standard_id=&from=&to=&below_pct=` | Attendance summary array |
 | GET | `/reports/export/attendance` | teacher | same | CSV StreamingResponse |
-| GET | `/leaderboard` | any | `?standard_id=` | `[{ student_id, name, username, points, rank }]` sorted by points |
+| GET | `/leaderboard` | any | `?standard_id=` | `[{ id, name, username, points, avatar_url, rank }]` sorted by points desc |
 
 ---
 
@@ -210,13 +219,25 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 
 ---
 
+## Notifications
+
+| Method | Path | Auth | Body / Query | Response |
+|---|---|---|---|---|
+| GET | `/notifications` | any | — | Latest 30 notifications for the caller |
+| PATCH | `/notifications/{notification_id}/read` | any | — | Marks single notification read |
+| POST | `/notifications/read-all` | any | — | Marks all caller's notifications read |
+
+**Notes:** Table exists. Bell icon in TopBar (`NotificationBell.jsx`) exists but is not yet wired to live data — currently shows static UI.
+
+---
+
 ## File Upload
 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
-| POST | `/upload` | teacher | multipart: `file` | `{ url }` — Supabase Storage URL |
+| POST | `/upload` | teacher | multipart: `file` | `{ url, type, filename }` — Supabase Storage `broadcasts` bucket URL |
 
-Used for broadcast attachment uploads.
+Used for broadcast attachment uploads (images, PDFs).
 
 ---
 

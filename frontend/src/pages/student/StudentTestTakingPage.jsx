@@ -65,7 +65,16 @@ export default function StudentTestTakingPage() {
   
   useEffect(() => {
     if (test && !hasStarted) {
-      setRemaining((test.duration_mins || 30) * 60);
+      let allocatedSeconds = (test.duration_mins || 30) * 60;
+      if (test.expires_at) {
+        const now = new Date().getTime();
+        const expiry = new Date(test.expires_at).getTime();
+        const secondsUntilExpiry = Math.floor((expiry - now) / 1000);
+        if (secondsUntilExpiry > 0 && secondsUntilExpiry < allocatedSeconds) {
+           allocatedSeconds = secondsUntilExpiry;
+        }
+      }
+      setRemaining(allocatedSeconds);
     }
   }, [test, hasStarted]);
 

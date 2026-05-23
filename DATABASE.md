@@ -267,6 +267,24 @@ This means: **no direct frontend DB access**. All data goes through FastAPI.
 
 ---
 
+## Supabase Storage Buckets
+
+Storage buckets are **not PostgreSQL tables** — they live in Supabase Storage alongside the database. The backend auto-creates them on first use via `storage.create_bucket()`, or create them manually in Supabase Dashboard → Storage → New bucket.
+
+| Bucket | Public | Used By | Column Stored In |
+|---|---|---|---|
+| `videos` | ✅ | `POST /api/videos/upload` (Cloudflare fallback) | `videos.cloudflare_video_id` (full HTTPS URL) |
+| `avatars` | ✅ | `POST /api/students/me/avatar` | `students.avatar_url` |
+| `broadcasts` | ✅ | `POST /api/upload` (broadcast attachments) | `broadcasts.attachment_url` |
+
+**Dual-purpose column — `videos.cloudflare_video_id`:**
+- When Cloudflare Stream is configured: stores the short Cloudflare video UID (e.g. `abc123def`)
+- When using the Supabase Storage fallback: stores the full public HTTPS URL (e.g. `https://xxxx.supabase.co/storage/v1/object/public/videos/...`)
+
+The student video player detects which mode by checking `cloudflare_video_id.startsWith('https://')` and renders either a Cloudflare Stream embed or a native `<video>` element accordingly.
+
+---
+
 ## Migrations
 
 When adding columns to existing tables, add a migration comment in `schema.sql`:

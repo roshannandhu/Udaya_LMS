@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS tests (
     penalty NUMERIC DEFAULT 0,
     status TEXT DEFAULT 'draft',
     scheduled_for TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
     created_by UUID,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -265,6 +266,7 @@ ALTER TABLE notifications      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bulk_imports       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invite_links       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invite_requests    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE question_bank      ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypasses all RLS — FastAPI backend always uses this.
 -- No additional policies needed for service role.
@@ -287,3 +289,44 @@ CREATE POLICY "deny_anon_notifications"      ON notifications      FOR ALL TO an
 CREATE POLICY "deny_anon_bulk_imports"       ON bulk_imports       FOR ALL TO anon, authenticated USING (false);
 CREATE POLICY "deny_anon_invite_links"       ON invite_links       FOR ALL TO anon, authenticated USING (false);
 CREATE POLICY "deny_anon_invite_requests"    ON invite_requests    FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_question_bank"      ON question_bank      FOR ALL TO anon, authenticated USING (false);
+
+-- ── Supabase Storage Buckets ──────────────────────────────────────────────────
+-- These are NOT SQL tables — they live in Supabase Storage.
+-- The backend auto-creates them on first use via storage.create_bucket().
+-- You can also create them manually: Supabase Dashboard → Storage → New bucket.
+--
+-- Bucket: videos   (public: true)
+--   Used by: POST /api/videos/upload when Cloudflare Stream is NOT configured.
+--   Path pattern: {class_id}/{uuid}_{sanitized_filename}
+--   Stored in column: videos.cloudflare_video_id  (as full public HTTPS URL)
+--   Note: videos.cloudflare_video_id is dual-purpose — it holds either a short
+--         Cloudflare video UID or a full Supabase Storage HTTPS URL depending
+--         on which upload path was used. Detect by checking startsWith('https://').
+--
+-- Bucket: avatars  (public: true)
+--   Used by: POST /api/students/me/avatar
+--   Path pattern: avatars/{student_id}.{ext}
+--   Stored in column: students.avatar_url
+--
+-- Bucket: broadcasts  (public: true)
+--   Used by: POST /api/upload  (broadcast file attachments — images, PDFs)
+--   Path pattern: {uuid}-{filename}
+-- Stored in column: broadcasts.attachment_url
+--
+-- Question Bank
+CREATE TABLE IF NOT EXISTS question_bank (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID NOT NULL,
+    subject TEXT,
+    question TEXT NOT NULL,
+    options JSONB NOT NULL,
+    correct_idx INTEGER NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Broadcast Scheduling Migration ─────────────────────────────────────────────
+-- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
+
+-- ── Video Chapters Migration ───────────────────────────────────────────────────
+-- ALTER TABLE videos ADD COLUMN IF NOT EXISTS chapters JSONB DEFAULT '[]';

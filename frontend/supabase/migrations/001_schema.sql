@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS tests (
   penalty          NUMERIC DEFAULT 0,
   status           TEXT DEFAULT 'draft',
   scheduled_for    TIMESTAMPTZ,
+  expires_at       TIMESTAMPTZ,
   created_by       UUID REFERENCES auth.users(id),
   created_at       TIMESTAMPTZ DEFAULT now()
 );

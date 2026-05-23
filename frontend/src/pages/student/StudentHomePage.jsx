@@ -113,7 +113,7 @@ export default function StudentHomePage() {
           </div>
           <div className="flex items-center gap-1">
             <NotificationBell />
-            <Avatar name={student?.name || user?.name || '?'} size="sm" />
+            <Avatar name={student?.name || user?.name || '?'} src={student?.avatar_url} size="sm" />
           </div>
         </div>
       </div>
@@ -181,7 +181,7 @@ export default function StudentHomePage() {
               {top3.map((s, i) => (
                 <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${i < 2 ? 'border-b border-white/40' : ''}`}>
                   <span className="text-base w-6 text-center">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
-                  <Avatar name={s.name} size="sm" />
+                  <Avatar name={s.name} src={s.avatar_url} size="sm" />
                   <p className="flex-1 text-sm font-medium truncate">{s.name}</p>
                   <span className="text-sm font-semibold text-amber-700">{s.points} pts</span>
                 </div>

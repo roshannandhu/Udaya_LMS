@@ -14,6 +14,8 @@ import StudentsPage       from './pages/teacher/StudentsPage';
 import StudentDetailPage  from './pages/teacher/StudentDetailPage';
 import BroadcastsPage     from './pages/teacher/BroadcastsPage';
 import MorePage           from './pages/teacher/MorePage';
+import QuestionBankPage   from './pages/teacher/QuestionBankPage';
+import TeacherProfilePage from './pages/teacher/TeacherProfilePage';
 import TestsPage          from './pages/teacher/TestsPage';
 import ReportsPage        from './pages/teacher/ReportsPage';
 import RemindersPage      from './pages/teacher/RemindersPage';
@@ -131,6 +133,8 @@ export default function App() {
           <Route path="students/:studentId" element={<StudentDetailPage />} />
           <Route path="broadcasts" element={<BroadcastsPage />} />
           <Route path="more" element={<MorePage />} />
+          <Route path="question-bank" element={<QuestionBankPage />} />
+          <Route path="profile" element={<TeacherProfilePage />} />
           <Route path="tests" element={<TestsPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="reminders" element={<RemindersPage />} />

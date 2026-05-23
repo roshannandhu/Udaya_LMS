@@ -91,6 +91,10 @@ export const testApi = {
     apiClient(`/tests${classId ? `?class_id=${classId}` : ''}`),
   getTestForTaking: (testId) =>
     apiClient(`/tests/${testId}/take`),
+  getTestForEdit: (testId) =>
+    apiClient(`/tests/${testId}/edit`),
+  updateTestFull: (testId, data) =>
+    apiClient(`/tests/${testId}/full`, { method: 'PUT', body: JSON.stringify(data) }),
   submitTest: (testId, data) =>
     apiClient(`/tests/${testId}/submit`, { method: 'POST', body: JSON.stringify(data) }),
   getTestResults: (testId) =>
@@ -111,6 +115,15 @@ export const broadcastApi = {
     apiClient('/broadcast-reads', { method: 'POST', body: JSON.stringify({ broadcast_ids: broadcastIds }) }),
   getReadCounts: (standardId) =>
     apiClient(`/broadcasts/reads?standard_id=${standardId}`),
+};
+
+export const notificationApi = {
+  getAll: () =>
+    apiClient('/notifications'),
+  markRead: (id) =>
+    apiClient(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: () =>
+    apiClient('/notifications/read-all', { method: 'POST' }),
 };
 
 export const videoApi = {

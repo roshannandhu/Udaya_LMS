@@ -78,7 +78,10 @@ export const useAppCache = create(
         const needStds  = stale(s.standardsTs);
         const needSubs  = stale(s.subjectsTs);
         const needStuds = stale(s.studentsTs);
-        if (!needStds && !needSubs && !needStuds) return;
+        if (!needStds && !needSubs && !needStuds) {
+          set({ standardsReady: true, subjectsReady: true, studentsReady: true });
+          return;
+        }
 
         const [r0, r1, r2] = await Promise.allSettled([
           needStds  ? apiClient('/standards') : s.standards,
@@ -139,11 +142,11 @@ export const useAppCache = create(
         studentsTs:     s.studentsTs,
       }),
       onRehydrateStorage: () => (state) => {
-        // After hydrating from localStorage, mark as ready immediately
         if (state) {
-          state.standardsReady = Array.isArray(state.standards) && state.standards.length > 0;
-          state.subjectsReady  = Array.isArray(state.subjects)  && state.subjects.length  > 0;
-          state.studentsReady  = Array.isArray(state.students)  && state.students.length  > 0;
+          // Ready if we've fetched at least once (ts is set), even if result was empty
+          state.standardsReady = state.standardsTs != null;
+          state.subjectsReady  = state.subjectsTs  != null;
+          state.studentsReady  = state.studentsTs  != null;
         }
       },
     }

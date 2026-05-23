@@ -28,7 +28,7 @@ uvicorn main:app --reload --port 8001    # dev server → http://localhost:8001
 ```
 
 ### Environment files
-- `backend/.env` — copy from BUILD_STEPS.md S2 section; must have `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`
+- `backend/.env` — must have `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`. Cloudflare vars are optional — omitting them enables the Supabase Storage video fallback.
 - `frontend/.env.local` — must have `VITE_API_URL=http://localhost:8001/api`
 
 ---
@@ -56,8 +56,8 @@ User → Login → Teacher portal
 | Database | Supabase (Postgres) |
 | Auth | Supabase Auth — JWT tokens validated via `supabase.auth.get_user(token)` in FastAPI |
 | Backend | FastAPI (Python), single file: `backend/main.py` |
-| Video hosting | Cloudflare Stream (planned — Module 4) |
-| File storage | Supabase Storage (planned — Module 5) |
+| Video hosting | Cloudflare Stream (primary) — falls back to Supabase Storage `videos` bucket if CF not configured |
+| File storage | Supabase Storage — `videos` (fallback), `avatars` (student photos), `broadcasts` (attachments) |
 | Mobile | Not yet started |
 
 > `@clerk/clerk-react` is in `frontend/package.json` but is **not used** — ignore it.
@@ -186,13 +186,15 @@ Shared UI primitives are in `frontend/src/components/ui.jsx`.
 3. **Broadcasts go to a standard, not a subject.**
 4. **Single device per student.** New login must invalidate all existing sessions for that student.
 5. **Teacher creates student accounts.** Students cannot self-register.
-6. **Video files live in Cloudflare Stream.** Supabase only stores metadata (title, cloudflare_video_id, duration).
-7. **Attachment files (PDFs, images) go in Supabase Storage.** Not Cloudflare.
+6. **Video files live in Cloudflare Stream when configured.** If `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_STREAM_API_TOKEN` are absent, the backend falls back to Supabase Storage `videos` bucket. The `videos.cloudflare_video_id` column is dual-purpose: it holds a short CF UID *or* a full Supabase Storage HTTPS URL. Detect by `startsWith('https://')`.
+7. **Attachment files (PDFs, images) go in Supabase Storage** `broadcasts` bucket. Not Cloudflare.
 8. **Delete = delete from cloud too.** Video delete → Cloudflare. Attachment delete → Supabase Storage.
 9. **Never expose student phone/email to other students.** Only returned for teacher-role sessions.
 10. **Correct answers must never be sent to the student.** Strip `correct_option` from the questions API response for students.
 11. **Match the prototype UI.** Replicate component structure from `lms-v3_9.jsx`.
 12. **Use Supabase Row Level Security.** Every table needs RLS policies.
+13. **Sync Supabase Storage calls must use `asyncio.to_thread`.** The supabase-py storage client is synchronous. Calling it directly inside an `async def` FastAPI endpoint blocks the event loop and causes connection resets on Windows. Always wrap: `await asyncio.to_thread(lambda: supabase.storage.from_(...).upload(...))`.
+14. **LMS branding (name + logo) is client-side only.** Stored in Zustand `useSettingsStore` persisted to `tutoria-settings` localStorage key. No database table or API endpoint.
 
 ---
 
@@ -206,8 +208,8 @@ Build one module completely (schema + API + UI + tested) before the next. See BU
 | Auth | ✅ Complete — login/logout/me, first-login forced change, server-side single-device enforcement via student_sessions |
 | Standards + Subjects | ✅ Complete — full CRUD backend + frontend live API |
 | Student Management | ✅ Complete — create/edit/delete/reset-password/block, bulk import, invite links |
-| Videos | ✅ Complete — backend + frontend live; requires Cloudflare credentials in backend/.env to upload |
-| Broadcasts | ✅ Complete — WebSocket real-time + JSON file persistence + Supabase DB |
+| Videos | ✅ Complete — Cloudflare Stream upload + Supabase Storage fallback (auto-created `videos` bucket) |
+| Broadcasts | ✅ Complete — WebSocket real-time + JSON file persistence + Supabase DB + read counts + delete/edit propagation |
 | Tests | ✅ Complete — create with questions, student take, anti-cheat, scoring, results |
 | Reports + Leaderboard | ✅ Complete — attendance reports, CSV export, student report modal, leaderboard |
 | RLS Policies | ✅ Added to schema.sql — run in Supabase SQL Editor to apply |

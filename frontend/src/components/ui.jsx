@@ -52,12 +52,17 @@ export const Textarea = ({ label, placeholder, value, onChange, rows = 3, ...res
   </div>
 );
 
-export const Avatar = ({ name, size = 'md' }) => {
+export const Avatar = ({ name, src, size = 'md' }) => {
+  const [imgError, setImgError] = React.useState(false);
   const initials = name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
   const sizes = { xs: 'w-6 h-6 text-[10px]', sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-14 h-14 text-base', xl: 'w-20 h-20 text-xl' };
   const bgs   = ['#FDEBEC', '#FBF3DB', '#DDEDEA', '#E6F0FA', '#EAE4F2', '#F4DFEB'];
   const texts = ['#E03E3E', '#CB912F', '#0F7B6C', '#2383E2', '#6940A5', '#AD1A72'];
   const idx   = (name?.charCodeAt(0) || 0) % bgs.length;
+  if (src && !imgError) {
+    return <img src={src} alt={name || ''} onError={() => setImgError(true)}
+      className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-white/40`} />;
+  }
   return (
     <div className={`${sizes[size]} rounded-full flex items-center justify-center font-semibold flex-shrink-0`}
       style={{ background: bgs[idx], color: texts[idx] }}>

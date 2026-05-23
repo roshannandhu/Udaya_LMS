@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Image as ImageIcon, Clock } from 'lucide-react';
 import { apiClient, broadcastApi } from '../../lib/api';
 
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
@@ -8,6 +8,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [editingId, setEditingId] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState('');
   const [attachOpen, setAttachOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [readCounts, setReadCounts] = useState({});
@@ -42,7 +44,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
           attachments: b.attachment_url ? [{ url: b.attachment_url, type: b.attachment_type, name: 'Attachment' }] : [],
           edited: !!b.edited,
           deleted: !!b.deleted,
-          readBy: 0
+          readBy: 0,
+          scheduled_for: b.scheduled_for || null
         }));
         onUpdate(() => formatted);
       } else if (data.type === 'new_broadcast') {
@@ -57,7 +60,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
           attachments: b.attachment_url ? [{ url: b.attachment_url, type: b.attachment_type, name: 'Attachment' }] : [],
           edited: false,
           deleted: false,
-          readBy: 0
+          readBy: 0,
+          scheduled_for: b.scheduled_for || null
         };
         onUpdate((list) => {
           if (list.some(x => x.id === newMsg.id)) return list;
@@ -137,9 +141,12 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         attachment_url: attachments.length > 0 ? attachments[0].url : null,
         attachment_type: attachments.length > 0 ? attachments[0].type : null
       };
+      if (scheduledFor) payload.scheduled_for = scheduledFor;
       
       setMsg('');
       setAttachments([]);
+      setShowSchedule(false);
+      setScheduledFor('');
       
       try {
         await apiClient('/broadcasts', { method: 'POST', body: JSON.stringify(payload) });
@@ -174,7 +181,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
           <div className="space-y-3 max-w-2xl">
             {broadcasts.filter(b => !b.deleted).map((b) => (
                 <div key={b.id} className="max-w-md group relative">
-                  <div className="glass-panel rounded-xl p-3 shadow-sm">
+                  <div className={`rounded-xl p-3 shadow-sm ${new Date(b.scheduled_for) > new Date() ? 'bg-neutral-100/60 border border-neutral-200/60 opacity-75' : 'glass-panel'}`}>
                     {b.pinned && (
                       <div className="flex items-center gap-1 text-[10px] text-neutral-500 mb-1.5">
                         <Pin size={9} /> Pinned
@@ -200,6 +207,12 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                             )}
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {b.scheduled_for && new Date(b.scheduled_for) > new Date() && (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full inline-flex border border-amber-200">
+                        <Clock size={9} />
+                        Sends {new Date(b.scheduled_for).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       </div>
                     )}
                     <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-neutral-400">
@@ -290,10 +303,33 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         </div>
       )}
 
+      {showSchedule && (
+        <div className="bg-amber-50 border-t border-amber-200 px-4 py-2 flex items-center gap-2">
+          <Clock size={12} className="text-amber-600" />
+          <span className="text-[11px] text-amber-800 font-medium whitespace-nowrap">Schedule send</span>
+          <input
+            type="datetime-local"
+            value={scheduledFor}
+            onChange={(e) => setScheduledFor(e.target.value)}
+            className="flex-1 px-2 py-1 rounded text-xs bg-white border border-amber-200 outline-none focus:ring-1 focus:ring-amber-400"
+          />
+          {scheduledFor && (
+            <button onClick={() => { setScheduledFor(''); setShowSchedule(false); }}
+              className="p-1 text-amber-500 hover:text-amber-700 rounded hover:bg-white/60">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="bg-white border-t border-white/60 px-3 py-2 flex items-end gap-2">
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
         <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="p-2 text-neutral-500 hover:text-neutral-900 rounded hover:bg-white/60 disabled:opacity-50">
           {uploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+        </button>
+        <button onClick={() => setShowSchedule(s => !s)}
+          className={`p-2 rounded transition-colors ${showSchedule ? 'text-amber-700 bg-amber-50' : 'text-neutral-500 hover:text-neutral-900 hover:bg-white/60'}`}>
+          <Clock size={16} />
         </button>
         <input
           value={msg}

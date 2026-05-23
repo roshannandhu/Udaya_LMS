@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { Modal, Input, Btn } from '../ui';
-import { apiClient } from '../../lib/api';
+import { apiClient, testApi } from '../../lib/api';
 
-export default function NewTestModal({ open, onClose, defaultClassId, onSuccess }) {
+export default function NewTestModal({ open, onClose, defaultClassId, onSuccess, editTestId }) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,30 +19,65 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess 
   const [negativeMarking, setNegativeMarking] = useState(false);
   const [penalty, setPenalty] = useState(0.25);
   const [scheduledFor, setScheduledFor] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
 
   // Step 2: Questions
   const [questions, setQuestions] = useState([
     { id: 1, question: '', options: ['', '', '', ''], correct_idx: 0 }
   ]);
 
-  // Reset form when modal closes/opens; fetch subjects when no defaultClassId
+  const [fetchingTest, setFetchingTest] = useState(false);
+
+  // Reset form when modal closes/opens; fetch test details if in edit mode
   React.useEffect(() => {
     if (open) {
       setStep(1);
-      setTitle('');
-      setDuration(30);
-      setTotalMarks(50);
-      setNegativeMarking(false);
-      setPenalty(0.25);
-      setScheduledFor('');
-      setSelectedClassId(defaultClassId || '');
-      setQuestions([{ id: Date.now(), question: '', options: ['', '', '', ''], correct_idx: 0 }]);
       setError('');
       if (!defaultClassId) {
         apiClient('/subjects').then(data => setSubjects(Array.isArray(data) ? data : [])).catch(() => {});
       }
+      
+      if (editTestId) {
+        setFetchingTest(true);
+        testApi.getTestForEdit(editTestId).then(data => {
+          const t = data.test;
+          setTitle(t.title);
+          setDuration(t.duration_mins);
+          setTotalMarks(t.total_marks);
+          setNegativeMarking(t.negative_marking);
+          setPenalty(t.penalty || 0.25);
+          
+          const fmtDate = (d) => {
+            if (!d) return '';
+            const dt = new Date(d);
+            dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+            return dt.toISOString().slice(0, 16);
+          };
+          
+          setScheduledFor(fmtDate(t.scheduled_for));
+          setExpiresAt(fmtDate(t.expires_at));
+          setSelectedClassId(t.class_id);
+          
+          if (data.questions && data.questions.length > 0) {
+            setQuestions(data.questions);
+          } else {
+            setQuestions([{ id: Date.now(), question: '', options: ['', '', '', ''], correct_idx: 0 }]);
+          }
+        }).catch(err => setError(err.message || 'Failed to load test'))
+          .finally(() => setFetchingTest(false));
+      } else {
+        setTitle('');
+        setDuration(30);
+        setTotalMarks(50);
+        setNegativeMarking(false);
+        setPenalty(0.25);
+        setScheduledFor('');
+        setExpiresAt('');
+        setSelectedClassId(defaultClassId || '');
+        setQuestions([{ id: Date.now(), question: '', options: ['', '', '', ''], correct_idx: 0 }]);
+      }
     }
-  }, [open, defaultClassId]);
+  }, [open, defaultClassId, editTestId]);
 
   const classId = defaultClassId || selectedClassId;
 
@@ -54,6 +89,12 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess 
     if (!title.trim()) {
       setError('Please enter a test title');
       return;
+    }
+    if (scheduledFor && expiresAt) {
+      if (new Date(expiresAt) <= new Date(scheduledFor)) {
+        setError('End Time must be after Start Time');
+        return;
+      }
     }
     setError('');
     setStep(2);
@@ -98,26 +139,32 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess 
     setError('');
     try {
       const formattedQuestions = questions.map((q, idx) => ({
+        id: typeof q.id === 'string' ? q.id : undefined,
         question: q.question,
         options: q.options,
         correct_idx: q.correct_idx,
         order_num: idx + 1
       }));
 
-      const created = await apiClient('/tests/with-questions', {
-        method: 'POST',
-        body: JSON.stringify({
-          class_id: classId,
-          title,
-          duration_mins: parseInt(duration) || 30,
-          total_marks: parseFloat(totalMarks) || 50,
-          negative_marking: negativeMarking,
-          penalty: negativeMarking ? (parseFloat(penalty) || 0.25) : 0,
-          status: scheduledFor ? 'scheduled' : 'active',
-          scheduled_for: scheduledFor || undefined,
-          questions: formattedQuestions
-        })
-      });
+      const payload = {
+        class_id: classId,
+        title,
+        duration_mins: parseInt(duration) || 30,
+        total_marks: parseFloat(totalMarks) || 50,
+        negative_marking: negativeMarking,
+        penalty: negativeMarking ? (parseFloat(penalty) || 0.25) : 0,
+        status: scheduledFor ? 'scheduled' : 'active',
+        scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : undefined,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+        questions: formattedQuestions
+      };
+
+      let created;
+      if (editTestId) {
+        created = await testApi.updateTestFull(editTestId, payload);
+      } else {
+        created = await testApi.createTestWithQuestions(payload);
+      }
 
       onClose();
       if (onSuccess) onSuccess(created);
@@ -129,7 +176,10 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess 
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={step === 1 ? "Create Test" : "Add Questions"} size="lg">
+    <Modal open={open} onClose={onClose} title={editTestId ? "Edit Test" : "Create New Test"} size="lg">
+      {fetchingTest ? (
+        <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-neutral-400" /></div>
+      ) : (
       <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
         {error && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-md font-medium sticky top-0 z-10">{error}</div>}
 
@@ -172,7 +222,10 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess 
               <Input label="Penalty per wrong answer" type="number" step="0.25" value={penalty} onChange={(e) => setPenalty(e.target.value)} />
             )}
 
-            <Input label="Schedule for (optional)" type="datetime-local" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Start Time (optional)" type="datetime-local" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+              <Input label="End Time (optional)" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+            </div>
 
             <div className="flex justify-end pt-2">
               <Btn onClick={handleNext} variant="primary" className="w-full">
@@ -234,14 +287,15 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess 
 
             <div className="flex gap-3 pt-4 border-t border-white/40 sticky bottom-0 bg-white/80 backdrop-blur-md p-3 -mx-2 rounded-xl">
               <Btn onClick={() => setStep(1)} variant="ghost" icon={ArrowLeft}>Back</Btn>
-              <Btn onClick={handleSubmit} disabled={loading} variant="primary" className="flex-1">
+              <Btn variant="primary" onClick={handleSubmit} disabled={loading} className="flex-1">
                 {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : <Check size={16} className="mr-2" />}
-                Publish Test ({questions.length} questions)
+                {editTestId ? 'Save Changes' : `Publish Test (${questions.length} questions)`}
               </Btn>
             </div>
           </div>
         )}
       </div>
+      )}
     </Modal>
   );
 }

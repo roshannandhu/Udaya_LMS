@@ -75,7 +75,7 @@ export default function StudentLeaderboardPage() {
           <div className="flex items-end justify-center gap-3 mb-8 px-4">
             {/* 2nd */}
             <div className="flex flex-col items-center flex-1">
-              <Avatar name={leaderboard[1]?.name} size="md" />
+              <Avatar name={leaderboard[1]?.name} src={leaderboard[1]?.avatar_url} size="md" />
               <p className="text-xs font-medium mt-2 truncate max-w-[80px] text-center">{leaderboard[1]?.name}</p>
               <div className="mt-2 w-full h-16 glass-panel rounded-t-2xl flex flex-col items-center justify-center border-neutral-200">
                 <Medal size={20} className="text-neutral-400 mb-1" />
@@ -85,7 +85,7 @@ export default function StudentLeaderboardPage() {
             {/* 1st */}
             <div className="flex flex-col items-center flex-1">
               <Crown size={20} className="text-amber-500 mb-1" />
-              <Avatar name={leaderboard[0]?.name} size="lg" />
+              <Avatar name={leaderboard[0]?.name} src={leaderboard[0]?.avatar_url} size="lg" />
               <p className="text-xs font-medium mt-2 truncate max-w-[80px] text-center">{leaderboard[0]?.name}</p>
               <div className="mt-2 w-full h-24 bg-amber-50/80 backdrop-blur-md border border-amber-200 rounded-t-2xl flex flex-col items-center justify-center" style={{boxShadow: '-4px -4px 10px rgba(255,255,255,0.8), 4px 4px 10px rgba(0,0,0,0.06)'}}>
                 <Star size={18} className="text-amber-500 mb-1" />
@@ -94,7 +94,7 @@ export default function StudentLeaderboardPage() {
             </div>
             {/* 3rd */}
             <div className="flex flex-col items-center flex-1">
-              <Avatar name={leaderboard[2]?.name} size="md" />
+              <Avatar name={leaderboard[2]?.name} src={leaderboard[2]?.avatar_url} size="md" />
               <p className="text-xs font-medium mt-2 truncate max-w-[80px] text-center">{leaderboard[2]?.name}</p>
               <div className="mt-2 w-full h-10 glass-panel rounded-t-2xl flex flex-col items-center justify-center border-orange-200">
                 <p className="text-sm font-bold">{leaderboard[2]?.points}</p>
@@ -120,7 +120,7 @@ export default function StudentLeaderboardPage() {
                 <div className="flex items-center justify-center w-6 flex-shrink-0">
                   {rankIcon(s.rank)}
                 </div>
-                <Avatar name={s.name} size="sm" />
+                <Avatar name={s.name} src={s.avatar_url} size="sm" />
                 <p className={`flex-1 text-sm font-medium truncate ${s.id === myId ? 'text-blue-700' : ''}`}>
                   {s.name}
                   {s.id === myId && <span className="text-xs font-normal text-blue-500 ml-1">(you)</span>}

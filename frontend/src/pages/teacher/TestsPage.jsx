@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, FileQuestion, Clock, Loader2, ListChecks } from 'lucide-react';
+import { ArrowLeft, Plus, FileQuestion, Clock, Loader2, ListChecks, Edit2 } from 'lucide-react';
 import { Btn, Tag, Skeleton } from '../../components/ui';
 import { NewTestModal } from '../../components/teacher/Modals';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
@@ -12,6 +12,7 @@ export default function TestsPage() {
   const [filter, setFilter]         = useState('all');
   const [resultsTest, setResultsTest] = useState(null);
   const [newTestOpen, setNewTestOpen] = useState(false);
+  const [editTestId, setEditTestId]   = useState(null);
   const [tests, setTests]           = useState([]);
   const [loading, setLoading]       = useState(true);
 
@@ -62,7 +63,7 @@ export default function TestsPage() {
             <ArrowLeft size={16} />
           </button>
           <h1 className="text-base font-semibold flex-1">All Tests</h1>
-          <Btn variant="primary" size="sm" icon={Plus} onClick={() => setNewTestOpen(true)}>New test</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>New test</Btn>
         </div>
       </div>
 
@@ -86,7 +87,7 @@ export default function TestsPage() {
             <FileQuestion size={36} className="mx-auto mb-3 text-neutral-300" />
             <p className="font-medium text-neutral-600">No {filter !== 'all' ? filter : ''} tests yet</p>
             <p className="text-sm text-neutral-400 mb-4">Create your first test to get started.</p>
-            <Btn variant="primary" size="sm" icon={Plus} onClick={() => setNewTestOpen(true)}>Create test</Btn>
+            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>Create test</Btn>
           </div>
         ) : (
           <div className="space-y-2">
@@ -112,6 +113,11 @@ export default function TestsPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button onClick={() => { setEditTestId(t.id); setNewTestOpen(true); }}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
+                        <Edit2 size={13} className="text-neutral-500" />
+                        Edit
+                      </button>
                       <button onClick={() => setResultsTest(t)}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
                         <ListChecks size={13} className="text-neutral-500" />
@@ -145,7 +151,12 @@ export default function TestsPage() {
           setResultsTest(null);
         }}
       />
-      <NewTestModal open={newTestOpen} onClose={() => setNewTestOpen(false)} onSuccess={fetchTests} />
+      <NewTestModal 
+        open={newTestOpen} 
+        onClose={() => { setNewTestOpen(false); setEditTestId(null); }} 
+        onSuccess={fetchTests} 
+        editTestId={editTestId} 
+      />
     </div>
   );
 }

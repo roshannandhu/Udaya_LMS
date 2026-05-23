@@ -6,6 +6,7 @@ import { apiClient, attendanceApi } from '../../lib/api';
 import AttendanceGrid from '../../components/teacher/AttendanceGrid';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import NewTestModal from '../../components/teacher/NewTestModal';
+import { EditVideoModal } from '../../components/teacher/Modals';
 import { useAppCache } from '../../store';
 
 function UploadVideoModal({ open, onClose, classId, onSuccess }) {
@@ -207,6 +208,7 @@ export default function SubjectDetailPage() {
   const [newTestOpen, setNewTestOpen] = useState(false);
   const [selectedTest, setSelectedTest]   = useState(null);
   const [videoMenuId, setVideoMenuId] = useState(null);
+  const [editVideo, setEditVideo]     = useState(null);
 
   useEffect(() => {
     if (!videoMenuId) return;
@@ -356,6 +358,12 @@ export default function SubjectDetailPage() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
+                          onClick={() => { setEditVideo(v); setVideoMenuId(null); }}
+                          className="w-full text-left px-3 py-1.5 text-sm text-neutral-700 hover:bg-white/40"
+                        >
+                          Edit
+                        </button>
+                        <button
                           onClick={() => handleDeleteVideo(v.id)}
                           className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
                         >
@@ -400,8 +408,8 @@ export default function SubjectDetailPage() {
                     </div>
                   </div>
                   {t.scheduled_for && (
-                    <div className="text-xs text-neutral-500 pt-2 border-t border-white/40 mt-2">
-                      Scheduled: {new Date(t.scheduled_for).toLocaleString()}
+                    <div className="text-xs text-amber-700 pt-2 border-t border-white/40 mt-2">
+                      Publishes on {new Date(t.scheduled_for).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </div>
                   )}
                 </div>
@@ -451,6 +459,12 @@ export default function SubjectDetailPage() {
         onClose={() => setNewTestOpen(false)}
         defaultClassId={classId}
         onSuccess={() => fetchTestsData()}
+      />
+      <EditVideoModal
+        open={!!editVideo}
+        onClose={() => setEditVideo(null)}
+        video={editVideo}
+        onSuccess={() => fetchVideosData()}
       />
       <TestResultsSheet
         open={!!selectedTest}

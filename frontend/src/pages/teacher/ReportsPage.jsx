@@ -65,6 +65,26 @@ export default function ReportsPage() {
     }
   };
 
+  const exportAttendancePDF = () => {
+    if (!currentStd || lowAttendance.length === 0) return;
+    const doc = new jsPDF();
+    doc.text('Attendance Report', 14, 16);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    // Simulating filter values as requested
+    doc.text(`Standard: ${currentStd.name}  |  Threshold: 75%  |  Date: Last 30 Days`, 14, 24);
+    doc.setTextColor(0);
+    
+    doc.autoTable({
+      startY: 30,
+      head: [['Student', 'Attendance %', 'Absent (30d)']],
+      body: lowAttendance.map(r => [r.name, `${r.attendance_pct}%`, r.absent_days ?? '—']),
+      theme: 'striped',
+      headStyles: { fillColor: [220, 38, 38] },
+    });
+    doc.save(`${currentStd.name.replace(/\s+/g, '_')}_Attendance_Report.pdf`);
+  };
+
   const handleExportPDF = () => {
     if (!currentStd || students.length === 0) return;
     const doc = new jsPDF();
@@ -147,6 +167,9 @@ export default function ReportsPage() {
             <ArrowLeft size={16} />
           </button>
           <h1 className="text-base font-semibold flex-1">Reports & Analytics</h1>
+          <Btn variant="default" size="sm" icon={Download} onClick={handleExportPDF} disabled={students.length === 0}>
+            Class Report
+          </Btn>
         </div>
       </div>
 
@@ -286,11 +309,11 @@ export default function ReportsPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Btn variant="default" size="sm" icon={Download} onClick={handleExportPDF} disabled={students.length === 0}>
-                    PDF
+                  <Btn variant="default" size="sm" icon={Download} onClick={exportAttendancePDF} disabled={lowAttendance.length === 0}>
+                    Export PDF
                   </Btn>
                   <Btn variant="default" size="sm" icon={Download} onClick={handleExportAttendance}>
-                    CSV
+                    Export CSV
                   </Btn>
                 </div>
               </div>

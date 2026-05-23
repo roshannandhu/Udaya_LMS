@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
-import { FileQuestion, BarChart3, Bell, Settings, ChevronRight, Edit2, LogOut, MessageSquare, Calendar, Loader2, Users } from 'lucide-react';
+import { FileQuestion, BarChart3, Bell, Settings, ChevronRight, Edit2, LogOut, MessageSquare, Calendar, Loader2, Users, User, Database } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Modal } from '../../components/ui';
 import { Btn, Input } from '../../components/ui';
@@ -19,6 +19,8 @@ export default function MorePage() {
   const [editSaving, setEditSaving] = useState(false);
 
   const items = [
+    { icon: User,          label: 'My Profile',    sub: 'Edit name & view stats',     onClick: () => navigate('/teacher/profile') },
+    { icon: Database,      label: 'Question Bank', sub: 'Reusable questions',          onClick: () => navigate('/teacher/question-bank') },
     { icon: Users,         label: 'Students',      sub: 'Manage class students',      onClick: () => navigate('/teacher/students') },
     { icon: MessageSquare, label: 'Broadcasts',    sub: 'Send messages to students',  onClick: () => navigate('/teacher/broadcasts') },
     { icon: Calendar,      label: 'Attendance',    sub: 'Mark & view attendance',      onClick: () => navigate('/teacher/attendance') },

@@ -44,9 +44,9 @@ export default function StudentTestsPage() {
   const now = new Date();
 
   const isOpen = (t) => {
-    if (t.status === 'active') return true;
+    if (t.expires_at && new Date(t.expires_at) <= now) return false;
     if (t.status === 'scheduled') return !t.scheduled_for || new Date(t.scheduled_for) <= now;
-    return false;
+    return true;
   };
 
   const available = allTests.filter(t => isOpen(t) && !attemptedIds.has(String(t.id)));
@@ -55,7 +55,7 @@ export default function StudentTestsPage() {
   );
   const completed = allTests.filter(t => attemptedIds.has(String(t.id)));
   const missed    = allTests.filter(t =>
-    t.status === 'completed' && !attemptedIds.has(String(t.id))
+    (t.status === 'completed' || (t.expires_at && new Date(t.expires_at) <= now)) && !attemptedIds.has(String(t.id))
   );
 
   function fmtDate(d) {
@@ -95,7 +95,7 @@ export default function StudentTestsPage() {
           <div className="flex items-center justify-between pt-2 border-t border-white/40 mt-2">
             <span className="text-xs text-amber-700 flex items-center gap-1">
               <Clock size={11} />
-              {t.scheduled_for ? fmtDate(t.scheduled_for) : 'Active now'}
+              {t.expires_at ? `Closes ${fmtDate(t.expires_at)}` : (t.scheduled_for ? fmtDate(t.scheduled_for) : 'Active now')}
             </span>
             <button
               onClick={() => navigate(`/student/tests/${t.id}/take`)}

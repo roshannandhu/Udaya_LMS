@@ -154,7 +154,7 @@ export default function StudentDetailPage() {
 
       <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
         <div className="flex items-start gap-4 mb-8 pb-8 border-b border-white/60">
-          <Avatar name={s.name} size="xl" />
+          <Avatar name={s.name} src={s.avatar_url} size="xl" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <h2 className="text-xl font-semibold">{s.name}</h2>

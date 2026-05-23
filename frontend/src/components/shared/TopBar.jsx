@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import SearchPalette from './SearchPalette';
+import NotificationBell from './NotificationBell';
 
 export default function TopBar({ title, subtitle, action, showSearch = true, breadcrumbs }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -28,6 +29,7 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
             <Search size={16} />
           </button>
         )}
+        <NotificationBell />
         {action}
       </div>
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />

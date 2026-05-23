@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
 import { Btn, Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import {
@@ -11,6 +11,13 @@ import {
   getCachedVideoSize,
   formatBytes,
 } from '../../lib/offlineVideos';
+
+function toMmSs(secs) {
+  if (secs == null) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
@@ -33,6 +40,10 @@ export default function StudentVideoPlayerPage() {
   const [cachedSize, setCachedSize] = useState(null);
   const [blobUrl, setBlobUrl]     = useState(null);
   const blobUrlRef = useRef(null);
+  const videoRef = useRef(null);
+  const iframeRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [chapterActive, setChapterActive] = useState(-1);
 
   // Track online/offline status
   useEffect(() => {
@@ -110,6 +121,28 @@ export default function StudentVideoPlayerPage() {
       });
     }
   }, [isOnline, saved, blobUrl, videoId]);
+
+  const handleTimeUpdate = useCallback(() => {
+    const t = videoRef.current?.currentTime;
+    if (t == null) return;
+    setCurrentTime(t);
+    if (video?.chapters?.length) {
+      let idx = -1;
+      for (let i = video.chapters.length - 1; i >= 0; i--) {
+        if (t >= video.chapters[i].start_secs) { idx = i; break; }
+      }
+      setChapterActive(idx);
+    }
+  }, [video?.chapters]);
+
+  const seekTo = (secs) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = secs;
+      videoRef.current.play();
+    } else if (iframeRef.current) {
+      iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'seek', data: secs }), '*');
+    }
+  };
 
   const handleMarkComplete = async () => {
     setIsMarking(true);
@@ -211,6 +244,7 @@ export default function StudentVideoPlayerPage() {
         <div className="relative bg-neutral-900 aspect-video flex items-center justify-center">
           {showCloudflarePlayer && (
             <iframe
+              ref={iframeRef}
               src={`https://iframe.cloudflarestream.com/${video.cloudflare_video_id}`}
               className="w-full h-full border-0"
               allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
@@ -220,20 +254,24 @@ export default function StudentVideoPlayerPage() {
           )}
           {showStoragePlayer && (
             <video
+              ref={videoRef}
               src={video.cloudflare_video_id}
               controls
               className="w-full h-full"
               controlsList={video.allow_download ? '' : 'nodownload'}
               title={video.title}
+              onTimeUpdate={handleTimeUpdate}
             />
           )}
           {showOfflinePlayer && (
             <video
+              ref={videoRef}
               src={blobUrl}
               className="w-full h-full"
               controls
               autoPlay={false}
               title={video.title}
+              onTimeUpdate={handleTimeUpdate}
             />
           )}
           {showOfflineUnavailable && (
@@ -339,6 +377,36 @@ export default function StudentVideoPlayerPage() {
 
           {video.description && (
             <p className="text-sm text-neutral-600 mb-5 leading-relaxed">{video.description}</p>
+          )}
+
+          {/* Chapters */}
+          {video?.chapters?.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock size={13} className="text-neutral-400" />
+                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Chapters</p>
+              </div>
+              <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden divide-y divide-white/40">
+                {video.chapters.sort((a, b) => a.start_secs - b.start_secs).map((ch, idx) => (
+                  <button key={idx} onClick={() => seekTo(ch.start_secs)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/40 ${
+                      chapterActive === idx ? 'bg-blue-50/60 border-l-2 border-l-blue-500' : ''
+                    }`}>
+                    <span className={`text-[11px] font-mono font-medium px-1.5 py-0.5 rounded ${
+                      chapterActive === idx ? 'bg-blue-100 text-blue-700' : 'bg-neutral-100 text-neutral-600'
+                    }`}>
+                      {toMmSs(ch.start_secs)}
+                    </span>
+                    <span className={`text-sm flex-1 min-w-0 truncate ${
+                      chapterActive === idx ? 'font-medium text-blue-800' : 'text-neutral-700'
+                    }`}>
+                      {ch.title}
+                    </span>
+                    <Play size={11} className="text-neutral-400 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {!completed && isOnline && (

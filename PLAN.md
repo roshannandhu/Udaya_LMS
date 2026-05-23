@@ -45,28 +45,29 @@ These are features not yet built. Prioritize top-to-bottom.
 
 | Feature | Where | Notes |
 |---|---|---|
-| Push notifications (browser) | Frontend + backend `/api/notifications` | Table exists, endpoint not built |
+| Push notifications (browser) | Frontend + backend `/api/notifications` | ✅ Done — bell in TopBar with polling |
 | Student profile photo upload | `StudentProfilePage` + `PATCH /api/students/me` | Supabase Storage bucket exists |
-| Test scheduling (publish at future time) | `NewTestModal` + backend | `scheduled_for` column exists in tests table |
-| Broadcast scheduling | `BroadcastThread` + backend | `scheduled_for` exists in broadcasts table |
-| Read receipts UI | `BroadcastThread` / `StudentBroadcastsPage` | `broadcast_reads` table exists |
+| Test scheduling & Expiration logic | `NewTestModal` + backend | ✅ Done — start/end dates, dynamic timer, strict class separation |
+| Broadcast scheduling | `BroadcastThread` + backend | ✅ Done — schedule UI, WS suppression, student filter |
+| Read receipts UI | `BroadcastThread` / `StudentBroadcastsPage` | `broadcast_reads` table exists | ✅ Done — student marks read on WS history + new_broadcast |
 
 ### P2 — Medium effort
 
 | Feature | Where | Notes |
 |---|---|---|
-| Question bank (reusable questions) | New page + `question_bank` table | Table in plan, not in schema yet |
+| Question bank (reusable questions) | New page + `question_bank` table | ✅ Done — CRUD + import into tests |
 | Student import via invite QR scan | `BulkImportModal` + `/join/:code` | Partial — join requests exist |
-| Teacher profile page | New `TeacherProfilePage` | Only MorePage exists currently |
+| Teacher profile page | New `TeacherProfilePage` | ✅ Done — avatar, stats, inline name edit, password link |
+| Edit Test functionality | `NewTestModal` + `TestsPage` | ✅ Done — full upserting of questions, preserves answers |
 | Multi-teacher / admin delegation | `SettingsPage` + new endpoint | `teachers.is_admin` column needed |
-| PDF export of reports | `ReportsPage` | jspdf + jspdf-autotable already installed |
-| Video chapters / timestamps | `SubjectDetailPage` + videos table | New column `chapters` JSONB |
+| PDF export of reports | `ReportsPage` | ✅ Done — Class Report + Attendance Report |
+| Video chapters / timestamps | `SubjectDetailPage` + videos table | ✅ Done — EditVideoModal + student chapter timeline with seek |
 
 ### P3 — Future / nice-to-have
 
 | Feature | Notes |
 |---|---|
-| PWA Service Worker | manifest.json + sw.js |
+| PWA Service Worker | manifest.json + sw.js | ✅ Done — vite-plugin-pwa, Workbox caching, icons |
 | Parent portal (read-only) | New role + routing |
 | Live class (WebRTC/Zoom) | Complex — external integration |
 | AI attendance from camera | Very complex — future |

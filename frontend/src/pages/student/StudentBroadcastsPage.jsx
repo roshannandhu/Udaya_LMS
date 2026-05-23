@@ -12,6 +12,7 @@ export default function StudentBroadcastsPage() {
   const [loading, setLoading] = useState(true);
   const [broadcasts, setBroadcasts] = useState([]);
   const wsRef = useRef(null);
+  const markedReadRef = useRef(new Set());
 
   // Load the student's standard from their profile
   useEffect(() => {
@@ -44,8 +45,9 @@ export default function StudentBroadcastsPage() {
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'history') {
+        const now = new Date();
         const formatted = data.data
-          .filter(b => !b.deleted)
+          .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
           .map(b => ({
             id: b.id,
             text: b.message,
@@ -54,12 +56,17 @@ export default function StudentBroadcastsPage() {
             attachments: b.attachment_url ? [{ url: b.attachment_url, type: b.attachment_type }] : [],
           }));
         setBroadcasts(formatted);
-        // Mark all visible broadcasts as read
+        // Mark all visible broadcasts as read (skip already-sent IDs)
         const ids = formatted.map(b => b.id).filter(Boolean);
-        if (ids.length > 0) broadcastApi.markRead(ids).catch(() => {});
+        const unseen = ids.filter(id => !markedReadRef.current.has(id));
+        if (unseen.length > 0) {
+          broadcastApi.markRead(unseen).catch(() => {});
+          unseen.forEach(id => markedReadRef.current.add(id));
+        }
       } else if (data.type === 'new_broadcast') {
         const b = data.data;
         if (b.deleted) return;
+        if (b.scheduled_for && new Date(b.scheduled_for) > new Date()) return;
         const newMsg = {
           id: b.id,
           text: b.message,
@@ -71,8 +78,11 @@ export default function StudentBroadcastsPage() {
           if (prev.some(x => x.id === newMsg.id)) return prev;
           return [...prev, newMsg];
         });
-        // Mark the new message as read immediately
-        if (b.id) broadcastApi.markRead([b.id]).catch(() => {});
+        // Mark the new message as read immediately (skip if already sent)
+        if (b.id && !markedReadRef.current.has(b.id)) {
+          broadcastApi.markRead([b.id]).catch(() => {});
+          markedReadRef.current.add(b.id);
+        }
       } else if (data.type === 'delete_broadcast') {
         setBroadcasts(prev => prev.filter(b => b.id !== data.id));
       } else if (data.type === 'edit_broadcast') {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Upload, Plus, Shield, QrCode, Check, FileText, Layers, Minus, Loader2 } from 'lucide-react';
+import { UserPlus, Upload, Plus, Shield, QrCode, Check, FileText, Layers, Minus, Loader2, Clock, X, Database, Search } from 'lucide-react';
 import { Modal } from '../ui';
 import { Btn, Input, Textarea, Toggle } from '../ui';
-import { testApi } from '../../lib/api';
+import { testApi, apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
 
 export function NewStandardModal({ open, onClose }) {
@@ -165,6 +165,7 @@ export function NewTestModal({ open, onClose, defaultClassId, onSuccess }) {
   const [questions, setQuestions] = useState([{ question: '', options: ['', '', '', ''], correct_idx: 0 }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -314,6 +315,7 @@ export function NewTestModal({ open, onClose, defaultClassId, onSuccess }) {
             </div>
           ))}
           <Btn variant="default" size="sm" icon={Plus} onClick={handleAddQuestion} className="w-full">Add Question</Btn>
+          <Btn variant="default" size="sm" icon={Database} onClick={() => setImportOpen(true)} className="w-full mt-1">Import from Bank</Btn>
         </div>
       </div>
       <div className="flex gap-2 justify-end pt-4 mt-2 border-t border-white/60">
@@ -323,6 +325,18 @@ export function NewTestModal({ open, onClose, defaultClassId, onSuccess }) {
           Create test
         </Btn>
       </div>
+      <ImportFromBankModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onPick={(bankQuestions) => {
+          setQuestions(prev => [...prev, ...bankQuestions.map(q => ({
+            question: q.question,
+            options: q.options,
+            correct_idx: q.correct_idx,
+          }))]);
+          setImportOpen(false);
+        }}
+      />
     </Modal>
   );
 }
@@ -344,6 +358,214 @@ export function AttachPickerModal({ open, onClose, onPick }) {
             <span className="text-sm font-medium">{o.label}</span>
           </button>
         ))}
+      </div>
+    </Modal>
+  );
+}
+
+function toMmSs(secs) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function parseMmSs(str) {
+  const parts = str.split(':');
+  if (parts.length === 2) return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  if (parts.length === 3) return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+  return parseInt(str, 10) || 0;
+}
+
+export function EditVideoModal({ open, onClose, video, onSuccess }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [allowDownload, setAllowDownload] = useState(true);
+  const [chapters, setChapters] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open && video) {
+      setTitle(video.title || '');
+      setDescription(video.description || '');
+      setAllowDownload(video.allow_download !== false);
+      setChapters(video.chapters ? [...video.chapters].sort((a, b) => a.start_secs - b.start_secs) : []);
+      setError('');
+    }
+  }, [open, video]);
+
+  const handleAddChapter = () => {
+    setChapters([...chapters, { title: '', start_secs: 0 }]);
+  };
+
+  const handleRemoveChapter = (idx) => {
+    setChapters(chapters.filter((_, i) => i !== idx));
+  };
+
+  const handleChapterChange = (idx, field, value) => {
+    const updated = [...chapters];
+    if (field === 'time') {
+      updated[idx] = { ...updated[idx], start_secs: parseMmSs(value) };
+    } else if (field === 'title') {
+      updated[idx] = { ...updated[idx], title: value };
+    }
+    setChapters(updated);
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) { setError('Title is required'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const sorted = [...chapters].sort((a, b) => a.start_secs - b.start_secs);
+      await apiClient(`/videos/${video.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: title.trim(), description: description.trim() || null, allow_download: allowDownload, chapters: sorted }),
+      });
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Video" size="md">
+      <div className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
+        {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 p-2.5 rounded-lg">{error}</div>}
+        <Input label="Title" value={title} onChange={e => setTitle(e.target.value)} />
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Description</label>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+            className="w-full px-3 py-2 rounded-md bg-white/50 border border-white/60 outline-none text-sm resize-none" />
+        </div>
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" checked={allowDownload} onChange={e => setAllowDownload(e.target.checked)} className="w-4 h-4 rounded" />
+          Allow offline download
+        </label>
+
+        {/* Chapters */}
+        <div className="border-t border-white/60 pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Chapters</p>
+            <Btn variant="ghost" size="sm" icon={Plus} onClick={handleAddChapter}>Add</Btn>
+          </div>
+          {chapters.length === 0 && (
+            <p className="text-xs text-neutral-400 py-2">No chapters yet. Add timestamps to help students navigate.</p>
+          )}
+          <div className="space-y-1.5">
+            {chapters.map((ch, idx) => (
+              <div key={idx} className="flex items-center gap-1.5">
+                <span className="text-[10px] text-neutral-400 font-mono w-5">{idx + 1}.</span>
+                <input value={ch.title} onChange={e => handleChapterChange(idx, 'title', e.target.value)}
+                  placeholder="Chapter title"
+                  className="flex-1 px-2 py-1.5 rounded text-xs bg-white/50 border border-white/60 outline-none" />
+                <div className="relative">
+                  <Clock size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                  <input value={toMmSs(ch.start_secs)} onChange={e => handleChapterChange(idx, 'time', e.target.value)}
+                    placeholder="0:00"
+                    className="w-20 pl-7 pr-2 py-1.5 rounded text-xs bg-white/50 border border-white/60 outline-none font-mono" />
+                </div>
+                <button onClick={() => handleRemoveChapter(idx)} className="p-1 text-neutral-400 hover:text-red-500 rounded hover:bg-red-50">
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end pt-4 mt-2 border-t border-white/60">
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+          Save
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+export function ImportFromBankModal({ open, onClose, onPick }) {
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    const load = async () => {
+      setLoading(true);
+      setSelected(new Set());
+      setSearch('');
+      try {
+        const { apiClient } = await import('../../lib/api');
+        const data = await apiClient('/question-bank');
+        setQuestions(data || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [open]);
+
+  const toggle = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const filtered = questions.filter(q => {
+    if (!search.trim()) return true;
+    const s = search.toLowerCase();
+    return q.question.toLowerCase().includes(s) || (q.subject || '').toLowerCase().includes(s);
+  });
+
+  return (
+    <Modal open={open} onClose={onClose} title="Import from Question Bank" size="md">
+      <div className="space-y-3 max-h-[60vh] overflow-y-auto p-1">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search..."
+            className="w-full pl-8 pr-3 py-1.5 rounded text-xs bg-white/50 border border-white/60 outline-none" />
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 size={16} className="animate-spin text-neutral-400" /></div>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-neutral-500 py-4 text-center">No questions found in your bank.</p>
+        ) : (
+          filtered.map((q, i) => (
+            <label key={q.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selected.has(q.id) ? 'bg-blue-50 border-blue-300' : 'border-white/60 hover:bg-white/30'}`}>
+              <input type="checkbox" checked={selected.has(q.id)} onChange={() => toggle(q.id)} className="mt-1" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium mb-1.5">{q.question}</p>
+                <div className="flex flex-wrap gap-1">
+                  {q.options.map((opt, oi) => (
+                    <span key={oi} className={`text-[10px] px-1.5 py-0.5 rounded ${oi === q.correct_idx ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-500'}`}>
+                      {opt}
+                    </span>
+                  ))}
+                </div>
+                {q.subject && <p className="text-[10px] text-neutral-400 mt-1">{q.subject}</p>}
+              </div>
+            </label>
+          ))
+        )}
+      </div>
+      <div className="flex gap-2 justify-end pt-4 mt-2 border-t border-white/60">
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={() => {
+          const picked = questions.filter(q => selected.has(q.id));
+          onPick(picked);
+        }} disabled={selected.size === 0}>
+          Add Selected ({selected.size})
+        </Btn>
       </div>
     </Modal>
   );

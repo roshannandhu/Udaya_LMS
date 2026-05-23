@@ -42,6 +42,7 @@ Last updated: May 2026
 
 ### Teacher Portal — Videos
 - [x] Upload video to Cloudflare Stream
+- [x] Upload video to Supabase Storage fallback (when Cloudflare not configured — auto-creates `videos` bucket)
 - [x] Manual video entry (without uploading)
 - [x] Edit video title / description / allow_download
 - [x] Delete video (removes from Cloudflare + DB)
@@ -67,12 +68,13 @@ Last updated: May 2026
 
 ### Teacher Portal — Broadcasts
 - [x] Send broadcast message to a standard
-- [x] Attach file to broadcast (Supabase Storage)
+- [x] Attach file to broadcast (Supabase Storage `broadcasts` bucket)
 - [x] Real-time WebSocket delivery
 - [x] Broadcast history persisted to DB + broadcasts.json
-- [x] Soft-delete broadcast
-- [x] Edit broadcast message
+- [x] Soft-delete broadcast (WebSocket `delete_broadcast` event propagates to all clients)
+- [x] Edit broadcast message (WebSocket `edit_broadcast` event propagates)
 - [x] Standard selector in BroadcastsPage
+- [x] Read count display per message (teacher view — `✓✓ N/Total read` via `broadcast_reads` table)
 
 ### Teacher Portal — Reports & Dashboard
 - [x] Dashboard stats (standards / students / subjects / videos counts)
@@ -90,6 +92,7 @@ Last updated: May 2026
 ### Teacher Portal — Settings
 - [x] Default student password (saved to localStorage, used in bulk + individual add)
 - [x] Change teacher's own password
+- [x] LMS branding — custom name + logo (base64, persisted to localStorage via Zustand)
 - [x] Notifications toggle UI (not yet wired to backend)
 - [x] Security toggle UI (not yet wired to backend)
 
@@ -97,7 +100,7 @@ Last updated: May 2026
 - [x] Student home (welcome + quick stats)
 - [x] Subjects list
 - [x] Subject view (videos list)
-- [x] Video player (Cloudflare Stream embed)
+- [x] Video player (Cloudflare Stream embed or native `<video>` for Supabase Storage URLs)
 - [x] Video progress tracking (POST /videos/{id}/complete)
 - [x] Offline video download + playback (Cache API)
 - [x] Test list (non-draft only)
@@ -108,6 +111,10 @@ Last updated: May 2026
 - [x] Test history
 - [x] Real-time broadcasts (WebSocket)
 - [x] Student profile view + edit
+- [x] Student profile photo upload (POST /api/students/me/avatar → Supabase Storage `avatars` bucket)
+- [x] Avatar displayed on: StudentProfilePage (header), StudentDetailPage (teacher view), StudentLeaderboardPage (podium + list)
+- [x] Avatar persists across page reloads — `/auth/me` now returns `avatar_url`
+- [x] Avatar component supports `src` prop with graceful fallback to colored initials on load error
 - [x] Change password (forced on first login)
 - [x] Leaderboard (with current student highlighted)
 
@@ -127,23 +134,22 @@ Last updated: May 2026
 
 ### P1 — High value, low effort
 
-- [ ] **Push notifications** — `notifications` table exists, no endpoint yet. Build `GET /notifications`, `POST /notifications`, `PATCH /notifications/{id}/read`. Add bell icon to TopBar.
-- [ ] **Student profile photo** — Add `avatar_url` upload to `PATCH /api/students/me`. Supabase Storage bucket needs creation. Show in StudentProfilePage + Avatar component.
-- [ ] **Test scheduling** — `tests.scheduled_for` column exists. Wire it in `NewTestModal` date picker. Backend already accepts `scheduled_for` in TestUpdate. Add frontend display.
-- [ ] **Broadcast scheduling** — `broadcasts.scheduled_for` column exists. Add scheduled send UI in BroadcastThread. Backend needs filter: `scheduled_for IS NULL OR scheduled_for <= now()`.
-- [ ] **Read receipts display** — `broadcast_reads` table exists. Add read count badge on broadcast messages for teacher. Student side: `POST /broadcast-reads` on message visible (upsert).
+- [x] **Push notifications** — `notifications` table exists, endpoints exist (`GET /notifications`, `POST /notifications/read-all`, `PATCH /notifications/{id}/read`) — bell UI in TopBar wired to live data with polling.
+- [x] **Test scheduling** — `tests.scheduled_for` column exists. Date picker in `NewTestModal`, future-scheduled tests hidden from students, "Publishes on" label on teacher test cards.
+- [x] **Broadcast scheduling** — `scheduled_for` column added, schedule UI in BroadcastThread, future-scheduled hidden from students, "Scheduled" pill on teacher bubbles.
+- [x] **Student read receipts (student side)** — Student portal calls `POST /broadcast-reads` when broadcasts load/arrive via WebSocket, with a `markedReadRef` Set dedup to avoid re-sending on reconnect.
 
 ### P2 — Medium effort
 
-- [ ] **PDF report export** — `jspdf` + `jspdf-autotable` already installed. Wire in `ReportsPage` alongside existing CSV export button.
-- [ ] **Question bank** — New table `question_bank(id, test_id, question, options, correct_idx, teacher_id)`. New page. Import from bank into test.
-- [ ] **Teacher profile page** — Expand `MorePage` or create `TeacherProfilePage`. Show name, email, created standards count.
-- [ ] **Video chapters** — Add `chapters JSONB` column to `videos` table. Timeline UI in `StudentVideoPlayerPage`.
+- [x] **PDF report export** — Two PDF exports on `ReportsPage`: "Class Report" (full student table + low-attendance section) via `handleExportPDF`, and "Export PDF" (low-attendance only) via `exportAttendancePDF`. Client-side generation with jspdf + jspdf-autotable.
+- [x] **Question bank** — `question_bank` table in schema.sql. 4 backend endpoints (GET/POST/DELETE/import). `QuestionBankPage` at `/teacher/question-bank` with search, add form, delete. `ImportFromBankModal` in `NewTestModal`.
+- [x] **Teacher profile page** — New `TeacherProfilePage` at `/teacher/profile` with avatar, stats row, inline name edit (PATCH /auth/profile), and link to change password. Linked from MorePage "My Profile" row.
+- [x] **Video chapters** — `chapters JSONB` column (migration comment in schema.sql). EditVideoModal in Modals.jsx for teacher (title + MM:SS inputs). Chapter timeline in StudentVideoPlayerPage with click-to-seek (native video ref + Cloudflare postMessage) and active-chapter highlighting via onTimeUpdate.
 - [ ] **Multi-teacher admin** — Add `teachers` table or `is_admin` column. Admin can create other teacher accounts.
 
 ### P3 — Future
 
-- [ ] PWA manifest + Service Worker
+- [x] PWA manifest + Service Worker — `vite-plugin-pwa` with auto-update SW, manifest.webmanifest, Workbox caching (glob precache + Supabase Storage runtime cache), icon-192.png + icon-512.png, theme-color meta tag.
 - [ ] Parent portal (read-only role)
 - [ ] Live class (WebRTC integration)
 - [ ] Mobile app (React Native)
