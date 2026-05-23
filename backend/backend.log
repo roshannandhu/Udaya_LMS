@@ -1,0 +1,1211 @@
+[*] Supabase connected successfully
+INFO:     127.0.0.1:53160 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53171 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53175 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53193 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53196 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53199 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53299 - "GET /api/leaderboard HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53302 - "GET /api/student/tests/history HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53306 - "GET /api/reports/attendance?standard_id=test HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53314 - "GET /api/tests HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53316 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53318 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53320 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53322 - "GET /api/videos HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53324 - "GET /api/broadcasts HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60484 - "PATCH /api/auth/profile HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56972 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57006 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54657 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54660 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50060 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52423 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52423 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54540 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52423 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63298 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54540 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52423 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63298 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63298 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51376 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62430 - "GET /api/dashboard/activity HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54540 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52423 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50060 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+[*] Supabase connected successfully
+INFO:     127.0.0.1:61139 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57608 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65200 - "GET /api/dashboard/activity HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59557 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54355 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61139 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50319 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57608 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65200 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59557 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61139 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57608 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65200 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61139 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65200 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65200 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59534 - "POST /api/broadcast-reads HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59537 - "GET /api/broadcasts/reads?standard_id=test HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52170 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59180 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53619 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59180 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65504 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53619 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59699 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53394 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59699 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53619 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59180 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55926 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53609 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52267 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60084 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50388 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63237 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53609 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60084 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52267 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60084 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53609 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63237 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "POST /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56324 - "OPTIONS /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59751 - "OPTIONS /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59218 - "OPTIONS /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52544 - "OPTIONS /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "OPTIONS /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56324 - "OPTIONS /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50685 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59751 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59218 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50685 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56324 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59751 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52544 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59218 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55425 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52544 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59218 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "OPTIONS /api/tests/with-questions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "POST /api/tests/with-questions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56001 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63275 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61457 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56001 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63275 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64474 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59709 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59709 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63325 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62104 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62104 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62104 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60755 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "OPTIONS /api/standards/6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60755 - "OPTIONS /api/subjects?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "OPTIONS /api/students?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62104 - "OPTIONS /api/subjects?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51233 - "OPTIONS /api/students?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "OPTIONS /api/standards/6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60755 - "GET /api/standards/6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/subjects?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62104 - "GET /api/students?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60215 - "GET /api/standards/6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53709 - "GET /api/students?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60755 - "GET /api/subjects?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58103 - "OPTIONS /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "OPTIONS /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58103 - "GET /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52854 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62964 - "GET /api/standards HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:55690 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56541 - "OPTIONS /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56541 - "OPTIONS /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56541 - "GET /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/subjects?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/standards/6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57167 - "GET /api/students/c009541d-5ad4-4d4b-bd11-c8bef7ff0ae6/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57167 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56541 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "OPTIONS /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50731 - "OPTIONS /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55901 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64290 - "OPTIONS /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50779 - "OPTIONS /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50779 - "GET /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64290 - "GET /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53379 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53379 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53379 - "OPTIONS /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53957 - "OPTIONS /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53957 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53379 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49237 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49237 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "OPTIONS /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49237 - "OPTIONS /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59179 - "OPTIONS /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "OPTIONS /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49237 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49237 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "OPTIONS /api/broadcasts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "POST /api/broadcasts HTTP/1.1" 200 OK
+Supabase broadcast insert failed: {'message': "Could not find the 'attachment_type' column of 'broadcasts' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+INFO:     127.0.0.1:54383 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60827 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58100 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52302 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60827 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58100 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58100 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60827 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58137 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62766 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60394 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63995 - "GET /api/dashboard/activity HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51546 - "GET /api/dashboard/stats HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62766 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58137 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58849 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62766 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58137 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58849 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58849 - "OPTIONS /api/auth/logout HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58849 - "POST /api/auth/logout HTTP/1.1" 200 OK
+Session tracking failed: {'message': 'insert or update on table "student_sessions" violates foreign key constraint "student_sessions_student_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (student_id)=(9e062352-7ac3-4ae1-a9a3-e10b46fc39d1) is not present in table "students".'}
+INFO:     127.0.0.1:60292 - "POST /api/auth/login HTTP/1.1" 200 OK
+[*] Supabase connected successfully
+INFO:     127.0.0.1:58383 - "OPTIONS /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65270 - "OPTIONS /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51358 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56179 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64501 - "OPTIONS /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64501 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51358 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51358 - "OPTIONS /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53222 - "OPTIONS /api/student/tests/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51358 - "OPTIONS /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56179 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65270 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58383 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56179 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53222 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64501 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51358 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58383 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56179 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53222 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:65270 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56179 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58383 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54773 - "GET /api/tests HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62501 - "GET /api/videos HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51845 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54773 - "GET /api/tests HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62501 - "GET /api/videos HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51845 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51845 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54773 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62501 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56411 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51845 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51845 - "OPTIONS /api/leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63498 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56411 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:61781 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51845 - "GET /api/leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61781 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57529 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60021 - "GET /api/leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51845 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51845 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61083 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60021 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49436 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60235 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51845 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63033 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60235 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49436 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63033 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60235 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:65355 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59839 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:65355 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53103 - "OPTIONS /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58301 - "OPTIONS /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56738 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56792 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58301 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63022 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53103 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56738 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:65268 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51603 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51863 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51863 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57655 - "GET /api/leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51863 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49858 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51863 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57655 - "GET /api/leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53909 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63290 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51863 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57655 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49708 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59296 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57003 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59674 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56592 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56413 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59674 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56413 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51173 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58578 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51528 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64342 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51528 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55862 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64342 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58578 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49273 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:55062 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55862 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64342 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51528 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58578 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:55062 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:55862 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59303 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51528 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51010 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59303 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55862 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54506 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49433 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52318 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51010 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53930 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59303 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52318 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49433 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49433 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57992 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55681 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57992 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51828 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52544 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63770 - "GET /api/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51828 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63770 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57992 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54234 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54234 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:64994 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55580 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58686 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60992 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+[*] Supabase connected successfully
+INFO:     127.0.0.1:54662 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54662 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50456 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56599 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52331 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57057 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52211 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54662 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56599 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57057 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50456 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54662 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57057 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52211 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58605 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52960 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49444 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:64767 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49328 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63277 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58690 - "GET /api/students/9e062352-7ac3-4ae1-a9a3-e10b46fc39d1/attendance HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59522 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52297 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53928 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58287 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56615 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59522 - "OPTIONS /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50111 - "OPTIONS /api/student/tests/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59522 - "OPTIONS /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50111 - "OPTIONS /api/student/tests/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55581 - "OPTIONS /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59673 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59673 - "OPTIONS /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50270 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62910 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50270 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62910 - "POST /api/auth/verify-device HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59673 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60492 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55581 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56655 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62910 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50270 - "POST /api/auth/verify-device HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59673 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60492 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50270 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51713 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54810 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62910 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59673 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50270 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60492 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49671 - "GET /api/student/tests/history HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59673 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56091 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58740 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58481 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56049 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56049 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56049 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56049 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63616 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58619 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62177 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53687 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63616 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53958 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62177 - "GET /api/dashboard/stats HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52090 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62172 - "GET /api/standards HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:65268 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54040 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63230 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52090 - "GET /api/standards HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54886 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54299 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49702 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53122 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53122 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54299 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49702 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54382 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "OPTIONS /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "OPTIONS /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "OPTIONS /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "OPTIONS /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "OPTIONS /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "OPTIONS /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51212 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64392 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53234 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62394 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51345 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51254 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49892 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64918 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51345 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51254 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51254 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51254 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51254 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64918 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49892 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51345 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49892 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51345 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64918 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51254 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49892 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64918 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51345 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59554 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59554 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53920 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60768 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60768 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60768 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60768 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59857 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59867 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60768 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61429 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61658 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61429 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61658 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61429 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61658 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61658 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54964 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56336 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:61429 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59918 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56921 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59747 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62176 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49990 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64617 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54254 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62441 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54254 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64617 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54124 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52964 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60998 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54124 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57105 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64703 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60998 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54124 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52964 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57105 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64703 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64703 - "GET /api/standards HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52964 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57105 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60998 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60998 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54124 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52681 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55021 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "OPTIONS /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54124 - "OPTIONS /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59621 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52681 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55021 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49379 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55021 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60479 - "OPTIONS /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62724 - "OPTIONS /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57810 - "OPTIONS /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60479 - "OPTIONS /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "OPTIONS /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56302 - "OPTIONS /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57810 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56302 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60479 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56302 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57810 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61347 - "OPTIONS /api/students/d3ac0f7c-65ff-4571-9dd9-3084d957b95b/block?blocked=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61347 - "PATCH /api/students/d3ac0f7c-65ff-4571-9dd9-3084d957b95b/block?blocked=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61347 - "OPTIONS /api/students/d3ac0f7c-65ff-4571-9dd9-3084d957b95b/block?blocked=false HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61347 - "PATCH /api/students/d3ac0f7c-65ff-4571-9dd9-3084d957b95b/block?blocked=false HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55942 - "OPTIONS /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64414 - "OPTIONS /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60929 - "OPTIONS /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55803 - "OPTIONS /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56170 - "OPTIONS /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53164 - "OPTIONS /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60929 - "GET /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64414 - "GET /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55803 - "GET /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60929 - "GET /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64414 - "GET /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55803 - "GET /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49764 - "OPTIONS /api/videos/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49764 - "POST /api/videos/upload HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:54208 - "OPTIONS /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52689 - "OPTIONS /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60767 - "OPTIONS /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54208 - "GET /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60767 - "GET /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52689 - "GET /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 500 Internal Server Error
+[*] Supabase connected successfully
+INFO:     127.0.0.1:58818 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52761 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63047 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52761 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "GET /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "GET /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63047 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52761 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64594 - "GET /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "GET /api/tests?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "OPTIONS /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "OPTIONS /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "OPTIONS /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "GET /api/videos?class_id=869bae6b-1e82-4164-933c-ac4d0afb8e79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52761 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63047 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64594 - "GET /api/reports/attendance?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64594 - "GET /api/standards/541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52761 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "GET /api/subjects?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63047 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57371 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64594 - "GET /api/students?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54297 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58818 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62931 - "OPTIONS /api/videos/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62931 - "POST /api/videos/upload HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:59978 - "POST /api/videos/upload HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:54430 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60076 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64886 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54430 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60076 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64886 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54430 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60076 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58629 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52720 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60076 - "GET /api/dashboard/activity HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53069 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64886 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54430 - "GET /api/notifications HTTP/1.1" 401 Unauthorized
+[*] Supabase connected successfully
+INFO:     127.0.0.1:56578 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61120 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56578 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59506 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60600 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52124 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59506 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60600 - "OPTIONS /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56578 - "OPTIONS /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59506 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52124 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:60600 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61120 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56578 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60600 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61120 - "GET /api/tests HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49706 - "OPTIONS /api/tests/2c4c8c44-3ea5-463b-9f49-847f38504d3f/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49706 - "GET /api/tests/2c4c8c44-3ea5-463b-9f49-847f38504d3f/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56663 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50219 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50219 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50219 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56663 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56663 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50219 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56832 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "OPTIONS /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56832 - "OPTIONS /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49842 - "OPTIONS /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "OPTIONS /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50219 - "OPTIONS /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56663 - "OPTIONS /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62035 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56832 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:50219 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:56663 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49842 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49182 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53866 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55420 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49182 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55420 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53866 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49182 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:57382 - "POST /api/videos/upload HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49934 - "POST /api/videos/upload HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58748 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57880 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54004 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58144 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57880 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58144 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54004 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64762 - "GET /api/students HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54345 - "GET /api/subjects HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:59212 - "GET /api/standards HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49993 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58703 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58437 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50073 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53768 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53768 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53768 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50073 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54202 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57610 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54202 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50073 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53768 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51602 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58800 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51602 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58800 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58823 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55224 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58823 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58800 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55224 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52618 - "OPTIONS /api/auth/profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52618 - "PATCH /api/auth/profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52618 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52618 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52618 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50376 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50376 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52618 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59715 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55980 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59822 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52837 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59822 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59715 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55980 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59822 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63763 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55980 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59715 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55980 - "GET /api/dashboard/activity HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62324 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52837 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52837 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52837 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52837 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52837 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52837 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "OPTIONS /api/broadcasts/d8712424-afbc-4cca-b694-315fc42ad210 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "DELETE /api/broadcasts/d8712424-afbc-4cca-b694-315fc42ad210 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "OPTIONS /api/broadcasts/312e225a-bc72-4f99-9177-3933d1e6bd75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "DELETE /api/broadcasts/312e225a-bc72-4f99-9177-3933d1e6bd75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "OPTIONS /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "OPTIONS /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57799 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57799 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57799 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62324 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61479 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52873 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60990 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52873 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61479 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60990 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59124 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61479 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52873 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61596 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61470 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49803 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63376 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61544 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53952 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65455 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63886 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63376 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61544 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49803 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65455 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:53952 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:63886 - "GET /api/students HTTP/1.1" 401 Unauthorized
+[*] Supabase connected successfully
+INFO:     127.0.0.1:49944 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60001 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:63146 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49944 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60001 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:63146 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52093 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65397 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56348 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51119 - "OPTIONS /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59219 - "OPTIONS /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65397 - "OPTIONS /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52093 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51119 - "OPTIONS /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56348 - "OPTIONS /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59219 - "OPTIONS /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52093 - "GET /api/notifications HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56348 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52093 - "GET /api/notifications HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/dashboard/activity HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/dashboard/activity HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56452 - "OPTIONS /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59219 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:65397 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59219 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56452 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51119 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "OPTIONS /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51948 - "OPTIONS /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57477 - "OPTIONS /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60611 - "OPTIONS /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51948 - "OPTIONS /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57477 - "OPTIONS /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51227 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62991 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57477 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51948 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51948 - "GET /api/tests?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "GET /api/videos?class_id=1061e709-001e-4cb0-9987-b0c716696ead HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57477 - "GET /api/reports/attendance?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de&below_pct=75 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57477 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60611 - "OPTIONS /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60611 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51227 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57477 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51948 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62991 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51227 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62991 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62991 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51227 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51227 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51948 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51227 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51948 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51948 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56598 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62991 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51227 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57477 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57477 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62991 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60611 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58757 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62299 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58907 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61994 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62299 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58907 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58757 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62299 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58907 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54848 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62463 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51558 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59404 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56669 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54604 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54848 - "GET /api/standards/4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54604 - "GET /api/subjects?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62463 - "GET /api/students?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62463 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54604 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54848 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56669 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54848 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54604 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56669 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54848 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54604 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56707 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64143 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:63611 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:63611 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56707 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64143 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61785 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62797 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61785 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "OPTIONS /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49495 - "OPTIONS /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49495 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56371 - "OPTIONS /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56371 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "OPTIONS /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49495 - "OPTIONS /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49495 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "OPTIONS /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56371 - "OPTIONS /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56371 - "GET /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects/f16308b1-17fb-468d-b105-b0941971d279/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects/869bae6b-1e82-4164-933c-ac4d0afb8e79/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:56371 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49495 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "OPTIONS /api/subjects/5606b0fe-3743-4c4a-b625-1afa6c9bebaf/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50297 - "OPTIONS /api/subjects/5606b0fe-3743-4c4a-b625-1afa6c9bebaf/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50297 - "GET /api/subjects/5606b0fe-3743-4c4a-b625-1afa6c9bebaf/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/subjects/5606b0fe-3743-4c4a-b625-1afa6c9bebaf/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54335 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64574 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54335 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64574 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54335 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "OPTIONS /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50297 - "OPTIONS /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64574 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50297 - "GET /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50298 - "OPTIONS /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64574 - "OPTIONS /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8/attendance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50297 - "GET /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64574 - "GET /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8/attendance HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64574 - "GET /api/students/46bdd84c-282d-4cd8-8ccf-1f25d6777db8/attendance HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64792 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60124 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51340 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51340 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64792 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62168 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60124 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54925 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62168 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55965 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55965 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55965 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50405 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50920 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62539 - "GET /api/dashboard/stats HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:64734 - "GET /api/dashboard/activity HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:51509 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50405 - "GET /api/standards HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:55965 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:50920 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51151 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52642 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51151 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51509 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50920 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51509 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "OPTIONS /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/broadcasts/reads?standard_id=4ac8f4ce-bb4e-4771-917c-2041135819de HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "OPTIONS /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "OPTIONS /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/broadcasts/reads?standard_id=6a271c9d-92c3-4e12-b17c-f9e3d974635c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "OPTIONS /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "OPTIONS /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/broadcasts/reads?standard_id=541ee60f-d10c-4a89-a766-c76dd6ec373e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63871 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/subjects/4b9883b7-a6e0-4d18-8d10-1ffc0d7cd1ca/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63031 - "GET /api/subjects/6a7bebf7-a3f8-404e-b786-09b4689185eb/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63031 - "GET /api/subjects/5606b0fe-3743-4c4a-b625-1afa6c9bebaf/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54539 - "GET /api/subjects/5606b0fe-3743-4c4a-b625-1afa6c9bebaf/attendance/week?start=2026-05-18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61424 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51612 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59156 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57106 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58420 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61424 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59156 - "GET /api/subjects HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57106 - "GET /api/subjects/1061e709-001e-4cb0-9987-b0c716696ead/attendance/week?start=2026-05-18 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58420 - "GET /api/standards HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51612 - "GET /api/students HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58420 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59156 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51612 - "GET /api/standards HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58420 - "GET /api/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51894 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51894 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56143 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51894 - "GET /api/students HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56143 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49197 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50643 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62568 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56143 - "GET /api/reports/attendance?standard_id=all&below_pct=75 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49197 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50643 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50133 - "GET /api/notifications HTTP/1.1" 200 OK

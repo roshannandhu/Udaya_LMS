@@ -1,0 +1,371 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle } from 'lucide-react';
+import { Btn, Tag } from '../../components/ui';
+import { videoApi, apiClient } from '../../lib/api';
+import {
+  isVideoSaved,
+  saveVideoOffline,
+  removeVideoOffline,
+  getCachedVideoBlobUrl,
+  getCachedVideoSize,
+  formatBytes,
+} from '../../lib/offlineVideos';
+
+export default function StudentVideoPlayerPage() {
+  const { classId, videoId } = useParams();
+  const navigate = useNavigate();
+
+  const [video, setVideo]         = useState(null);
+  const [subject, setSubject]     = useState(null);
+  const [loading, setLoading]     = useState(true);
+
+  const [completed, setCompleted] = useState(false);
+  const [isMarking, setIsMarking] = useState(false);
+  const [liked, setLiked]         = useState(false);
+
+  // Offline state
+  const [isOnline, setIsOnline]   = useState(navigator.onLine);
+  const [saved, setSaved]         = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [saveProgress, setSaveProgress] = useState(null); // 0-100 | null
+  const [saveError, setSaveError] = useState('');
+  const [cachedSize, setCachedSize] = useState(null);
+  const [blobUrl, setBlobUrl]     = useState(null);
+  const blobUrlRef = useRef(null);
+
+  // Track online/offline status
+  useEffect(() => {
+    const online  = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => {
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+    };
+  }, []);
+
+  // Load video metadata
+  useEffect(() => {
+    const fetchVid = async () => {
+      try {
+        const [vids, subs] = await Promise.all([
+          videoApi.getVideos(classId),
+          apiClient('/subjects'),
+        ]);
+        const v = (vids || []).find(x => String(x.id) === String(videoId));
+        setVideo(v || null);
+        const sub = (subs || []).find(x => String(x.id) === String(classId));
+        setSubject(sub || null);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchVid();
+  }, [classId, videoId]);
+
+  // Init offline state after video loads
+  useEffect(() => {
+    if (!video) return;
+
+    const isSaved = isVideoSaved(videoId);
+    setSaved(isSaved);
+
+    if (isSaved) {
+      // Get cached size for display
+      getCachedVideoSize(videoId).then(size => {
+        if (size) setCachedSize(formatBytes(size));
+      });
+
+      // If currently offline, load the blob URL so playback works
+      if (!navigator.onLine) {
+        getCachedVideoBlobUrl(videoId).then(url => {
+          if (url) {
+            blobUrlRef.current = url;
+            setBlobUrl(url);
+          }
+        });
+      }
+    }
+
+    return () => {
+      // Revoke blob URL on unmount to free memory
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
+    };
+  }, [video, videoId]);
+
+  // When going offline, load blob URL if video is saved
+  useEffect(() => {
+    if (!isOnline && saved && !blobUrl) {
+      getCachedVideoBlobUrl(videoId).then(url => {
+        if (url) {
+          blobUrlRef.current = url;
+          setBlobUrl(url);
+        }
+      });
+    }
+  }, [isOnline, saved, blobUrl, videoId]);
+
+  const handleMarkComplete = async () => {
+    setIsMarking(true);
+    try {
+      await videoApi.markComplete(video.id);
+      setCompleted(true);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to mark as completed.');
+    } finally {
+      setIsMarking(false);
+    }
+  };
+
+  const handleSaveOffline = async () => {
+    if (!video?.allow_download) {
+      setSaveError('The teacher has disabled offline saving for this video.');
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    setSaveProgress(0);
+    try {
+      await saveVideoOffline(videoId, video.cloudflare_video_id, (pct) => {
+        setSaveProgress(pct);
+      });
+      setSaved(true);
+      setSaveProgress(100);
+      const size = await getCachedVideoSize(videoId);
+      if (size) setCachedSize(formatBytes(size));
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save. Try again.');
+      setSaveProgress(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveOffline = async () => {
+    try {
+      await removeVideoOffline(videoId);
+      setSaved(false);
+      setCachedSize(null);
+      setSaveProgress(null);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      setBlobUrl(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen text-sm text-neutral-500">
+        <Loader2 className="animate-spin mr-2" size={18} /> Loading video...
+      </div>
+    );
+  }
+
+  if (!video) {
+    return (
+      <div className="flex items-center justify-center h-screen text-sm text-neutral-500">
+        Video not found.
+      </div>
+    );
+  }
+
+  // Decide what to render in the player area
+  const isStorageUrl = video.cloudflare_video_id?.startsWith('https://');
+  const showOfflinePlayer = !isOnline && blobUrl;
+  const showOfflineUnavailable = !isOnline && !blobUrl;
+  const showCloudflarePlayer = isOnline && video.cloudflare_video_id && !isStorageUrl;
+  const showStoragePlayer = isOnline && isStorageUrl;
+  const showNoPlayer = isOnline && !video.cloudflare_video_id;
+
+  return (
+    <div>
+      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          <button onClick={() => navigate(`/student/subjects/${classId}`)}
+            className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md">
+            <ArrowLeft size={16} />
+          </button>
+          <h1 className="text-base font-semibold flex-1 truncate">{video.title}</h1>
+          {completed && <Tag color="green"><CheckCircle2 size={11} className="mr-1 inline" />Done</Tag>}
+          {!isOnline && (
+            <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+              <WifiOff size={11} /> Offline
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto">
+        {/* ── Video player area ── */}
+        <div className="relative bg-neutral-900 aspect-video flex items-center justify-center">
+          {showCloudflarePlayer && (
+            <iframe
+              src={`https://iframe.cloudflarestream.com/${video.cloudflare_video_id}`}
+              className="w-full h-full border-0"
+              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+              allowFullScreen
+              title={video.title}
+            />
+          )}
+          {showStoragePlayer && (
+            <video
+              src={video.cloudflare_video_id}
+              controls
+              className="w-full h-full"
+              controlsList={video.allow_download ? '' : 'nodownload'}
+              title={video.title}
+            />
+          )}
+          {showOfflinePlayer && (
+            <video
+              src={blobUrl}
+              className="w-full h-full"
+              controls
+              autoPlay={false}
+              title={video.title}
+            />
+          )}
+          {showOfflineUnavailable && (
+            <div className="flex flex-col items-center gap-3 text-white/70 px-8 text-center">
+              <WifiOff size={40} className="text-white/40" />
+              <p className="text-sm font-medium text-white/80">You're offline</p>
+              <p className="text-xs text-white/50">
+                {saved
+                  ? 'Cached video could not be loaded. Try removing and re-saving when online.'
+                  : 'Save this video while online to watch it offline.'}
+              </p>
+            </div>
+          )}
+          {showNoPlayer && (
+            <div className="flex flex-col items-center gap-3 text-white/50 text-sm">
+              <p>No video available for this lesson.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 md:px-8 py-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-semibold text-lg mb-1">{video.title}</h2>
+              <p className="text-sm text-neutral-500">{subject?.emoji} {subject?.name || 'Subject'}</p>
+            </div>
+
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setLiked(!liked)}
+                className={`p-2 rounded-md border transition-colors ${liked ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-white/60 text-neutral-500 hover:text-neutral-900'}`}
+              >
+                <ThumbsUp size={15} />
+              </button>
+
+              {/* ── Save offline button ── */}
+              {!saved && !saving && (
+                <button
+                  onClick={handleSaveOffline}
+                  disabled={!video.cloudflare_video_id || isStorageUrl || !video.allow_download}
+                  title={
+                    !video.cloudflare_video_id || isStorageUrl
+                      ? 'No video to cache'
+                      : !video.allow_download
+                      ? 'Download disabled by teacher'
+                      : 'Save for offline viewing'
+                  }
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm transition-colors border-white/60 text-neutral-600 hover:bg-white/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <WifiOff size={13} /> Save offline
+                </button>
+              )}
+
+              {saving && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-white/60 text-sm text-neutral-600 min-w-[130px]">
+                  <Loader2 size={13} className="animate-spin flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-xs mb-0.5">
+                      {saveProgress !== null ? `${saveProgress}%` : 'Downloading…'}
+                    </div>
+                    <div className="h-1 bg-neutral-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-neutral-800 rounded-full transition-all duration-300"
+                        style={{ width: saveProgress !== null ? `${saveProgress}%` : '100%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {saved && !saving && (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm border-green-200 bg-green-50 text-green-700">
+                    <Wifi size={13} /> Saved{cachedSize ? ` · ${cachedSize}` : ''}
+                  </span>
+                  <button
+                    onClick={handleRemoveOffline}
+                    title="Remove offline copy"
+                    className="p-2 rounded-md border border-white/60 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Save error */}
+          {saveError && (
+            <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+              <AlertTriangle size={15} className="flex-shrink-0" />
+              {saveError}
+            </div>
+          )}
+
+          {/* Saved offline notice */}
+          {saved && !saveError && (
+            <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+              <CheckCircle2 size={15} className="flex-shrink-0" />
+              Video saved to this device. You can watch it without internet.
+            </div>
+          )}
+
+          {video.description && (
+            <p className="text-sm text-neutral-600 mb-5 leading-relaxed">{video.description}</p>
+          )}
+
+          {!completed && isOnline && (
+            <Btn
+              variant="primary"
+              onClick={handleMarkComplete}
+              icon={CheckCircle2}
+              className="w-full justify-center"
+              disabled={isMarking}
+            >
+              {isMarking ? 'Marking...' : 'Mark as completed'}
+            </Btn>
+          )}
+          {!completed && !isOnline && (
+            <div className="flex items-center gap-2 p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-500 text-sm">
+              <WifiOff size={15} />
+              Connect to the internet to mark this video as completed.
+            </div>
+          )}
+          {completed && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+              <CheckCircle2 size={16} />
+              You've completed this video. Great work!
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

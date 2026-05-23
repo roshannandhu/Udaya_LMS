@@ -1,0 +1,289 @@
+-- Tutoria LMS Database Schema (Supabase / PostgreSQL)
+-- Uses UUID primary keys. students.id = auth.users.id (set explicitly on insert).
+
+-- Standards (8th, 9th, 10th, 11th, 12th)
+CREATE TABLE IF NOT EXISTS standards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    short TEXT,
+    emoji TEXT DEFAULT '📚',
+    teacher_id UUID,  -- references auth.users.id
+    start_date DATE,
+    end_date DATE,
+    attendance_threshold INTEGER DEFAULT 75,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Subject Classes (Maths, Physics, Chemistry, etc.)
+CREATE TABLE IF NOT EXISTS subject_classes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    standard_id UUID REFERENCES standards(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    emoji TEXT DEFAULT '📐',
+    end_date DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Students
+-- id = auth.users.id (set explicitly from Supabase auth on create)
+CREATE TABLE IF NOT EXISTS students (
+    id UUID PRIMARY KEY,
+    name TEXT NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT,
+    phone TEXT,
+    avatar_url TEXT,
+    standard_id UUID REFERENCES standards(id),
+    points INTEGER DEFAULT 0,
+    attendance_pct NUMERIC DEFAULT 0,
+    avg_score NUMERIC DEFAULT 0,
+    blocked BOOLEAN DEFAULT false,
+    must_change_pwd BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Single device enforcement
+CREATE TABLE IF NOT EXISTS student_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    device_fingerprint TEXT NOT NULL,
+    last_active_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(student_id)
+);
+
+-- Attendance Records (one row per student per subject per day)
+CREATE TABLE IF NOT EXISTS attendance_records (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    subject_class_id UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late')),
+    marked_by UUID,  -- teacher's auth.users.id
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(student_id, subject_class_id, date)
+);
+
+-- Attendance Summary View (per student per subject, computed from attendance_records)
+CREATE OR REPLACE VIEW attendance_summary AS
+SELECT
+    ar.student_id,
+    sc.standard_id,
+    sc.id AS subject_class_id,
+    sc.name AS subject_name,
+    COUNT(*) AS total_sessions,
+    SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present_count,
+    SUM(CASE WHEN ar.status = 'absent'  THEN 1 ELSE 0 END) AS absent_count,
+    SUM(CASE WHEN ar.status = 'late'    THEN 1 ELSE 0 END) AS late_count,
+    ROUND(
+        (SUM(CASE WHEN ar.status IN ('present', 'late') THEN 1 ELSE 0 END)::NUMERIC
+         / NULLIF(COUNT(*), 0)) * 100, 1
+    ) AS attendance_pct
+FROM attendance_records ar
+JOIN subject_classes sc ON ar.subject_class_id = sc.id
+GROUP BY ar.student_id, sc.id, sc.name, sc.standard_id;
+
+-- Videos
+CREATE TABLE IF NOT EXISTS videos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id UUID REFERENCES subject_classes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    cloudflare_video_id TEXT,
+    duration_secs INTEGER,
+    size_bytes BIGINT,
+    allow_download BOOLEAN DEFAULT true,
+    created_by UUID,  -- references auth.users.id
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Video Progress
+CREATE TABLE IF NOT EXISTS video_progress (
+    video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    progress_secs INTEGER DEFAULT 0,
+    completed BOOLEAN DEFAULT false,
+    downloaded BOOLEAN DEFAULT false,
+    last_watched_at TIMESTAMPTZ,
+    PRIMARY KEY (video_id, student_id)
+);
+
+-- Tests
+CREATE TABLE IF NOT EXISTS tests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id UUID REFERENCES subject_classes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    duration_mins INTEGER NOT NULL,
+    total_marks NUMERIC NOT NULL,
+    negative_marking BOOLEAN DEFAULT false,
+    penalty NUMERIC DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    scheduled_for TIMESTAMPTZ,
+    created_by UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Questions
+CREATE TABLE IF NOT EXISTS questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    test_id UUID REFERENCES tests(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    options JSONB NOT NULL,
+    correct_idx INTEGER NOT NULL,
+    order_num INTEGER NOT NULL
+);
+
+-- Test Attempts
+CREATE TABLE IF NOT EXISTS test_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    test_id UUID REFERENCES tests(id),
+    student_id UUID REFERENCES students(id),
+    answers JSONB,
+    score NUMERIC,
+    correct_count INTEGER,
+    wrong_count INTEGER,
+    marks_deducted NUMERIC DEFAULT 0,
+    points_earned INTEGER DEFAULT 0,
+    flagged BOOLEAN DEFAULT false,
+    cheat_events JSONB,
+    started_at TIMESTAMPTZ,
+    submitted_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (test_id, student_id)
+);
+
+-- Broadcasts (WhatsApp-style per standard)
+CREATE TABLE IF NOT EXISTS broadcasts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    standard_id UUID REFERENCES standards(id) ON DELETE CASCADE,
+    sender_id UUID,  -- references auth.users.id
+    message TEXT,
+    attachment_url TEXT,
+    attachment_type TEXT,
+    deleted BOOLEAN DEFAULT false,
+    edited BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Broadcast Read Receipts
+CREATE TABLE IF NOT EXISTS broadcast_reads (
+    broadcast_id UUID REFERENCES broadcasts(id) ON DELETE CASCADE,
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    read_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (broadcast_id, student_id)
+);
+
+-- Reminders (teacher personal task list)
+CREATE TABLE IF NOT EXISTS reminders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID,  -- references auth.users.id
+    title TEXT NOT NULL,
+    scheduled_for TIMESTAMPTZ,
+    context TEXT,
+    done BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Notifications
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipient_id UUID NOT NULL,
+    recipient_type TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT,
+    body TEXT,
+    data JSONB,
+    read BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Bulk Import Audit Log
+CREATE TABLE IF NOT EXISTS bulk_imports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID,
+    filename TEXT,
+    total_rows INTEGER DEFAULT 0,
+    created INTEGER DEFAULT 0,
+    skipped INTEGER DEFAULT 0,
+    errors INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Invite Links (teacher-generated join codes)
+CREATE TABLE IF NOT EXISTS invite_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT UNIQUE NOT NULL,
+    standard_id UUID REFERENCES standards(id) ON DELETE CASCADE,
+    created_by UUID,  -- references auth.users.id
+    max_uses INTEGER DEFAULT 50,
+    use_count INTEGER DEFAULT 0,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Invite Requests (students requesting to join via invite code)
+CREATE TABLE IF NOT EXISTS invite_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invite_code TEXT NOT NULL,
+    student_name TEXT NOT NULL,
+    student_email TEXT,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Migration helpers (run these if upgrading an existing DB) ──────────────
+-- ALTER TABLE standards ADD COLUMN IF NOT EXISTS attendance_threshold INTEGER DEFAULT 75;
+-- ALTER TABLE students RENAME COLUMN attendance TO attendance_pct;
+-- ALTER TABLE students ADD COLUMN IF NOT EXISTS must_change_pwd BOOLEAN DEFAULT true;
+-- ALTER TABLE students DROP COLUMN IF EXISTS supabase_user_id;
+-- ALTER TABLE students DROP COLUMN IF EXISTS first_login;
+-- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS message TEXT;
+-- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_url TEXT;
+-- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_type TEXT;
+-- ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- ── Row Level Security ────────────────────────────────────────────────────────
+-- The FastAPI backend uses the service_role key which bypasses RLS.
+-- RLS protects against direct anon/user key access to the database.
+-- Run these after creating all tables.
+
+ALTER TABLE standards          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subject_classes    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE students           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_sessions   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE videos             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE video_progress     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tests              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE questions          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE test_attempts      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE broadcasts         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE broadcast_reads    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reminders          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bulk_imports       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invite_links       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invite_requests    ENABLE ROW LEVEL SECURITY;
+
+-- Service role bypasses all RLS — FastAPI backend always uses this.
+-- No additional policies needed for service role.
+-- Deny all access via anon/authenticated keys (everything goes through FastAPI).
+
+CREATE POLICY "deny_anon_standards"          ON standards          FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_subject_classes"    ON subject_classes    FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_students"           ON students           FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_student_sessions"   ON student_sessions   FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_attendance_records" ON attendance_records  FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_videos"             ON videos             FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_video_progress"     ON video_progress     FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_tests"              ON tests              FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_questions"          ON questions          FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_test_attempts"      ON test_attempts      FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_broadcasts"         ON broadcasts         FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_broadcast_reads"    ON broadcast_reads    FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_reminders"          ON reminders          FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_notifications"      ON notifications      FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_bulk_imports"       ON bulk_imports       FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_invite_links"       ON invite_links       FOR ALL TO anon, authenticated USING (false);
+CREATE POLICY "deny_anon_invite_requests"    ON invite_requests    FOR ALL TO anon, authenticated USING (false);

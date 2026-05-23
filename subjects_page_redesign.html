@@ -1,0 +1,274 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{font-family:var(--font-sans);display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:1rem 0}
+.frame-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.screen{background:var(--color-background-secondary);border-radius:var(--border-radius-lg);overflow:hidden}
+
+/* ---- LAPTOP FRAME ---- */
+.lap-frame{border:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary)}
+.lap-inner{display:flex;min-height:520px}
+.lap-sidebar{width:160px;flex-shrink:0;border-right:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+.lap-logo{display:flex;align-items:center;gap:7px;padding:8px 8px 16px;font-size:13px;font-weight:500;color:var(--color-text-primary)}
+.lap-logo-icon{width:22px;height:22px;background:var(--color-text-primary);border-radius:5px;display:flex;align-items:center;justify-content:center}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--color-text-secondary);transition:background .12s}
+.nav-item.active{background:var(--color-text-primary);color:#fff}
+.nav-item i{font-size:16px}
+.lap-content{flex:1;padding:24px 28px;background:var(--color-background-tertiary);overflow:hidden}
+
+/* page header */
+.page-header{margin-bottom:20px}
+.page-title{font-size:18px;font-weight:500;color:var(--color-text-primary);margin-bottom:3px}
+.page-sub{font-size:12px;color:var(--color-text-tertiary)}
+.top-row{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.search-box{flex:1;display:flex;align-items:center;gap:8px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--color-text-tertiary)}
+.add-btn{display:flex;align-items:center;gap:5px;background:var(--color-text-primary);color:#fff;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:500;white-space:nowrap;flex-shrink:0}
+
+/* standard cards — GRID layout on laptop */
+.std-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.std-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 14px 12px;cursor:pointer}
+.std-card:hover{border-color:var(--color-border-secondary)}
+.card-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.std-badge{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0}
+.badge-10{background:#EEEDFE;color:#3C3489}
+.badge-11{background:#E1F5EE;color:#085041}
+.badge-12{background:#FBEAF0;color:#72243E}
+.badge-9{background:#FAEEDA;color:#633806}
+.card-name{font-size:13px;font-weight:500;color:var(--color-text-primary);line-height:1.3;margin-bottom:2px}
+.card-meta{font-size:11px;color:var(--color-text-tertiary)}
+.card-stats{display:flex;gap:8px;margin-bottom:10px}
+.stat-chip{flex:1;background:var(--color-background-secondary);border-radius:5px;padding:6px 8px;text-align:center}
+.stat-num{font-size:14px;font-weight:500;color:var(--color-text-primary);display:block;line-height:1.1}
+.stat-lbl{font-size:10px;color:var(--color-text-tertiary)}
+.card-subjects{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.subj-pill{font-size:10px;padding:3px 7px;border-radius:4px;border:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);background:var(--color-background-secondary)}
+.card-footer{display:flex;align-items:center;justify-content:space-between;border-top:0.5px solid var(--color-border-tertiary);padding-top:8px}
+.open-btn{font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:3px}
+.add-sub-btn{font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:3px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;padding:3px 7px}
+
+/* ---- PHONE FRAME ---- */
+.phone-frame{background:var(--color-background-primary);border-radius:16px;border:0.5px solid var(--color-border-tertiary);overflow:hidden;max-width:220px;margin:0 auto}
+.ph-topbar{padding:12px 14px 8px;border-bottom:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary)}
+.ph-title{font-size:15px;font-weight:500;margin-bottom:2px;color:var(--color-text-primary)}
+.ph-sub{font-size:11px;color:var(--color-text-tertiary)}
+.ph-search{margin:10px 14px;display:flex;align-items:center;gap:7px;background:var(--color-background-secondary);border-radius:7px;padding:7px 10px;font-size:11px;color:var(--color-text-tertiary)}
+.ph-list{padding:0 14px;display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.ph-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;overflow:hidden}
+.ph-card-header{display:flex;align-items:center;gap:9px;padding:10px 12px}
+.ph-badge{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0}
+.ph-card-name{font-size:12px;font-weight:500;color:var(--color-text-primary)}
+.ph-card-meta{font-size:10px;color:var(--color-text-tertiary)}
+.ph-chevron{margin-left:auto;color:var(--color-text-tertiary)}
+.ph-subjects{padding:0 12px 10px;display:flex;gap:4px;flex-wrap:wrap}
+.ph-subj{font-size:10px;padding:2px 6px;border-radius:3px;background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.ph-stats-row{display:flex;border-top:0.5px solid var(--color-border-tertiary)}
+.ph-stat{flex:1;text-align:center;padding:6px 4px}
+.ph-stat-n{font-size:13px;font-weight:500;color:var(--color-text-primary);display:block}
+.ph-stat-l{font-size:9px;color:var(--color-text-tertiary)}
+.ph-divider{width:0.5px;background:var(--color-border-tertiary);align-self:stretch}
+
+/* phone bottom nav */
+.ph-nav{display:flex;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);padding:6px 0 8px}
+.ph-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;color:var(--color-text-tertiary)}
+.ph-nav-item.act{color:var(--color-text-primary)}
+.ph-nav-item i{font-size:18px}
+</style>
+
+<div class="wrap">
+  <div>
+    <div class="frame-label"><i class="ti ti-device-laptop" aria-hidden="true"></i> Laptop view</div>
+    <div class="screen lap-frame">
+      <div class="lap-inner">
+        <div class="lap-sidebar">
+          <div class="lap-logo">
+            <div class="lap-logo-icon"><i class="ti ti-school" style="font-size:13px;color:#fff" aria-hidden="true"></i></div>
+            Tutoria
+          </div>
+          <div class="nav-item"><i class="ti ti-home" aria-hidden="true"></i>Today</div>
+          <div class="nav-item active"><i class="ti ti-book" aria-hidden="true"></i>Subjects</div>
+          <div class="nav-item"><i class="ti ti-users" aria-hidden="true"></i>Students</div>
+          <div class="nav-item"><i class="ti ti-message" aria-hidden="true"></i>Inbox</div>
+          <div class="nav-item"><i class="ti ti-dots" aria-hidden="true"></i>More</div>
+        </div>
+        <div class="lap-content">
+          <div class="page-header">
+            <div class="page-title">Subjects</div>
+            <div class="page-sub">8 subjects across 4 standards</div>
+          </div>
+          <div class="top-row">
+            <div class="search-box"><i class="ti ti-search" style="font-size:13px" aria-hidden="true"></i>Search subjects...</div>
+            <div class="add-btn"><i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>New standard</div>
+          </div>
+          <div class="std-grid">
+            <div class="std-card">
+              <div class="card-top">
+                <div class="std-badge badge-10">10</div>
+                <div><div class="card-name">10th Standard</div><div class="card-meta">Active · ends Dec 2026</div></div>
+              </div>
+              <div class="card-stats">
+                <div class="stat-chip"><span class="stat-num">6</span><span class="stat-lbl">Students</span></div>
+                <div class="stat-chip"><span class="stat-num">3</span><span class="stat-lbl">Subjects</span></div>
+                <div class="stat-chip"><span class="stat-num">64</span><span class="stat-lbl">Videos</span></div>
+              </div>
+              <div class="card-subjects">
+                <span class="subj-pill">Mathematics</span>
+                <span class="subj-pill">Physics</span>
+                <span class="subj-pill">Chemistry</span>
+              </div>
+              <div class="card-footer">
+                <div class="open-btn"><i class="ti ti-arrow-right" style="font-size:12px" aria-hidden="true"></i>Open standard</div>
+                <div class="add-sub-btn"><i class="ti ti-plus" style="font-size:11px" aria-hidden="true"></i>Subject</div>
+              </div>
+            </div>
+            <div class="std-card">
+              <div class="card-top">
+                <div class="std-badge badge-11">11</div>
+                <div><div class="card-name">11th Standard</div><div class="card-meta">Active · ends Dec 2026</div></div>
+              </div>
+              <div class="card-stats">
+                <div class="stat-chip"><span class="stat-num">1</span><span class="stat-lbl">Students</span></div>
+                <div class="stat-chip"><span class="stat-num">2</span><span class="stat-lbl">Subjects</span></div>
+                <div class="stat-chip"><span class="stat-num">33</span><span class="stat-lbl">Videos</span></div>
+              </div>
+              <div class="card-subjects">
+                <span class="subj-pill">Mathematics</span>
+                <span class="subj-pill">Physics</span>
+              </div>
+              <div class="card-footer">
+                <div class="open-btn"><i class="ti ti-arrow-right" style="font-size:12px" aria-hidden="true"></i>Open standard</div>
+                <div class="add-sub-btn"><i class="ti ti-plus" style="font-size:11px" aria-hidden="true"></i>Subject</div>
+              </div>
+            </div>
+            <div class="std-card">
+              <div class="card-top">
+                <div class="std-badge badge-12">12</div>
+                <div><div class="card-name">12th Standard</div><div class="card-meta">Active · ends Mar 2027</div></div>
+              </div>
+              <div class="card-stats">
+                <div class="stat-chip"><span class="stat-num">2</span><span class="stat-lbl">Students</span></div>
+                <div class="stat-chip"><span class="stat-num">2</span><span class="stat-lbl">Subjects</span></div>
+                <div class="stat-chip"><span class="stat-num">59</span><span class="stat-lbl">Videos</span></div>
+              </div>
+              <div class="card-subjects">
+                <span class="subj-pill">Physics</span>
+                <span class="subj-pill">Mathematics</span>
+              </div>
+              <div class="card-footer">
+                <div class="open-btn"><i class="ti ti-arrow-right" style="font-size:12px" aria-hidden="true"></i>Open standard</div>
+                <div class="add-sub-btn"><i class="ti ti-plus" style="font-size:11px" aria-hidden="true"></i>Subject</div>
+              </div>
+            </div>
+            <div class="std-card">
+              <div class="card-top">
+                <div class="std-badge badge-9">9</div>
+                <div><div class="card-name">9th Standard</div><div class="card-meta">Active · ends Jan 2027</div></div>
+              </div>
+              <div class="card-stats">
+                <div class="stat-chip"><span class="stat-num">1</span><span class="stat-lbl">Students</span></div>
+                <div class="stat-chip"><span class="stat-num">1</span><span class="stat-lbl">Subjects</span></div>
+                <div class="stat-chip"><span class="stat-num">12</span><span class="stat-lbl">Videos</span></div>
+              </div>
+              <div class="card-subjects">
+                <span class="subj-pill">English</span>
+              </div>
+              <div class="card-footer">
+                <div class="open-btn"><i class="ti ti-arrow-right" style="font-size:12px" aria-hidden="true"></i>Open standard</div>
+                <div class="add-sub-btn"><i class="ti ti-plus" style="font-size:11px" aria-hidden="true"></i>Subject</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="frame-label"><i class="ti ti-device-mobile" aria-hidden="true"></i> Phone view</div>
+    <div class="screen" style="background:var(--color-background-secondary);padding:16px">
+      <div class="phone-frame">
+        <div class="ph-topbar">
+          <div class="ph-title">Subjects</div>
+          <div class="ph-sub">8 subjects · 4 standards</div>
+        </div>
+        <div class="ph-search"><i class="ti ti-search" style="font-size:12px" aria-hidden="true"></i>Search...</div>
+        <div class="ph-list">
+          <div class="ph-card">
+            <div class="ph-card-header">
+              <div class="ph-badge badge-10">10</div>
+              <div>
+                <div class="ph-card-name">10th Standard</div>
+                <div class="ph-card-meta">Maths · Physics · Chemistry</div>
+              </div>
+              <div class="ph-chevron"><i class="ti ti-chevron-right" style="font-size:14px" aria-hidden="true"></i></div>
+            </div>
+            <div class="ph-stats-row">
+              <div class="ph-stat"><span class="ph-stat-n">6</span><span class="ph-stat-l">Students</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">3</span><span class="ph-stat-l">Subjects</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">64</span><span class="ph-stat-l">Videos</span></div>
+            </div>
+          </div>
+          <div class="ph-card">
+            <div class="ph-card-header">
+              <div class="ph-badge badge-11">11</div>
+              <div>
+                <div class="ph-card-name">11th Standard</div>
+                <div class="ph-card-meta">Maths · Physics</div>
+              </div>
+              <div class="ph-chevron"><i class="ti ti-chevron-right" style="font-size:14px" aria-hidden="true"></i></div>
+            </div>
+            <div class="ph-stats-row">
+              <div class="ph-stat"><span class="ph-stat-n">1</span><span class="ph-stat-l">Students</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">2</span><span class="ph-stat-l">Subjects</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">33</span><span class="ph-stat-l">Videos</span></div>
+            </div>
+          </div>
+          <div class="ph-card">
+            <div class="ph-card-header">
+              <div class="ph-badge badge-12">12</div>
+              <div>
+                <div class="ph-card-name">12th Standard</div>
+                <div class="ph-card-meta">Physics · Maths</div>
+              </div>
+              <div class="ph-chevron"><i class="ti ti-chevron-right" style="font-size:14px" aria-hidden="true"></i></div>
+            </div>
+            <div class="ph-stats-row">
+              <div class="ph-stat"><span class="ph-stat-n">2</span><span class="ph-stat-l">Students</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">2</span><span class="ph-stat-l">Subjects</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">59</span><span class="ph-stat-l">Videos</span></div>
+            </div>
+          </div>
+          <div class="ph-card">
+            <div class="ph-card-header">
+              <div class="ph-badge badge-9">9</div>
+              <div>
+                <div class="ph-card-name">9th Standard</div>
+                <div class="ph-card-meta">English</div>
+              </div>
+              <div class="ph-chevron"><i class="ti ti-chevron-right" style="font-size:14px" aria-hidden="true"></i></div>
+            </div>
+            <div class="ph-stats-row">
+              <div class="ph-stat"><span class="ph-stat-n">1</span><span class="ph-stat-l">Students</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">1</span><span class="ph-stat-l">Subjects</span></div>
+              <div class="ph-divider"></div>
+              <div class="ph-stat"><span class="ph-stat-n">12</span><span class="ph-stat-l">Videos</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="ph-nav">
+          <div class="ph-nav-item"><i class="ti ti-home" aria-hidden="true"></i>Today</div>
+          <div class="ph-nav-item act"><i class="ti ti-book" aria-hidden="true"></i>Subjects</div>
+          <div class="ph-nav-item"><i class="ti ti-users" aria-hidden="true"></i>Students</div>
+          <div class="ph-nav-item"><i class="ti ti-message" aria-hidden="true"></i>Inbox</div>
+          <div class="ph-nav-item"><i class="ti ti-dots" aria-hidden="true"></i>More</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

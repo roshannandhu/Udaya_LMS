@@ -1,0 +1,163 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { GraduationCap, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
+import { useAuthStore, ROLES } from '../lib/auth';
+import { useSettingsStore } from '../store';
+
+export default function LoginPage() {
+  const [mode, setMode] = useState('teacher');
+  const [showPwd, setShowPwd] = useState(false);
+  const [creds, setCreds] = useState({ email: '', phone: '', pwd: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { login, enforceSingleDevice } = useAuthStore();
+  const { lmsName, lmsLogo } = useSettingsStore();
+
+  useEffect(() => { document.title = lmsName || 'Tutoria'; }, [lmsName]);
+
+  const handleSubmit = async () => {
+    const identifier = mode === 'teacher' ? creds.email : creds.phone;
+    if (!identifier.trim() || !creds.pwd.trim()) {
+      setError('Please fill in all fields.');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    try {
+      const result = await login(identifier.trim(), creds.pwd);
+
+      if (result.success) {
+        if (result.role === ROLES.STUDENT && !result.requiresPasswordChange) {
+          const { user } = useAuthStore.getState();
+          const deviceCheck = await enforceSingleDevice(user?.id || identifier);
+          if (!deviceCheck.allowed) {
+            setError(deviceCheck.message);
+            setLoading(false);
+            return;
+          }
+        }
+
+        if (result.requiresPasswordChange) {
+          navigate('/student/change-password', { replace: true });
+        } else {
+          navigate(result.role === ROLES.TEACHER ? '/teacher' : '/student', { replace: true });
+        }
+      } else {
+        setError(result.error || 'Login failed');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6 bg-transparent">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-2 mb-10 justify-center">
+          {lmsLogo
+            ? <img src={lmsLogo} alt="logo" className="w-9 h-9 rounded-lg object-cover" />
+            : <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center"><GraduationCap size={18} className="text-white" /></div>
+          }
+          <span className="font-semibold tracking-tight text-lg">{lmsName || 'Tutoria'}</span>
+        </div>
+
+        <div className="glass-panel border border-white/60 p-8 rounded-2xl shadow-lg backdrop-blur-md">
+          <h1 className="text-xl font-semibold mb-1">Welcome back</h1>
+          <p className="text-sm text-neutral-500 mb-6">Sign in to continue</p>
+
+          <div className="flex p-1 bg-white/30 backdrop-blur-sm rounded-lg mb-6 border border-white/40 shadow-inner">
+            {['teacher', 'student'].map((r) => (
+              <button
+                key={r}
+                onClick={() => { setMode(r); setError(''); }}
+                className={`flex-1 py-1.5 rounded text-sm font-medium capitalize transition-all
+                  ${mode === r ? 'bg-white/80 text-neutral-900 shadow-sm border border-white/60' : 'text-neutral-600 hover:text-neutral-900 hover:bg-white/40'}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            {mode === 'student' && (
+              <div>
+                <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Email or phone number</label>
+                <input
+                  value={creds.phone}
+                  onChange={(e) => setCreds({ ...creds, phone: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  placeholder="student@email.com or 9876543210"
+                  className="w-full px-3 py-2 rounded-lg bg-white/50 border border-white/60 focus:border-neutral-400 focus:ring-2 focus:ring-white/50 outline-none text-sm backdrop-blur-sm"
+                />
+              </div>
+            )}
+
+            {mode === 'teacher' && (
+              <div>
+                <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Email</label>
+                <input
+                  type="email"
+                  value={creds.email}
+                  onChange={(e) => setCreds({ ...creds, email: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  placeholder="priya@academy.com"
+                  className="w-full px-3 py-2 rounded-lg bg-white/50 border border-white/60 focus:border-neutral-400 focus:ring-2 focus:ring-white/50 outline-none text-sm backdrop-blur-sm"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Password</label>
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={creds.pwd}
+                  onChange={(e) => setCreds({ ...creds, pwd: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  placeholder="Enter password"
+                  className="w-full px-3 py-2 pr-9 rounded-lg bg-white/50 border border-white/60 focus:border-neutral-400 focus:ring-2 focus:ring-white/50 outline-none text-sm backdrop-blur-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 p-1"
+                >
+                  {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-xs text-red-600 flex items-center gap-1.5">
+                <AlertCircle size={12} /> {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="w-full py-2 bg-neutral-900 text-white rounded-md font-medium hover:bg-neutral-800 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : null}
+              {loading ? 'Signing in...' : 'Sign in'}
+            </button>
+          </div>
+
+          {mode === 'student' && (
+            <div className="mt-5 p-3 rounded-lg bg-white/40 backdrop-blur-sm border border-white/60 text-xs text-neutral-700 leading-relaxed shadow-sm">
+              Sign in with your email or phone number and the password your teacher gave you.
+            </div>
+          )}
+        </div>
+
+        <p className="text-center text-xs text-neutral-400 mt-6">{lmsName || 'Tutoria'} · A learning platform built for tuition</p>
+      </div>
+    </div>
+  );
+}

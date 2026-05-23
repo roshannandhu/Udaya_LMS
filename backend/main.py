@@ -1,0 +1,2490 @@
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Literal, Any
+from datetime import date, datetime, timedelta
+import asyncio
+import csv
+from io import StringIO
+from fastapi.responses import StreamingResponse
+import uuid
+import re
+import os
+import json
+import base64
+from pathlib import Path
+from dotenv import load_dotenv
+from supabase import create_client, Client
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+app = FastAPI(title="Tutoria LMS API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3001", "http://127.0.0.1:3001", "http://192.168.1.9:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+supabase: Optional[Client] = None
+service_supabase: Optional[Client] = None
+
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        if SUPABASE_SERVICE_KEY:
+            service_supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        print("[*] Supabase connected successfully")
+    except Exception as e:
+        print(f"[!] Supabase connection failed: {e}")
+
+# Models
+class Standard(BaseModel):
+    name: str
+    short: Optional[str] = None
+    emoji: Optional[str] = '📚'
+
+class StandardUpdate(BaseModel):
+    name: Optional[str] = None
+    short: Optional[str] = None
+    emoji: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+class SubjectClass(BaseModel):
+    standard_id: str
+    name: str
+    emoji: Optional[str] = '📐'
+    end_date: Optional[str] = None
+
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = None
+    emoji: Optional[str] = None
+    end_date: Optional[str] = None
+
+class Video(BaseModel):
+    class_id: str
+    title: str
+    description: Optional[str] = None
+    cloudflare_video_id: Optional[str] = None
+    duration_secs: Optional[int] = None
+    allow_download: bool = True
+
+class VideoUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+class Test(BaseModel):
+    class_id: str
+    title: str
+    duration_mins: int
+    total_marks: float
+    negative_marking: bool = False
+    penalty: float = 0
+    status: str = 'draft'
+    scheduled_for: Optional[str] = None
+
+class TestUpdate(BaseModel):
+    title: Optional[str] = None
+    duration_mins: Optional[int] = None
+    total_marks: Optional[float] = None
+    negative_marking: Optional[bool] = None
+    penalty: Optional[float] = None
+    status: Optional[str] = None
+    scheduled_for: Optional[str] = None
+
+class StudentProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+class Question(BaseModel):
+    test_id: str
+    question: str
+    options: List[str]
+    correct_idx: int
+    order_num: int
+
+class InviteLinkCreate(BaseModel):
+    standard_id: str
+    max_uses: int = 50
+    expires_at: Optional[str] = None
+
+class CreateStudentRequest(BaseModel):
+    email: Optional[str] = None
+    password: str
+    name: str
+    username: str
+    standard_id: Optional[str] = None
+
+class LoginRequest(BaseModel):
+    email_or_username: str
+    password: str
+    device_fingerprint: Optional[str] = None
+
+class AttendanceRecord(BaseModel):
+    student_id: str
+    status: Literal["present", "absent", "late"]
+
+class MarkAttendanceRequest(BaseModel):
+    date: str
+    records: List[AttendanceRecord]
+
+class BroadcastRequest(BaseModel):
+    standard_id: str
+    message: str
+    attachment_url: Optional[str] = None
+    attachment_type: Optional[str] = None
+
+# --- WebSocket Connection Manager ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+        self.broadcast_history = []
+        self.load_history()
+
+    def load_history(self):
+        if os.path.exists("broadcasts.json"):
+            try:
+                with open("broadcasts.json", "r") as f:
+                    self.broadcast_history = json.load(f)
+            except:
+                pass
+
+    def save_history(self):
+        with open("broadcasts.json", "w") as f:
+            json.dump(self.broadcast_history, f)
+
+    async def connect(self, websocket: WebSocket, standard_id: str):
+        await websocket.accept()
+        if standard_id not in self.active_connections:
+            self.active_connections[standard_id] = []
+        self.active_connections[standard_id].append(websocket)
+        history = [b for b in self.broadcast_history if b.get("standard_id") == standard_id]
+        if history:
+            await websocket.send_json({"type": "history", "data": history})
+
+    def disconnect(self, websocket: WebSocket, standard_id: str):
+        if standard_id in self.active_connections and websocket in self.active_connections[standard_id]:
+            self.active_connections[standard_id].remove(websocket)
+
+    async def broadcast_to_standard(self, standard_id: str, message: dict):
+        message["standard_id"] = standard_id
+        if "id" not in message:
+            message["id"] = str(uuid.uuid4())
+        if "created_at" not in message:
+            message["created_at"] = datetime.now().isoformat()
+        self.broadcast_history.append(message)
+        import asyncio
+        def save_and_insert():
+            self.save_history()
+            if service_supabase:
+                try:
+                    service_supabase.table("broadcasts").insert({
+                        "id": message["id"],
+                        "standard_id": standard_id,
+                        "message": message.get("message", ""),
+                        "attachment_url": message.get("attachment_url"),
+                        "attachment_type": message.get("attachment_type"),
+                        "created_at": message["created_at"]
+                    }).execute()
+                except Exception as e:
+                    print("Supabase broadcast insert failed:", e)
+        
+        asyncio.create_task(asyncio.to_thread(save_and_insert))
+
+        if standard_id in self.active_connections:
+            disconnected = []
+            for connection in self.active_connections[standard_id]:
+                try:
+                    await connection.send_json({"type": "new_broadcast", "data": message})
+                except Exception:
+                    disconnected.append(connection)
+            for d in disconnected:
+                self.disconnect(d, standard_id)
+
+manager = ConnectionManager()
+
+def verify_token(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization format")
+
+    token = authorization.replace("Bearer ", "")
+
+    try:
+        user_response = supabase.auth.get_user(token)
+        if not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        user = user_response.user
+        user_metadata = user.user_metadata or {}
+        role = user_metadata.get("role", "student")
+
+        result = {
+            "id": user.id,
+            "user_id": user.id,
+            "teacher_id": user.id,
+            "email": user.email,
+            "name": user_metadata.get("name", ""),
+            "role": role,
+            "username": user_metadata.get("username", ""),
+            "student_id": None,
+            "standard_id": None,
+        }
+
+        if role == "student" and service_supabase:
+            try:
+                lookup = service_supabase.table("students").select("id, standard_id, name, username, points, avg_score, attendance_pct, phone, must_change_pwd").eq("id", user.id).single().execute()
+                if lookup.data:
+                    result["student_id"] = lookup.data["id"]
+                    result["standard_id"] = lookup.data.get("standard_id")
+                    if lookup.data.get("name"):
+                        result["name"] = lookup.data["name"]
+                    if lookup.data.get("username"):
+                        result["username"] = lookup.data["username"]
+                    result["points"] = lookup.data.get("points", 0)
+                    result["avg_score"] = lookup.data.get("avg_score", 0)
+                    result["attendance_pct"] = lookup.data.get("attendance_pct")
+                    result["phone"] = lookup.data.get("phone")
+                    result["must_change_pwd"] = bool(lookup.data.get("must_change_pwd"))
+                    # Fetch standard name
+                    if lookup.data.get("standard_id"):
+                        try:
+                            std = service_supabase.table("standards").select("name").eq("id", lookup.data["standard_id"]).single().execute()
+                            result["standard_name"] = std.data["name"] if std.data else None
+                        except Exception:
+                            result["standard_name"] = None
+            except Exception:
+                pass
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+
+# Auth
+@app.post("/api/auth/login")
+def login(request: LoginRequest):
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    identifier = request.email_or_username.strip()
+    email_to_use = identifier
+
+    if "@" not in identifier:
+        # Phone number login — look up the student's email by phone
+        if not service_supabase:
+            raise HTTPException(status_code=503, detail="Phone login unavailable")
+        try:
+            digits_only = re.sub(r'\D', '', identifier)
+            if len(digits_only) < 7:
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+            # Try exact match first
+            phone_lookup = service_supabase.table("students").select("email").eq("phone", identifier).single().execute()
+            if not phone_lookup.data or not phone_lookup.data.get("email"):
+                # Digits-normalized match (handles +91 prefix variations)
+                all_students = service_supabase.table("students").select("email, phone").not_.is_("phone", "null").execute()
+                phone_lookup = None
+                for s in (all_students.data or []):
+                    stored_digits = re.sub(r'\D', '', s.get("phone", ""))
+                    if stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits):
+                        phone_lookup = type('obj', (object,), {'data': s})()
+                        break
+            if phone_lookup and getattr(phone_lookup, 'data', None) and phone_lookup.data.get("email"):
+                email_to_use = phone_lookup.data["email"]
+            else:
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email": email_to_use,
+            "password": request.password
+        })
+
+        if not response.user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        user = response.user
+        user_metadata = user.user_metadata or {}
+        role = user_metadata.get("role", "student")
+
+        user_info = {
+            "id": user.id,
+            "email": user.email,
+            "name": user_metadata.get("name", ""),
+            "role": role,
+            "username": user_metadata.get("username", ""),
+            "standard_id": None,
+            "student_id": None,
+        }
+
+        # For students, fetch standard_id and real name/username from students table
+        if role == "student" and service_supabase:
+            try:
+                s = service_supabase.table("students").select("id, standard_id, name, username, must_change_pwd, blocked").eq("id", user.id).single().execute()
+                if s.data:
+                    if s.data.get("blocked"):
+                        raise HTTPException(status_code=403, detail="Your account has been blocked. Contact your teacher.")
+                    user_info["standard_id"] = s.data.get("standard_id")
+                    user_info["student_id"] = s.data["id"]
+                    user_info["must_change_pwd"] = bool(s.data.get("must_change_pwd"))
+                    if s.data.get("name"):
+                        user_info["name"] = s.data["name"]
+                    if s.data.get("username"):
+                        user_info["username"] = s.data["username"]
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
+            # Record device fingerprint — overwrites any previous session (single-device enforcement)
+            if request.device_fingerprint:
+                try:
+                    service_supabase.table("student_sessions").upsert({
+                        "student_id": user.id,
+                        "device_fingerprint": request.device_fingerprint,
+                        "last_active_at": datetime.now().isoformat()
+                    }, on_conflict="student_id").execute()
+                except Exception as e:
+                    print(f"Session tracking failed: {e}")
+
+        return {
+            "token": response.session.access_token,
+            "user": user_info,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+@app.post("/api/auth/logout")
+def logout():
+    return {"message": "Logged out"}
+
+class VerifyDeviceRequest(BaseModel):
+    device_fingerprint: str
+
+@app.post("/api/auth/verify-device")
+def verify_device(request: VerifyDeviceRequest, user = Depends(verify_token)):
+    if user.get("role") != "student":
+        return {"allowed": True}
+    if not service_supabase:
+        return {"allowed": True}
+    try:
+        session = service_supabase.table("student_sessions").select("device_fingerprint").eq("student_id", user["id"]).single().execute()
+        if not session.data:
+            return {"allowed": True}
+        return {"allowed": session.data["device_fingerprint"] == request.device_fingerprint}
+    except Exception:
+        return {"allowed": True}
+
+@app.get("/api/auth/me")
+def get_current_user(user = Depends(verify_token)):
+    return user
+
+class ChangePasswordRequest(BaseModel):
+    password: str
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+
+@app.patch("/api/auth/profile")
+def update_profile(request: UpdateProfileRequest, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    updates = {}
+    if request.name:
+        updates["name"] = request.name
+    if updates:
+        current_meta = service_supabase.auth.admin.get_user_by_id(user["user_id"]).user.user_metadata or {}
+        current_meta.update(updates)
+        service_supabase.auth.admin.update_user_by_id(user["user_id"], {"user_metadata": current_meta})
+    return {"message": "Profile updated"}
+
+@app.post("/api/auth/change-password")
+def change_password(request: ChangePasswordRequest, user = Depends(verify_token)):
+    if len(request.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    try:
+        service_supabase.auth.admin.update_user_by_id(user["user_id"], {"password": request.password})
+        if user["role"] == "student":
+            try:
+                service_supabase.table("students").update({"must_change_pwd": False}).eq("id", user["user_id"]).execute()
+            except Exception:
+                pass
+        return {"message": "Password changed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Dashboard Stats
+@app.get("/api/dashboard/stats")
+def get_dashboard_stats(user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    teacher_id = user["user_id"]
+    standards = service_supabase.table("standards").select("id").eq("teacher_id", teacher_id).execute()
+    standard_ids = [s["id"] for s in standards.data] if standards.data else []
+
+    students_count = 0
+    if standard_ids:
+        students_result = service_supabase.table("students").select("id", count="exact").in_("standard_id", standard_ids).execute()
+        students_count = students_result.count or 0
+
+    subject_classes_count = 0
+    if standard_ids:
+        subjects_result = service_supabase.table("subject_classes").select("id", count="exact").in_("standard_id", standard_ids).execute()
+        subject_classes_count = subjects_result.count or 0
+
+    if standard_ids:
+        class_ids_result = service_supabase.table("subject_classes").select("id").in_("standard_id", standard_ids).execute()
+        class_ids = [c["id"] for c in class_ids_result.data] if class_ids_result.data else []
+        scheduled_tests_count = 0
+        if class_ids:
+            tests_result = service_supabase.table("tests").select("id", count="exact").in_("class_id", class_ids).eq("status", "scheduled").execute()
+            scheduled_tests_count = tests_result.count or 0
+    else:
+        scheduled_tests_count = 0
+
+    broadcasts_count = 0
+    if standard_ids:
+        broadcasts_result = service_supabase.table("broadcasts").select("id", count="exact").in_("standard_id", standard_ids).eq("deleted", False).execute()
+        broadcasts_count = broadcasts_result.count or 0
+
+    return {
+        "students_count": students_count,
+        "subjects_count": subject_classes_count,
+        "scheduled_tests_count": scheduled_tests_count,
+        "broadcasts_count": broadcasts_count,
+        "standards_count": len(standard_ids)
+    }
+
+@app.get("/api/dashboard/activity")
+def get_dashboard_activity(user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    teacher_id = user["user_id"]
+
+    # Get teacher's standards
+    standards = service_supabase.table("standards").select("id").eq("teacher_id", teacher_id).execute()
+    standard_ids = [s["id"] for s in standards.data] if standards.data else []
+
+    if not standard_ids:
+        return {"activities": []}
+
+    # Get students in teacher's standards
+    students_result = service_supabase.table("students").select("id, name").in_("standard_id", standard_ids).execute()
+    student_map = {s["id"]: s["name"] for s in (students_result.data or [])}
+
+    activities = []
+
+    # Recent video progress
+    student_ids = list(student_map.keys())
+    if student_ids:
+        video_progress = service_supabase.table("video_progress").select("*, videos(title)").in_("student_id", student_ids).order("last_watched_at", desc=True).limit(10).execute()
+        for vp in (video_progress.data or []):
+            student_name = student_map.get(vp["student_id"], "Unknown")
+            activities.append({
+                "type": "video_progress",
+                "student": student_name,
+                "detail": f"Watched video",
+                "timestamp": vp.get("last_watched_at"),
+                "video_title": vp.get("videos", {}).get("title", "Unknown") if vp.get("videos") else "Unknown"
+            })
+
+        # Recent test attempts
+        test_attempts = service_supabase.table("test_attempts").select("*, tests(title)").in_("student_id", student_ids).order("submitted_at", desc=True).limit(10).execute()
+        for ta in (test_attempts.data or []):
+            student_name = student_map.get(ta["student_id"], "Unknown")
+            score = ta.get("score", 0)
+            activities.append({
+                "type": "test_attempt",
+                "student": student_name,
+                "detail": f"Scored {score}% in test",
+                "timestamp": ta.get("submitted_at"),
+                "test_title": ta.get("tests", {}).get("title", "Unknown") if ta.get("tests") else "Unknown",
+                "score": score
+            })
+
+    # Sort by timestamp
+    activities.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+
+    return {"activities": activities[:20]}
+
+# Standards CRUD
+@app.get("/api/standards")
+def get_standards(user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if user["role"] == "teacher":
+        response = service_supabase.table("standards").select("*").eq("teacher_id", user["user_id"]).order("created_at", desc=True).execute()
+    else:
+        response = service_supabase.table("standards").select("*").execute()
+
+    return response.data or []
+
+@app.get("/api/standards/{standard_id}")
+def get_standard(standard_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    response = service_supabase.table("standards").select("*").eq("id", standard_id).single().execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Standard not found")
+    return response.data
+
+@app.post("/api/standards")
+def create_standard(standard: Standard, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    data = {
+        "name": standard.name,
+        "short": standard.short,
+        "emoji": standard.emoji,
+        "teacher_id": user["user_id"]
+    }
+    try:
+        response = service_supabase.table("standards").insert(data).execute()
+        return response.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/api/standards/{standard_id}")
+def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Verify ownership
+    existing = service_supabase.table("standards").select("teacher_id").eq("id", standard_id).single().execute()
+    if not existing.data or existing.data["teacher_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    if update_data:
+        service_supabase.table("standards").update(update_data).eq("id", standard_id).execute()
+
+    return {"message": "Standard updated"}
+
+@app.delete("/api/standards/{standard_id}")
+async def delete_standard(standard_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Ownership check
+    existing = service_supabase.table("standards").select("teacher_id").eq("id", standard_id).single().execute()
+    if not existing.data or existing.data["teacher_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # 1. Fetch all student IDs for this standard
+    students_res = service_supabase.table("students").select("id").eq("standard_id", standard_id).execute()
+    student_ids = [s["id"] for s in (students_res.data or [])]
+
+    # 2. Fetch all subject_class IDs for this standard
+    subjects_res = service_supabase.table("subject_classes").select("id").eq("standard_id", standard_id).execute()
+    subject_ids = [s["id"] for s in (subjects_res.data or [])]
+
+    # 3. Delete Cloudflare Stream videos before DB rows cascade away
+    if subject_ids:
+        videos_res = service_supabase.table("videos").select("cloudflare_video_id").in_("class_id", subject_ids).execute()
+        cf_ids = [v["cloudflare_video_id"] for v in (videos_res.data or []) if v.get("cloudflare_video_id")]
+        if cf_ids:
+            CF_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+            CF_TOKEN = os.getenv("CLOUDFLARE_STREAM_API_TOKEN", "")
+            if CF_ACCOUNT_ID and CF_TOKEN:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    for cf_id in cf_ids:
+                        try:
+                            await client.delete(
+                                f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/stream/{cf_id}",
+                                headers={"Authorization": f"Bearer {CF_TOKEN}"},
+                                timeout=10.0
+                            )
+                        except Exception as e:
+                            print(f"Cloudflare delete failed for {cf_id}: {e}")
+
+    # 4. Delete test_attempts for students (no CASCADE on student_id FK)
+    if student_ids:
+        service_supabase.table("test_attempts").delete().in_("student_id", student_ids).execute()
+
+    # 5. Delete broadcast_reads for students (explicit safety)
+    if student_ids:
+        service_supabase.table("broadcast_reads").delete().in_("student_id", student_ids).execute()
+
+    # 6. Delete Supabase Auth accounts for all students
+    for sid in student_ids:
+        try:
+            service_supabase.auth.admin.delete_user(sid)
+        except Exception as e:
+            print(f"Auth delete failed for student {sid}: {e}")
+
+    # 7. Delete students DB rows (safe now — test_attempts already removed)
+    if student_ids:
+        service_supabase.table("students").delete().in_("id", student_ids).execute()
+
+    # 8. Clear in-memory broadcast history for this standard and persist
+    manager.broadcast_history = [b for b in manager.broadcast_history if b.get("standard_id") != standard_id]
+    try:
+        import json as _json
+        with open("broadcasts.json", "w") as f:
+            _json.dump(manager.broadcast_history, f)
+    except Exception:
+        pass
+
+    # 9. Delete the standard — PostgreSQL CASCADE removes:
+    #    subject_classes, videos (DB), video_progress, tests, questions,
+    #    attendance_records, broadcasts, invite_links
+    service_supabase.table("standards").delete().eq("id", standard_id).execute()
+    return {"message": "Standard terminated"}
+
+# Subjects CRUD
+@app.get("/api/subjects")
+def get_subjects(standard_id: Optional[str] = None, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if standard_id:
+        response = service_supabase.table("subject_classes").select("*").eq("standard_id", standard_id).execute()
+        return response.data or []
+    elif user["role"] == "student":
+        student = service_supabase.table("students").select("standard_id").eq("id", user["user_id"]).single().execute()
+        if not student.data or not student.data.get("standard_id"):
+            return []
+        response = service_supabase.table("subject_classes").select("*").eq("standard_id", student.data["standard_id"]).execute()
+        return response.data or []
+    else:
+        # Teacher: return all subjects for their standards
+        stds = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
+        if not stds.data:
+            return []
+        std_ids = [s["id"] for s in stds.data]
+        response = service_supabase.table("subject_classes").select("*").in_("standard_id", std_ids).execute()
+        return response.data or []
+
+@app.post("/api/subjects")
+def create_subject(subject: SubjectClass, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Verify standard ownership
+    standard = service_supabase.table("standards").select("teacher_id").eq("id", subject.standard_id).single().execute()
+    if not standard.data or standard.data["teacher_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    data = {
+        "standard_id": subject.standard_id,
+        "name": subject.name,
+        "emoji": subject.emoji,
+        "end_date": subject.end_date
+    }
+    response = service_supabase.table("subject_classes").insert(data).execute()
+    return response.data[0]
+
+@app.patch("/api/subjects/{subject_id}")
+def update_subject(subject_id: str, updates: SubjectUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    subj = service_supabase.table("subject_classes").select("standard_id").eq("id", subject_id).single().execute()
+    if not subj.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    std = service_supabase.table("standards").select("teacher_id").eq("id", subj.data["standard_id"]).single().execute()
+    if not std.data or std.data["teacher_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    if update_data:
+        service_supabase.table("subject_classes").update(update_data).eq("id", subject_id).execute()
+
+    return {"message": "Subject updated"}
+
+@app.delete("/api/subjects/{subject_id}")
+def delete_subject(subject_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    subj = service_supabase.table("subject_classes").select("standard_id").eq("id", subject_id).single().execute()
+    if not subj.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    std = service_supabase.table("standards").select("teacher_id").eq("id", subj.data["standard_id"]).single().execute()
+    if not std.data or std.data["teacher_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    service_supabase.table("subject_classes").delete().eq("id", subject_id).execute()
+    return {"message": "Subject deleted"}
+
+# Students
+@app.get("/api/students")
+def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Students only see safe fields (no phone/email of other students)
+    student_public_fields = "id, name, username, standard_id, points, attendance_pct, avg_score, avatar_url"
+
+    if user["role"] == "teacher":
+        if standard_id:
+            response = service_supabase.table("students").select("*").eq("standard_id", standard_id).execute()
+        else:
+            standards = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
+            standard_ids = [s["id"] for s in (standards.data or [])]
+            if standard_ids:
+                response = service_supabase.table("students").select("*").in_("standard_id", standard_ids).execute()
+            else:
+                return []
+    else:
+        # Students can see classmates but not their phone/email
+        if standard_id:
+            response = service_supabase.table("students").select(student_public_fields).eq("standard_id", standard_id).execute()
+        else:
+            student_std = user.get("standard_id")
+            if student_std:
+                response = service_supabase.table("students").select(student_public_fields).eq("standard_id", student_std).execute()
+            else:
+                return []
+
+    return response.data or []
+
+@app.get("/api/students/{student_id}")
+def get_student(student_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    # Teachers get full profile; students can only see their own full profile
+    if user["role"] == "teacher":
+        fields = "*"
+    elif user.get("user_id") == student_id or user.get("student_id") == student_id:
+        fields = "*"
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    response = service_supabase.table("students").select(fields).eq("id", student_id).single().execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return response.data
+
+@app.get("/api/students/{student_id}/report")
+def get_student_report(student_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Get student info
+    student_res = service_supabase.table("students").select("*").eq("id", student_id).single().execute()
+    if not student_res.data:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Get all test attempts with test titles
+    attempts_res = service_supabase.table("test_attempts").select("*, tests(title, total_marks, created_at)").eq("student_id", student_id).order("created_at").execute()
+
+    # Calculate performance history
+    history = []
+    for a in (attempts_res.data or []):
+        test = a.get("tests", {})
+        score_pct = (a["score"] / (test.get("total_marks") or 100)) * 100 if a.get("score") is not None else 0
+        history.append({
+            "test_title": test.get("title", "Unknown Test"),
+            "score_pct": round(score_pct, 1),
+            "date": a["created_at"],
+            "flagged": a.get("flagged", False)
+        })
+        
+    return {
+        "student": student_res.data,
+        "history": history
+    }
+
+@app.post("/api/admin/create-student")
+def create_student_admin(request: CreateStudentRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    auth_email = request.email or f"{request.username}@tutoria.local"
+
+    try:
+        response = service_supabase.auth.admin.create_user({
+            "email": auth_email,
+            "password": request.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "role": "student",
+                "name": request.name,
+                "username": request.username
+            }
+        })
+
+        if not response.user:
+            raise HTTPException(status_code=400, detail="Failed to create student")
+
+        student_data = {
+            "id": response.user.id,
+            "name": request.name,
+            "username": request.username,
+            "email": auth_email,
+            "standard_id": request.standard_id,
+        }
+        service_supabase.table("students").insert(student_data).execute()
+
+        return {
+            "id": response.user.id,
+            "email": auth_email,
+            "username": request.username,
+            "role": "student",
+            "password": request.password
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/api/students/me")
+def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    allowed = {k: v for k, v in request.model_dump().items() if v is not None}
+    if allowed:
+        service_supabase.table("students").update(allowed).eq("id", user["user_id"]).execute()
+    return {"message": "Profile updated"}
+
+@app.post("/api/students/me/avatar")
+async def upload_student_avatar(file: UploadFile = File(...), user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    file_bytes = await file.read()
+    file_ext = os.path.splitext(file.filename or "avatar.jpg")[1] or ".jpg"
+    file_name = f"avatars/{user['user_id']}{file_ext}"
+
+    try:
+        try:
+            service_supabase.storage.get_bucket("avatars")
+        except:
+            service_supabase.storage.create_bucket("avatars", options={"public": True})
+        try:
+            service_supabase.storage.from_("avatars").remove([file_name])
+        except:
+            pass
+        await asyncio.to_thread(
+            lambda: service_supabase.storage.from_("avatars").upload(file_name, file_bytes, {"content-type": file.content_type or "image/jpeg"})
+        )
+        public_url = await asyncio.to_thread(
+            lambda: service_supabase.storage.from_("avatars").get_public_url(file_name)
+        )
+        service_supabase.table("students").update({"avatar_url": str(public_url)}).eq("id", user["user_id"]).execute()
+        return {"avatar_url": public_url}
+    except Exception as e:
+        print("Avatar upload error:", e)
+        raise HTTPException(status_code=500, detail="Upload failed")
+
+@app.patch("/api/students/{student_id}/block")
+def block_student(student_id: str, blocked: bool, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    service_supabase.table("students").update({"blocked": blocked}).eq("id", student_id).execute()
+    return {"message": f"Student {'blocked' if blocked else 'unblocked'} successfully"}
+
+@app.post("/api/students/{student_id}/reset-password")
+def reset_student_password(student_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits
+    new_password = ''.join(secrets.choice(alphabet) for _ in range(10))
+    try:
+        service_supabase.auth.admin.update_user_by_id(student_id, {"password": new_password})
+        service_supabase.table("students").update({"must_change_pwd": True}).eq("id", student_id).execute()
+        return {"new_password": new_password}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/api/students/{student_id}")
+def update_student(student_id: str, request: StudentProfileUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    allowed = {k: v for k, v in request.model_dump().items() if v is not None}
+    if allowed:
+        service_supabase.table("students").update(allowed).eq("id", student_id).execute()
+    return {"message": "Student updated"}
+
+@app.delete("/api/students/{student_id}")
+def delete_student(student_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    service_supabase.table("students").delete().eq("id", student_id).execute()
+    return {"message": "Student deleted"}
+
+# Videos
+@app.get("/api/videos")
+def get_videos(class_id: Optional[str] = None, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if class_id:
+        response = service_supabase.table("videos").select("*").eq("class_id", class_id).execute()
+        return response.data or []
+
+    # No class_id — for students return all videos for their standard's subjects
+    if user["role"] == "student" and user.get("standard_id"):
+        subjects = service_supabase.table("subject_classes").select("id").eq("standard_id", user["standard_id"]).execute()
+        if not subjects.data:
+            return []
+        sub_ids = [s["id"] for s in subjects.data]
+        response = service_supabase.table("videos").select("*").in_("class_id", sub_ids).execute()
+        return response.data or []
+
+    # For teachers without class_id, return empty (they should always specify class_id)
+    return []
+
+@app.post("/api/videos")
+def create_video(video: Video, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    data = {
+        "class_id": video.class_id,
+        "title": video.title,
+        "allow_download": video.allow_download,
+        "created_by": user["id"],
+    }
+    if video.description: data["description"] = video.description
+    if video.cloudflare_video_id: data["cloudflare_video_id"] = video.cloudflare_video_id
+    if video.duration_secs: data["duration_secs"] = video.duration_secs
+    try:
+        response = service_supabase.table("videos").insert(data).execute()
+        return {"id": response.data[0]["id"], "message": "Video created"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/videos/upload")
+async def upload_video(
+    file: UploadFile = File(...),
+    class_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    allow_download: str = Form("true"),
+    user = Depends(verify_token)
+):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+    CLOUDFLARE_STREAM_API_TOKEN = os.getenv("CLOUDFLARE_STREAM_API_TOKEN", "")
+
+    if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_STREAM_API_TOKEN:
+        # Fallback: store video in Supabase Storage "videos" bucket
+        if not service_supabase:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        file_bytes = await file.read()
+        safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'video.mp4')
+        storage_path = f"{class_id}/{uuid.uuid4()}_{safe_name}"
+
+        # Auto-create bucket in thread (sync I/O must not block event loop)
+        try:
+            await asyncio.to_thread(
+                lambda: service_supabase.storage.create_bucket("videos", options={"public": True})
+            )
+        except Exception:
+            pass  # Already exists
+
+        # Upload file in thread
+        try:
+            await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("videos").upload(
+                    storage_path, file_bytes,
+                    {"content-type": file.content_type or "video/mp4"}
+                )
+            )
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Storage upload failed: {e}")
+
+        # Get public URL in thread
+        try:
+            public_url = await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("videos").get_public_url(storage_path)
+            )
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Could not get video URL: {e}")
+
+        allow_dl = allow_download.lower() not in ("false", "0", "no")
+        try:
+            db_resp = service_supabase.table("videos").insert({
+                "class_id": class_id,
+                "title": title,
+                "description": description or None,
+                "cloudflare_video_id": str(public_url),
+                "allow_download": allow_dl,
+                "duration_secs": None,
+                "created_by": user["id"],
+            }).execute()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database insert failed: {e}")
+
+        if not db_resp.data:
+            raise HTTPException(status_code=500, detail="Video uploaded but database record creation failed")
+        return db_resp.data[0]
+
+    file_bytes = await file.read()
+    allow_dl = allow_download.lower() not in ("false", "0", "no")
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        resp = await client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/stream",
+            headers={"Authorization": f"Bearer {CLOUDFLARE_STREAM_API_TOKEN}"},
+            files={"file": (file.filename or "video.mp4", file_bytes, file.content_type or "video/mp4")},
+            data={"meta": json.dumps({"name": title})}
+        )
+
+    cf = resp.json()
+    if not cf.get("success"):
+        errors = cf.get("errors", [])
+        raise HTTPException(status_code=502, detail=f"Cloudflare upload failed: {errors}")
+
+    result = cf["result"]
+    cloudflare_video_id = result["uid"]
+    duration_secs = int(result.get("duration") or 0) or None
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    video_data = {
+        "class_id": class_id,
+        "title": title,
+        "description": description or None,
+        "cloudflare_video_id": cloudflare_video_id,
+        "allow_download": allow_dl,
+        "duration_secs": duration_secs,
+        "created_by": user["id"],
+    }
+    db_resp = service_supabase.table("videos").insert(video_data).execute()
+    return db_resp.data[0]
+
+@app.patch("/api/videos/{video_id}")
+def update_video(video_id: str, updates: VideoUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    existing = service_supabase.table("videos").select("created_by").eq("id", video_id).single().execute()
+    if not existing.data or existing.data.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    if update_data:
+        service_supabase.table("videos").update(update_data).eq("id", video_id).execute()
+
+    return {"message": "Video updated"}
+
+@app.delete("/api/videos/{video_id}")
+async def delete_video(video_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Get cloudflare_video_id and verify ownership before deleting
+    vid = service_supabase.table("videos").select("cloudflare_video_id, created_by").eq("id", video_id).single().execute()
+    if not vid.data or vid.data.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    cf_video_id = vid.data.get("cloudflare_video_id")
+
+    # Delete from Cloudflare Stream if configured
+    if cf_video_id:
+        CF_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+        CF_TOKEN = os.getenv("CLOUDFLARE_STREAM_API_TOKEN", "")
+        if CF_ACCOUNT_ID and CF_TOKEN:
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    await client.delete(
+                        f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/stream/{cf_video_id}",
+                        headers={"Authorization": f"Bearer {CF_TOKEN}"},
+                        timeout=10.0
+                    )
+            except Exception as e:
+                print(f"Cloudflare Stream delete failed: {e}")
+
+    service_supabase.table("videos").delete().eq("id", video_id).execute()
+    return {"message": "Video deleted"}
+
+@app.get("/api/videos/{video_id}/stats")
+def get_video_stats(video_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Count total students who watched
+    watch_count = service_supabase.table("video_progress").select("student_id", count="exact").eq("video_id", video_id).execute()
+
+    # Count students who completed
+    completed_count = service_supabase.table("video_progress").select("student_id", count="exact").eq("video_id", video_id).eq("completed", True).execute()
+
+    return {
+        "watch_count": watch_count.count or 0,
+        "completed_count": completed_count.count or 0
+    }
+
+# Tests
+@app.get("/api/tests")
+def get_tests(class_id: Optional[str] = None, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if class_id:
+        if user["role"] == "student":
+            response = service_supabase.table("tests").select("*").eq("class_id", class_id).neq("status", "draft").execute()
+        else:
+            response = service_supabase.table("tests").select("*").eq("class_id", class_id).execute()
+        return response.data or []
+
+    if user["role"] == "student":
+        standard_id = user.get("standard_id")
+        if not standard_id:
+            return []
+        subjects = service_supabase.table("subject_classes").select("id").eq("standard_id", standard_id).execute()
+        if not subjects.data:
+            return []
+        class_ids = [s["id"] for s in subjects.data]
+        response = service_supabase.table("tests").select("*").in_("class_id", class_ids).neq("status", "draft").execute()
+        return response.data or []
+
+    # Teacher: return all tests for their standards
+    stds = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
+    if not stds.data:
+        return []
+    std_ids = [s["id"] for s in stds.data]
+    subjects = service_supabase.table("subject_classes").select("id").in_("standard_id", std_ids).execute()
+    if not subjects.data:
+        return []
+    class_ids = [s["id"] for s in subjects.data]
+    response = service_supabase.table("tests").select("*").in_("class_id", class_ids).execute()
+    return response.data or []
+
+@app.post("/api/tests")
+def create_test(test: Test, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    data = {
+        "class_id": test.class_id,
+        "title": test.title,
+        "duration_mins": test.duration_mins,
+        "total_marks": test.total_marks,
+        "negative_marking": test.negative_marking,
+        "penalty": test.penalty,
+        "status": test.status,
+        "scheduled_for": test.scheduled_for,
+        "created_by": user["user_id"]
+    }
+    response = service_supabase.table("tests").insert(data).execute()
+    return {"id": response.data[0]["id"], "message": "Test created"}
+
+@app.patch("/api/tests/{test_id}")
+def update_test(test_id: str, updates: TestUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    existing = service_supabase.table("tests").select("created_by").eq("id", test_id).single().execute()
+    if not existing.data or existing.data.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    if update_data:
+        service_supabase.table("tests").update(update_data).eq("id", test_id).execute()
+
+    return {"message": "Test updated"}
+
+@app.delete("/api/tests/{test_id}")
+def delete_test(test_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    existing = service_supabase.table("tests").select("created_by").eq("id", test_id).single().execute()
+    if not existing.data or existing.data.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    service_supabase.table("tests").delete().eq("id", test_id).execute()
+    return {"message": "Test deleted"}
+
+# Questions
+@app.get("/api/tests/{test_id}/questions")
+def get_questions(test_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    response = service_supabase.table("questions").select("id, question, options, order_num").eq("test_id", test_id).order("order_num").execute()
+    return response.data or []
+
+@app.post("/api/questions")
+def create_question(question: Question, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    data = {
+        "test_id": question.test_id,
+        "question": question.question,
+        "options": question.options,
+        "correct_idx": question.correct_idx,
+        "order_num": question.order_num
+    }
+    response = service_supabase.table("questions").insert(data).execute()
+    return {"id": response.data[0]["id"], "message": "Question created"}
+
+# Invite Links
+@app.post("/api/invite-links")
+def create_invite_link(data: InviteLinkCreate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Generate unique code
+    code = uuid.uuid4().hex[:8]
+
+    link_data = {
+        "code": code,
+        "standard_id": data.standard_id,
+        "created_by": user["user_id"],
+        "max_uses": data.max_uses,
+        "expires_at": data.expires_at
+    }
+    response = service_supabase.table("invite_links").insert(link_data).execute()
+    return {"id": response.data[0]["id"], "code": code, "message": "Invite link created"}
+
+@app.get("/api/invite-links")
+def get_invite_links(standard_id: Optional[str] = None, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if standard_id:
+        response = service_supabase.table("invite_links").select("*").eq("standard_id", standard_id).eq("created_by", user["user_id"]).execute()
+    else:
+        response = service_supabase.table("invite_links").select("*").eq("created_by", user["user_id"]).execute()
+
+    return response.data or []
+
+@app.delete("/api/invite-links/{link_id}")
+def delete_invite_link(link_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    service_supabase.table("invite_links").delete().eq("id", link_id).eq("created_by", user["user_id"]).execute()
+    return {"message": "Invite link deleted"}
+
+# Join requests
+@app.get("/api/join-requests")
+def get_join_requests(invite_code: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    response = service_supabase.table("invite_requests").select("*").eq("invite_code", invite_code).eq("status", "pending").execute()
+    return response.data or []
+
+@app.patch("/api/join-requests/{request_id}/approve")
+def approve_join_request(request_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Get the request
+    request = service_supabase.table("invite_requests").select("*").eq("id", request_id).single().execute()
+    if not request.data:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    # Get invite link to find standard_id
+    invite_link = service_supabase.table("invite_links").select("standard_id").eq("code", request.data["invite_code"]).single().execute()
+    if not invite_link.data:
+        raise HTTPException(status_code=404, detail="Invite link not found")
+
+    # Generate temp password
+    temp_password = uuid.uuid4().hex[:12]
+
+    # Create student account
+    if service_supabase:
+        auth_email = f"{request.data['student_email'] or request.data['student_name']}@tutoria.local"
+        try:
+            new_user = service_supabase.auth.admin.create_user({
+                "email": auth_email,
+                "password": temp_password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "role": "student",
+                    "name": request.data["student_name"]
+                }
+            })
+
+            if new_user.user:
+                service_supabase.table("students").insert({
+                    "id": new_user.user.id,
+                    "name": request.data["student_name"],
+                    "email": auth_email,
+                    "username": request.data["student_email"] or request.data["student_name"].lower().replace(" ", "."),
+                    "standard_id": invite_link.data["standard_id"],
+                }).execute()
+
+                # Update request status
+                service_supabase.table("invite_requests").update({"status": "approved"}).eq("id", request_id).execute()
+
+                return {
+                    "message": "Student approved",
+                    "username": request.data["student_email"] or request.data["student_name"].lower().replace(" ", "."),
+                    "temp_password": temp_password
+                }
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return {"message": "Request approved"}
+
+@app.patch("/api/join-requests/{request_id}/reject")
+def reject_join_request(request_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    service_supabase.table("invite_requests").update({"status": "rejected"}).eq("id", request_id).execute()
+    return {"message": "Request rejected"}
+
+# Public join endpoint
+@app.post("/api/join/{code}")
+def join_with_code(code: str, name: str, email: Optional[str] = None):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Check if code exists
+    link = service_supabase.table("invite_links").select("*").eq("code", code).single().execute()
+    if not link.data:
+        raise HTTPException(status_code=404, detail="Invalid invite code")
+
+    # Check if expired
+    if link.data.get("expires_at"):
+        from datetime import datetime
+        if datetime.now() > datetime.fromisoformat(link.data["expires_at"]):
+            raise HTTPException(status_code=400, detail="Invite link expired")
+
+    # Check use count
+    if link.data.get("use_count", 0) >= link.data.get("max_uses", 50):
+        raise HTTPException(status_code=400, detail="Invite link max uses reached")
+
+    # Create request
+    request_data = {
+        "invite_code": code,
+        "student_name": name,
+        "student_email": email,
+        "status": "pending"
+    }
+    service_supabase.table("invite_requests").insert(request_data).execute()
+
+    # Increment use count
+    service_supabase.table("invite_links").update({"use_count": link.data.get("use_count", 0) + 1}).eq("id", link.data["id"]).execute()
+
+    return {"message": "Request submitted. Waiting for teacher approval."}
+
+# Health
+@app.get("/api/health")
+def health_check():
+    db_status = "connected" if supabase else "disconnected"
+    return {"status": "ok", "database": db_status}
+
+# Demo accounts — teacher-only, for seeding demo data
+@app.post("/api/demo/create-accounts")
+def create_demo_accounts(user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    results = []
+
+    try:
+        teacher_response = service_supabase.auth.admin.create_user({
+            "email": "teacher@tutoria.com",
+            "password": "teacher123",
+            "email_confirm": True,
+            "user_metadata": {"role": "teacher", "name": "Priya Sharma"}
+        })
+
+        if teacher_response.user:
+            results.append({
+                "role": "teacher",
+                "email": "teacher@tutoria.com",
+                "password": "teacher123",
+                "name": "Priya Sharma"
+            })
+
+        students_data = [
+            {"name": "Aarav Patel", "username": "aarav.p"},
+            {"name": "Meera Singh", "username": "meera.s"},
+            {"name": "Rohan Kumar", "username": "rohan.k"},
+            {"name": "Sneha Reddy", "username": "sneha.r"},
+            {"name": "Vivaan Sharma", "username": "vivaan.s"},
+        ]
+
+        for student in students_data:
+            auth_email = f"{student['username']}@tutoria.local"
+            student_response = service_supabase.auth.admin.create_user({
+                "email": auth_email,
+                "password": "student123",
+                "email_confirm": True,
+                "user_metadata": {"role": "student", "name": student["name"], "username": student["username"]}
+            })
+
+            if student_response.user:
+                service_supabase.table("students").insert({
+                    "id": student_response.user.id,
+                    "name": student["name"],
+                    "username": student["username"],
+                    "email": auth_email,
+                }).execute()
+
+                results.append({
+                    "role": "student",
+                    "username": student["username"],
+                    "password": "student123",
+                    "name": student["name"]
+                })
+
+        return {"message": "Demo accounts created", "accounts": results}
+
+    except Exception as e:
+        return {"message": "Some accounts may already exist", "error": str(e), "accounts": results}
+
+# Attendance
+@app.get("/api/subjects/{subject_id}/attendance")
+def get_subject_attendance(subject_id: str, date: str = None, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+
+    # Get standard_id from subject
+    subject = service_supabase.table("subject_classes").select("standard_id").eq("id", subject_id).single().execute()
+    if not subject.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    
+    standard_id = subject.data["standard_id"]
+
+    # Get all students in standard
+    students = service_supabase.table("students").select("id, name, username").eq("standard_id", standard_id).execute()
+    
+    # Get attendance records for date
+    records = service_supabase.table("attendance_records").select("student_id, status").eq("subject_class_id", subject_id).eq("date", date).execute()
+    
+    status_map = {r["student_id"]: r["status"] for r in records.data} if records.data else {}
+    
+    result = []
+    if students.data:
+        for s in students.data:
+            result.append({
+                "student_id": s["id"],
+                "name": s["name"],
+                "username": s["username"],
+                "status": status_map.get(s["id"])
+            })
+    return result
+
+@app.post("/api/subjects/{subject_id}/attendance")
+def mark_subject_attendance(subject_id: str, req: MarkAttendanceRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if not req.records:
+        return {"marked": 0, "date": req.date}
+
+    # ── Batch upsert all records in a single call ─────────────────
+    upsert_data = [
+        {
+            "student_id": rec.student_id,
+            "subject_class_id": subject_id,
+            "date": req.date,
+            "status": rec.status,
+            "marked_by": user["user_id"],
+        }
+        for rec in req.records
+    ]
+    service_supabase.table("attendance_records").upsert(
+        upsert_data,
+        on_conflict="student_id,subject_class_id,date"
+    ).execute()
+
+    # ── Batch recompute attendance_pct ────────────────────────────
+    # Fetch ALL records for ALL affected students in ONE query
+    student_ids = list({r.student_id for r in req.records})
+
+    all_recs = service_supabase.table("attendance_records") \
+        .select("student_id, status") \
+        .in_("student_id", student_ids) \
+        .execute()
+
+    # Group by student
+    from collections import defaultdict
+    by_student = defaultdict(list)
+    for r in (all_recs.data or []):
+        by_student[r["student_id"]].append(r["status"])
+
+    # Compute pct and update in batch (one update per student, still N but fast)
+    for sid, statuses in by_student.items():
+        total = len(statuses)
+        present_or_late = sum(1 for s in statuses if s in ("present", "late"))
+        pct = round((present_or_late / total) * 100, 1) if total > 0 else 0.0
+        service_supabase.table("students").update({"attendance_pct": pct}).eq("id", sid).execute()
+
+    return {"marked": len(req.records), "date": req.date}
+
+@app.delete("/api/subjects/{subject_id}/attendance/{student_id}/{date}")
+def clear_attendance_record(subject_id: str, student_id: str, date: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    service_supabase.table("attendance_records").delete().eq("subject_class_id", subject_id).eq("student_id", student_id).eq("date", date).execute()
+    return {"message": "Record cleared"}
+
+@app.get("/api/subjects/{subject_id}/attendance/week")
+def get_subject_attendance_week(subject_id: str, start: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    start_date = datetime.strptime(start, "%Y-%m-%d")
+    end_date = start_date + timedelta(days=6)
+    
+    subject = service_supabase.table("subject_classes").select("standard_id").eq("id", subject_id).single().execute()
+    if not subject.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    
+    standard_id = subject.data["standard_id"]
+    students = service_supabase.table("students").select("id, name, username, attendance_pct").eq("standard_id", standard_id).execute()
+    
+    records = service_supabase.table("attendance_records").select("*").eq("subject_class_id", subject_id).gte("date", start_date.strftime("%Y-%m-%d")).lte("date", end_date.strftime("%Y-%m-%d")).execute()
+    
+    student_map = {}
+    if students.data:
+        student_map = {s["id"]: {"student_id": s["id"], "student_name": s["name"], "days": {}, "overall_pct": s.get("attendance_pct")} for s in students.data}
+    
+    if records.data:
+        for r in records.data:
+            sid = r["student_id"]
+            if sid in student_map:
+                student_map[sid]["days"][r["date"]] = r["status"]
+                
+    return list(student_map.values())
+
+@app.get("/api/students/{student_id}/attendance")
+def get_student_attendance(student_id: str, user = Depends(verify_token)):
+    if user["role"] == "student" and user.get("student_id") != student_id and user.get("user_id") != student_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
+    student = service_supabase.table("students").select("attendance_pct").eq("id", student_id).single().execute()
+    overall_pct = student.data.get("attendance_pct") if student.data else None
+    
+    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    recent_records = service_supabase.table("attendance_records").select("status").eq("student_id", student_id).gte("date", thirty_days_ago).execute()
+    
+    absent_days = 0
+    late_days = 0
+    if recent_records.data:
+        absent_days = sum(1 for r in recent_records.data if r["status"] == "absent")
+        late_days = sum(1 for r in recent_records.data if r["status"] == "late")
+        
+    summary = service_supabase.table("attendance_summary").select("*").eq("student_id", student_id).execute()
+    by_subject = []
+    if summary.data:
+        for s in summary.data:
+            by_subject.append({
+                "subject_name": s["subject_name"],
+                "pct": s["attendance_pct"],
+                "present": s["present_count"],
+                "absent": s["absent_count"],
+                "late": s["late_count"],
+                "total": s["total_sessions"]
+            })
+            
+    eight_weeks_ago = (datetime.now() - timedelta(weeks=8)).strftime("%Y-%m-%d")
+    records_8w = service_supabase.table("attendance_records").select("date, status").eq("student_id", student_id).gte("date", eight_weeks_ago).execute()
+    
+    by_week = []
+    if records_8w.data:
+        weeks = {}
+        for r in records_8w.data:
+            r_date = datetime.strptime(r["date"], "%Y-%m-%d")
+            week_start = r_date - timedelta(days=r_date.weekday())
+            week_label = week_start.strftime("W%W") # Use week number to be safe or "%b %d"
+            
+            if week_label not in weeks:
+                weeks[week_label] = {"total": 0, "present_late": 0}
+            weeks[week_label]["total"] += 1
+            if r["status"] in ["present", "late"]:
+                weeks[week_label]["present_late"] += 1
+                
+        for label, stats in sorted(weeks.items()):
+            pct = round((stats["present_late"] / stats["total"]) * 100, 1)
+            by_week.append({"week": label, "pct": pct})
+            
+    return {
+        "overall_pct": overall_pct,
+        "absent_days": absent_days,
+        "late_days": late_days,
+        "by_subject": by_subject,
+        "by_week": by_week[-8:]
+    }
+
+@app.get("/api/reports/attendance")
+def get_low_attendance(standard_id: str, below_pct: float = None, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
+    threshold = below_pct
+    
+    if standard_id == "all":
+        standards = service_supabase.table("standards").select("id, name, attendance_threshold").eq("teacher_id", user["user_id"]).execute()
+        if not standards.data:
+            return {"students": [], "count": 0}
+            
+        all_students = []
+        for std in standards.data:
+            t = threshold if threshold is not None else (std.get("attendance_threshold") or 75)
+            students = service_supabase.table("students").select("id, name, username, attendance_pct").eq("standard_id", std["id"]).execute()
+            if students.data:
+                for s in students.data:
+                    if s.get("attendance_pct") is not None and float(s["attendance_pct"]) < t:
+                        all_students.append({
+                            "student_id": s["id"],
+                            "name": s["name"],
+                            "username": s["username"],
+                            "attendance_pct": s["attendance_pct"],
+                            "standard_name": std["name"]
+                        })
+        return {"students": sorted(all_students, key=lambda x: x["attendance_pct"]), "count": len(all_students)}
+    else:
+        standard = service_supabase.table("standards").select("name, attendance_threshold").eq("id", standard_id).single().execute()
+        if not standard.data:
+            raise HTTPException(status_code=404, detail="Standard not found")
+            
+        t = threshold if threshold is not None else (standard.data.get("attendance_threshold") or 75)
+        
+        students = service_supabase.table("students").select("id, name, username, attendance_pct").eq("standard_id", standard_id).execute()
+        flagged = []
+        if students.data:
+            for s in students.data:
+                if s.get("attendance_pct") is not None and float(s["attendance_pct"]) < t:
+                    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+                    absent_records = service_supabase.table("attendance_records").select("id", count="exact").eq("student_id", s["id"]).eq("status", "absent").gte("date", thirty_days_ago).execute()
+                    
+                    flagged.append({
+                        "student_id": s["id"],
+                        "name": s["name"],
+                        "username": s["username"],
+                        "attendance_pct": s["attendance_pct"],
+                        "absent_days": absent_records.count or 0,
+                        "standard_name": standard.data["name"]
+                    })
+                    
+        return {
+            "threshold": t,
+            "standard_name": standard.data["name"],
+            "flagged_count": len(flagged),
+            "students": sorted(flagged, key=lambda x: x["attendance_pct"])
+        }
+
+@app.get("/api/reports/export/attendance")
+def export_attendance(standard_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
+    summary = service_supabase.table("attendance_summary").select("*").eq("standard_id", standard_id).execute()
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Student Name", "Username", "Subject", "Total Sessions", "Present", "Absent", "Late", "Attendance %"])
+    
+    if summary.data:
+        for row in summary.data:
+            writer.writerow([
+                row.get("student_name", ""),
+                row.get("username", ""),
+                row.get("subject_name", ""),
+                row.get("total_sessions", 0),
+                row.get("present_count", 0),
+                row.get("absent_count", 0),
+                row.get("late_count", 0),
+                row.get("attendance_pct", 0)
+            ])
+            
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=attendance_report.csv"}
+    )
+
+# Test with questions (bulk create)
+class TestWithQuestions(BaseModel):
+    class_id: str
+    title: str
+    duration_mins: int
+    total_marks: float
+    negative_marking: bool = False
+    penalty: float = 0
+    status: str = 'draft'
+    scheduled_for: Optional[str] = None
+    questions: List[dict] = []  # [{question, options: [], correct_idx, order_num}]
+
+# Submit test request
+class SubmitTestRequest(BaseModel):
+    answers: dict  # {question_id: selected_idx}
+    cheat_events: List[dict] = []
+
+# Test attempt for results
+@app.post("/api/tests/with-questions")
+def create_test_with_questions(data: TestWithQuestions, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Create test
+    test_data = {
+        "class_id": data.class_id,
+        "title": data.title,
+        "duration_mins": data.duration_mins,
+        "total_marks": data.total_marks,
+        "negative_marking": data.negative_marking,
+        "penalty": data.penalty,
+        "status": data.status,
+        "scheduled_for": data.scheduled_for,
+        "created_by": user["user_id"]
+    }
+    test_response = service_supabase.table("tests").insert(test_data).execute()
+    test_id = test_response.data[0]["id"]
+
+    # Create questions
+    if data.questions:
+        questions_data = []
+        for q in data.questions:
+            questions_data.append({
+                "test_id": test_id,
+                "question": q["question"],
+                "options": q["options"],
+                "correct_idx": q["correct_idx"],
+                "order_num": q["order_num"]
+            })
+        service_supabase.table("questions").insert(questions_data).execute()
+
+    return {"id": test_id, "message": f"Test created with {len(data.questions)} questions"}
+
+# Get test with questions (for students taking test)
+@app.get("/api/tests/{test_id}/take")
+def get_test_for_taking(test_id: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Get test details
+    test = service_supabase.table("tests").select("*").eq("id", test_id).single().execute()
+    if not test.data:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    # Get questions (without correct answers for students)
+    questions = service_supabase.table("questions").select("id, question, options, order_num").eq("test_id", test_id).order("order_num").execute()
+
+    return {
+        "test": {
+            "id": test.data["id"],
+            "title": test.data["title"],
+            "duration_mins": test.data["duration_mins"],
+            "total_marks": test.data["total_marks"],
+            "negative_marking": test.data["negative_marking"],
+            "penalty": test.data["penalty"]
+        },
+        "questions": questions.data
+    }
+
+# Check if student already attempted
+@app.get("/api/tests/{test_id}/attempt-status")
+def get_attempt_status(test_id: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    attempt = service_supabase.table("test_attempts").select("*").eq("test_id", test_id).eq("student_id", user["student_id"]).single().execute()
+
+    return {
+        "attempted": attempt.data is not None,
+        "attempt": attempt.data
+    }
+
+# Submit test attempt
+@app.post("/api/tests/{test_id}/submit")
+def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if not user.get("student_id"):
+        raise HTTPException(status_code=400, detail="Student record not found. Contact your teacher.")
+
+    # Get test details
+    test = service_supabase.table("tests").select("*").eq("id", test_id).single().execute()
+    if not test.data:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    # Check if already attempted
+    existing = service_supabase.table("test_attempts").select("id").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Test already attempted")
+
+    # Get questions with correct answers
+    questions = service_supabase.table("questions").select("id, correct_idx, order_num").eq("test_id", test_id).execute()
+    questions_list = questions.data or []
+
+    # Calculate score
+    correct_count = 0
+    wrong_count = 0
+    marks_deducted = 0
+    total_obtained = 0
+    marks_per_question = test.data["total_marks"] / len(questions_list) if questions_list else 1
+
+    for q in questions_list:
+        q_id = q["id"]
+        if q_id in request.answers:
+            if request.answers[q_id] == q["correct_idx"]:
+                correct_count += 1
+                total_obtained += marks_per_question
+            else:
+                wrong_count += 1
+                if test.data["negative_marking"]:
+                    deduction = marks_per_question * test.data["penalty"]
+                    marks_deducted += deduction
+                    total_obtained -= deduction
+
+    # Determine if flagged (cheat events)
+    flagged = len(request.cheat_events) > 0
+
+    # Calculate percentage
+    score_pct = (total_obtained / test.data["total_marks"] * 100) if test.data["total_marks"] > 0 else 0
+
+    # Points earned (based on score)
+    points_earned = 0
+    if score_pct >= 90:
+        points_earned = 100
+    elif score_pct >= 75:
+        points_earned = 75
+    elif score_pct >= 60:
+        points_earned = 50
+    elif score_pct >= 40:
+        points_earned = 25
+    else:
+        points_earned = 10
+
+    # Insert attempt
+    attempt_data = {
+        "test_id": test_id,
+        "student_id": user["student_id"],
+        "answers": request.answers,
+        "score": round(total_obtained, 2),
+        "correct_count": correct_count,
+        "wrong_count": wrong_count,
+        "marks_deducted": round(marks_deducted, 2),
+        "points_earned": points_earned,
+        "flagged": flagged,
+        "cheat_events": request.cheat_events,
+        "started_at": datetime.now().isoformat(),
+        "submitted_at": datetime.now().isoformat()
+    }
+    result = service_supabase.table("test_attempts").insert(attempt_data).execute()
+
+    # Update student points
+    student = service_supabase.table("students").select("points").eq("id", user["student_id"]).single().execute()
+    if student.data:
+        new_points = (student.data.get("points") or 0) + points_earned
+        service_supabase.table("students").update({"points": new_points}).eq("id", user["student_id"]).execute()
+
+    # Update avg_score (stored as percentage)
+    attempts = service_supabase.table("test_attempts").select("score, tests(total_marks)").eq("student_id", user["student_id"]).execute()
+    if attempts.data:
+        pcts = []
+        for a in attempts.data:
+            tm = (a.get("tests") or {}).get("total_marks") or 0
+            if tm > 0:
+                pcts.append((a["score"] / tm) * 100)
+        if pcts:
+            avg_pct = sum(pcts) / len(pcts)
+            service_supabase.table("students").update({"avg_score": round(avg_pct, 1)}).eq("id", user["student_id"]).execute()
+
+    return {
+        "attempt_id": result.data[0]["id"],
+        "score": round(total_obtained, 2),
+        "total_marks": test.data["total_marks"],
+        "percentage": round(score_pct, 1),
+        "correct_count": correct_count,
+        "wrong_count": wrong_count,
+        "marks_deducted": round(marks_deducted, 2),
+        "points_earned": points_earned,
+        "flagged": flagged
+    }
+
+# Get test results for a specific test (teacher view)
+@app.get("/api/tests/{test_id}/results")
+def get_test_results(test_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Get test details
+    test = service_supabase.table("tests").select("*, subject_classes(name, standards(name))").eq("id", test_id).single().execute()
+    if not test.data:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    # Get all attempts with student info
+    attempts = service_supabase.table("test_attempts").select("*, students(name, username)").eq("test_id", test_id).execute()
+    attempts_list = attempts.data or []
+
+    # Calculate stats
+    scores = [a["score"] for a in attempts_list if a.get("score") is not None]
+    avg_score = sum(scores) / len(scores) if scores else 0
+    flagged_count = sum(1 for a in attempts_list if a.get("flagged"))
+
+    return {
+        "test": test.data,
+        "attempts": sorted(attempts_list, key=lambda x: x.get("score") or 0, reverse=True),
+        "stats": {
+            "total_attempts": len(attempts.data),
+            "avg_score": round(avg_score, 2),
+            "highest_score": max(scores) if scores else 0,
+            "lowest_score": min(scores) if scores else 0,
+            "flagged_count": flagged_count
+        }
+    }
+
+# Get student's test history
+@app.get("/api/student/tests/history")
+def get_student_test_history(user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    attempts = service_supabase.table("test_attempts").select("*, tests(title, total_marks)").eq("student_id", user["student_id"]).order("submitted_at", desc=True).execute()
+
+    return attempts.data or []
+
+# Get leaderboard for a standard
+@app.get("/api/leaderboard")
+def get_leaderboard(standard_id: Optional[str] = None, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if standard_id:
+        students = service_supabase.table("students").select("id, name, username, points").eq("standard_id", standard_id).order("points", desc=True).execute()
+    else:
+        students = service_supabase.table("students").select("id, name, username, points").order("points", desc=True).limit(50).execute()
+
+    return {
+        "leaderboard": [
+            {"rank": i + 1, **s}
+            for i, s in enumerate(students.data or [])
+        ]
+    }
+
+# Video completion points
+@app.post("/api/videos/{video_id}/complete")
+def mark_video_complete(video_id: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Check if already completed — only award points once
+    existing = service_supabase.table("video_progress").select("completed").eq("video_id", video_id).eq("student_id", user["student_id"]).execute()
+    already_done = bool(existing.data and existing.data[0].get("completed"))
+
+    # Upsert progress record
+    service_supabase.table("video_progress").upsert({
+        "video_id": video_id,
+        "student_id": user["student_id"],
+        "completed": True,
+        "downloaded": False,
+        "progress_secs": 0,
+        "last_watched_at": datetime.now().isoformat()
+    }, on_conflict="video_id,student_id").execute()
+
+    POINTS_PER_VIDEO = 10
+    points_earned = 0
+    new_points = 0
+
+    if not already_done:
+        student = service_supabase.table("students").select("points").eq("id", user["student_id"]).single().execute()
+        if student.data:
+            new_points = (student.data.get("points") or 0) + POINTS_PER_VIDEO
+            service_supabase.table("students").update({"points": new_points}).eq("id", user["student_id"]).execute()
+            points_earned = POINTS_PER_VIDEO
+
+    return {"points_earned": points_earned, "total_points": new_points}
+
+# --- Reminders ---
+@app.get("/api/reminders")
+def get_reminders(user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    response = service_supabase.table("reminders").select("*").eq("teacher_id", user["user_id"]).order("done").order("scheduled_for", nullsfirst=True).execute()
+    return response.data or []
+
+class ReminderCreate(BaseModel):
+    title: str
+    context: Optional[str] = None
+    scheduled_for: Optional[str] = None
+
+class ReminderUpdate(BaseModel):
+    done: Optional[bool] = None
+    title: Optional[str] = None
+    context: Optional[str] = None
+    scheduled_for: Optional[str] = None
+
+@app.post("/api/reminders")
+def create_reminder(reminder: ReminderCreate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    data = {
+        "teacher_id": user["user_id"],
+        "title": reminder.title,
+        "scheduled_for": reminder.scheduled_for,
+        "context": reminder.context,
+        "done": False
+    }
+    response = service_supabase.table("reminders").insert(data).execute()
+    return response.data[0]
+
+@app.patch("/api/reminders/{reminder_id}")
+def update_reminder(reminder_id: str, updates: ReminderUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    update_data = updates.model_dump(exclude_none=True)
+    if not update_data:
+        return {}
+    response = service_supabase.table("reminders").update(update_data).eq("id", reminder_id).eq("teacher_id", user["user_id"]).execute()
+    return response.data[0] if response.data else {}
+
+@app.delete("/api/reminders/{reminder_id}")
+def delete_reminder(reminder_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    service_supabase.table("reminders").delete().eq("id", reminder_id).eq("teacher_id", user["user_id"]).execute()
+    return {"message": "Deleted"}
+
+# --- Notifications ---
+@app.get("/api/notifications")
+def get_notifications(user = Depends(verify_token)):
+    if not service_supabase:
+        return []
+    try:
+        response = service_supabase.table("notifications").select("*")\
+            .eq("recipient_id", user["user_id"])\
+            .order("created_at", desc=True)\
+            .limit(30)\
+            .execute()
+        return response.data or []
+    except Exception:
+        return []
+
+@app.patch("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        return {"ok": True}
+    try:
+        service_supabase.table("notifications").update({"read": True})\
+            .eq("id", notification_id)\
+            .eq("recipient_id", user["user_id"])\
+            .execute()
+        return {"ok": True}
+    except Exception:
+        return {"ok": True}
+
+@app.post("/api/notifications/read-all")
+def mark_all_notifications_read(user = Depends(verify_token)):
+    if not service_supabase:
+        return {"ok": True}
+    try:
+        service_supabase.table("notifications").update({"read": True})\
+            .eq("recipient_id", user["user_id"])\
+            .eq("read", False)\
+            .execute()
+        return {"ok": True}
+    except Exception:
+        return {"ok": True}
+
+
+# --- WebSockets & Broadcasts & Uploads ---
+
+@app.websocket("/api/ws/broadcasts/{standard_id}")
+async def websocket_endpoint(websocket: WebSocket, standard_id: str, token: Optional[str] = None):
+    if not token:
+        await websocket.close(code=4001)
+        return
+    try:
+        user_response = supabase.auth.get_user(token)
+        if not user_response.user:
+            await websocket.close(code=4001)
+            return
+    except Exception:
+        await websocket.close(code=4001)
+        return
+    await manager.connect(websocket, standard_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, standard_id)
+
+@app.post("/api/broadcasts")
+async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    
+    payload = {
+        "message": req.message,
+        "attachment_url": req.attachment_url,
+        "attachment_type": req.attachment_type,
+        "sender": user["user_id"]
+    }
+    await manager.broadcast_to_standard(req.standard_id, payload)
+    return {"status": "success", "data": payload}
+
+@app.get("/api/broadcasts")
+def get_broadcasts(standard_id: Optional[str] = None, user = Depends(verify_token)):
+    history = manager.broadcast_history
+    if standard_id:
+        history = [b for b in history if b.get("standard_id") == standard_id]
+    return history
+
+class BroadcastReadRequest(BaseModel):
+    broadcast_ids: List[str]
+
+@app.post("/api/broadcast-reads")
+def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase or not user.get("student_id") or not req.broadcast_ids:
+        return {"marked": 0}
+    try:
+        now = datetime.now().isoformat()
+        rows = [{"broadcast_id": bid, "student_id": user["student_id"], "read_at": now} for bid in req.broadcast_ids]
+        service_supabase.table("broadcast_reads").upsert(rows, on_conflict="broadcast_id,student_id").execute()
+        return {"marked": len(rows)}
+    except Exception as e:
+        return {"marked": 0}
+
+@app.get("/api/broadcasts/reads")
+def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        return {}
+    try:
+        broadcast_ids = [b["id"] for b in manager.broadcast_history
+                         if b.get("standard_id") == standard_id and not b.get("deleted")]
+        if not broadcast_ids:
+            return {}
+        reads = service_supabase.table("broadcast_reads").select("broadcast_id").in_("broadcast_id", broadcast_ids).execute()
+        counts = {}
+        for row in (reads.data or []):
+            bid = row["broadcast_id"]
+            counts[bid] = counts.get(bid, 0) + 1
+        return counts
+    except Exception:
+        return {}
+
+@app.delete("/api/broadcasts/{broadcast_id}")
+async def delete_broadcast(broadcast_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    found = False
+    std_id = None
+    for b in manager.broadcast_history:
+        if b.get("id") == broadcast_id:
+            b["deleted"] = True
+            b["message"] = ""
+            b["attachment_url"] = None
+            std_id = b.get("standard_id")
+            found = True
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    def db_delete():
+        manager.save_history()
+        if service_supabase:
+            try:
+                service_supabase.table("broadcasts").update({"deleted": True}).eq("id", broadcast_id).execute()
+            except Exception as e:
+                print("Supabase broadcast delete failed:", e)
+    
+    import asyncio
+    asyncio.create_task(asyncio.to_thread(db_delete))
+    # Notify connected clients in real-time
+    if std_id and std_id in manager.active_connections:
+        dead = []
+        for conn in manager.active_connections[std_id]:
+            try:
+                await conn.send_json({"type": "delete_broadcast", "id": broadcast_id})
+            except Exception:
+                dead.append(conn)
+        for d in dead:
+            manager.disconnect(d, std_id)
+    return {"status": "deleted"}
+
+class EditBroadcastRequest(BaseModel):
+    message: str
+
+@app.patch("/api/broadcasts/{broadcast_id}")
+async def edit_broadcast(broadcast_id: str, req: EditBroadcastRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    found = False
+    updated_b = None
+    for b in manager.broadcast_history:
+        if b.get("id") == broadcast_id:
+            b["message"] = req.message
+            b["edited"] = True
+            updated_b = b
+            found = True
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    manager.save_history()
+    # Notify connected clients in real-time
+    std_id = updated_b.get("standard_id") if updated_b else None
+    if std_id and std_id in manager.active_connections:
+        dead = []
+        for conn in manager.active_connections[std_id]:
+            try:
+                await conn.send_json({"type": "edit_broadcast", "data": updated_b})
+            except Exception:
+                dead.append(conn)
+        for d in dead:
+            manager.disconnect(d, std_id)
+    return {"status": "updated"}
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    file_bytes = await file.read()
+    file_ext = os.path.splitext(file.filename)[1]
+    file_name = f"{uuid.uuid4()}{file_ext}"
+
+    try:
+        try:
+            service_supabase.storage.get_bucket("broadcasts")
+        except:
+            service_supabase.storage.create_bucket("broadcasts", options={"public": True})
+
+        service_supabase.storage.from_("broadcasts").upload(file_name, file_bytes, {"content-type": file.content_type})
+        public_url = service_supabase.storage.from_("broadcasts").get_public_url(file_name)
+        return {"url": public_url, "type": file.content_type, "filename": file.filename}
+    except Exception as e:
+        print("Upload error:", e)
+        b64 = base64.b64encode(file_bytes).decode('utf-8')
+        return {"url": f"data:{file.content_type};base64,{b64}", "type": file.content_type, "filename": file.filename}
+
+# --- Bulk Student Import ---
+
+class BulkStudentItem(BaseModel):
+    name: str
+    username: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    standard_id: str
+    temp_password: str
+
+class BulkImportRequest(BaseModel):
+    students: List[BulkStudentItem]
+    filename: str
+
+@app.post("/api/students/bulk")
+def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    success_count = 0
+    error_count = 0
+    skipped_count = 0
+
+    for s in req.students:
+        auth_user_id = None
+        try:
+            # 1. Create Supabase Auth user
+            email_to_use = s.email if s.email else f"{s.username}@tutoria.internal"
+            auth_res = service_supabase.auth.admin.create_user({
+                "email": email_to_use,
+                "password": s.temp_password,
+                "user_metadata": {
+                    "role": "student",
+                    "username": s.username,
+                    "name": s.name
+                },
+                "email_confirm": True
+            })
+
+            if not auth_res.user:
+                # Already exists or creation silently failed — skip
+                skipped_count += 1
+                continue
+
+            auth_user_id = auth_res.user.id
+
+            # 2. Insert into students table
+            service_supabase.table("students").insert({
+                "id": auth_user_id,
+                "name": s.name,
+                "username": s.username,
+                "email": s.email,
+                "phone": s.phone,
+                "standard_id": s.standard_id,
+                "must_change_pwd": True
+            }).execute()
+
+            success_count += 1
+        except Exception as e:
+            err_str = str(e).lower()
+            # "already registered" / "already exists" / duplicate key — treat as skipped
+            if any(kw in err_str for kw in ["already", "duplicate", "unique", "exists", "registered"]):
+                skipped_count += 1
+            else:
+                print(f"Error importing student {s.username}:", e)
+                error_count += 1
+                # Clean up orphan auth user if DB insert failed
+                if auth_user_id:
+                    try:
+                        service_supabase.auth.admin.delete_user(auth_user_id)
+                    except Exception as del_err:
+                        print(f"Failed to clean up orphan auth user {auth_user_id}:", del_err)
+
+    # 3. Log bulk import
+    try:
+        service_supabase.table("bulk_imports").insert({
+            "teacher_id": user["user_id"],
+            "filename": req.filename,
+            "total_rows": len(req.students),
+            "created": success_count,
+            "skipped": skipped_count,
+            "errors": error_count,
+            "created_at": datetime.now().isoformat()
+        }).execute()
+    except Exception as e:
+        print("Failed to insert audit log (table might not exist):", e)
+
+    return {"status": "success", "created": success_count, "skipped": skipped_count, "errors": error_count}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
