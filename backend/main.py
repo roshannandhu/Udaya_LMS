@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Literal, Any
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import asyncio
 import csv
 from io import StringIO
@@ -12,6 +12,7 @@ import re
 import os
 import json
 import base64
+import httpx
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -22,7 +23,7 @@ app = FastAPI(title="Tutoria LMS API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3001", "http://127.0.0.1:3001", "http://192.168.1.9:3001"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,6 +44,53 @@ if SUPABASE_URL and SUPABASE_KEY:
         print("[*] Supabase connected successfully")
     except Exception as e:
         print(f"[!] Supabase connection failed: {e}")
+
+
+async def _ensure_plain_password_column():
+    """Auto-add plain_password column to students table if missing (uses Supabase pg-meta API)."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
+        return
+    # Probe first — fast path if column already exists
+    try:
+        service_supabase.table("students").select("plain_password").limit(1).execute()
+        return
+    except Exception:
+        pass
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # Get the students table ID from pg-meta
+            resp = await client.get(f"{SUPABASE_URL}/pg-meta/v0/tables", headers=headers, params={"schema": "public"})
+            if not resp.is_success:
+                raise Exception(f"pg-meta tables: {resp.status_code} {resp.text[:200]}")
+            students_table = next((t for t in resp.json() if t["name"] == "students"), None)
+            if not students_table:
+                raise Exception("students table not found in pg-meta response")
+            # Add the column
+            add_resp = await client.post(
+                f"{SUPABASE_URL}/pg-meta/v0/columns",
+                headers=headers,
+                json={"table_id": students_table["id"], "name": "plain_password", "type": "text", "is_nullable": True},
+            )
+            if add_resp.is_success:
+                print("[*] Auto-migrated: plain_password column added to students table")
+            else:
+                raise Exception(f"add column: {add_resp.status_code} {add_resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Could not auto-add plain_password column: {e}")
+        print("[!] Run this in Supabase SQL Editor:")
+        print("    ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;")
+
+
+@app.on_event("startup")
+async def startup_event():
+    await _ensure_plain_password_column()
+
 
 # Models
 class Standard(BaseModel):
@@ -126,6 +174,9 @@ class CreateStudentRequest(BaseModel):
     name: str
     username: str
     standard_id: Optional[str] = None
+
+class ResetPasswordRequest(BaseModel):
+    new_password: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email_or_username: str
@@ -430,9 +481,14 @@ def change_password(request: ChangePasswordRequest, user = Depends(verify_token)
         service_supabase.auth.admin.update_user_by_id(user["user_id"], {"password": request.password})
         if user["role"] == "student":
             try:
-                service_supabase.table("students").update({"must_change_pwd": False}).eq("id", user["user_id"]).execute()
+                # Clear must_change_pwd and any plain_password column that may exist
+                service_supabase.table("students").update({"must_change_pwd": False, "plain_password": None}).eq("id", user["user_id"]).execute()
             except Exception:
-                pass
+                # plain_password column may not exist — that's fine
+                try:
+                    service_supabase.table("students").update({"must_change_pwd": False}).eq("id", user["user_id"]).execute()
+                except Exception:
+                    pass
         return {"message": "Password changed successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -795,17 +851,19 @@ def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
+    # Safe field list — never include any password column regardless of DB state
+    teacher_fields = "id, name, username, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
     # Students only see safe fields (no phone/email of other students)
     student_public_fields = "id, name, username, standard_id, points, attendance_pct, avg_score, avatar_url"
 
     if user["role"] == "teacher":
         if standard_id:
-            response = service_supabase.table("students").select("*").eq("standard_id", standard_id).execute()
+            response = service_supabase.table("students").select(teacher_fields).eq("standard_id", standard_id).execute()
         else:
             standards = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
             standard_ids = [s["id"] for s in (standards.data or [])]
             if standard_ids:
-                response = service_supabase.table("students").select("*").in_("standard_id", standard_ids).execute()
+                response = service_supabase.table("students").select(teacher_fields).in_("standard_id", standard_ids).execute()
             else:
                 return []
     else:
@@ -825,11 +883,12 @@ def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)
 def get_student(student_id: str, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
-    # Teachers get full profile; students can only see their own full profile
+    # Explicit safe field list — never include any password column regardless of DB state
+    safe_fields = "id, name, username, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
     if user["role"] == "teacher":
-        fields = "*"
+        fields = safe_fields
     elif user.get("user_id") == student_id or user.get("student_id") == student_id:
-        fields = "*"
+        fields = safe_fields
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
     response = service_supabase.table("students").select(fields).eq("id", student_id).single().execute()
@@ -844,11 +903,13 @@ def get_student_report(student_id: str, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Get student info
-    student_res = service_supabase.table("students").select("*").eq("id", student_id).single().execute()
+    # Get student info — explicit fields, no password columns
+    student_res = service_supabase.table("students").select(
+        "id, name, username, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
+    ).eq("id", student_id).single().execute()
     if not student_res.data:
         raise HTTPException(status_code=404, detail="Student not found")
-    
+
     # Get all test attempts with test titles
     attempts_res = service_supabase.table("test_attempts").select("*, tests(title, total_marks, created_at)").eq("student_id", student_id).order("created_at").execute()
 
@@ -902,6 +963,10 @@ def create_student_admin(request: CreateStudentRequest, user = Depends(verify_to
             "standard_id": request.standard_id,
         }
         service_supabase.table("students").insert(student_data).execute()
+        try:
+            service_supabase.table("students").update({"plain_password": request.password}).eq("id", response.user.id).execute()
+        except Exception:
+            pass
 
         return {
             "id": response.user.id,
@@ -970,21 +1035,57 @@ def block_student(student_id: str, blocked: bool, user = Depends(verify_token)):
     return {"message": f"Student {'blocked' if blocked else 'unblocked'} successfully"}
 
 @app.post("/api/students/{student_id}/reset-password")
-def reset_student_password(student_id: str, user = Depends(verify_token)):
+def reset_student_password(student_id: str, body: ResetPasswordRequest = None, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
     import secrets
     import string
-    alphabet = string.ascii_letters + string.digits
-    new_password = ''.join(secrets.choice(alphabet) for _ in range(10))
+    if body and body.new_password and len(body.new_password.strip()) >= 6:
+        new_password = body.new_password.strip()
+    else:
+        alphabet = string.ascii_letters + string.digits
+        new_password = ''.join(secrets.choice(alphabet) for _ in range(10))
     try:
         service_supabase.auth.admin.update_user_by_id(student_id, {"password": new_password})
-        service_supabase.table("students").update({"must_change_pwd": True}).eq("id", student_id).execute()
+        try:
+            service_supabase.table("students").update({"must_change_pwd": True, "plain_password": new_password}).eq("id", student_id).execute()
+        except Exception:
+            service_supabase.table("students").update({"must_change_pwd": True}).eq("id", student_id).execute()
         return {"new_password": new_password}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/students/{student_id}/password")
+def get_student_password(student_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    try:
+        row = service_supabase.table("students").select("plain_password,must_change_pwd").eq("id", student_id).single().execute()
+        if not row.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+        plain_password = row.data.get("plain_password")
+        must_change_pwd = row.data.get("must_change_pwd", True)
+        # null + must_change_pwd=True  → password never stored (old student, pre-migration)
+        # null + must_change_pwd=False → student changed their own password
+        if plain_password is None and must_change_pwd:
+            return {"plain_password": None, "status": "never_stored"}
+        if plain_password is None:
+            return {"plain_password": None, "status": "changed"}
+        return {"plain_password": plain_password, "status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        err_str = str(e).lower()
+        if "plain_password" in err_str or "column" in err_str or "42703" in err_str:
+            raise HTTPException(
+                status_code=503,
+                detail="column_missing: ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;"
+            )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/api/students/{student_id}")
 def update_student(student_id: str, request: StudentProfileUpdate, user = Depends(verify_token)):
@@ -1020,19 +1121,87 @@ def get_videos(class_id: Optional[str] = None, user = Depends(verify_token)):
 
     if class_id:
         response = service_supabase.table("videos").select("*").eq("class_id", class_id).execute()
-        return response.data or []
-
-    # No class_id — for students return all videos for their standard's subjects
-    if user["role"] == "student" and user.get("standard_id"):
+        videos = response.data or []
+    elif user["role"] == "student" and user.get("standard_id"):
+        # No class_id — for students return all videos for their standard's subjects
         subjects = service_supabase.table("subject_classes").select("id").eq("standard_id", user["standard_id"]).execute()
         if not subjects.data:
             return []
         sub_ids = [s["id"] for s in subjects.data]
         response = service_supabase.table("videos").select("*").in_("class_id", sub_ids).execute()
-        return response.data or []
+        videos = response.data or []
+    else:
+        # For teachers without class_id, return empty (they should always specify class_id)
+        return []
 
-    # For teachers without class_id, return empty (they should always specify class_id)
-    return []
+    # Embed view/completion counts for teachers (single extra query, no N+1)
+    if videos and user["role"] == "teacher":
+        try:
+            ids = [v["id"] for v in videos]
+            prog = service_supabase.table("video_progress").select("video_id, completed").in_("video_id", ids).execute()
+            stats: dict = {}
+            for r in (prog.data or []):
+                e = stats.setdefault(r["video_id"], {"view_count": 0, "completed_count": 0})
+                e["view_count"] += 1
+                if r.get("completed"):
+                    e["completed_count"] += 1
+            for v in videos:
+                s = stats.get(v["id"], {"view_count": 0, "completed_count": 0})
+                v["view_count"] = s["view_count"]
+                v["completed_count"] = s["completed_count"]
+        except Exception:
+            for v in videos:
+                v.setdefault("view_count", 0)
+                v.setdefault("completed_count", 0)
+
+    # Embed each student's own completion status (single extra query, no N+1)
+    if videos and user["role"] == "student" and user.get("student_id"):
+        try:
+            ids = [v["id"] for v in videos]
+            my_prog = service_supabase.table("video_progress").select("video_id, completed")\
+                .in_("video_id", ids).eq("student_id", user["student_id"]).execute()
+            my_status = {r["video_id"]: bool(r.get("completed")) for r in (my_prog.data or [])}
+            for v in videos:
+                v["my_completed"] = my_status.get(v["id"], False)
+        except Exception:
+            for v in videos:
+                v.setdefault("my_completed", False)
+
+    return videos
+
+@app.get("/api/videos/{video_id}/viewers")
+def get_video_viewers(video_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teachers only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    # Resolve video → class → standard
+    video = service_supabase.table("videos").select("class_id").eq("id", video_id).single().execute()
+    if not video.data:
+        raise HTTPException(status_code=404, detail="Video not found")
+    subject = service_supabase.table("subject_classes").select("standard_id").eq("id", video.data["class_id"]).single().execute()
+    if not subject.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    # All students in the standard
+    students_res = service_supabase.table("students").select("id, name, username, avatar_url").eq("standard_id", subject.data["standard_id"]).execute()
+    # Progress records for this video
+    prog = service_supabase.table("video_progress").select("student_id, completed, last_watched_at").eq("video_id", video_id).execute()
+    prog_map = {r["student_id"]: r for r in (prog.data or [])}
+    result = []
+    for s in (students_res.data or []):
+        p = prog_map.get(s["id"])
+        result.append({
+            "id": s["id"],
+            "name": s["name"],
+            "username": s["username"],
+            "avatar_url": s.get("avatar_url"),
+            "watched": p is not None,
+            "completed": p["completed"] if p else False,
+            "last_watched_at": p["last_watched_at"] if p else None,
+        })
+    # Sort: completed first, then watched-not-completed, then not watched; alpha within each group
+    result.sort(key=lambda x: (0 if x["completed"] else 1 if x["watched"] else 2, x["name"]))
+    return result
 
 @app.post("/api/videos")
 def create_video(video: Video, user = Depends(verify_token)):
@@ -1291,11 +1460,29 @@ def update_test(test_id: str, updates: TestUpdate, user = Depends(verify_token))
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    existing = service_supabase.table("tests").select("created_by").eq("id", test_id).single().execute()
+    existing = service_supabase.table("tests").select("created_by, status, scheduled_for").eq("id", test_id).single().execute()
     if not existing.data or existing.data.get("created_by") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    # Block content edits once the exam has started (allow status-only changes like publish/close)
+    content_fields = {"title", "duration_mins", "total_marks", "negative_marking", "penalty", "scheduled_for", "expires_at"}
+    incoming = {k: v for k, v in updates.model_dump().items() if v is not None}
+    has_content_change = bool(incoming.keys() & content_fields)
+    edata = existing.data
+    if has_content_change:
+        if edata.get("status") not in ("draft", "scheduled"):
+            raise HTTPException(status_code=403, detail="Cannot edit a test that is already active or completed")
+        if edata.get("scheduled_for"):
+            try:
+                sched = datetime.fromisoformat(edata["scheduled_for"].replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) >= sched:
+                    raise HTTPException(status_code=403, detail="Cannot edit a test after the scheduled start time")
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
+    update_data = incoming
     if update_data:
         service_supabase.table("tests").update(update_data).eq("id", test_id).execute()
 
@@ -1312,6 +1499,8 @@ def delete_test(test_id: str, user = Depends(verify_token)):
     if not existing.data or existing.data.get("created_by") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    # Delete attempts first (no ON DELETE CASCADE on this FK); questions cascade automatically
+    service_supabase.table("test_attempts").delete().eq("test_id", test_id).execute()
     service_supabase.table("tests").delete().eq("id", test_id).execute()
     return {"message": "Test deleted"}
 
@@ -1949,17 +2138,84 @@ def get_test_for_edit(test_id: str, user = Depends(verify_token)):
         "questions": questions.data
     }
 
+def recalculate_test_attempts(test_id: str):
+    if not service_supabase: return
+    try:
+        test = service_supabase.table("tests").select("*").eq("id", test_id).single().execute()
+        if not test.data: return
+        tdata = test.data
+
+        questions = service_supabase.table("questions").select("id, correct_idx").eq("test_id", test_id).execute()
+        q_list = questions.data or []
+        
+        attempts = service_supabase.table("test_attempts").select("*").eq("test_id", test_id).execute()
+        if not attempts.data: return
+        
+        for attempt in attempts.data:
+            answers = attempt.get("answers", {})
+            correct_count = 0
+            wrong_count = 0
+            marks_deducted = 0
+            total_obtained = 0
+            marks_per_question = tdata["total_marks"] / len(q_list) if q_list else 1
+            
+            for q in q_list:
+                q_id = str(q["id"])
+                if q_id in answers:
+                    if answers[q_id] == q["correct_idx"]:
+                        correct_count += 1
+                        total_obtained += marks_per_question
+                    else:
+                        wrong_count += 1
+                        if tdata["negative_marking"]:
+                            deduction = marks_per_question * tdata["penalty"]
+                            marks_deducted += deduction
+                            total_obtained -= deduction
+            
+            score_pct = (total_obtained / tdata["total_marks"] * 100) if tdata["total_marks"] > 0 else 0
+            points_earned = 0
+            if score_pct >= 90: points_earned = 100
+            elif score_pct >= 75: points_earned = 75
+            elif score_pct >= 60: points_earned = 50
+            elif score_pct >= 40: points_earned = 25
+            else: points_earned = 10
+
+            update_payload = {
+                "correct_count": correct_count,
+                "wrong_count": wrong_count,
+                "marks_deducted": marks_deducted,
+                "score": round(total_obtained, 2),
+                "points_earned": points_earned
+            }
+            service_supabase.table("test_attempts").update(update_payload).eq("id", attempt["id"]).execute()
+    except Exception as e:
+        print(f"Error recalculating attempts for test {test_id}: {e}")
+
 # Update full test
 @app.put("/api/tests/{test_id}/full")
-def update_test_full(test_id: str, data: TestUpdateFull, user = Depends(verify_token)):
+def update_test_full(test_id: str, data: TestUpdateFull, background_tasks: BackgroundTasks, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    existing = service_supabase.table("tests").select("created_by").eq("id", test_id).single().execute()
+    existing = service_supabase.table("tests").select("created_by, status, scheduled_for").eq("id", test_id).single().execute()
     if not existing.data or existing.data.get("created_by") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Block editing once the exam has started
+    edata = existing.data
+    if edata.get("status") not in ("draft", "scheduled"):
+        raise HTTPException(status_code=403, detail="Cannot edit a test that is already active or completed")
+    if edata.get("scheduled_for"):
+        try:
+            sched = datetime.fromisoformat(edata["scheduled_for"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) >= sched:
+                raise HTTPException(status_code=403, detail="Cannot edit a test after the scheduled start time")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
 
     # Update test metadata
     test_data = {
@@ -2000,6 +2256,7 @@ def update_test_full(test_id: str, data: TestUpdateFull, user = Depends(verify_t
         for qid in to_delete:
             service_supabase.table("questions").delete().eq("id", qid).execute()
 
+    background_tasks.add_task(recalculate_test_attempts, test_id)
     return {"message": "Test fully updated"}
 
 # Get test with questions (for students taking test)
@@ -2217,6 +2474,39 @@ def get_student_test_history(user = Depends(verify_token)):
     attempts = service_supabase.table("test_attempts").select("*, tests(title, total_marks)").eq("student_id", user["student_id"]).order("submitted_at", desc=True).execute()
 
     return attempts.data or []
+
+# Get attempt review with correct answers (student views their own completed attempt)
+@app.get("/api/tests/{test_id}/attempt-review")
+def get_attempt_review(test_id: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # students.id = auth.users.id; use student_id from token if set, else fall back to user id
+    sid = user.get("student_id") or user.get("id")
+    if not sid:
+        raise HTTPException(status_code=401, detail="Student identity not resolved")
+
+    attempt = service_supabase.table("test_attempts").select("answers").eq("test_id", test_id).eq("student_id", sid).execute()
+    if not attempt.data:
+        raise HTTPException(status_code=404, detail="No attempt found for this test")
+
+    raw_answers = attempt.data[0].get("answers") or {}
+    # supabase-py may return JSONB as a string in some versions
+    if isinstance(raw_answers, str):
+        import json
+        try:
+            raw_answers = json.loads(raw_answers)
+        except Exception:
+            raw_answers = {}
+
+    questions = service_supabase.table("questions").select("id, question, options, correct_idx, order_num").eq("test_id", test_id).order("order_num").execute()
+
+    return {
+        "questions": questions.data or [],
+        "answers": raw_answers
+    }
 
 # Get leaderboard for a standard
 @app.get("/api/leaderboard")

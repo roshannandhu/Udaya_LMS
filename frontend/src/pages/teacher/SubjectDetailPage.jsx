@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Play, Upload, Plus, MoreVertical, Video, FileQuestion, Shield, Loader2, ListChecks } from 'lucide-react';
+import { ArrowLeft, Play, Upload, Plus, MoreVertical, Video, FileQuestion, Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock } from 'lucide-react';
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, attendanceApi } from '../../lib/api';
 import AttendanceGrid from '../../components/teacher/AttendanceGrid';
@@ -42,7 +42,8 @@ function UploadVideoModal({ open, onClose, classId, onSuccess }) {
     setProgress(0);
 
     const token = localStorage.getItem('tutoria_token');
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+    const { getApiBaseUrl } = await import('../../lib/api');
+    const apiBase = getApiBaseUrl();
 
     const formData = new FormData();
     formData.append('file', file);
@@ -185,6 +186,117 @@ function UploadVideoModal({ open, onClose, classId, onSuccess }) {
   );
 }
 
+function VideoViewersModal({ video, onClose }) {
+  const [viewers, setViewers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!video) return;
+    setLoading(true);
+    setViewers([]);
+    apiClient(`/videos/${video.id}/viewers`)
+      .then(data => setViewers(Array.isArray(data) ? data : []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [video?.id]);
+
+  const watched    = viewers.filter(v => v.watched);
+  const notWatched = viewers.filter(v => !v.watched);
+
+  const formatTime = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  return (
+    <Modal open={!!video} onClose={onClose} title={video?.title || 'Video viewers'} size="md">
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="w-8 h-8 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-2.5 w-20" />
+              </div>
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {/* Summary */}
+          <div className="flex items-center gap-2 text-sm text-neutral-600">
+            <Eye size={14} />
+            <span><strong className="text-neutral-900">{watched.length}</strong> of <strong className="text-neutral-900">{viewers.length}</strong> students watched</span>
+          </div>
+
+          {/* Watched */}
+          {watched.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">Watched</p>
+              <div className="space-y-2">
+                {watched.map(s => (
+                  <div key={s.id} className="flex items-center gap-3 py-1">
+                    <Avatar name={s.name} src={s.avatar_url} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{s.name}</p>
+                      <p className="text-xs text-neutral-500">@{s.username}{s.last_watched_at ? ` · ${formatTime(s.last_watched_at)}` : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {s.completed && (
+                        <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                          <CheckCircle2 size={10} /> Completed
+                        </span>
+                      )}
+                      {!s.completed && (
+                        <span className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                          <Clock size={10} /> In progress
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Not yet */}
+          {notWatched.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">Not yet</p>
+              <div className="space-y-2">
+                {notWatched.map(s => (
+                  <div key={s.id} className="flex items-center gap-3 py-1 opacity-60">
+                    <Avatar name={s.name} src={s.avatar_url} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{s.name}</p>
+                      <p className="text-xs text-neutral-500">@{s.username}</p>
+                    </div>
+                    <span className="text-xs text-neutral-500 bg-neutral-100 border border-neutral-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                      Not watched
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {viewers.length === 0 && (
+            <p className="text-sm text-neutral-500 text-center py-4">No students enrolled in this standard yet.</p>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export default function SubjectDetailPage() {
   const { standardId, classId } = useParams();
   const navigate = useNavigate();
@@ -206,9 +318,12 @@ export default function SubjectDetailPage() {
   const [tab, setTab]           = useState('videos');
   const [uploadOpen, setUploadOpen]   = useState(false);
   const [newTestOpen, setNewTestOpen] = useState(false);
+  const [editTestId, setEditTestId]   = useState(null);
   const [selectedTest, setSelectedTest]   = useState(null);
   const [videoMenuId, setVideoMenuId] = useState(null);
+  const [menuPos, setMenuPos]         = useState({ top: 0, right: 0 });
   const [editVideo, setEditVideo]     = useState(null);
+  const [selectedVideo, setSelectedVideo] = useState(null);
 
   useEffect(() => {
     if (!videoMenuId) return;
@@ -320,7 +435,7 @@ export default function SubjectDetailPage() {
           ))}
           <div className="ml-auto">
             {tab === 'videos' && <Btn variant="primary" size="sm" icon={Upload} onClick={() => setUploadOpen(true)}>Upload</Btn>}
-            {tab === 'tests' && <Btn variant="primary" size="sm" icon={Plus} onClick={() => setNewTestOpen(true)}>New test</Btn>}
+            {tab === 'tests' && <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>New test</Btn>}
           </div>
         </div>
 
@@ -333,48 +448,75 @@ export default function SubjectDetailPage() {
               <Btn variant="primary" icon={Upload} onClick={() => setUploadOpen(true)}>Upload video</Btn>
             </div>
           ) : (
-            <div className="glass-panel rounded-xl overflow-hidden">
-              {videos.map((v, i) => (
-                <div key={v.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-white/50 transition-colors ${i < videos.length - 1 ? 'border-b border-white/40' : ''}`}>
-                  <div className="w-12 h-12 rounded-md bg-white/50 border border-white/60 flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <Play size={16} className="text-neutral-600" fill="currentColor" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{v.title}</p>
-                    <p className="text-xs text-neutral-500">
-                      {v.duration_secs ? `${Math.floor(v.duration_secs / 60)}:${(v.duration_secs % 60).toString().padStart(2, '0')}` : 'No duration'}
-                    </p>
-                  </div>
-                  <div className="relative">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setVideoMenuId(videoMenuId === v.id ? null : v.id); }}
-                      className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded hover:bg-white/60"
-                    >
-                      <MoreVertical size={14} />
-                    </button>
-                    {videoMenuId === v.id && (
-                      <div
-                        className="absolute right-0 top-full mt-1 w-28 bg-white rounded-lg shadow-lg border border-neutral-200 z-50 py-1"
-                        onClick={(e) => e.stopPropagation()}
+            <>
+              <div className="glass-panel rounded-xl overflow-hidden">
+                {videos.map((v, i) => (
+                  <div
+                    key={v.id}
+                    className={`flex items-center gap-3 px-4 py-3 hover:bg-white/50 transition-colors cursor-pointer ${i < videos.length - 1 ? 'border-b border-white/40' : ''}`}
+                    onClick={() => setSelectedVideo(v)}
+                  >
+                    <div className="w-12 h-12 rounded-md bg-white/50 border border-white/60 flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <Play size={16} className="text-neutral-600" fill="currentColor" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{v.title}</p>
+                      <p className="text-xs text-neutral-500 flex items-center gap-1.5 flex-wrap">
+                        {v.duration_secs
+                          ? `${Math.floor(v.duration_secs / 60)}:${(v.duration_secs % 60).toString().padStart(2, '0')}`
+                          : 'No duration'}
+                        {students.length > 0 && (
+                          <>
+                            <span className="text-neutral-300">·</span>
+                            <span className="flex items-center gap-1 text-neutral-400">
+                              <Eye size={10} />
+                              {v.completed_count ?? 0}/{students.length} watched
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    {/* Stop propagation so three-dot click doesn't open viewers modal */}
+                    <div onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (videoMenuId === v.id) { setVideoMenuId(null); return; }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                          setVideoMenuId(v.id);
+                        }}
+                        className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded hover:bg-white/60"
                       >
-                        <button
-                          onClick={() => { setEditVideo(v); setVideoMenuId(null); }}
-                          className="w-full text-left px-3 py-1.5 text-sm text-neutral-700 hover:bg-white/40"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteVideo(v.id)}
-                          className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
+                        <MoreVertical size={14} />
+                      </button>
+                    </div>
                   </div>
+                ))}
+              </div>
+
+              {/* Fixed-position dropdown — outside overflow:hidden so it's never clipped */}
+              {videoMenuId && (
+                <div
+                  style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+                  className="w-32 bg-white rounded-lg shadow-xl border border-neutral-200 py-1"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => { setEditVideo(videos.find(v => v.id === videoMenuId) || null); setVideoMenuId(null); }}
+                    className="w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => { handleDeleteVideo(videoMenuId); }}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Delete
+                  </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )
         )}
 
@@ -383,7 +525,7 @@ export default function SubjectDetailPage() {
             <div className="text-center py-16 glass-panel border-dashed border-white/60 rounded-xl">
               <FileQuestion size={32} className="mx-auto mb-3 text-neutral-400" />
               <h3 className="font-medium mb-1">No tests yet</h3>
-              <Btn variant="primary" icon={Plus} onClick={() => setNewTestOpen(true)}>Create test</Btn>
+              <Btn variant="primary" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>Create test</Btn>
             </div>
           ) : (
             <div className="space-y-2">
@@ -399,6 +541,9 @@ export default function SubjectDetailPage() {
                       <p className="text-xs text-neutral-500">{t.duration_mins} mins · {t.total_marks} marks</p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Btn size="sm" variant="ghost" icon={Edit2} onClick={() => { setEditTestId(t.id); setNewTestOpen(true); }}>
+                        Edit
+                      </Btn>
                       <Btn size="sm" variant="ghost" icon={ListChecks} onClick={() => { setSelectedTest(t); }}>
                         Results
                       </Btn>
@@ -456,9 +601,10 @@ export default function SubjectDetailPage() {
       />
       <NewTestModal
         open={newTestOpen}
-        onClose={() => setNewTestOpen(false)}
+        onClose={() => { setNewTestOpen(false); setEditTestId(null); }}
         defaultClassId={classId}
         onSuccess={() => fetchTestsData()}
+        editTestId={editTestId}
       />
       <EditVideoModal
         open={!!editVideo}
@@ -478,6 +624,10 @@ export default function SubjectDetailPage() {
           setTests(prev => prev.filter(t => t.id !== deletedId));
           setSelectedTest(null);
         }}
+      />
+      <VideoViewersModal
+        video={selectedVideo}
+        onClose={() => setSelectedVideo(null)}
       />
     </div>
   );

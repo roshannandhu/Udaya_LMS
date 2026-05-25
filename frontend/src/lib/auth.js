@@ -1,6 +1,7 @@
 import { create } from 'zustand';
+import { getApiBaseUrl } from './api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+const API_BASE = getApiBaseUrl();
 const ROLE_KEY = 'tutoria_user_role';
 const TOKEN_KEY = 'tutoria_token';
 const NAME_KEY = 'tutoria_user_name';

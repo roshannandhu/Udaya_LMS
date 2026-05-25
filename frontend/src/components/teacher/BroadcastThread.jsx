@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Image as ImageIcon, Clock } from 'lucide-react';
-import { apiClient, broadcastApi } from '../../lib/api';
+import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
   const [msg, setMsg] = useState('');
@@ -26,7 +26,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
   useEffect(() => {
     // Connect WebSocket
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+    const apiBase = getApiBaseUrl();
     const wsBase = apiBase.replace(/^http/, 'ws');
     const token = localStorage.getItem('tutoria_token') || '';
     const ws = new WebSocket(`${wsBase}/ws/broadcasts/${std.id}?token=${encodeURIComponent(token)}`);
@@ -90,7 +90,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     
     try {
       const token = localStorage.getItem('tutoria_token');
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+    const apiBase = getApiBaseUrl();
       const res = await fetch(`${apiBase}/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileQuestion, Clock, CheckCircle2, Loader2, Trophy, CalendarClock } from 'lucide-react';
+import { FileQuestion, Clock, CheckCircle2, Loader2, Trophy, CalendarClock, BookOpen } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Tag, Skeleton } from '../../components/ui';
 import { testApi, apiClient } from '../../lib/api';
@@ -106,11 +106,35 @@ export default function StudentTestsPage() {
         )}
 
         {section === 'completed' && attempt && (
-          <div className="flex gap-4 text-xs pt-2 border-t border-white/40 mt-2 flex-wrap">
-            <div><span className="text-neutral-500">Score </span><span className="font-semibold">{attempt.score}/{t.total_marks}</span></div>
-            <div><span className="text-neutral-500">Correct </span><span className="font-semibold text-green-600">{attempt.correct_count}</span></div>
-            <div><span className="text-neutral-500">Wrong </span><span className="font-semibold text-red-500">{attempt.wrong_count}</span></div>
-            <div className="flex items-center gap-1"><Trophy size={10} className="text-amber-500" /><span className="font-semibold text-amber-700">{attempt.points_earned} pts</span></div>
+          <div className="pt-2 border-t border-white/40 mt-2">
+            <div className="flex gap-4 text-xs mb-2.5 flex-wrap">
+              <div><span className="text-neutral-500">Score </span><span className="font-semibold">{attempt.score}/{t.total_marks}</span></div>
+              <div><span className="text-neutral-500">Correct </span><span className="font-semibold text-green-600">{attempt.correct_count}</span></div>
+              <div><span className="text-neutral-500">Wrong </span><span className="font-semibold text-red-500">{attempt.wrong_count}</span></div>
+              <div className="flex items-center gap-1"><Trophy size={10} className="text-amber-500" /><span className="font-semibold text-amber-700">{attempt.points_earned} pts</span></div>
+            </div>
+            <button
+              onClick={() => navigate('/student/tests/review', {
+                state: {
+                  test_id: t.id,
+                  result: {
+                    test_id: t.id,
+                    testTitle: t.title,
+                    score: attempt.score,
+                    total_marks: t.total_marks,
+                    percentage: t.total_marks ? Math.round((attempt.score / t.total_marks) * 100) : 0,
+                    correct_count: attempt.correct_count,
+                    wrong_count: attempt.wrong_count,
+                    marks_deducted: attempt.marks_deducted,
+                    points_earned: attempt.points_earned,
+                    flagged: attempt.flagged,
+                  }
+                }
+              })}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-neutral-600 bg-white/40 border border-white/60 hover:bg-white/70 transition-colors"
+            >
+              <BookOpen size={12} /> Review Answers
+            </button>
           </div>
         )}
       </div>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, Target, CheckCircle2, Trophy, BookOpen, ChevronRight, ShieldOff, Shield } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, Target, CheckCircle2, Trophy, BookOpen, ChevronRight, ShieldOff, Shield, Eye } from 'lucide-react';
 import { Btn, Avatar, Tag, Divider, Modal, Input, SectionHeader, Skeleton } from '../../components/ui';
 import { apiClient } from '../../lib/api';
-import { useAppCache } from '../../store';
+import { useAppCache, useSettingsStore } from '../../store';
 import AttendanceStudentCard from '../../components/teacher/AttendanceStudentCard';
 import StudentReportModal from '../../components/teacher/StudentReportModal';
 
@@ -22,6 +22,8 @@ export default function StudentDetailPage() {
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
   const [resetPwResult, setResetPwResult] = useState(null);
   const [resetPwLoading, setResetPwLoading] = useState(false);
+  const [viewPwResult, setViewPwResult] = useState(null);
+  const [viewPwLoading, setViewPwLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
 
@@ -64,16 +66,42 @@ export default function StudentDetailPage() {
     }
   };
 
+  const { defaultStudentPassword } = useSettingsStore();
+
   const handleResetPassword = async () => {
     setResetPwLoading(true);
     setMenuOpen(false);
     try {
-      const res = await apiClient(`/students/${studentId}/reset-password`, { method: 'POST' });
+      const body = defaultStudentPassword ? { new_password: defaultStudentPassword } : {};
+      const res = await apiClient(`/students/${studentId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
       setResetPwResult(res.new_password);
     } catch (err) {
       console.error(err);
     } finally {
       setResetPwLoading(false);
+    }
+  };
+
+  const handleViewPassword = async () => {
+    setViewPwLoading(true);
+    setMenuOpen(false);
+    try {
+      const res = await apiClient(`/students/${studentId}/password`);
+      if (res.status === 'ok') setViewPwResult(res.plain_password);
+      else if (res.status === 'never_stored') setViewPwResult('never_stored');
+      else setViewPwResult('changed');
+    } catch (err) {
+      const msg = err?.message || '';
+      if (msg.startsWith('column_missing:')) {
+        setViewPwResult('column_missing');
+      } else {
+        setViewPwResult('error');
+      }
+    } finally {
+      setViewPwLoading(false);
     }
   };
 
@@ -177,6 +205,7 @@ export default function StudentDetailPage() {
                   <button onClick={() => { navigate('/teacher/broadcasts', { state: { stdId: s.standard_id } }); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><MessageSquare size={13} /> Message standard</button>
                   <button onClick={() => { setReportOpen(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><Download size={13} /> Export report</button>
                   <button onClick={handleResetPassword} disabled={resetPwLoading} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><Lock size={13} /> {resetPwLoading ? 'Resetting…' : 'Reset password'}</button>
+                  <button onClick={handleViewPassword} disabled={viewPwLoading} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><Eye size={13} /> {viewPwLoading ? 'Loading…' : 'View password'}</button>
                   <button onClick={handleToggleBlock} disabled={blockLoading} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-amber-50 text-left text-amber-700">
                     {s.blocked ? <Shield size={13} /> : <ShieldOff size={13} />} {blockLoading ? 'Updating…' : s.blocked ? 'Unblock student' : 'Block student'}
                   </button>
@@ -260,6 +289,49 @@ export default function StudentDetailPage() {
         <Btn variant="primary" className="w-full" onClick={() => { navigator.clipboard.writeText(resetPwResult); setResetPwResult(null); }}>
           Copy & close
         </Btn>
+      </Modal>
+
+      <Modal open={!!viewPwResult} onClose={() => setViewPwResult(null)} title="Student password" size="sm">
+        {(viewPwResult === 'error' || viewPwResult === 'column_missing') ? (
+          <>
+            <p className="text-sm text-neutral-600 mb-3">The <code className="bg-neutral-100 px-1 rounded text-xs">plain_password</code> column is missing. Run this once in your <strong>Supabase SQL Editor</strong>:</p>
+            <div className="p-3 bg-neutral-900 text-white rounded-lg font-mono text-xs mb-4 select-all break-all">
+              ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
+            </div>
+            <p className="text-xs text-neutral-500 mb-4">After running the migration, restart the backend — it will auto-detect the column. New student passwords set after that will be visible here.</p>
+            <div className="flex gap-2">
+              <Btn variant="default" className="flex-1" onClick={() => { navigator.clipboard.writeText('ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;'); }}>Copy SQL</Btn>
+              <Btn variant="primary" className="flex-1" onClick={() => setViewPwResult(null)}>Close</Btn>
+            </div>
+          </>
+        ) : viewPwResult === 'never_stored' ? (
+          <>
+            <p className="text-sm text-neutral-600 mb-3">
+              No password on file for <strong>{s.name}</strong>. This student was created before password storage was enabled.
+            </p>
+            <p className="text-xs text-neutral-500 mb-4">Use "Reset password" to set a new password — it will be saved and visible here.</p>
+            <Btn variant="primary" className="w-full" onClick={() => setViewPwResult(null)}>Close</Btn>
+          </>
+        ) : viewPwResult === 'changed' ? (
+          <>
+            <p className="text-sm text-neutral-600 mb-3">
+              <strong>{s.name}</strong> has set their own password. The original is no longer available.
+            </p>
+            <p className="text-xs text-neutral-500 mb-4">Use "Reset password" to issue a new one.</p>
+            <Btn variant="primary" className="w-full" onClick={() => setViewPwResult(null)}>Close</Btn>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-neutral-600 mb-3">Last password set for <strong>{s.name}</strong>:</p>
+            <div className="p-3 bg-neutral-900 text-white rounded-lg font-mono text-base mb-3 select-all">
+              {viewPwResult}
+            </div>
+            <p className="text-xs text-neutral-500 mb-4">This is the password you last set. Once the student changes it themselves, it won't be visible here.</p>
+            <Btn variant="primary" className="w-full" onClick={() => { navigator.clipboard.writeText(viewPwResult); setViewPwResult(null); }}>
+              Copy & close
+            </Btn>
+          </>
+        )}
       </Modal>
 
       <Modal open={confirmRemove} onClose={() => setConfirmRemove(false)} title="Remove student?" size="sm">

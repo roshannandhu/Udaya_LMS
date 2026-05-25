@@ -55,7 +55,8 @@ export default function StudentProfilePage() {
       const form = new FormData();
       form.append('file', file);
       const token = localStorage.getItem('tutoria_token');
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+      const { getApiBaseUrl } = await import('../../lib/api');
+      const apiBase = getApiBaseUrl();
       const res = await fetch(`${apiBase}/students/me/avatar`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },

@@ -217,6 +217,7 @@ export default function StudentTestTakingPage() {
             testTitle: test?.title,
             total_marks: test?.total_marks,
             auto,
+            test_id: testId,
           }
         },
       });

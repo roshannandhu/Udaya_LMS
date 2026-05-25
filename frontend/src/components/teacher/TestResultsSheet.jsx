@@ -23,13 +23,20 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
 
   useEffect(() => {
     if (test) {
+      const fmtLocal = (d) => {
+        if (!d) return '';
+        const dt = new Date(d);
+        dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+        return dt.toISOString().slice(0, 16);
+      };
       setEditForm({
         title: test.title || '',
         duration_mins: test.duration_mins || test.duration || 30,
         total_marks: test.total_marks || test.totalMarks || 50,
         negative_marking: test.negative_marking || false,
         penalty: test.penalty || 0.25,
-        scheduled_for: test.scheduled_for ? new Date(test.scheduled_for).toISOString().slice(0, 16) : '',
+        scheduled_for: fmtLocal(test.scheduled_for),
+        expires_at: fmtLocal(test.expires_at),
       });
     }
   }, [test]);
@@ -69,7 +76,8 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
         negative_marking: editForm.negative_marking,
         penalty: editForm.negative_marking ? (parseFloat(editForm.penalty) || 0.25) : 0,
       };
-      if (editForm.scheduled_for) payload.scheduled_for = editForm.scheduled_for;
+      if (editForm.scheduled_for) payload.scheduled_for = new Date(editForm.scheduled_for).toISOString();
+      if (editForm.expires_at) payload.expires_at = new Date(editForm.expires_at).toISOString();
       await apiClient(`/tests/${test.id}`, {
         method: 'PATCH',
         body: JSON.stringify(payload)
@@ -102,7 +110,7 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
 
   if (!test) return null;
 
-  const isScheduled = test.status === 'scheduled';
+  const isScheduled = test.status === 'scheduled' && (!test.scheduled_for || new Date(test.scheduled_for) > new Date());
   const isDraft = test.status === 'draft';
 
   return (
@@ -129,7 +137,10 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
               {editForm.negative_marking && (
                 <Input label="Penalty per wrong answer" type="number" step="0.25" value={editForm.penalty} onChange={e => setEditForm({ ...editForm, penalty: e.target.value })} />
               )}
-              <Input label="Schedule for" type="datetime-local" value={editForm.scheduled_for} onChange={e => setEditForm({ ...editForm, scheduled_for: e.target.value })} />
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Start time" type="datetime-local" value={editForm.scheduled_for} onChange={e => setEditForm({ ...editForm, scheduled_for: e.target.value })} />
+                <Input label="End time" type="datetime-local" value={editForm.expires_at} onChange={e => setEditForm({ ...editForm, expires_at: e.target.value })} />
+              </div>
               <div className="flex gap-2 pt-2">
                 <Btn variant="ghost" onClick={() => setIsEditing(false)} className="flex-1" disabled={editSaving}>Cancel</Btn>
                 <Btn variant="primary" onClick={handleSaveEdit} disabled={editSaving} className="flex-1">
@@ -318,6 +329,24 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
           ) : (
             <div className="text-center py-8 text-sm text-neutral-500">Failed to load results</div>
           )}
+
+          {/* Delete danger zone — available for all active/completed tests */}
+          <div className="mt-6 pt-4 border-t border-white/40">
+            <Btn
+              variant="danger"
+              icon={deleting ? Loader2 : Trash2}
+              disabled={deleting}
+              onClick={handleDelete}
+              className="w-full"
+            >
+              {deleteConfirm ? 'Confirm delete?' : 'Delete Test'}
+            </Btn>
+            {deleteConfirm && (
+              <p className="text-xs text-red-600 mt-2 text-center">
+                This will permanently delete the test and all {results?.stats?.total_attempts ?? 0} student attempts.
+              </p>
+            )}
+          </div>
         </>
       )}
     </Sheet>

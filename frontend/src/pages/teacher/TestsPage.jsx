@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, FileQuestion, Clock, Loader2, ListChecks, Edit2 } from 'lucide-react';
+import { ArrowLeft, Plus, FileQuestion, Clock, Loader2, ListChecks, Edit2, Trash2 } from 'lucide-react';
 import { Btn, Tag, Skeleton } from '../../components/ui';
-import { NewTestModal } from '../../components/teacher/Modals';
+import NewTestModal from '../../components/teacher/NewTestModal';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import { testApi } from '../../lib/api';
 import { useAppCache } from '../../store';
@@ -15,6 +15,29 @@ export default function TestsPage() {
   const [editTestId, setEditTestId]   = useState(null);
   const [tests, setTests]           = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deleting, setDeleting]     = useState(false);
+
+  const canEdit = (t) => {
+    if (t.status === 'draft') return true;
+    if (t.status === 'scheduled' && t.scheduled_for && new Date(t.scheduled_for) > new Date()) return true;
+    return false;
+  };
+
+  const handleDeleteCard = async (t) => {
+    if (deleteConfirmId !== t.id) { setDeleteConfirmId(t.id); return; }
+    setDeleting(true);
+    try {
+      const { testApi } = await import('../../lib/api');
+      await testApi.deleteTest(t.id);
+      setTests(prev => prev.filter(x => x.id !== t.id));
+      setDeleteConfirmId(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Serve subjects + standards from cache (instant)
   const { subjects, standards, refreshSubjects, refreshStandards } = useAppCache();
@@ -113,15 +136,29 @@ export default function TestsPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => { setEditTestId(t.id); setNewTestOpen(true); }}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
-                        <Edit2 size={13} className="text-neutral-500" />
-                        Edit
-                      </button>
+                      {canEdit(t) ? (
+                        <button onClick={() => { setEditTestId(t.id); setNewTestOpen(true); }}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
+                          <Edit2 size={13} className="text-neutral-500" />
+                          Edit
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-neutral-300 glass-panel border-white/40 rounded-lg cursor-not-allowed select-none" title="Cannot edit after exam starts">
+                          <Edit2 size={13} /> Edit
+                        </span>
+                      )}
                       <button onClick={() => setResultsTest(t)}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
                         <ListChecks size={13} className="text-neutral-500" />
                         Results
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCard(t)}
+                        disabled={deleting && deleteConfirmId === t.id}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${deleteConfirmId === t.id ? 'bg-red-500 text-white hover:bg-red-600' : 'glass-panel border-white/60 text-red-500 hover:bg-red-50'}`}
+                      >
+                        {deleting && deleteConfirmId === t.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        {deleteConfirmId === t.id ? 'Confirm?' : 'Delete'}
                       </button>
                       <Tag color={statusColor}>{t.status}</Tag>
                     </div>

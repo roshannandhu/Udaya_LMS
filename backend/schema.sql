@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS students (
     avg_score NUMERIC DEFAULT 0,
     blocked BOOLEAN DEFAULT false,
     must_change_pwd BOOLEAN DEFAULT true,
+    plain_password TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -243,6 +244,7 @@ CREATE TABLE IF NOT EXISTS invite_requests (
 -- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_url TEXT;
 -- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_type TEXT;
 -- ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+-- ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
 
 -- ── Row Level Security ────────────────────────────────────────────────────────
 -- The FastAPI backend uses the service_role key which bypasses RLS.

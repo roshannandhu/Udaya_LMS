@@ -1209,3 +1209,16 @@ INFO:     127.0.0.1:56143 - "GET /api/reports/attendance?standard_id=all&below_p
 INFO:     127.0.0.1:49197 - "GET /api/dashboard/activity HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50643 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50133 - "GET /api/notifications HTTP/1.1" 200 OK
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully
+[*] Supabase connected successfully

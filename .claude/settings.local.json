@@ -43,7 +43,12 @@
       "PowerShell(Start-Process -FilePath \"py\" -ArgumentList \"-m\", \"uvicorn\", \"main:app\", \"--reload\", \"--port\", \"8001\" -WorkingDirectory \"E:\\\\IMP projects\\\\Udaya\\\\backend\" -RedirectStandardOutput \"E:\\\\IMP projects\\\\Udaya\\\\backend\\\\backend.log\" -RedirectStandardError \"E:\\\\IMP projects\\\\Udaya\\\\backend\\\\backend_err.log\" -WindowStyle Hidden)",
       "PowerShell(Start-Process -FilePath \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" -ArgumentList \"run\", \"dev\" -WorkingDirectory \"E:\\\\IMP projects\\\\Udaya\\\\frontend\" -RedirectStandardOutput \"E:\\\\IMP projects\\\\Udaya\\\\frontend\\\\frontend.log\" -RedirectStandardError \"E:\\\\IMP projects\\\\Udaya\\\\frontend\\\\frontend_err.log\" -WindowStyle Hidden)",
       "Bash(python3 -c ' *)",
-      "Bash(Select-Object -First 20)"
+      "Bash(Select-Object -First 20)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(Get-Content -Path \"E:\\\\IMP projects\\\\Udaya\\\\backend\\\\main.py\" -TotalCount 1230)",
+      "Bash(Select-Object -Last 30)",
+      "Bash(Format-List FullName)"
     ]
   }
 }

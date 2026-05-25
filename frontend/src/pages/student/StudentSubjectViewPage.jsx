@@ -89,12 +89,18 @@ export default function StudentSubjectViewPage() {
             {videos.map((v, i) => (
               <button key={v.id} onClick={() => navigate(`/student/subjects/${classId}/video/${v.id}`)}
                 className="w-full flex items-center gap-3 p-3 glass-panel rounded-xl hover:bg-white/70 transition-colors text-left">
-                <div className="w-10 h-10 rounded-lg bg-neutral-900 flex items-center justify-center flex-shrink-0 shadow-md">
-                  <Play size={14} className="text-white ml-0.5" />
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md ${v.my_completed ? 'bg-green-600' : 'bg-neutral-900'}`}>
+                  {v.my_completed
+                    ? <CheckCircle2 size={16} className="text-white" />
+                    : <Play size={14} className="text-white ml-0.5" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{v.title}</p>
-                  <p className="text-xs text-neutral-500 flex items-center gap-1 mt-0.5"><Clock size={10} />{v.duration_secs ? `${Math.floor(v.duration_secs / 60)}:${(v.duration_secs % 60).toString().padStart(2, '0')}` : '0:00'}</p>
+                  <p className="text-xs text-neutral-500 flex items-center gap-1.5 mt-0.5">
+                    <Clock size={10} />
+                    {v.duration_secs ? `${Math.floor(v.duration_secs / 60)}:${(v.duration_secs % 60).toString().padStart(2, '0')}` : '0:00'}
+                    {v.my_completed && <span className="text-green-600 font-medium">· Completed</span>}
+                  </p>
                 </div>
               </button>
             ))}
@@ -114,7 +120,7 @@ export default function StudentSubjectViewPage() {
               {tests.map((t) => {
                 const done = attempted.has(t.id);
                 const attempt = myAttempts[t.id];
-                const scorePct = attempt ? ((attempt.score / t.total_marks) * 100).toFixed(0) : '—';
+                const scorePct = attempt && t.total_marks > 0 ? ((attempt.score / t.total_marks) * 100).toFixed(0) : '—';
                 const open = isOpen(t);
                 const isFutureScheduled = t.status === 'scheduled' && t.scheduled_for && new Date(t.scheduled_for) > now;
                 return (

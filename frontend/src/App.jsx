@@ -30,6 +30,7 @@ import StudentVideoPlayerPage from './pages/student/StudentVideoPlayerPage';
 import StudentTestsPage       from './pages/student/StudentTestsPage';
 import StudentTestTakingPage  from './pages/student/StudentTestTakingPage';
 import StudentTestResultPage  from './pages/student/StudentTestResultPage';
+import StudentTestReviewPage  from './pages/student/StudentTestReviewPage';
 import StudentBroadcastsPage  from './pages/student/StudentBroadcastsPage';
 import StudentProfilePage     from './pages/student/StudentProfilePage';
 import StudentChangePasswordPage from './pages/student/StudentChangePasswordPage';
@@ -154,6 +155,7 @@ export default function App() {
           <Route path="tests" element={<StudentTestsPage />} />
           <Route path="tests/:testId/take" element={<StudentTestTakingPage />} />
           <Route path="tests/result" element={<StudentTestResultPage />} />
+          <Route path="tests/review" element={<StudentTestReviewPage />} />
           <Route path="broadcasts" element={<StudentBroadcastsPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
           <Route path="more" element={<StudentMorePage />} />

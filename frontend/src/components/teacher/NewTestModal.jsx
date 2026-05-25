@@ -59,7 +59,14 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
           setSelectedClassId(t.class_id);
           
           if (data.questions && data.questions.length > 0) {
-            setQuestions(data.questions);
+            const parsedQuestions = data.questions.map(q => {
+              let opts = q.options;
+              if (typeof opts === 'string') {
+                try { opts = JSON.parse(opts); } catch(e) { opts = ['', '', '', '']; }
+              }
+              return { ...q, options: Array.isArray(opts) ? opts : ['', '', '', ''] };
+            });
+            setQuestions(parsedQuestions);
           } else {
             setQuestions([{ id: Date.now(), question: '', options: ['', '', '', ''], correct_idx: 0 }]);
           }
@@ -90,11 +97,17 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       setError('Please enter a test title');
       return;
     }
-    if (scheduledFor && expiresAt) {
-      if (new Date(expiresAt) <= new Date(scheduledFor)) {
-        setError('End Time must be after Start Time');
-        return;
-      }
+    if (!scheduledFor) {
+      setError('Start Time is required');
+      return;
+    }
+    if (!expiresAt) {
+      setError('End Time is required');
+      return;
+    }
+    if (new Date(expiresAt) <= new Date(scheduledFor)) {
+      setError('End Time must be after Start Time');
+      return;
     }
     setError('');
     setStep(2);
@@ -111,13 +124,15 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
 
   const updateQuestion = (idx, field, value) => {
     const updated = [...questions];
-    updated[idx][field] = value;
+    updated[idx] = { ...updated[idx], [field]: value };
     setQuestions(updated);
   };
 
   const updateOption = (qIdx, optIdx, value) => {
     const updated = [...questions];
-    updated[qIdx].options[optIdx] = value;
+    const newOptions = [...updated[qIdx].options];
+    newOptions[optIdx] = value;
+    updated[qIdx] = { ...updated[qIdx], options: newOptions };
     setQuestions(updated);
   };
 
@@ -223,8 +238,8 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
             )}
 
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Start Time (optional)" type="datetime-local" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
-              <Input label="End Time (optional)" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+              <Input label="Start Time" type="datetime-local" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+              <Input label="End Time" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
             </div>
 
             <div className="flex justify-end pt-2">

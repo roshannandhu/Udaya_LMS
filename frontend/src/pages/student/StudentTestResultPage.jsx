@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Trophy, CheckCircle2, XCircle, MinusCircle, AlertTriangle, Star } from 'lucide-react';
+import { Trophy, CheckCircle2, XCircle, MinusCircle, AlertTriangle, Star, BookOpen } from 'lucide-react';
 import { Btn } from '../../components/ui';
 
 export default function StudentTestResultPage() {
@@ -98,6 +98,17 @@ export default function StudentTestResultPage() {
             <span className="font-bold text-amber-700 text-lg">+{points_earned || 0}</span>
           </div>
         </div>
+
+        {/* Review Answers — navigates to dedicated review page */}
+        {result?.test_id && (
+          <button
+            onClick={() => navigate('/student/tests/review', { state: { test_id: result.test_id, result } })}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 glass-panel rounded-2xl text-sm font-medium hover:bg-white/40 transition-colors mb-5"
+          >
+            <BookOpen size={15} className="text-neutral-500" />
+            Review Answers
+          </button>
+        )}
 
         {/* Actions */}
         <div className="flex gap-2">

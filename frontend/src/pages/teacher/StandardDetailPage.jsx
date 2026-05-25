@@ -209,7 +209,7 @@ function AddStudentModal({ open, onClose, standardId, onStudentAdded }) {
         <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aarav Patel" />
         <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="aarav.p" />
         <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@example.com" />
-        <Input label="Password" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pwdPlaceholder} />
+        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pwdPlaceholder} />
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading && <Loader2 size={14} className="animate-spin" />}
           Add Student

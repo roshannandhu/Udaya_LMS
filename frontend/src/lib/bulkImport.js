@@ -133,6 +133,9 @@ export async function parseImportFile(file, existingStandards, existingUsernames
         const raw_phone = colMap.phone && row[colMap.phone] ? String(row[colMap.phone]).trim() : null;
         const raw_std = colMap.standard && row[colMap.standard] ? String(row[colMap.standard]).trim() : '';
 
+        // Skip completely blank rows (common in Excel files with trailing empty rows)
+        if (!raw_name && !raw_email && !raw_phone && !raw_std) continue;
+
         const warnings = [];
         const errors = [];
         let status = 'ready';

@@ -67,6 +67,7 @@ export default function StudentVideoPlayerPage() {
         ]);
         const v = (vids || []).find(x => String(x.id) === String(videoId));
         setVideo(v || null);
+        if (v?.my_completed) setCompleted(true);
         const sub = (subs || []).find(x => String(x.id) === String(classId));
         setSubject(sub || null);
       } catch (err) {

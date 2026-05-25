@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Pin, Paperclip, Loader2, FileText, Image as ImageIcon } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
-import { apiClient, broadcastApi } from '../../lib/api';
+import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 
 function fmtTime(t) { return t || ''; }
 
@@ -37,7 +37,7 @@ export default function StudentBroadcastsPage() {
 
   useEffect(() => {
     if (!standard?.id) return;
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+    const apiBase = getApiBaseUrl();
     const wsBase = apiBase.replace(/^http/, 'ws');
     const token = localStorage.getItem('tutoria_token') || '';
     const ws = new WebSocket(`${wsBase}/ws/broadcasts/${standard.id}?token=${encodeURIComponent(token)}`);

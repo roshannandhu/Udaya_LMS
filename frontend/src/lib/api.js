@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const port = '8001';
+const API_BASE = hostname === 'localhost' || hostname === '127.0.0.1'
+  ? (import.meta.env.VITE_API_URL || `http://localhost:${port}/api`)
+  : `http://${hostname}:${port}/api`;
 const TOKEN_KEY = 'tutoria_token';
 
 export async function apiClient(endpoint, options = {}) {
@@ -24,6 +28,10 @@ export async function apiClient(endpoint, options = {}) {
   }
 
   return response.json();
+}
+
+export function getApiBaseUrl() {
+  return API_BASE;
 }
 
 export function getApiToken() {
@@ -101,6 +109,10 @@ export const testApi = {
     apiClient(`/tests/${testId}/results`),
   getStudentTestHistory: () =>
     apiClient('/student/tests/history'),
+  deleteTest: (testId) =>
+    apiClient(`/tests/${testId}`, { method: 'DELETE' }),
+  getAttemptReview: (testId) =>
+    apiClient(`/tests/${testId}/attempt-review`),
 };
 
 export const leaderboardApi = {
@@ -127,10 +139,10 @@ export const notificationApi = {
 };
 
 export const videoApi = {
-  // Get videos for a subject/class
   getVideos: (classId) =>
     apiClient(`/videos?class_id=${classId}`),
-  // Mark a video as completed
   markComplete: (videoId) =>
     apiClient(`/videos/${videoId}/complete`, { method: 'POST' }),
+  getViewers: (videoId) =>
+    apiClient(`/videos/${videoId}/viewers`),
 };
