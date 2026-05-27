@@ -21,6 +21,7 @@ export default function NotificationBell() {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const fetchNotifications = async () => {
+    if (!localStorage.getItem('tutoria_token')) return;
     setLoading(true);
     try {
       const data = await apiClient('/notifications');
