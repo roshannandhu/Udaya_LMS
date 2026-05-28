@@ -7,6 +7,7 @@ import Sidebar from '../../components/shared/Sidebar';
 function getActiveTab(path) {
   if (path === '/student' || path === '/student/') return 'home';
   if (path.startsWith('/student/subjects'))     return 'subjects';
+  if (path.startsWith('/student/live-classes')) return 'live';
   if (path.startsWith('/student/broadcasts'))   return 'broadcasts';
   if (path.startsWith('/student/profile'))      return 'profile';
   if (path.startsWith('/student/more') || path.startsWith('/student/tests') || path.startsWith('/student/leaderboard')) return 'more';
@@ -37,6 +38,7 @@ export default function StudentLayout() {
     const map = {
       home: '/student',
       subjects: '/student/subjects',
+      live: '/student/live-classes',
       broadcasts: '/student/broadcasts',
       profile: '/student/profile',
       more: '/student/more'

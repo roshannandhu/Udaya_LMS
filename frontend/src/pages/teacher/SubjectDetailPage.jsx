@@ -1,186 +1,188 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Play, Upload, Plus, MoreVertical, Video, FileQuestion, Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Play, Plus, Upload, MoreVertical, Video, FileQuestion, Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock } from 'lucide-react';
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
-import { apiClient, attendanceApi } from '../../lib/api';
+import { apiClient, attendanceApi, videoApi } from '../../lib/api';
 import AttendanceGrid from '../../components/teacher/AttendanceGrid';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import NewTestModal from '../../components/teacher/NewTestModal';
 import { EditVideoModal } from '../../components/teacher/Modals';
 import { useAppCache } from '../../store';
 
-function UploadVideoModal({ open, onClose, classId, onSuccess }) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [allowDownload, setAllowDownload] = useState(true);
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState('');
-  const fileInputRef = React.useRef(null);
+function VideoAddModal({ open, onClose, classId, onAdded }) {
+  const [youtubeUrl, setYoutubeUrl]         = useState('');
+  const [ytVideoId, setYtVideoId]           = useState(null);
+  const [ytPreviewTitle, setYtPreviewTitle] = useState('');
+  const [ytPreviewLoading, setYtPreviewLoading] = useState(false);
+  const [ytPreviewError, setYtPreviewError] = useState(null);
+  const [ytTitle, setYtTitle]               = useState('');
+  const [ytDescription, setYtDescription]   = useState('');
+  const [ytAdding, setYtAdding]             = useState(false);
+  const debounceRef = useRef(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
-      setTitle(''); setDescription(''); setAllowDownload(true);
-      setFile(null); setUploading(false); setProgress(0); setError('');
+      setYoutubeUrl(''); setYtVideoId(null); setYtPreviewTitle('');
+      setYtPreviewLoading(false); setYtPreviewError(null);
+      setYtTitle(''); setYtDescription(''); setYtAdding(false);
     }
   }, [open]);
 
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
-    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''));
-  };
-
-  const handleSubmit = async () => {
-    if (!file) { setError('Please select a video file.'); return; }
-    if (!title.trim()) { setError('Title is required.'); return; }
-
-    setUploading(true);
-    setError('');
-    setProgress(0);
-
-    const token = localStorage.getItem('tutoria_token');
-    const { getApiBaseUrl } = await import('../../lib/api');
-    const apiBase = getApiBaseUrl();
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('class_id', classId);
-    formData.append('title', title.trim());
-    formData.append('description', description.trim());
-    formData.append('allow_download', allowDownload ? 'true' : 'false');
-
-    try {
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${apiBase}/videos/upload`);
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 90));
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            setProgress(100);
-            resolve(JSON.parse(xhr.responseText));
-          } else {
-            try {
-              reject(new Error(JSON.parse(xhr.responseText).detail || `Upload failed (${xhr.status})`));
-            } catch {
-              reject(new Error(`Upload failed (${xhr.status})`));
-            }
-          }
-        };
-        xhr.onerror = () => reject(new Error('Network error. Check your connection.'));
-        xhr.send(formData);
-      });
-      onClose();
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      setError(err.message || 'Upload failed. Try again.');
-      setProgress(0);
-    } finally {
-      setUploading(false);
+  function extractYouTubeId(url) {
+    const patterns = [
+      /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+      /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    ];
+    for (const p of patterns) {
+      const m = url.match(p);
+      if (m) return m[1];
     }
-  };
+    return null;
+  }
 
-  const fileSizeMB = file ? (file.size / 1024 / 1024).toFixed(1) : null;
+  async function fetchYtPreview(url) {
+    const id = extractYouTubeId(url);
+    if (!id) {
+      setYtPreviewError('Invalid YouTube URL. Use youtube.com/watch?v=... or youtu.be/...');
+      setYtVideoId(null);
+      return;
+    }
+    setYtVideoId(id);
+    setYtPreviewLoading(true);
+    setYtPreviewError(null);
+    try {
+      const res = await fetch(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`
+      );
+      if (!res.ok) throw new Error('inaccessible');
+      const data = await res.json();
+      setYtPreviewTitle(data.title || '');
+      setYtTitle(data.title || '');
+    } catch {
+      setYtPreviewError('Could not load video. Make sure it is set to Unlisted (not Private) on YouTube.');
+      setYtVideoId(null);
+    } finally {
+      setYtPreviewLoading(false);
+    }
+  }
+
+  function onYoutubeUrlChange(e) {
+    const url = e.target.value;
+    setYoutubeUrl(url);
+    setYtVideoId(null);
+    setYtPreviewError(null);
+    setYtPreviewTitle('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (url.trim()) {
+      debounceRef.current = setTimeout(() => fetchYtPreview(url.trim()), 600);
+    }
+  }
+
+  async function handleAdd() {
+    if (!ytVideoId || !ytTitle.trim() || ytAdding) return;
+    setYtAdding(true);
+    try {
+      await apiClient('/videos/youtube', {
+        method: 'POST',
+        body: JSON.stringify({
+          class_id: classId,
+          title: ytTitle.trim(),
+          description: ytDescription.trim() || null,
+          youtube_video_id: ytVideoId,
+          youtube_url: youtubeUrl,
+        }),
+      });
+      onAdded();
+      onClose();
+    } catch (err) {
+      setYtPreviewError(err?.message || 'Failed to add video. Please try again.');
+    } finally {
+      setYtAdding(false);
+    }
+  }
 
   return (
-    <Modal open={open} onClose={uploading ? undefined : onClose} title="Upload Video" size="md">
+    <Modal open={open} onClose={onClose} title="Add video" size="md">
       <div className="space-y-4">
-        {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 p-2.5 rounded-lg">{error}</div>}
-
-        {/* File picker */}
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={handleFileChange}
-            disabled={uploading}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className={`w-full border-2 border-dashed rounded-xl p-6 text-center transition-colors disabled:opacity-50 ${
-              file ? 'border-neutral-400 bg-white/40' : 'border-white/60 bg-white/20 hover:bg-white/40 hover:border-neutral-300'
-            }`}
-          >
-            {file ? (
-              <div>
-                <Video size={24} className="mx-auto mb-1 text-neutral-700" />
-                <p className="text-sm font-medium text-neutral-800 truncate">{file.name}</p>
-                <p className="text-xs text-neutral-500">{fileSizeMB} MB · {file.type}</p>
-              </div>
-            ) : (
-              <div>
-                <Upload size={24} className="mx-auto mb-1 text-neutral-400" />
-                <p className="text-sm font-medium text-neutral-600">Tap to pick a video</p>
-                <p className="text-xs text-neutral-400 mt-0.5">MP4, MOV, AVI · any size</p>
-              </div>
-            )}
-          </button>
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 leading-relaxed">
+          <strong>Important:</strong> Set your YouTube video to <strong>Unlisted</strong> — not Private.
+          Unlisted videos are hidden from YouTube search. Students watch inside this app and never see the URL.
         </div>
 
-        <Input
-          label="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Introduction to Algebra"
-          disabled={uploading}
-        />
-
         <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Description (optional)</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            disabled={uploading}
-            className="w-full px-3 py-2 rounded-md bg-white/50 border border-white/60 focus:border-neutral-400 outline-none text-sm resize-none disabled:opacity-50"
-            placeholder="What will students learn in this video?"
+          <label className="block text-xs font-medium text-neutral-500 mb-1">YouTube video URL</label>
+          <input
+            type="url"
+            value={youtubeUrl}
+            onChange={onYoutubeUrlChange}
+            placeholder="https://www.youtube.com/watch?v=..."
+            className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/20 focus:border-neutral-400"
           />
         </div>
 
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={allowDownload}
-            onChange={(e) => setAllowDownload(e.target.checked)}
-            disabled={uploading}
-            className="w-4 h-4 rounded"
-          />
-          <span className="text-sm text-neutral-700">Allow students to save for offline viewing</span>
-        </label>
-
-        {/* Upload progress */}
-        {uploading && (
-          <div>
-            <div className="flex items-center justify-between text-xs text-neutral-600 mb-1">
-              <span className="flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Uploading…</span>
-              <span>{progress}%</span>
-            </div>
-            <div className="h-2 bg-white/40 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-neutral-900 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="text-xs text-neutral-400 mt-1">Don't close this window while uploading.</p>
+        {ytPreviewLoading && (
+          <div className="flex items-center gap-2 text-sm text-neutral-400">
+            <div className="w-4 h-4 border-2 border-neutral-200 border-t-neutral-500 rounded-full animate-spin" />
+            Checking video...
           </div>
         )}
 
-        <Btn
-          onClick={handleSubmit}
-          disabled={!file || !title.trim() || uploading}
-          className="w-full"
-          variant="primary"
-        >
-          {uploading ? 'Uploading…' : 'Upload Video'}
-        </Btn>
+        {ytPreviewError && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            {ytPreviewError}
+          </p>
+        )}
+
+        {ytVideoId && !ytPreviewError && !ytPreviewLoading && (
+          <div className="flex gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+            <img
+              src={`https://img.youtube.com/vi/${ytVideoId}/mqdefault.jpg`}
+              alt="preview"
+              className="w-28 flex-shrink-0 rounded-md object-cover"
+              style={{ aspectRatio: '16/9' }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-neutral-800 truncate">{ytPreviewTitle}</p>
+              <span className="inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+                ✓ Unlisted — ready to add
+              </span>
+            </div>
+          </div>
+        )}
+
+        {ytVideoId && !ytPreviewError && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1">Title</label>
+              <input
+                type="text"
+                value={ytTitle}
+                onChange={e => setYtTitle(e.target.value)}
+                placeholder="Video title"
+                className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/20"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1">Description (optional)</label>
+              <textarea
+                value={ytDescription}
+                onChange={e => setYtDescription(e.target.value)}
+                placeholder="What this video covers..."
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900/20"
+              />
+            </div>
+            <Btn
+              onClick={handleAdd}
+              disabled={!ytVideoId || !ytTitle.trim() || ytAdding}
+              className="w-full"
+            >
+              {ytAdding ? 'Adding...' : 'Add video'}
+            </Btn>
+          </>
+        )}
       </div>
     </Modal>
   );
@@ -324,6 +326,7 @@ export default function SubjectDetailPage() {
   const [menuPos, setMenuPos]         = useState({ top: 0, right: 0 });
   const [editVideo, setEditVideo]     = useState(null);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [thumbnailUrls, setThumbnailUrls] = useState({});
 
   useEffect(() => {
     if (!videoMenuId) return;
@@ -353,8 +356,20 @@ export default function SubjectDetailPage() {
     try {
       const data = await apiClient(`/videos?class_id=${classId}`);
       setVideos(data || []);
+      loadTeacherThumbnails(data || []);
     } catch(err) { console.error(err); }
   };
+
+  async function loadTeacherThumbnails(videosList) {
+    const thumbMap = {};
+    await Promise.all(videosList.map(async (v) => {
+      try {
+        const res = await videoApi.getThumbnail(v.id);
+        if (res?.thumbnail_url) thumbMap[v.id] = res.thumbnail_url;
+      } catch {}
+    }));
+    setThumbnailUrls(thumbMap);
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -434,7 +449,7 @@ export default function SubjectDetailPage() {
             </button>
           ))}
           <div className="ml-auto">
-            {tab === 'videos' && <Btn variant="primary" size="sm" icon={Upload} onClick={() => setUploadOpen(true)}>Upload</Btn>}
+            {tab === 'videos' && <Btn variant="primary" size="sm" icon={Upload} onClick={() => setUploadOpen(true)}>Add video</Btn>}
             {tab === 'tests' && <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>New test</Btn>}
           </div>
         </div>
@@ -445,7 +460,7 @@ export default function SubjectDetailPage() {
               <Video size={32} className="mx-auto mb-3 text-neutral-400" />
               <h3 className="font-medium mb-1">No videos yet</h3>
               <p className="text-sm text-neutral-600 mb-5">Upload your first video.</p>
-              <Btn variant="primary" icon={Upload} onClick={() => setUploadOpen(true)}>Upload video</Btn>
+              <Btn variant="primary" icon={Upload} onClick={() => setUploadOpen(true)}>Add video</Btn>
             </div>
           ) : (
             <>
@@ -456,8 +471,15 @@ export default function SubjectDetailPage() {
                     className={`flex items-center gap-3 px-4 py-3 hover:bg-white/50 transition-colors cursor-pointer ${i < videos.length - 1 ? 'border-b border-white/40' : ''}`}
                     onClick={() => setSelectedVideo(v)}
                   >
-                    <div className="w-12 h-12 rounded-md bg-white/50 border border-white/60 flex items-center justify-center flex-shrink-0 shadow-sm">
-                      <Play size={16} className="text-neutral-600" fill="currentColor" />
+                    <div className="w-12 h-12 rounded-md bg-white/50 border border-white/60 flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden relative">
+                      {thumbnailUrls[v.id] ? (
+                        <img src={thumbnailUrls[v.id]} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Play size={16} className="text-neutral-600" fill="currentColor" />
+                      )}
+                      {v.source_type === 'youtube' && (
+                        <span className="absolute top-0 right-0 text-[9px] font-bold px-1 py-0.5 bg-red-600 text-white rounded-bl-md leading-tight">YT</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{v.title}</p>
@@ -593,11 +615,11 @@ export default function SubjectDetailPage() {
         )}
       </div>
 
-      <UploadVideoModal
+      <VideoAddModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         classId={classId}
-        onSuccess={() => fetchVideosData()}
+        onAdded={() => fetchVideosData()}
       />
       <NewTestModal
         open={newTestOpen}

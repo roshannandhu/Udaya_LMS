@@ -18,13 +18,11 @@ export default function StudentBroadcastsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        // standard_id is now returned by /auth/me for students
         const me = await apiClient('/auth/me').catch(() => null);
         const standardId = me?.standard_id || user?.standard_id;
+        const standardName = me?.standard_name || user?.standard_name;
         if (standardId) {
-          const stds = await apiClient('/standards');
-          const std = (stds || []).find(s => String(s.id) === String(standardId));
-          setStandard(std || { id: standardId, name: 'My Class' });
+          setStandard({ id: standardId, name: standardName || 'My Class' });
         }
       } catch (e) {
         console.error(e);

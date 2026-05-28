@@ -1,20 +1,22 @@
 import React from 'react';
-import { Home, BookOpen, Users, MessageSquare, MoreHorizontal, FileQuestion, Trophy, Calendar } from 'lucide-react';
+import { Home, BookOpen, MessageSquare, Calendar, MoreHorizontal, Users, Video } from 'lucide-react';
 
 const TEACHER_ITEMS = [
   { id: 'today',      label: 'Home',       icon: Home },
   { id: 'subjects',   label: 'Classes',    icon: BookOpen },
   { id: 'broadcasts', label: 'Broadcasts', icon: MessageSquare },
   { id: 'attendance', label: 'Attendance', icon: Calendar },
+  { id: 'live',       label: 'Live',       icon: Video },
   { id: 'more',       label: 'More',       icon: MoreHorizontal },
 ];
 
 const STUDENT_ITEMS = [
-  { id: 'home',        label: 'Home',        icon: Home },
-  { id: 'subjects',    label: 'Subjects',    icon: BookOpen },
-  { id: 'broadcasts',  label: 'Broadcasts',  icon: MessageSquare },
-  { id: 'profile',     label: 'Profile',     icon: Users },
-  { id: 'more',        label: 'More',        icon: MoreHorizontal },
+  { id: 'home',       label: 'Home',       icon: Home },
+  { id: 'subjects',   label: 'Subjects',   icon: BookOpen },
+  { id: 'broadcasts', label: 'Broadcasts', icon: MessageSquare },
+  { id: 'live',       label: 'Live',       icon: Video },
+  { id: 'profile',    label: 'Profile',    icon: Users },
+  { id: 'more',       label: 'More',       icon: MoreHorizontal },
 ];
 
 export default function BottomNav({ active, setActive, type = 'teacher' }) {

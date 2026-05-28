@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Literal, Any
@@ -12,6 +12,9 @@ import re
 import os
 import json
 import base64
+import hashlib
+import hmac
+import time as time_module
 import httpx
 from pathlib import Path
 from dotenv import load_dotenv
@@ -32,6 +35,15 @@ app.add_middleware(
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+ZOOM_ACCOUNT_ID           = os.environ.get("ZOOM_ACCOUNT_ID", "")
+ZOOM_CLIENT_ID            = os.environ.get("ZOOM_CLIENT_ID", "")
+ZOOM_CLIENT_SECRET        = os.environ.get("ZOOM_CLIENT_SECRET", "")
+ZOOM_SDK_KEY              = os.environ.get("ZOOM_SDK_KEY", "")
+ZOOM_SDK_SECRET           = os.environ.get("ZOOM_SDK_SECRET", "")
+ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get("ZOOM_WEBHOOK_SECRET_TOKEN", "")
+
+_zoom_token_cache: dict = {"token": None, "expires_at": 0.0}
 
 supabase: Optional[Client] = None
 service_supabase: Optional[Client] = None
@@ -130,6 +142,13 @@ class VideoUpdate(BaseModel):
     allow_download: Optional[bool] = None
     chapters: Optional[List[Any]] = None
 
+class YouTubeVideo(BaseModel):
+    class_id: str
+    title: str
+    description: Optional[str] = None
+    youtube_video_id: str
+    youtube_url: str
+
 class Test(BaseModel):
     class_id: str
     title: str
@@ -197,6 +216,16 @@ class BroadcastRequest(BaseModel):
     attachment_url: Optional[str] = None
     attachment_type: Optional[str] = None
     scheduled_for: Optional[str] = None
+
+class LiveClassCreate(BaseModel):
+    class_id: str
+    title: str
+    scheduled_at: str  # ISO 8601: "2026-06-01T09:00:00"
+    duration_mins: int = 60
+
+class LiveClassUpdate(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
 
 # --- WebSocket Connection Manager ---
 class ConnectionManager:
@@ -267,6 +296,112 @@ class ConnectionManager:
                 self.disconnect(d, standard_id)
 
 manager = ConnectionManager()
+
+# --- Zoom helpers ---
+
+async def zoom_get_token() -> str:
+    """Get Zoom Server-to-Server OAuth access token. Cached for 55 minutes."""
+    import httpx
+    now = time_module.time()
+    if _zoom_token_cache["token"] and now < _zoom_token_cache["expires_at"]:
+        return _zoom_token_cache["token"]
+    if not all([ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET]):
+        raise HTTPException(
+            status_code=500,
+            detail="Zoom credentials not configured. Add ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET to backend/.env"
+        )
+    creds = base64.b64encode(f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}".encode()).decode()
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"https://zoom.us/oauth/token?grant_type=account_credentials&account_id={ZOOM_ACCOUNT_ID}",
+            headers={"Authorization": f"Basic {creds}"},
+            timeout=10.0,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Zoom auth failed: {resp.text}")
+    token = resp.json()["access_token"]
+    _zoom_token_cache["token"] = token
+    _zoom_token_cache["expires_at"] = now + 3300.0
+    return token
+
+
+async def zoom_create_meeting(topic: str, start_time: str, duration_mins: int) -> dict:
+    """Create a Zoom meeting. start_time is ISO 8601, e.g. '2026-06-01T09:00:00'.
+    Returns {meeting_id, join_url, start_url}."""
+    import httpx
+    token = await zoom_get_token()
+    payload = {
+        "topic": topic,
+        "type": 2,
+        "start_time": start_time,
+        "duration": duration_mins,
+        "timezone": "Asia/Kolkata",
+        "settings": {
+            "host_video": True,
+            "participant_video": True,
+            "join_before_host": False,
+            "waiting_room": True,
+            "auto_recording": "none",
+            "approval_type": 2,
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://api.zoom.us/v2/users/me/meetings",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            timeout=15.0,
+        )
+    if resp.status_code not in (200, 201):
+        raise HTTPException(status_code=502, detail=f"Zoom meeting creation failed: {resp.text}")
+    data = resp.json()
+    return {"meeting_id": str(data["id"]), "join_url": data["join_url"], "start_url": data["start_url"]}
+
+
+async def zoom_get_participants(meeting_id: str) -> list:
+    """Fetch participant list from Zoom report API after meeting ends."""
+    import httpx
+    try:
+        token = await zoom_get_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://api.zoom.us/v2/report/meetings/{meeting_id}/participants",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=15.0,
+            )
+        if resp.status_code != 200:
+            return []
+        return resp.json().get("participants", [])
+    except Exception:
+        return []
+
+
+def zoom_generate_sdk_signature(meeting_id: str, role: int) -> str:
+    """Generate Zoom Web SDK join signature as a proper JWT (required by @zoom/meetingsdk v3+).
+    role: 0=participant, 1=host."""
+    if not ZOOM_SDK_KEY or not ZOOM_SDK_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Zoom SDK credentials not configured. Add ZOOM_SDK_KEY and ZOOM_SDK_SECRET to backend/.env"
+        )
+
+    def b64url(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
+    iat = int(time_module.time()) - 30
+    exp = iat + 7200  # 2-hour token
+
+    header  = b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(',', ':')).encode())
+    payload = b64url(json.dumps({
+        "sdkKey": ZOOM_SDK_KEY, "appKey": ZOOM_SDK_KEY,
+        "mn": meeting_id, "role": role,
+        "iat": iat, "exp": exp, "tokenExp": exp,
+    }, separators=(',', ':')).encode())
+
+    signing_input = f"{header}.{payload}"
+    sig = b64url(hmac.new(ZOOM_SDK_SECRET.encode(), signing_input.encode(), hashlib.sha256).digest())
+    return f"{signing_input}.{sig}"
+
 
 def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
@@ -1154,18 +1289,33 @@ def get_videos(class_id: Optional[str] = None, user = Depends(verify_token)):
                 v.setdefault("view_count", 0)
                 v.setdefault("completed_count", 0)
 
-    # Embed each student's own completion status (single extra query, no N+1)
+    # Embed each student's own completion status + progress (single extra query, no N+1)
     if videos and user["role"] == "student" and user.get("student_id"):
         try:
             ids = [v["id"] for v in videos]
-            my_prog = service_supabase.table("video_progress").select("video_id, completed")\
+            my_prog = service_supabase.table("video_progress").select("video_id, completed, progress_secs")\
                 .in_("video_id", ids).eq("student_id", user["student_id"]).execute()
-            my_status = {r["video_id"]: bool(r.get("completed")) for r in (my_prog.data or [])}
+            my_status = {r["video_id"]: r for r in (my_prog.data or [])}
             for v in videos:
-                v["my_completed"] = my_status.get(v["id"], False)
+                row = my_status.get(v["id"])
+                v["my_completed"] = bool(row.get("completed")) if row else False
+                v["progress_secs"] = row.get("progress_secs") if row else None
         except Exception:
             for v in videos:
                 v.setdefault("my_completed", False)
+                v.setdefault("progress_secs", None)
+
+    # Add virtual source_type; never expose the raw cloudflare_video_id for YouTube videos
+    for v in videos:
+        cf = v.get("cloudflare_video_id") or ""
+        if cf.startswith("yt:"):
+            v["source_type"] = "youtube"
+            v["cloudflare_video_id"] = None  # hide the raw yt: ID
+        else:
+            v["source_type"] = "upload"
+        # Remove columns that might exist if migration ran
+        v.pop("youtube_video_id", None)
+        v.pop("youtube_url", None)
 
     return videos
 
@@ -1202,6 +1352,49 @@ def get_video_viewers(video_id: str, user = Depends(verify_token)):
     # Sort: completed first, then watched-not-completed, then not watched; alpha within each group
     result.sort(key=lambda x: (0 if x["completed"] else 1 if x["watched"] else 2, x["name"]))
     return result
+
+@app.post("/api/videos/youtube")
+async def create_youtube_video(video: YouTubeVideo, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    # Verify the subject class belongs to this teacher's standard
+    class_check = service_supabase.table("subject_classes") \
+        .select("id, standard_id").eq("id", video.class_id).single().execute()
+    if not class_check.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    std_check = service_supabase.table("standards") \
+        .select("id") \
+        .eq("id", class_check.data["standard_id"]) \
+        .eq("teacher_id", user["user_id"]) \
+        .single().execute()
+    if not std_check.data:
+        raise HTTPException(status_code=403, detail="Not your standard")
+
+    # Store YouTube video ID in cloudflare_video_id with "yt:" prefix.
+    # This works without any schema migration and is detected at read time.
+    insert_data = {
+        "class_id": video.class_id,
+        "title": video.title,
+        "description": video.description,
+        "cloudflare_video_id": f"yt:{video.youtube_video_id}",
+        "allow_download": False,
+        "created_by": user["user_id"],
+    }
+    try:
+        result = service_supabase.table("videos").insert(insert_data).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create video record")
+
+    created = result.data[0]
+    # Add virtual source_type for the response
+    cf = created.get("cloudflare_video_id", "")
+    created["source_type"] = "youtube" if cf.startswith("yt:") else "upload"
+    return created
 
 @app.post("/api/videos")
 def create_video(video: Video, user = Depends(verify_token)):
@@ -1347,28 +1540,41 @@ def update_video(video_id: str, updates: VideoUpdate, user = Depends(verify_toke
     return {"message": "Video updated"}
 
 @app.delete("/api/videos/{video_id}")
-async def delete_video(video_id: str, user = Depends(verify_token)):
+async def delete_video(video_id: str, user=Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Get cloudflare_video_id and verify ownership before deleting
     vid = service_supabase.table("videos").select("cloudflare_video_id, created_by").eq("id", video_id).single().execute()
     if not vid.data or vid.data.get("created_by") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    cf_video_id = vid.data.get("cloudflare_video_id")
 
-    # Delete from Cloudflare Stream if configured
-    if cf_video_id:
+    cf_id = vid.data.get("cloudflare_video_id") or ""
+
+    if cf_id.startswith("yt:"):
+        pass  # YouTube video — only DB row needs to be deleted
+    elif cf_id.startswith("https://"):
+        # Supabase Storage URL — extract the path and delete
+        try:
+            # Path is everything after "/object/public/videos/"
+            marker = "/object/public/videos/"
+            if marker in cf_id:
+                storage_path = cf_id.split(marker, 1)[1]
+                await asyncio.to_thread(
+                    lambda: service_supabase.storage.from_("videos").remove([storage_path])
+                )
+        except Exception as e:
+            print(f"Supabase Storage delete failed: {e}")
+    elif cf_id:
+        # Cloudflare Stream UID
         CF_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
         CF_TOKEN = os.getenv("CLOUDFLARE_STREAM_API_TOKEN", "")
         if CF_ACCOUNT_ID and CF_TOKEN:
             try:
-                import httpx
                 async with httpx.AsyncClient() as client:
                     await client.delete(
-                        f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/stream/{cf_video_id}",
+                        f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/stream/{cf_id}",
                         headers={"Authorization": f"Bearer {CF_TOKEN}"},
                         timeout=10.0
                     )
@@ -1395,6 +1601,86 @@ def get_video_stats(video_id: str, user = Depends(verify_token)):
         "watch_count": watch_count.count or 0,
         "completed_count": completed_count.count or 0
     }
+
+@app.get("/api/videos/{video_id}/token")
+async def get_video_token(video_id: str, user=Depends(verify_token)):
+    video_result = service_supabase.table("videos") \
+        .select("id, cloudflare_video_id, class_id, title") \
+        .eq("id", video_id).single().execute()
+
+    if not video_result.data:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    video = video_result.data
+    cf = video.get("cloudflare_video_id") or ""
+
+    if not cf.startswith("yt:"):
+        raise HTTPException(status_code=400, detail="Not a YouTube video")
+
+    yt_id = cf[3:]  # strip "yt:" prefix
+
+    # Get standard_id for this subject class
+    class_result = service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", video["class_id"]).single().execute()
+    if not class_result.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    required_standard_id = class_result.data["standard_id"]
+
+    if user["role"] == "teacher":
+        std_check = service_supabase.table("standards") \
+            .select("id") \
+            .eq("id", required_standard_id) \
+            .eq("teacher_id", user["user_id"]) \
+            .single().execute()
+        if not std_check.data:
+            raise HTTPException(status_code=403, detail="Not your class")
+    else:
+        if not user.get("standard_id"):
+            raise HTTPException(status_code=403, detail="No standard assigned")
+        if user["standard_id"] != required_standard_id:
+            raise HTTPException(status_code=403, detail="Not enrolled in this class")
+        student_check = service_supabase.table("students") \
+            .select("blocked").eq("id", user["user_id"]).single().execute()
+        if not student_check.data or student_check.data.get("blocked"):
+            raise HTTPException(status_code=403, detail="Account blocked")
+
+    return {
+        "token": yt_id,
+        "source_type": "youtube",
+        "title": video["title"],
+    }
+
+
+@app.get("/api/videos/{video_id}/thumbnail")
+async def get_video_thumbnail(video_id: str, user=Depends(verify_token)):
+    video_result = service_supabase.table("videos") \
+        .select("id, cloudflare_video_id, class_id") \
+        .eq("id", video_id).single().execute()
+
+    if not video_result.data:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    video = video_result.data
+    cf = video.get("cloudflare_video_id") or ""
+
+    if not cf.startswith("yt:"):
+        return {"thumbnail_url": None, "source_type": "upload"}
+
+    yt_id = cf[3:]
+
+    # Verify access
+    class_result = service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", video["class_id"]).single().execute()
+    if class_result.data and user["role"] == "student":
+        if user.get("standard_id") != class_result.data["standard_id"]:
+            raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+    return {
+        "thumbnail_url": f"https://img.youtube.com/vi/{yt_id}/mqdefault.jpg",
+        "source_type": "youtube",
+    }
+
 
 # Tests
 @app.get("/api/tests")
@@ -3043,6 +3329,263 @@ def import_from_question_bank(req: QuestionBankImport, user=Depends(verify_token
         })
     service_supabase.table("questions").insert(rows).execute()
     return {"status": "imported", "count": len(rows)}
+
+
+# --- Live Classes ---
+
+@app.get("/api/live-classes")
+async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_token)):
+    if not class_id:
+        raise HTTPException(status_code=400, detail="class_id is required")
+
+    class_result = service_supabase.table("subject_classes") \
+        .select("id, standard_id").eq("id", class_id).single().execute()
+    if not class_result.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    std_id = class_result.data["standard_id"]
+
+    if user["role"] == "teacher":
+        std_check = service_supabase.table("standards") \
+            .select("id").eq("id", std_id).eq("teacher_id", user["user_id"]).single().execute()
+        if not std_check.data:
+            raise HTTPException(status_code=403, detail="Not your class")
+    else:
+        if user.get("standard_id") != std_id:
+            raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+    result = service_supabase.table("live_classes") \
+        .select("*").eq("class_id", class_id) \
+        .order("scheduled_at", desc=True).execute()
+    classes = result.data or []
+
+    for lc in classes:
+        att = service_supabase.table("live_class_attendance") \
+            .select("attended, student_id").eq("live_class_id", lc["id"]).execute()
+        att_data = att.data or []
+        lc["attended_count"] = sum(1 for a in att_data if a["attended"])
+        lc["total_registered"] = len(att_data)
+        if user["role"] == "student":
+            lc.pop("zoom_join_url", None)
+            lc.pop("zoom_start_url", None)
+            # Attach this student's own attendance
+            my_att = next((a for a in att_data if a.get("student_id") == user["user_id"]), None)
+            lc["my_attended"] = my_att["attended"] if my_att else None
+
+    return classes
+
+
+@app.post("/api/live-classes")
+async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    class_result = service_supabase.table("subject_classes") \
+        .select("id, standard_id").eq("id", data.class_id).single().execute()
+    if not class_result.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    std_check = service_supabase.table("standards") \
+        .select("id") \
+        .eq("id", class_result.data["standard_id"]) \
+        .eq("teacher_id", user["user_id"]).single().execute()
+    if not std_check.data:
+        raise HTTPException(status_code=403, detail="Not your class")
+
+    zoom_data = await zoom_create_meeting(
+        topic=data.title,
+        start_time=data.scheduled_at,
+        duration_mins=data.duration_mins,
+    )
+
+    insert = {
+        "class_id": data.class_id,
+        "title": data.title,
+        "scheduled_at": data.scheduled_at,
+        "duration_mins": data.duration_mins,
+        "zoom_meeting_id": zoom_data["meeting_id"],
+        "zoom_join_url": zoom_data["join_url"],
+        "zoom_start_url": zoom_data["start_url"],
+        "status": "scheduled",
+        "created_by": user["user_id"],
+    }
+    result = service_supabase.table("live_classes").insert(insert).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create live class")
+    return result.data[0]
+
+
+@app.get("/api/live-classes/{live_class_id}/join-token")
+async def get_join_token(live_class_id: str, user=Depends(verify_token)):
+    lc_result = service_supabase.table("live_classes") \
+        .select("*").eq("id", live_class_id).single().execute()
+    if not lc_result.data:
+        raise HTTPException(status_code=404, detail="Live class not found")
+    lc = lc_result.data
+
+    if lc["status"] == "cancelled":
+        raise HTTPException(status_code=400, detail="This class has been cancelled")
+
+    class_result = service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", lc["class_id"]).single().execute()
+    required_std = class_result.data["standard_id"] if class_result.data else None
+
+    if user["role"] == "teacher":
+        std_check = service_supabase.table("standards") \
+            .select("id").eq("id", required_std).eq("teacher_id", user["user_id"]).single().execute()
+        if not std_check.data:
+            raise HTTPException(status_code=403, detail="Not your class")
+        role_num = 1
+        display_name = user.get("name", "Teacher")
+    else:
+        if user.get("standard_id") != required_std:
+            raise HTTPException(status_code=403, detail="Not enrolled in this class")
+        student = service_supabase.table("students") \
+            .select("blocked, name").eq("id", user["user_id"]).single().execute()
+        if not student.data or student.data.get("blocked"):
+            raise HTTPException(status_code=403, detail="Account blocked")
+        role_num = 0
+        display_name = student.data.get("name", user.get("name", "Student"))
+
+    if not lc.get("zoom_meeting_id"):
+        raise HTTPException(status_code=400, detail="Zoom meeting not created yet")
+
+    signature = zoom_generate_sdk_signature(lc["zoom_meeting_id"], role_num)
+    return {
+        "meeting_id": lc["zoom_meeting_id"],
+        "signature": signature,
+        "sdk_key": ZOOM_SDK_KEY,
+        "role": role_num,
+        "display_name": display_name,
+    }
+
+
+@app.post("/api/live-classes/{live_class_id}/end")
+async def end_live_class(live_class_id: str, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    lc_result = service_supabase.table("live_classes") \
+        .select("*").eq("id", live_class_id).single().execute()
+    if not lc_result.data:
+        raise HTTPException(status_code=404, detail="Not found")
+    lc = lc_result.data
+
+    service_supabase.table("live_classes") \
+        .update({"status": "ended"}).eq("id", live_class_id).execute()
+
+    participants = await zoom_get_participants(lc.get("zoom_meeting_id", ""))
+
+    class_result = service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", lc["class_id"]).single().execute()
+    if not class_result.data:
+        return {"message": "ended", "attended": 0, "absent": 0}
+
+    students_result = service_supabase.table("students") \
+        .select("id, name, email") \
+        .eq("standard_id", class_result.data["standard_id"]).execute()
+    all_students = students_result.data or []
+
+    p_by_email = {(p.get("user_email") or "").lower(): p for p in participants}
+    p_by_name  = {(p.get("user_name")  or "").lower(): p for p in participants}
+
+    attended_count = 0
+    absent_count   = 0
+
+    for student in all_students:
+        em  = (student.get("email") or "").lower()
+        nm  = (student.get("name")  or "").lower()
+        match = p_by_email.get(em) or p_by_name.get(nm)
+
+        if match:
+            attended_count += 1
+            dur_secs = match.get("duration", 0)
+            service_supabase.table("live_class_attendance").upsert({
+                "live_class_id": live_class_id,
+                "student_id":    student["id"],
+                "attended":      True,
+                "joined_at":     match.get("join_time"),
+                "left_at":       match.get("leave_time"),
+                "duration_mins": dur_secs // 60 if dur_secs else None,
+            }, on_conflict="live_class_id,student_id").execute()
+        else:
+            absent_count += 1
+            service_supabase.table("live_class_attendance").upsert({
+                "live_class_id": live_class_id,
+                "student_id":    student["id"],
+                "attended":      False,
+            }, on_conflict="live_class_id,student_id").execute()
+
+    return {"message": "Class ended", "attended": attended_count, "absent": absent_count, "total": len(all_students)}
+
+
+@app.post("/api/live-classes/{live_class_id}/cancel")
+async def cancel_live_class(live_class_id: str, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    service_supabase.table("live_classes") \
+        .update({"status": "cancelled"}) \
+        .eq("id", live_class_id) \
+        .eq("created_by", user["user_id"]).execute()
+    return {"message": "cancelled"}
+
+
+@app.get("/api/live-classes/{live_class_id}/attendance")
+async def get_live_class_attendance(live_class_id: str, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    result = service_supabase.table("live_class_attendance") \
+        .select("*, students(id, name, username, avatar_url)") \
+        .eq("live_class_id", live_class_id).execute()
+    return result.data or []
+
+
+@app.post("/api/zoom/webhook")
+async def zoom_webhook(request: Request):
+    body = await request.body()
+    timestamp = request.headers.get("x-zm-request-timestamp", "")
+    signature = request.headers.get("x-zm-signature", "")
+
+    if ZOOM_WEBHOOK_SECRET_TOKEN:
+        msg = f"v0:{timestamp}:{body.decode()}"
+        expected = "v0=" + hmac.new(
+            ZOOM_WEBHOOK_SECRET_TOKEN.encode(), msg.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    import json
+    data = json.loads(body)
+    event = data.get("event", "")
+
+    # Zoom URL validation challenge (required when registering webhook)
+    if event == "endpoint.url_validation":
+        plain = data.get("payload", {}).get("plainToken", "")
+        hashed = hmac.new(
+            ZOOM_WEBHOOK_SECRET_TOKEN.encode() if ZOOM_WEBHOOK_SECRET_TOKEN else b"",
+            plain.encode(), hashlib.sha256
+        ).hexdigest()
+        return {"plainToken": plain, "encryptedToken": hashed}
+
+    meeting_id = str(data.get("payload", {}).get("object", {}).get("id", ""))
+
+    if event == "meeting.started":
+        service_supabase.table("live_classes") \
+            .update({"status": "live"}) \
+            .eq("zoom_meeting_id", meeting_id) \
+            .eq("status", "scheduled").execute()
+
+    elif event == "meeting.ended":
+        lc = service_supabase.table("live_classes") \
+            .select("id").eq("zoom_meeting_id", meeting_id).single().execute()
+        if lc.data:
+            service_supabase.table("live_classes") \
+                .update({"status": "ended"}).eq("id", lc.data["id"]).execute()
+            # Note: Teacher should click "End class" to pull full attendance.
+            # Webhook just marks it ended. Attendance pull requires Zoom report API
+            # which may not be ready immediately after meeting ends.
+
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

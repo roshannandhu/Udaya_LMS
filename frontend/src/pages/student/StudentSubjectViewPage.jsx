@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle2, ChevronRight, Loader2, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock } from 'lucide-react';
 import { Tag } from '../../components/ui';
 import { videoApi, testApi, leaderboardApi, apiClient } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
@@ -18,6 +18,7 @@ export default function StudentSubjectViewPage() {
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [myAttempts, setMyAttempts] = useState({});
   const [loading, setLoading] = useState(true);
+  const [thumbnailUrls, setThumbnailUrls] = useState({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,6 +53,24 @@ export default function StudentSubjectViewPage() {
 
   const attempted = new Set(Object.keys(myAttempts));
 
+  useEffect(() => {
+    async function loadThumbnails() {
+      if (!videos.length) return;
+      const ytVids = videos.filter(v => v.source_type === 'youtube');
+      if (!ytVids.length) return;
+      const pairs = await Promise.all(
+        ytVids.map(async v => {
+          try {
+            const r = await apiClient(`/videos/${v.id}/thumbnail`);
+            return [v.id, r.thumbnail_url || null];
+          } catch { return [v.id, null]; }
+        })
+      );
+      setThumbnailUrls(Object.fromEntries(pairs));
+    }
+    loadThumbnails();
+  }, [videos]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -84,27 +103,90 @@ export default function StudentSubjectViewPage() {
             <Loader2 className="animate-spin" size={24} />
           </div>
         ) : tab === 'Videos' && (
-          <div className="space-y-2">
+          <>
             {videos.length === 0 && <p className="text-sm text-neutral-500 text-center py-12">No videos yet.</p>}
-            {videos.map((v, i) => (
-              <button key={v.id} onClick={() => navigate(`/student/subjects/${classId}/video/${v.id}`)}
-                className="w-full flex items-center gap-3 p-3 glass-panel rounded-xl hover:bg-white/70 transition-colors text-left">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md ${v.my_completed ? 'bg-green-600' : 'bg-neutral-900'}`}>
-                  {v.my_completed
-                    ? <CheckCircle2 size={16} className="text-white" />
-                    : <Play size={14} className="text-white ml-0.5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{v.title}</p>
-                  <p className="text-xs text-neutral-500 flex items-center gap-1.5 mt-0.5">
-                    <Clock size={10} />
-                    {v.duration_secs ? `${Math.floor(v.duration_secs / 60)}:${(v.duration_secs % 60).toString().padStart(2, '0')}` : '0:00'}
-                    {v.my_completed && <span className="text-green-600 font-medium">· Completed</span>}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {videos.map(v => {
+                const isYT = v.source_type === 'youtube';
+                const thumbUrl = isYT ? (thumbnailUrls[v.id] || null) : null;
+                const progressPct = v.progress_secs && v.duration_secs
+                  ? Math.min(100, Math.round((v.progress_secs / v.duration_secs) * 100))
+                  : 0;
+
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => navigate(`/student/subjects/${classId}/video/${v.id}`)}
+                    className="group text-left rounded-xl overflow-hidden border border-neutral-200 bg-white hover:shadow-md transition-all duration-200 active:scale-[0.98]"
+                  >
+                    {/* ── Thumbnail area ── */}
+                    <div className="relative overflow-hidden bg-neutral-900" style={{ aspectRatio: '16/9' }}>
+                      {thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt={v.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                          <Play size={28} className="text-white/40" />
+                        </div>
+                      )}
+
+                      {/* Play button overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className={`
+                          w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200
+                          ${thumbUrl
+                            ? 'bg-black/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 group-hover:scale-110'
+                            : 'bg-white/10 opacity-100'}
+                        `}>
+                          <Play size={20} className="text-white" fill="white" />
+                        </div>
+                      </div>
+
+                      {/* Duration badge */}
+                      {v.duration_secs > 0 && (
+                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded font-medium pointer-events-none">
+                          {Math.floor(v.duration_secs / 60)}:{String(v.duration_secs % 60).padStart(2, '0')}
+                        </div>
+                      )}
+
+                      {/* Completed badge */}
+                      {v.my_completed && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded font-medium pointer-events-none">
+                          <CheckCircle size={9} />
+                          Done
+                        </div>
+                      )}
+
+                      {/* YouTube badge */}
+                      {isYT && (
+                        <div className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 bg-red-600 text-white rounded font-bold pointer-events-none">
+                          YT
+                        </div>
+                      )}
+
+                      {/* Progress bar */}
+                      {progressPct > 0 && !v.my_completed && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20 pointer-events-none">
+                          <div className="h-full bg-white" style={{ width: `${progressPct}%` }} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Card footer ── */}
+                    <div className="p-3">
+                      <p className="text-sm font-medium text-neutral-900 line-clamp-2 leading-snug">{v.title}</p>
+                      {v.description && (
+                        <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1">{v.description}</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {tab === 'Tests' && (() => {

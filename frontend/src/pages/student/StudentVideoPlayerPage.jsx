@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
+import { ArrowLeft, CheckCircle, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
 import { Btn, Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import {
@@ -43,6 +43,11 @@ export default function StudentVideoPlayerPage() {
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [ytToken, setYtToken]         = useState(null);
+  const [ytPlayerReady, setYtPlayerReady] = useState(false);
+  const [ytError, setYtError]         = useState(null);
+  const ytPlayerRef   = useRef(null);
+  const ytProgressRef = useRef(null);
   const [chapterActive, setChapterActive] = useState(-1);
 
   // Track online/offline status
@@ -111,6 +116,20 @@ export default function StudentVideoPlayerPage() {
     };
   }, [video, videoId]);
 
+  // Fetch YouTube token when source_type is youtube
+  useEffect(() => {
+    if (video?.source_type !== 'youtube') return;
+    apiClient(`/videos/${videoId}/token`)
+      .then(res => setYtToken(res.token))
+      .catch(err => {
+        if (err?.status === 403 || err?.message?.includes('403')) {
+          setYtError('You do not have access to this video.');
+        } else {
+          setYtError('Could not load video. Please try again.');
+        }
+      });
+  }, [video?.source_type, videoId]);
+
   // When going offline, load blob URL if video is saved
   useEffect(() => {
     if (!isOnline && saved && !blobUrl) {
@@ -122,6 +141,77 @@ export default function StudentVideoPlayerPage() {
       });
     }
   }, [isOnline, saved, blobUrl, videoId]);
+
+  function startYtProgress(player) {
+    stopYtProgress();
+    ytProgressRef.current = setInterval(async () => {
+      try {
+        const currentTime = Math.floor(player.getCurrentTime());
+        const duration    = Math.floor(player.getDuration());
+        await apiClient('/video-progress', {
+          method: 'POST',
+          body: JSON.stringify({ video_id: videoId, progress_secs: currentTime }),
+        });
+        if (duration > 0 && currentTime / duration >= 0.9 && !completed) {
+          markComplete();
+        }
+      } catch { /* silent — do not interrupt playback */ }
+    }, 5000);
+  }
+
+  function stopYtProgress() {
+    if (ytProgressRef.current) {
+      clearInterval(ytProgressRef.current);
+      ytProgressRef.current = null;
+    }
+  }
+
+  // Load YouTube IFrame API and init player when token is ready
+  useEffect(() => {
+    if (!ytToken) return;
+
+    function loadYTApi() {
+      return new Promise(resolve => {
+        if (window.YT?.Player) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(s);
+        window.onYouTubeIframeAPIReady = resolve;
+        // Immediate resolve if already loaded
+        if (window.YT?.Player) resolve();
+      });
+    }
+
+    loadYTApi().then(() => {
+      ytPlayerRef.current = new window.YT.Player('yt-player-mount', {
+        videoId: ytToken,
+        width: '100%',
+        height: '100%',
+        playerVars: { rel: 0, modestbranding: 1, fs: 1, iv_load_policy: 3, controls: 1 },
+        events: {
+          onReady: e => {
+            setYtPlayerReady(true);
+            const saved = video?.progress_secs || 0;
+            if (saved > 30) e.target.seekTo(saved, true);
+          },
+          onStateChange: e => {
+            const S = window.YT.PlayerState;
+            if (e.data === S.PLAYING) startYtProgress(e.target);
+            else stopYtProgress();
+            if (e.data === S.ENDED) markComplete();
+          },
+          onError: () => {
+            setYtError('Video cannot be played. Make sure the video is Unlisted on YouTube.');
+          },
+        },
+      });
+    });
+
+    return () => {
+      stopYtProgress();
+      ytPlayerRef.current?.destroy?.();
+    };
+  }, [ytToken]);
 
   const handleTimeUpdate = useCallback(() => {
     const t = videoRef.current?.currentTime;
@@ -142,6 +232,9 @@ export default function StudentVideoPlayerPage() {
       videoRef.current.play();
     } else if (iframeRef.current) {
       iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'seek', data: secs }), '*');
+    } else if (ytPlayerRef.current) {
+      ytPlayerRef.current.seekTo(secs);
+      ytPlayerRef.current.playVideo();
     }
   };
 
@@ -157,6 +250,13 @@ export default function StudentVideoPlayerPage() {
       setIsMarking(false);
     }
   };
+
+  function markComplete() {
+    if (completed) return;
+    videoApi.markComplete(video.id)
+      .then(() => setCompleted(true))
+      .catch(err => console.error('markComplete failed:', err));
+  }
 
   const handleSaveOffline = async () => {
     if (!video?.allow_download) {
@@ -216,11 +316,63 @@ export default function StudentVideoPlayerPage() {
 
   // Decide what to render in the player area
   const isStorageUrl = video.cloudflare_video_id?.startsWith('https://');
+  const isYouTube = video.source_type === 'youtube';
   const showOfflinePlayer = !isOnline && blobUrl;
   const showOfflineUnavailable = !isOnline && !blobUrl;
   const showCloudflarePlayer = isOnline && video.cloudflare_video_id && !isStorageUrl;
   const showStoragePlayer = isOnline && isStorageUrl;
-  const showNoPlayer = isOnline && !video.cloudflare_video_id;
+  const showYouTubePlayer = isOnline && isYouTube && ytToken;
+  const showYouTubeLoading = isOnline && isYouTube && !ytToken;
+  const showNoPlayer = isOnline && !video.cloudflare_video_id && !isYouTube;
+
+  if (video?.source_type === 'youtube') {
+    return (
+      <div className="min-h-screen bg-black flex flex-col">
+
+        {/* Back button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="absolute top-4 left-4 z-20 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white"
+        >
+          <ArrowLeft size={18} />
+        </button>
+
+        {/* Player container */}
+        <div className="w-full bg-black" style={{ aspectRatio: '16/9', position: 'relative' }}>
+          {ytError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
+              <p className="text-white/70 text-sm">{ytError}</p>
+              <button onClick={() => navigate(-1)} className="text-white/50 text-xs underline mt-1">Go back</button>
+            </div>
+          ) : (
+            <>
+              {!ytPlayerReady && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                </div>
+              )}
+              <div id="yt-player-mount" className="w-full h-full" />
+            </>
+          )}
+        </div>
+
+        {/* Info below player */}
+        <div className="flex-1 bg-[#FAFAF9] px-4 py-4 space-y-2">
+          <h1 className="text-base font-semibold text-neutral-900">{video.title}</h1>
+          {video.description && (
+            <p className="text-sm text-neutral-500 leading-relaxed">{video.description}</p>
+          )}
+          {completed && (
+            <div className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
+              <CheckCircle size={14} />
+              Completed · +10 points
+            </div>
+          )}
+        </div>
+
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -263,6 +415,15 @@ export default function StudentVideoPlayerPage() {
               title={video.title}
               onTimeUpdate={handleTimeUpdate}
             />
+          )}
+          {showYouTubeLoading && (
+            <div className="flex items-center gap-2 text-white/60 text-sm">
+              <Loader2 className="animate-spin" size={18} />
+              Loading video...
+            </div>
+          )}
+          {showYouTubePlayer && (
+            <div id="yt-player-mount" className="w-full h-full" />
           )}
           {showOfflinePlayer && (
             <video

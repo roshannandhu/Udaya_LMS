@@ -21,6 +21,8 @@ import ReportsPage        from './pages/teacher/ReportsPage';
 import RemindersPage      from './pages/teacher/RemindersPage';
 import SettingsPage       from './pages/teacher/SettingsPage';
 import AttendancePage     from './pages/teacher/AttendancePage';
+import TeacherLiveClassesPage from './pages/teacher/TeacherLiveClassesPage';
+import StudentLiveClassesPage from './pages/student/StudentLiveClassesPage';
 
 import StudentLayout          from './pages/student/StudentLayout';
 import StudentHomePage        from './pages/student/StudentHomePage';
@@ -130,6 +132,7 @@ export default function App() {
           <Route path="subjects" element={<SubjectsPage />} />
           <Route path="subjects/:standardId" element={<StandardDetailPage />} />
           <Route path="subjects/:standardId/:classId" element={<SubjectDetailPage />} />
+          <Route path="live-classes" element={<TeacherLiveClassesPage />} />
           <Route path="students" element={<StudentsPage />} />
           <Route path="students/:studentId" element={<StudentDetailPage />} />
           <Route path="broadcasts" element={<BroadcastsPage />} />
@@ -152,6 +155,7 @@ export default function App() {
           <Route path="subjects" element={<StudentSubjectsPage />} />
           <Route path="subjects/:classId" element={<StudentSubjectViewPage />} />
           <Route path="subjects/:classId/video/:videoId" element={<StudentVideoPlayerPage />} />
+          <Route path="live-classes" element={<StudentLiveClassesPage />} />
           <Route path="tests" element={<StudentTestsPage />} />
           <Route path="tests/:testId/take" element={<StudentTestTakingPage />} />
           <Route path="tests/result" element={<StudentTestResultPage />} />

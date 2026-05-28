@@ -21,7 +21,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         runtimeCaching: [{
           urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
           handler: 'CacheFirst',
@@ -30,6 +30,15 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'zoom-sdk': ['@zoom/meetingsdk'],
+        },
+      },
+    },
+  },
   server: {
     port: 3001,
     strictPort: true,

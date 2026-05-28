@@ -44,6 +44,7 @@ export default function StudentTestsPage() {
   const now = new Date();
 
   const isOpen = (t) => {
+    if (t.status === 'completed') return false;
     if (t.expires_at && new Date(t.expires_at) <= now) return false;
     if (t.status === 'scheduled') return !t.scheduled_for || new Date(t.scheduled_for) <= now;
     return true;

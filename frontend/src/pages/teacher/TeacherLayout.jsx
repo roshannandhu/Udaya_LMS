@@ -7,6 +7,7 @@ import Sidebar from '../../components/shared/Sidebar';
 function getActiveTab(path) {
   if (path === '/teacher' || path === '/teacher/') return 'today';
   if (path.startsWith('/teacher/subjects'))    return 'subjects';
+  if (path.startsWith('/teacher/live-classes')) return 'live';
   if (path.startsWith('/teacher/attendance'))  return 'attendance';
   if (path.startsWith('/teacher/broadcasts'))  return 'broadcasts';
   if (path.startsWith('/teacher/more') || path.startsWith('/teacher/students')) return 'more';
@@ -31,6 +32,7 @@ export default function TeacherLayout() {
     const routes = {
       today:      '/teacher',
       subjects:   '/teacher/subjects',
+      live:       '/teacher/live-classes',
       attendance: '/teacher/attendance',
       broadcasts: '/teacher/broadcasts',
       more:       '/teacher/more'

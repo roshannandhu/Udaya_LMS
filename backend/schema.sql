@@ -332,3 +332,87 @@ CREATE TABLE IF NOT EXISTS question_bank (
 
 -- ── Video Chapters Migration ───────────────────────────────────────────────────
 -- ALTER TABLE videos ADD COLUMN IF NOT EXISTS chapters JSONB DEFAULT '[]';
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- FEATURE MIGRATIONS — YouTube Videos + Live Classes
+-- Run the four blocks below IN ORDER in Supabase SQL Editor
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- ── Migration 1: Extend videos table for YouTube support ──────────────────────
+
+ALTER TABLE videos
+  ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'upload'
+    CHECK (source_type IN ('upload', 'youtube'));
+
+ALTER TABLE videos
+  ADD COLUMN IF NOT EXISTS youtube_video_id TEXT,
+  ADD COLUMN IF NOT EXISTS youtube_url TEXT;
+
+-- storage_path becomes optional (YouTube videos have no storage path)
+ALTER TABLE videos ALTER COLUMN storage_path DROP NOT NULL;
+
+-- ── Migration 2: Create live_classes table ────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS live_classes (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id        UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
+  title           TEXT NOT NULL,
+  scheduled_at    TIMESTAMPTZ NOT NULL,
+  duration_mins   INTEGER NOT NULL DEFAULT 60,
+  zoom_meeting_id TEXT,
+  zoom_join_url   TEXT,
+  zoom_start_url  TEXT,
+  status          TEXT NOT NULL DEFAULT 'scheduled'
+                  CHECK (status IN ('scheduled', 'live', 'ended', 'cancelled')),
+  created_by      UUID REFERENCES auth.users(id),
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_live_classes_class_id   ON live_classes(class_id);
+CREATE INDEX IF NOT EXISTS idx_live_classes_status     ON live_classes(status);
+CREATE INDEX IF NOT EXISTS idx_live_classes_scheduled  ON live_classes(scheduled_at);
+
+-- ── Migration 3: Create live_class_attendance table ───────────────────────────
+
+CREATE TABLE IF NOT EXISTS live_class_attendance (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  live_class_id   UUID NOT NULL REFERENCES live_classes(id) ON DELETE CASCADE,
+  student_id      UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  joined_at       TIMESTAMPTZ,
+  left_at         TIMESTAMPTZ,
+  duration_mins   INTEGER,
+  attended        BOOLEAN NOT NULL DEFAULT false,
+  UNIQUE (live_class_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lca_live_class ON live_class_attendance(live_class_id);
+CREATE INDEX IF NOT EXISTS idx_lca_student    ON live_class_attendance(student_id);
+
+-- ── Migration 4: Row Level Security (deny all direct access) ─────────────────
+
+ALTER TABLE live_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE live_class_attendance ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "deny_all_live_classes" ON live_classes;
+DROP POLICY IF EXISTS "deny_all_lca" ON live_class_attendance;
+
+CREATE POLICY "deny_all_live_classes" ON live_classes FOR ALL USING (false);
+CREATE POLICY "deny_all_lca" ON live_class_attendance FOR ALL USING (false);
+
+-- ── Verification queries (run to confirm migrations applied) ──────────────────
+
+-- 1. Check videos columns (expect 4 rows)
+-- SELECT column_name, data_type, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'videos'
+--   AND column_name IN ('source_type','youtube_video_id','youtube_url','storage_path')
+-- ORDER BY column_name;
+
+-- 2. Check new tables exist (expect 2 rows)
+-- SELECT table_name FROM information_schema.tables
+-- WHERE table_schema = 'public'
+--   AND table_name IN ('live_classes','live_class_attendance');
+
+-- 3. Confirm RLS enabled (expect rowsecurity=true for both)
+-- SELECT tablename, rowsecurity FROM pg_tables
+-- WHERE tablename IN ('live_classes','live_class_attendance');
