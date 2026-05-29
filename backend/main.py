@@ -1144,11 +1144,18 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
 
     # ── Get all subjects for this standard ───────────────────────────
     std_id = student.get("standard_id")
+    std_name = None
     if std_id:
         subjects_res = service_supabase.table("subject_classes").select("id, name, emoji").eq("standard_id", std_id).execute()
         subjects = subjects_res.data or []
+        try:
+            std_res = service_supabase.table("standards").select("name").eq("id", std_id).single().execute()
+            std_name = std_res.data["name"] if std_res.data else None
+        except Exception:
+            pass
     else:
         subjects = []
+    student["standard_name"] = std_name
     sub_map = {s["id"]: s for s in subjects}
 
     # ── Test attempts (period filtered) ──────────────────────────────
@@ -1315,6 +1322,125 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         vid_by_date[day]["count"] += 1
     video_heatmap = [{"date": d, **v} for d, v in sorted(vid_by_date.items())]
 
+    # ── Test participation heatmap (days when student submitted tests) ────
+    test_by_date: dict = {}
+    for a in attempts:
+        ts = a.get("submitted_at", "")
+        if not ts:
+            continue
+        day = ts[:10]
+        if day not in test_by_date:
+            test_by_date[day] = {"count": 0}
+        test_by_date[day]["count"] += 1
+    test_heatmap = [{"date": d, **v} for d, v in sorted(test_by_date.items())]
+
+    # ── Total tests available in standard (for participation KPI) ────────
+    total_tests_in_standard = 0
+    if subjects:
+        try:
+            all_tests_res = service_supabase.table("tests").select("id, class_id, created_at").in_(
+                "class_id", [s["id"] for s in subjects]
+            ).in_("status", ["active", "scheduled"]).execute()
+            avail = all_tests_res.data or []
+            if period_start:
+                avail = [t for t in avail if (t.get("created_at") or "") >= period_start]
+            total_tests_in_standard = len(avail)
+        except Exception:
+            pass
+
+    # ── Student rank in standard ──────────────────────────────────────────
+    rank = None
+    total_students = 0
+    if std_id:
+        try:
+            ranked_res = service_supabase.table("students").select("id, points").eq(
+                "standard_id", std_id
+            ).order("points", desc=True).execute()
+            ranked_list = ranked_res.data or []
+            total_students = len(ranked_list)
+            for i, s in enumerate(ranked_list):
+                if s["id"] == student_id:
+                    rank = i + 1
+                    break
+        except Exception:
+            pass
+
+    # ── Topic mastery pct (topics where score >= 60%) ─────────────────────
+    mastered = sum(1 for t in topic_map if t["score_pct"] >= 60)
+    topic_mastery_pct = round(mastered / len(topic_map) * 100, 1) if topic_map else 0
+
+    # ── Per-subject heatmaps (wrapped so any error can't crash the endpoint) ─
+    attendance_heatmap_by_subject: dict = {}
+    video_heatmap_by_subject: dict = {}
+    test_heatmap_by_subject: dict = {}
+    try:
+        # Attendance by subject
+        att_by_subj: dict = {}
+        for ar in att_rows:
+            subj_id = ar.get("subject_class_id") or ""
+            if not subj_id:
+                continue
+            day_key = ar.get("date") or ""
+            if not day_key:
+                continue
+            if subj_id not in att_by_subj:
+                att_by_subj[subj_id] = {}
+            if day_key not in att_by_subj[subj_id]:
+                att_by_subj[subj_id][day_key] = {"present": 0, "absent": 0, "late": 0, "total": 0}
+            att_by_subj[subj_id][day_key]["total"] += 1
+            status_val = ar.get("status") or "absent"
+            if status_val in ("present", "absent", "late"):
+                att_by_subj[subj_id][day_key][status_val] += 1
+        attendance_heatmap_by_subject = {
+            subj_id: [{"date": dk, **dv} for dk, dv in sorted(days_dict.items())]
+            for subj_id, days_dict in att_by_subj.items()
+        }
+
+        # Video watching by subject
+        vid_by_subj: dict = {}
+        for vp_item in vp_rows:
+            vid_info = vp_item.get("videos") or {}
+            subj_id = vid_info.get("class_id") or ""
+            if not subj_id:
+                continue
+            ts_val = vp_item.get("last_watched_at") or ""
+            if not ts_val:
+                continue
+            day_key = ts_val[:10]
+            if subj_id not in vid_by_subj:
+                vid_by_subj[subj_id] = {}
+            if day_key not in vid_by_subj[subj_id]:
+                vid_by_subj[subj_id][day_key] = {"minutes": 0, "count": 0}
+            vid_by_subj[subj_id][day_key]["minutes"] += round((vp_item.get("progress_secs") or 0) / 60, 1)
+            vid_by_subj[subj_id][day_key]["count"] += 1
+        video_heatmap_by_subject = {
+            subj_id: [{"date": dk, **dv} for dk, dv in sorted(days_dict.items())]
+            for subj_id, days_dict in vid_by_subj.items()
+        }
+
+        # Test participation by subject
+        test_by_subj: dict = {}
+        for attempt_item in attempts:
+            test_info = attempt_item.get("tests") or {}
+            subj_id = test_info.get("class_id") or ""
+            if not subj_id:
+                continue
+            ts_val = attempt_item.get("submitted_at") or ""
+            if not ts_val:
+                continue
+            day_key = ts_val[:10]
+            if subj_id not in test_by_subj:
+                test_by_subj[subj_id] = {}
+            if day_key not in test_by_subj[subj_id]:
+                test_by_subj[subj_id][day_key] = {"count": 0}
+            test_by_subj[subj_id][day_key]["count"] += 1
+        test_heatmap_by_subject = {
+            subj_id: [{"date": dk, **dv} for dk, dv in sorted(days_dict.items())]
+            for subj_id, days_dict in test_by_subj.items()
+        }
+    except Exception as exc:
+        print(f"Per-subject heatmap error (non-fatal): {exc}")
+
     return {
         "student": student,
         "period": period,
@@ -1323,6 +1449,14 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "topic_map": topic_map,
         "attendance_heatmap": attendance_heatmap,
         "video_heatmap": video_heatmap,
+        "test_heatmap": test_heatmap,
+        "attendance_heatmap_by_subject": attendance_heatmap_by_subject,
+        "video_heatmap_by_subject":      video_heatmap_by_subject,
+        "test_heatmap_by_subject":       test_heatmap_by_subject,
+        "total_tests_in_standard": total_tests_in_standard,
+        "rank": rank,
+        "total_students": total_students,
+        "topic_mastery_pct": topic_mastery_pct,
         "subjects": subjects,
     }
 

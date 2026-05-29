@@ -1,14 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileQuestion, Trophy, ChevronRight } from 'lucide-react';
+import { FileQuestion, Trophy, BarChart3, ChevronRight } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 
 export default function StudentMorePage() {
   const navigate = useNavigate();
-  
+
   const items = [
-    { icon: FileQuestion, label: 'Tests',       sub: 'Take tests and view results', onClick: () => navigate('/student/tests') },
-    { icon: Trophy,       label: 'Leaderboard', sub: 'View class rankings',         onClick: () => navigate('/student/leaderboard') },
+    { icon: FileQuestion, label: 'Tests',       sub: 'Take tests and view results',         onClick: () => navigate('/student/tests') },
+    { icon: Trophy,       label: 'Leaderboard', sub: 'View class rankings',                  onClick: () => navigate('/student/leaderboard') },
+    { icon: BarChart3,    label: 'Report Card',  sub: 'View your performance report card',   onClick: () => navigate('/student/report') },
   ];
 
   return (

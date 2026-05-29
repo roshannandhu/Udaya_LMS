@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { Btn, Tag, Divider, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, reportApi } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
-import ReportCardUI from '../../components/shared/ReportCardUI';
+import StudentReportCard from '../../components/shared/StudentReportCard';
 
 export default function StudentDetailPage() {
   const { studentId } = useParams();
@@ -29,9 +29,6 @@ export default function StudentDetailPage() {
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState(null);
-
-  const [suggestions, setSuggestions] = useState(null);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const { defaultStudentPassword } = useSettingsStore();
 
@@ -59,25 +56,11 @@ export default function StudentDetailPage() {
     if (!studentId) return;
     setReportLoading(true);
     setReportError(null);
-    setSuggestions(null);
     reportApi.getV2(studentId, reportPeriod)
       .then(d => setReportData(d))
       .catch(e => setReportError(e.message || 'Failed to load report'))
       .finally(() => setReportLoading(false));
   }, [studentId, reportPeriod]);
-
-  const handleGenerateSuggestions = async () => {
-    setLoadingSuggestions(true);
-    try {
-      const res = await reportApi.generateSuggestions(studentId, reportPeriod);
-      setSuggestions(res.suggestions);
-    } catch (e) {
-      console.error(e);
-      setSuggestions(["Failed to generate suggestions."]);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  };
 
   const handleSave = async () => {
     try {
@@ -155,105 +138,6 @@ export default function StudentDetailPage() {
       setBlockLoading(false);
     }
   };
-
-  const {
-    radarData,
-    performanceData,
-    multiLineData,
-    attHeatmap, attStats,
-    vidHeatmap, vidStats
-  } = useMemo(() => {
-    if (!reportData) return {};
-    const data = reportData;
-
-    const sr = (data.subject_radar || []).map(r => ({
-      subject: r.subject,
-      score: r.test_avg || 0,
-      classAvg: r.classAvg || 0
-    }));
-
-    const stats = data.student || student || {};
-    const attPct = Math.round(stats.attendance_pct || 0);
-    const vp = data.video_heatmap || [];
-    const videoPct = vp.length ? Math.round((vp.filter(d => d.minutes > 0).length / vp.length) * 100) : 0;
-    const pd = [
-      { subject: "Knowledge", score: Math.round(stats.avg_score || 0), classAvg: 65 },
-      { subject: "Attendance", score: attPct, classAvg: 75 },
-      { subject: "Activity", score: videoPct, classAvg: 60 },
-      { subject: "Consistency", score: Math.round((stats.avg_score || 0) * 0.9), classAvg: 70 },
-      { subject: "Points", score: Math.min(100, (stats.points || 0) / 10), classAvg: 50 },
-    ];
-
-    const tl = data.test_timeline || [];
-    const mData = {};
-    tl.forEach(t => {
-      const sub = t.subject || 'Unknown';
-      if (!mData[sub]) mData[sub] = { weeks: [], topics: {} };
-      const dStr = t.date ? t.date.slice(5, 10) : 'Test'; 
-      const wName = `${dStr} ${t.test_title.slice(0, 8)}`;
-      if (!mData[sub].weeks.includes(wName)) mData[sub].weeks.push(wName);
-      
-      const topic = t.test_title || 'General';
-      if (!mData[sub].topics[topic]) mData[sub].topics[topic] = [];
-      mData[sub].topics[topic].push(t.score_pct);
-    });
-
-    Object.keys(mData).forEach(sub => {
-      const targetLen = mData[sub].weeks.length;
-      Object.keys(mData[sub].topics).forEach(top => {
-        const arr = mData[sub].topics[top];
-        while (arr.length < targetLen) arr.unshift(arr[0] || 0);
-      });
-    });
-
-    const ah = data.attendance_heatmap || [];
-    const aStats = {
-      present: ah.reduce((a, d) => a + (d.present || 0), 0),
-      absent: ah.reduce((a, d) => a + (d.absent || 0), 0),
-      late: ah.reduce((a, d) => a + (d.late || 0), 0),
-    };
-
-    const vh = data.video_heatmap || [];
-    const vStats = {
-      days: vh.filter(d => d.minutes > 0).length,
-      mins: Math.round(vh.reduce((a, d) => a + (d.minutes || 0), 0)),
-    };
-
-    const makeHeatmapGrid = (heatmapData, type) => {
-      const dateMap = {};
-      heatmapData.forEach(d => {
-        if (type === 'attendance') {
-           dateMap[d.date] = (d.present || 0) > 0 ? 3 : (d.late || 0) > 0 ? 2 : (d.absent || 0) > 0 ? 1 : 0;
-        } else {
-           dateMap[d.date] = d.minutes > 60 ? 4 : d.minutes > 30 ? 3 : d.minutes > 10 ? 2 : d.minutes > 0 ? 1 : 0;
-        }
-      });
-      const grid = [];
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(today.getDate() - (12 * 7 - 1));
-      while (start.getDay() !== 0) start.setDate(start.getDate() - 1);
-      
-      let currentWeek = [];
-      for (let i = 0; i < 12 * 7; i++) {
-        const dStr = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`;
-        currentWeek.push(dateMap[dStr] || 0);
-        if (currentWeek.length === 7) { grid.push(currentWeek); currentWeek = []; }
-        start.setDate(start.getDate() + 1);
-      }
-      return grid;
-    };
-
-    return {
-      radarData: sr,
-      performanceData: pd,
-      multiLineData: mData,
-      attHeatmap: makeHeatmapGrid(ah, 'attendance'),
-      attStats: aStats,
-      vidHeatmap: makeHeatmapGrid(vh, 'video'),
-      vidStats: vStats
-    };
-  }, [reportData, student]);
 
   if (loading) {
     return (
@@ -334,23 +218,14 @@ export default function StudentDetailPage() {
           <div className="flex items-center gap-2 p-4 m-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100">
             <AlertTriangle size={16} />{reportError}
           </div>
-        ) : (
-          <ReportCardUI
-            student={{...student, standard: standard}}
+        ) : reportData ? (
+          <StudentReportCard
+            data={reportData}
             period={reportPeriod}
             onPeriodChange={setReportPeriod}
-            radarData={radarData}
-            performanceData={performanceData}
-            multiLineData={multiLineData}
-            attendanceGrid={attHeatmap}
-            attendanceStats={attStats}
-            videoGrid={vidHeatmap}
-            videoStats={vidStats}
-            suggestions={suggestions}
-            loadingSuggestions={loadingSuggestions}
-            onGenerateSuggestions={handleGenerateSuggestions}
+            showHeader={false}
           />
-        )}
+        ) : null}
       </div>
 
       {/* Edit Modal */}
