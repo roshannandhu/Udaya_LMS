@@ -276,6 +276,13 @@ status TEXT DEFAULT 'pending' CHECK IN ('pending','approved','rejected'),
 created_at TIMESTAMPTZ
 ```
 
+### `sub_teachers`
+```sql
+id UUID PK,               -- sub-teacher's auth.users.id
+primary_teacher_id UUID,  -- references primary teacher's auth.users.id
+name TEXT, email TEXT, phone TEXT, created_at TIMESTAMPTZ
+```
+
 ---
 
 ## 6. Entity Relationship
@@ -484,6 +491,14 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 | PATCH | `/api/join-requests/{request_id}/approve` | teacher | Creates student account (Supabase auth + students row), updates request status to 'approved'. |
 | PATCH | `/api/join-requests/{request_id}/reject` | teacher | Sets request status to 'rejected'. |
 
+### Team Management (Sub-teachers)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/teachers` | primary teacher | Lists all registered sub-teachers for the primary teacher |
+| POST | `/api/teachers` | primary teacher | Body: `{ name, email, phone?, password }`. Creates a sub-teacher auth user and DB entry. |
+| DELETE | `/api/teachers/{teacher_id}` | primary teacher | Removes a sub-teacher (deletes Supabase Auth user and deletes DB entry). |
+
 ---
 
 ### Misc
@@ -689,6 +704,7 @@ parseImportFile(file, existingStandards, existingUsernames, fixedPassword = null
 - **Correct answers** — `correct_idx` stripped from all question responses to students
 - **Blocked students** — login returns 403 if `students.blocked = true`
 - **Orphan cleanup** — bulk import deletes the Supabase auth user if the `students` table insert fails
+- **Multi-teacher team delegation** — sub-teachers authenticate and manage data owned by their primary teacher. Database checks verify the primary teacher's ID (via `user["teacher_id"]`), ensuring secure and isolated team access.
 
 ---
 
@@ -746,6 +762,7 @@ Every endpoint in Section 7 is implemented in `backend/main.py`. Every route in 
 6. **Service role only in backend** — never use `SUPABASE_SERVICE_KEY` or `service_supabase` in any frontend code.
 7. **WebSocket token in query param** — browsers cannot set custom headers for WS; always `?token=<jwt>`.
 8. **`useAppCache` is the global data store** — do not create a parallel caching system. Call `invalidate()` or `invalidateStudents()` after mutations.
+9. **Multi-teacher database queries** — when checking standard/subject/student ownership or filtering data for teacher roles, always use `user["teacher_id"]` (which resolves to the primary teacher's ID) instead of the caller's raw `user["user_id"]`. This ensures sub-teachers see and manage the primary teacher's standards and classes correctly.
 
 ### Before adding a new feature
 1. Check if an endpoint already exists in Section 7 — don't duplicate.

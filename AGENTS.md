@@ -6,7 +6,7 @@ This repo contains **two artifacts**:
 
 - **`lms-v3_9.jsx`** — Monolithic UI prototype (2951 lines). Design reference.
 - **`frontend/`** — Active Vite 5 + React 18 frontend.
-- **`backend/`** — FastAPI Python backend with Clerk auth.
+- **`backend/`** — FastAPI Python backend with Supabase Auth.
 
 ## Current stack
 
@@ -70,4 +70,4 @@ ZOOM_WEBHOOK_SECRET_TOKEN=
 
 ## PLAN.md (`/PLAN.md`)
 
-Full implementation plan (note: uses Supabase for DB, current implementation uses FastAPI for API + Clerk for auth).
+Full implementation plan (uses Supabase for DB, FastAPI for API, and Supabase Auth).

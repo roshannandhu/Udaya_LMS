@@ -2334,9 +2334,9 @@ def get_invite_links(standard_id: Optional[str] = None, user = Depends(verify_to
         raise HTTPException(status_code=503, detail="Database not available")
 
     if standard_id:
-        response = service_supabase.table("invite_links").select("*").eq("standard_id", standard_id).eq("created_by", user["user_id"]).execute()
+        response = service_supabase.table("invite_links").select("*").eq("standard_id", standard_id).eq("created_by", user["teacher_id"]).execute()
     else:
-        response = service_supabase.table("invite_links").select("*").eq("created_by", user["user_id"]).execute()
+        response = service_supabase.table("invite_links").select("*").eq("created_by", user["teacher_id"]).execute()
 
     return response.data or []
 
@@ -2812,7 +2812,7 @@ def get_low_attendance(standard_id: str, below_pct: float = None, user = Depends
     threshold = below_pct
     
     if standard_id == "all":
-        standards = service_supabase.table("standards").select("id, name, attendance_threshold").eq("teacher_id", user["user_id"]).execute()
+        standards = service_supabase.table("standards").select("id, name, attendance_threshold").eq("teacher_id", user["teacher_id"]).execute()
         if not standards.data:
             return {"students": [], "count": 0}
             
@@ -2978,8 +2978,11 @@ def get_test_for_edit(test_id: str, user = Depends(verify_token)):
     test = service_supabase.table("tests").select("*").eq("id", test_id).single().execute()
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
-        
-    if test.data.get("created_by") != user["user_id"]:
+
+    # Verify via standard ownership (supports sub-teachers)
+    _subj = service_supabase.table("subject_classes").select("standard_id").eq("id", test.data["class_id"]).single().execute()
+    _std  = service_supabase.table("standards").select("teacher_id").eq("id", (_subj.data or {}).get("standard_id", "")).single().execute() if _subj.data else None
+    if not _std or not _std.data or _std.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # Get questions WITH correct answers
@@ -3051,8 +3054,13 @@ def update_test_full(test_id: str, data: TestUpdateFull, background_tasks: Backg
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    existing = service_supabase.table("tests").select("created_by, status, scheduled_for").eq("id", test_id).single().execute()
-    if not existing.data or existing.data.get("created_by") != user["user_id"]:
+    existing = service_supabase.table("tests").select("created_by, status, scheduled_for, class_id").eq("id", test_id).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Test not found")
+    # Verify via standard ownership (supports sub-teachers)
+    _subj2 = service_supabase.table("subject_classes").select("standard_id").eq("id", existing.data["class_id"]).single().execute()
+    _std2  = service_supabase.table("standards").select("teacher_id").eq("id", (_subj2.data or {}).get("standard_id", "")).single().execute() if _subj2.data else None
+    if not _std2 or not _std2.data or _std2.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # Block editing once the exam has started
@@ -3421,7 +3429,7 @@ def get_reminders(user = Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
-    response = service_supabase.table("reminders").select("*").eq("teacher_id", user["user_id"]).order("done").order("scheduled_for", nullsfirst=True).execute()
+    response = service_supabase.table("reminders").select("*").eq("teacher_id", user["teacher_id"]).order("done").order("scheduled_for", nullsfirst=True).execute()
     return response.data or []
 
 class ReminderCreate(BaseModel):
@@ -3442,7 +3450,7 @@ def create_reminder(reminder: ReminderCreate, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
     data = {
-        "teacher_id": user["user_id"],
+        "teacher_id": user["teacher_id"],
         "title": reminder.title,
         "scheduled_for": reminder.scheduled_for,
         "context": reminder.context,
@@ -3460,7 +3468,7 @@ def update_reminder(reminder_id: str, updates: ReminderUpdate, user = Depends(ve
     update_data = updates.model_dump(exclude_none=True)
     if not update_data:
         return {}
-    response = service_supabase.table("reminders").update(update_data).eq("id", reminder_id).eq("teacher_id", user["user_id"]).execute()
+    response = service_supabase.table("reminders").update(update_data).eq("id", reminder_id).eq("teacher_id", user["teacher_id"]).execute()
     return response.data[0] if response.data else {}
 
 @app.delete("/api/reminders/{reminder_id}")
@@ -3469,7 +3477,7 @@ def delete_reminder(reminder_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
-    service_supabase.table("reminders").delete().eq("id", reminder_id).eq("teacher_id", user["user_id"]).execute()
+    service_supabase.table("reminders").delete().eq("id", reminder_id).eq("teacher_id", user["teacher_id"]).execute()
     return {"message": "Deleted"}
 
 # --- Notifications ---
@@ -3807,7 +3815,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
     # 3. Log bulk import
     try:
         service_supabase.table("bulk_imports").insert({
-            "teacher_id": user["user_id"],
+            "teacher_id": user["teacher_id"],
             "filename": req.filename,
             "total_rows": len(req.students),
             "created": success_count,
@@ -3837,7 +3845,7 @@ class QuestionBankImport(BaseModel):
 def get_question_bank(user=Depends(verify_token)):
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Teachers only")
-    result = service_supabase.table("question_bank").select("*").eq("teacher_id", user["user_id"]).order("created_at", desc=True).execute()
+    result = service_supabase.table("question_bank").select("*").eq("teacher_id", user["teacher_id"]).order("created_at", desc=True).execute()
     return result.data or []
 
 @app.post("/api/question-bank")
@@ -3845,7 +3853,7 @@ def create_question_bank_item(item: QuestionBankItem, user=Depends(verify_token)
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Teachers only")
     result = service_supabase.table("question_bank").insert({
-        "teacher_id": user["user_id"],
+        "teacher_id": user["teacher_id"],
         "question": item.question,
         "options": item.options,
         "correct_idx": item.correct_idx,
@@ -3863,7 +3871,7 @@ def delete_question_bank_item(question_id: str, user=Depends(verify_token)):
     existing = service_supabase.table("question_bank").select("id, teacher_id").eq("id", question_id).single().execute()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Question not found")
-    if existing.data["teacher_id"] != user["user_id"]:
+    if existing.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not your question")
     service_supabase.table("question_bank").delete().eq("id", question_id).execute()
     return {"status": "deleted"}
@@ -3878,7 +3886,7 @@ def import_from_question_bank(req: QuestionBankImport, user=Depends(verify_token
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
     # Fetch bank questions
-    bank_qs = service_supabase.table("question_bank").select("*").in_("id", req.question_ids).eq("teacher_id", user["user_id"]).execute()
+    bank_qs = service_supabase.table("question_bank").select("*").in_("id", req.question_ids).eq("teacher_id", user["teacher_id"]).execute()
     if not bank_qs.data:
         raise HTTPException(status_code=404, detail="No matching questions found")
     # Get current max order_num for the test
@@ -3913,7 +3921,7 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
 
     if user["role"] == "teacher":
         std_check = service_supabase.table("standards") \
-            .select("id").eq("id", std_id).eq("teacher_id", user["user_id"]).single().execute()
+            .select("id").eq("id", std_id).eq("teacher_id", user["teacher_id"]).single().execute()
         if not std_check.data:
             raise HTTPException(status_code=403, detail="Not your class")
     else:
@@ -3954,7 +3962,7 @@ async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
     std_check = service_supabase.table("standards") \
         .select("id") \
         .eq("id", class_result.data["standard_id"]) \
-        .eq("teacher_id", user["user_id"]).single().execute()
+        .eq("teacher_id", user["teacher_id"]).single().execute()
     if not std_check.data:
         raise HTTPException(status_code=403, detail="Not your class")
 
@@ -4000,7 +4008,7 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
 
     if user["role"] == "teacher":
         std_check = service_supabase.table("standards") \
-            .select("id").eq("id", required_std).eq("teacher_id", user["user_id"]).single().execute()
+            .select("id").eq("id", required_std).eq("teacher_id", user["teacher_id"]).single().execute()
         if not std_check.data:
             raise HTTPException(status_code=403, detail="Not your class")
         role_num = 1
@@ -4094,10 +4102,16 @@ async def end_live_class(live_class_id: str, user=Depends(verify_token)):
 async def cancel_live_class(live_class_id: str, user=Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
+    # Verify ownership via standard chain (supports sub-teachers)
+    lc = service_supabase.table("live_classes").select("class_id").eq("id", live_class_id).single().execute()
+    if lc.data:
+        _sc = service_supabase.table("subject_classes").select("standard_id").eq("id", lc.data["class_id"]).single().execute()
+        _st = service_supabase.table("standards").select("teacher_id").eq("id", (_sc.data or {}).get("standard_id", "")).single().execute() if _sc.data else None
+        if not _st or not _st.data or _st.data["teacher_id"] != user["teacher_id"]:
+            raise HTTPException(status_code=403, detail="Not your class")
     service_supabase.table("live_classes") \
         .update({"status": "cancelled"}) \
-        .eq("id", live_class_id) \
-        .eq("created_by", user["user_id"]).execute()
+        .eq("id", live_class_id).execute()
     return {"message": "cancelled"}
 
 

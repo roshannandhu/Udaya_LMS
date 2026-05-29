@@ -4,6 +4,34 @@ Format: newest first. Each entry includes what changed, which files, and why.
 
 ---
 
+## May 2026 — Sub-Teacher Team Management, Idempotent RLS Policies & Connection Stability
+
+### Feature: Sub-Teacher Team Management (Multi-Teacher Support)
+- **Files:** `backend/main.py`, `backend/schema.sql`, `frontend/src/lib/api.js`, `frontend/src/pages/teacher/SettingsPage.jsx`.
+- Allows primary teachers to register and manage multiple sub-teacher team members.
+- Created `sub_teachers` table and RLS deny policies.
+- Automatically creates sub-teacher accounts under Supabase Auth.
+- Implemented settings panel on settings page for team addition and removal (primary only; blocked for sub-teachers).
+- Updated backend standard/subject database checks to use primary teacher's ID (`user["teacher_id"]`), enabling shared team visibility and administrative management of the primary teacher's classes.
+
+### Feature: Idempotent RLS Policies DDL
+- **Files:** `backend/schema.sql`, `backend/rls_policies.sql`.
+- Added `DROP POLICY IF EXISTS` prefix queries to all RLS policy definitions.
+- Avoids duplicate policy errors (`ERROR: 42710`) when re-running database schemas.
+
+### Feature: Connection Stability & Offline Graceful Handling
+- **Files:** `frontend/src/lib/api.js`, `frontend/src/lib/auth.js`.
+- Refactored `tryRefreshToken` and mount authentication logic to prevent automatic logout on network timeouts or temporary backend outages.
+- Added graceful offline warnings to keep cached student/teacher sessions active until connection recovers.
+
+### Refactor: Reusable Student Report Card Redesign
+- **Files:** `frontend/src/components/shared/StudentReportCard.jsx`, `frontend/src/components/teacher/StudentReportModal.jsx`, `frontend/src/pages/student/StudentReportPage.jsx`, `frontend/src/pages/teacher/StudentDetailPage.jsx`, `backend/main.py`.
+- Extracted metrics, attendance heatmaps, and test charts into a shared `StudentReportCard` component.
+- Cleaned up repetitive layouts across the teacher and student report views.
+- Updated report endpoint (`get_student_report_v2`) to compute rank, total standard tests, and per-subject activity heatmaps.
+
+---
+
 ## May 2026 — Zoom Live Classes & YouTube Integration
 
 ### Feature: Zoom Live Classes

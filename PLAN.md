@@ -59,7 +59,7 @@ These are features not yet built. Prioritize top-to-bottom.
 | Student import via invite QR scan | `BulkImportModal` + `/join/:code` | Partial — join requests exist |
 | Teacher profile page | New `TeacherProfilePage` | ✅ Done — avatar, stats, inline name edit, password link |
 | Edit Test functionality | `NewTestModal` + `TestsPage` | ✅ Done — full upserting of questions, preserves answers |
-| Multi-teacher / admin delegation | `SettingsPage` + new endpoint | `teachers.is_admin` column needed |
+| Multi-teacher / admin delegation | `SettingsPage` + new endpoint | ✅ Done — /api/teachers endpoints, sub-teacher auth, and primary teacher settings block |
 | PDF export of reports | `ReportsPage` | ✅ Done — Class Report + Attendance Report |
 | Video chapters / timestamps | `SubjectDetailPage` + videos table | ✅ Done — EditVideoModal + student chapter timeline with seek |
 

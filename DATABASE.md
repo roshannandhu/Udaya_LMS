@@ -30,6 +30,7 @@ All tables live in Supabase (PostgreSQL). The full DDL is in `backend/schema.sql
 | `bulk_imports` | Audit log for bulk student imports |
 | `invite_links` | Invite codes per standard |
 | `invite_requests` | Students requesting to join via invite code |
+| `sub_teachers` | Sub-teachers team management (multi-teacher support) |
 
 ---
 
@@ -287,6 +288,16 @@ student_name  TEXT NOT NULL
 student_email TEXT
 status        TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected'))
 created_at    TIMESTAMPTZ DEFAULT NOW()
+```
+
+### `sub_teachers`
+```sql
+id                 UUID PRIMARY KEY           -- sub-teacher's auth.users.id
+primary_teacher_id UUID NOT NULL              -- primary teacher's auth.users.id
+name               TEXT NOT NULL
+email              TEXT
+phone              TEXT
+created_at         TIMESTAMPTZ DEFAULT NOW()
 ```
 
 ---

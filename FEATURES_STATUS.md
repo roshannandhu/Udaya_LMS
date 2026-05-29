@@ -97,6 +97,13 @@ Last updated: May 2026
 - [x] End class and fetch participant list automatically
 - [x] View attendance sheet for past live classes
 
+### Teacher Portal — Team Management
+- [x] Create team member sub-teacher accounts (automatic Supabase Auth user registration)
+- [x] List existing team members under primary teacher settings
+- [x] Remove team members (deletes Supabase Auth account and deletes `sub_teachers` DB entry)
+- [x] Restrict Settings page (only available to primary teacher; sub-teachers are blocked with custom ShieldOff view)
+- [x] Namespace data sharing: all database queries use primary teacher's ID as `teacher_id` instead of caller's own ID, so sub-teachers can view and manage their primary teacher's standards, classes, and students
+
 ### Teacher Portal — Settings
 - [x] Default student password (saved to localStorage, used in bulk + individual add)
 - [x] Change teacher's own password
@@ -155,7 +162,7 @@ Last updated: May 2026
 - [x] **Question bank** — `question_bank` table in schema.sql. 4 backend endpoints (GET/POST/DELETE/import). `QuestionBankPage` at `/teacher/question-bank` with search, add form, delete. `ImportFromBankModal` in `NewTestModal`.
 - [x] **Teacher profile page** — New `TeacherProfilePage` at `/teacher/profile` with avatar, stats row, inline name edit (PATCH /auth/profile), and link to change password. Linked from MorePage "My Profile" row.
 - [x] **Video chapters** — `chapters JSONB` column (migration comment in schema.sql). EditVideoModal in Modals.jsx for teacher (title + MM:SS inputs). Chapter timeline in StudentVideoPlayerPage with click-to-seek (native video ref + Cloudflare postMessage) and active-chapter highlighting via onTimeUpdate.
-- [ ] **Multi-teacher admin** — Add `teachers` table or `is_admin` column. Admin can create other teacher accounts.
+- [x] **Multi-teacher team management** — `sub_teachers` table in schema.sql. Team Members management UI added to SettingsPage (primary teacher only, sub-teachers blocked from settings). Namespace isolation via primary teacher's ID ensures team members share the same standard, subjects, and student data.
 
 ### P3 — Future
 
