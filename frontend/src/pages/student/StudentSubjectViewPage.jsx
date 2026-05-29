@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink } from 'lucide-react';
 import { Tag } from '../../components/ui';
-import { videoApi, testApi, leaderboardApi, apiClient } from '../../lib/api';
+import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
-const TABS = ['Videos', 'Tests', 'Leaderboard'];
+import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
+const TABS = ['Videos', 'Tests', 'Assignments', 'Leaderboard'];
 
 export default function StudentSubjectViewPage() {
   const { classId } = useParams();
@@ -15,6 +16,8 @@ export default function StudentSubjectViewPage() {
 
   const [videos, setVideos] = useState([]);
   const [tests, setTests] = useState([]);
+  const [assignments, setAssignments]           = useState([]);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
   const [myAttempts, setMyAttempts] = useState({});
@@ -26,14 +29,16 @@ export default function StudentSubjectViewPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [vids, tsts, hist, subs] = await Promise.all([
+        const [vids, tsts, hist, subs, assigns] = await Promise.all([
           videoApi.getVideos(classId),
           testApi.getTests(classId),
           testApi.getStudentTestHistory(),
           apiClient('/subjects'),
+          assignmentApi.getByClass(classId).catch(() => ({ assignments: [] })),
         ]);
         setVideos(vids || []);
         setTests(tsts || []);
+        setAssignments(assigns?.assignments || []);
         const sub = (subs || []).find(s => String(s.id) === String(classId));
         setSubject(sub || null);
         const attemptsMap = {};
@@ -47,6 +52,15 @@ export default function StudentSubjectViewPage() {
     };
     fetchData();
   }, [classId]);
+
+  // Refresh assignments every time the Assignments tab is opened so grades
+  // set by the teacher are immediately visible without a page reload.
+  useEffect(() => {
+    if (tab !== 'Assignments') return;
+    assignmentApi.getByClass(classId)
+      .then(data => setAssignments(data?.assignments || []))
+      .catch(() => {});
+  }, [tab, classId]);
 
   // Lazy-load leaderboard only when that tab is opened
   useEffect(() => {
@@ -227,6 +241,88 @@ export default function StudentSubjectViewPage() {
             </div>
           );
         })()}
+
+        {tab === 'Assignments' && (
+          <div className="space-y-3">
+            {assignments.length === 0 && (
+              <div className="text-center py-16">
+                <ClipboardList size={28} className="mx-auto mb-2 text-neutral-300" />
+                <p className="text-sm text-neutral-500">No assignments yet.</p>
+              </div>
+            )}
+            {assignments.map(a => {
+              const sub = a.my_submission;
+              const isSubmitted = !!sub;
+              const isGraded = sub && sub.marks_obtained != null;
+              const due = a.due_date ? new Date(a.due_date) : null;
+              const now = new Date();
+              const isPast = due && due < now;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => setSelectedAssignment(a)}
+                  className="w-full text-left p-4 glass-panel rounded-xl hover:bg-white/70 transition-colors"
+                >
+                  <div className="flex items-start gap-3">
+                    <ClipboardList size={16} className="text-neutral-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{a.title}</p>
+                      {a.description && (
+                        <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">{a.description}</p>
+                      )}
+                      {due && (
+                        <div className={`flex items-center gap-1 text-xs mt-1 font-medium ${isPast ? 'text-red-500' : 'text-amber-600'}`}>
+                          <CalendarClock size={11} />
+                          Due {due.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0">
+                      {isGraded ? (
+                        <div className="text-right">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
+                            {sub.marks_obtained}/100
+                          </span>
+                          <div className="flex items-center justify-end gap-0.5 text-xs text-amber-600 font-semibold mt-1">
+                            <Star size={10} fill="currentColor" /> {sub.points_earned} pts
+                          </div>
+                        </div>
+                      ) : isSubmitted ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                          Submitted
+                        </span>
+                      ) : (
+                        <span className="inline-flex px-2 py-0.5 bg-neutral-100 text-neutral-500 text-xs font-semibold rounded-full">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            <StudentAssignmentSheet
+              open={!!selectedAssignment}
+              onClose={() => setSelectedAssignment(null)}
+              assignment={selectedAssignment}
+              onSubmitted={(result) => {
+                const updated = { ...selectedAssignment, my_submission: result };
+                setAssignments(prev => prev.map(a =>
+                  a.id === result.assignment_id ? updated : a
+                ));
+                setSelectedAssignment(null);
+              }}
+              onDeleted={() => {
+                // Clear the submission from both local state and the open sheet
+                const updated = { ...selectedAssignment, my_submission: null };
+                setAssignments(prev => prev.map(a =>
+                  a.id === selectedAssignment?.id ? updated : a
+                ));
+                setSelectedAssignment(updated);
+              }}
+            />
+          </div>
+        )}
 
         {tab === 'Leaderboard' && (
           <div className="space-y-0 glass-panel rounded-xl overflow-hidden">

@@ -1,14 +1,15 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ReferenceLine, ResponsiveContainer,
+  ReferenceLine, ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts';
 import {
   Trophy, TrendingUp, Calendar, Eye, Sparkles, ChevronDown, ChevronUp,
   Download, Target, BookOpen, Video, CheckCircle2, BarChart3,
+  ClipboardList, Star, Share2, Loader2,
 } from 'lucide-react';
 import { Avatar } from '../ui';
+import { aiApi } from '../../lib/api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -17,11 +18,38 @@ const SUBJECT_COLORS = [
   '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
 ];
 
-const HEATMAP_PERIODS = [
-  { id: 'week',  label: 'Week'    },
-  { id: 'month', label: 'Month'   },
-  { id: 'all',   label: 'Overall' },
-];
+const getHeatmapPeriods = () => {
+  const options = [];
+  const now = new Date();
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    let label = "";
+    if (i === 0) label = "This Month";
+    else if (i === 1) label = "1 Month Ago";
+    else label = `${i} Months Ago`;
+    
+    label += ` (${monthNames[d.getMonth()]})`;
+    
+    const yearStr = d.getFullYear();
+    const monthStr = String(d.getMonth() + 1).padStart(2, '0');
+    const id = `${yearStr}-${monthStr}`;
+    options.push({ id, label });
+  }
+  return options;
+};
+
+const HEATMAP_PERIODS = getHeatmapPeriods();
+
+function getCurrentMonthId() {
+  const now = new Date();
+  const yearStr = now.getFullYear();
+  const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+  return `${yearStr}-${monthStr}`;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,9 +57,7 @@ function pct(n) { return `${Math.round(n || 0)}%`; }
 
 function sliceHeatmap(data, periodId) {
   if (!data || data.length === 0) return [];
-  if (periodId === 'week')  return data.slice(-7);
-  if (periodId === 'month') return data.slice(-30);
-  return data;
+  return data.filter(d => d.date && d.date.startsWith(periodId));
 }
 
 function buildHeatmapWeeks(rawData) {
@@ -52,75 +78,40 @@ function buildHeatmapWeeks(rawData) {
   return { weeks, dates, dateMap };
 }
 
-// ─── generateSuggestions (client-side, cites real data) ──────────────────────
-
-function generateSuggestions(data) {
-  if (!data) return [];
-  const tips = [];
-  const { subject_radar = [], topic_map = [], student = {}, test_timeline = [] } = data;
-
-  // Weakest subject
-  const subjWithTests = subject_radar.filter(s => s.test_count > 0).sort((a, b) => a.test_avg - b.test_avg);
-  if (subjWithTests.length > 0) {
-    const weak = subjWithTests[0];
-    if (weak.test_avg < 60) {
-      tips.push({ type: 'warning', text: `Averaging ${weak.test_avg}% in ${weak.subject} across ${weak.test_count} test${weak.test_count > 1 ? 's' : ''}. Needs urgent revision.` });
-    } else if (weak.test_avg < 75) {
-      tips.push({ type: 'warning', text: `${weak.subject} average is ${weak.test_avg}% — slightly below target. Consider revisiting the weaker topics.` });
-    }
+function buildHeatmapWeeksForMonth(rawData, periodId) {
+  const dateMap = {};
+  if (rawData) {
+    rawData.forEach(d => { dateMap[d.date] = d; });
   }
 
-  // Video watched but failed test
-  const watchedButFailed = topic_map.filter(t => t.video_completed && t.score_pct < 60);
-  if (watchedButFailed.length > 0) {
-    const t = watchedButFailed[0];
-    tips.push({ type: 'insight', text: `Watched "${t.video_title}" but scored only ${Math.round(t.score_pct)}% on the related test. The concept may need re-watching or extra practice.` });
+  const [year, month] = periodId.split('-').map(Number);
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+
+  let cur = new Date(firstDay);
+  cur.setDate(cur.getDate() - cur.getDay());
+
+  let end = new Date(lastDay);
+  end.setDate(end.getDate() + (6 - end.getDay()));
+
+  const allDays = [];
+  while (cur <= end) {
+    const yStr = cur.getFullYear();
+    const mStr = String(cur.getMonth() + 1).padStart(2, '0');
+    const dStr = String(cur.getDate()).padStart(2, '0');
+    allDays.push(`${yStr}-${mStr}-${dStr}`);
+    cur.setDate(cur.getDate() + 1);
   }
 
-  // Tests taken without watching video
-  const noVideo = topic_map.filter(t => !t.video_completed);
-  if (noVideo.length > 0) {
-    tips.push({ type: 'tip', text: `Attempted ${noVideo.length} topic test${noVideo.length > 1 ? 's' : ''} without completing the corresponding video first. Watch the video before the test for better results.` });
+  const weeks = [];
+  for (let i = 0; i < allDays.length; i += 7) {
+    weeks.push(allDays.slice(i, i + 7));
   }
 
-  // Low attendance warning
-  const attPct = student.attendance_pct || 0;
-  if (attPct < 75) {
-    tips.push({ type: 'warning', text: `Overall attendance is ${Math.round(attPct)}% — below the 75% threshold. Frequent absences can directly impact test scores.` });
-  }
-
-  // Low attendance in a subject
-  const lowAttSubj = subject_radar.filter(s => s.att_total > 0 && s.attendance_pct < 75);
-  if (lowAttSubj.length > 0 && attPct >= 75) {
-    const s = lowAttSubj[0];
-    tips.push({ type: 'warning', text: `Attendance in ${s.subject} is ${s.attendance_pct}% (${s.att_present} of ${s.att_total} sessions). This may be affecting performance.` });
-  }
-
-  // Strong subject — positive reinforcement
-  const strongSubj = subject_radar.filter(s => s.test_count > 0 && s.test_avg >= 85);
-  if (strongSubj.length > 0) {
-    const s = strongSubj[0];
-    tips.push({ type: 'positive', text: `Excellent performance in ${s.subject} — averaging ${s.test_avg}% across ${s.test_count} test${s.test_count > 1 ? 's' : ''}. Keep it up!` });
-  }
-
-  // Video completion gap
-  const totalVids = subject_radar.reduce((a, s) => a + (s.video_total || 0), 0);
-  const doneVids  = subject_radar.reduce((a, s) => a + (s.video_done  || 0), 0);
-  if (totalVids > 0) {
-    const vidPct = Math.round((doneVids / totalVids) * 100);
-    if (vidPct < 60) {
-      tips.push({ type: 'tip', text: `Only ${doneVids} of ${totalVids} videos completed (${vidPct}%). Regular video watching is one of the strongest predictors of test success.` });
-    }
-  }
-
-  // Topic mastery celebration
-  const mastered = topic_map.filter(t => t.score_pct >= 75).length;
-  if (mastered >= 3) {
-    tips.push({ type: 'positive', text: `Mastered ${mastered} topic${mastered > 1 ? 's' : ''} with ≥75% score. Strong topic-level understanding is a great foundation.` });
-  }
-
-  return tips.slice(0, 7);
+  return { weeks, dateMap };
 }
+
+
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -153,8 +144,8 @@ function KPICard({ label, value, sub, icon: Icon, color }) {
 }
 
 function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labelFn, details, localPeriod, setLocalPeriod }) {
-  const sliced = sliceHeatmap(data, localPeriod);
-  const { weeks, dates, dateMap } = useMemo(() => buildHeatmapWeeks(sliced), [sliced]);
+  const sliced = useMemo(() => sliceHeatmap(data, localPeriod), [data, localPeriod]);
+  const { weeks, dateMap } = useMemo(() => buildHeatmapWeeksForMonth(sliced, localPeriod), [sliced, localPeriod]);
   const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
@@ -171,13 +162,19 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
             {kpiSub && <p className="text-[10px] text-neutral-400">{kpiSub}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-1 p-0.5 bg-neutral-100/80 rounded-lg">
-          {HEATMAP_PERIODS.map(p => (
-            <button key={p.id} onClick={() => setLocalPeriod(p.id)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${localPeriod === p.id ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}>
-              {p.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-xl border border-neutral-100/80">
+          <Calendar size={12} className="text-neutral-400" />
+          <select
+            value={localPeriod}
+            onChange={(e) => setLocalPeriod(e.target.value)}
+            className="text-xs font-semibold bg-transparent border-none outline-none cursor-pointer text-neutral-800"
+          >
+            {HEATMAP_PERIODS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -196,7 +193,7 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
               <div key={wi} className="flex flex-col gap-1">
                 {week.map((day, di) => {
                   const entry = dateMap?.[day];
-                  const inRange = dates && dates.length > 0 && day >= dates[0] && day <= dates[dates.length - 1];
+                  const inRange = day.startsWith(localPeriod);
                   return (
                     <div key={di} title={entry ? labelFn(entry) : day}
                       className={`w-5 h-5 rounded-sm transition-opacity ${inRange && entry ? colorFn(entry) : inRange ? 'bg-neutral-100' : 'opacity-0'}`}
@@ -224,16 +221,200 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
   );
 }
 
+function radarPath(data, cx, cy, r, valueKey) {
+  const n = data.length || 1;
+  return data.map((d, i) => {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const pct = Math.max(0, Math.min((d[valueKey] || 0) / 100, 1));
+    const x = cx + r * pct * Math.cos(angle);
+    const y = cy + r * pct * Math.sin(angle);
+    return [x, y];
+  });
+}
+
+function pointsToPath(pts) {
+  if (!pts || pts.length === 0) return "";
+  return pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ") + " Z";
+}
+
+function CustomRadarChart({ data }) {
+  const cx = 135, cy = 135, r = 90;
+  const n = data.length || 1;
+  const levels = [0.2, 0.4, 0.6, 0.8, 1.0];
+
+  const axisPoints = data.map((_, i) => {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  });
+
+  const studentPts = radarPath(data, cx, cy, r, "value");
+  const avgPts     = radarPath(data, cx, cy, r, "classAvg");
+
+  return (
+    <div className="w-full flex justify-center py-2">
+      <svg width="270" height="270" style={{ overflow: "visible" }} className="mx-auto select-none">
+        <defs>
+          <radialGradient id="youGlowSvg" cx="50%" cy="50%" r="80%">
+            <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity={0.05} />
+          </radialGradient>
+        </defs>
+
+        {/* Outer Circular levels */}
+        {levels.map((l) => {
+          const pts = data.map((_, i) => {
+            const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+            return [cx + r * l * Math.cos(angle), cy + r * l * Math.sin(angle)];
+          });
+          return (
+            <polygon
+              key={l}
+              points={pts.map((p) => p.join(",")).join(" ")}
+              fill="none"
+              stroke="#e5e7eb"
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        {/* Axis lines */}
+        {axisPoints.map((pt, i) => (
+          <line key={i} x1={cx} y1={cy} x2={pt.x} y2={pt.y} stroke="#e5e7eb" strokeWidth="1" />
+        ))}
+
+        {/* Radar polygons */}
+        {data.length > 2 && (
+          <>
+            <path
+              d={pointsToPath(avgPts)}
+              fill="rgba(156, 163, 175, 0.05)"
+              stroke="#9ca3af"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+              className="transition-all duration-300 ease-in-out"
+            />
+            <path
+              d={pointsToPath(studentPts)}
+              fill="url(#youGlowSvg)"
+              stroke="#6366f1"
+              strokeWidth="2.5"
+              className="transition-all duration-300 ease-in-out"
+            />
+          </>
+        )}
+
+        {/* Points for Student */}
+        {studentPts.map((pt, i) => (
+          <circle
+            key={i}
+            cx={pt[0]}
+            cy={pt[1]}
+            r="4"
+            fill="#6366f1"
+            stroke="#fff"
+            strokeWidth="1.5"
+            className="transition-all duration-300 ease-in-out"
+          />
+        ))}
+
+        {/* Axis labels */}
+        {data.map((d, i) => {
+          const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+          const lx = cx + (r + 15) * Math.cos(angle);
+          const ly = cy + (r + 15) * Math.sin(angle);
+          const anchor = Math.abs(Math.cos(angle)) < 0.1 ? "middle" : Math.cos(angle) < 0 ? "end" : "start";
+          
+          let dy = 3;
+          if (Math.sin(angle) < -0.9) dy = -5; // Top label
+          else if (Math.sin(angle) > 0.9) dy = 10; // Bottom label
+
+          return (
+            <text
+              key={i}
+              x={lx}
+              y={ly + dy}
+              textAnchor={anchor}
+              fontSize="10"
+              className="fill-neutral-500 font-bold"
+            >
+              {d.metric}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
+
+export function shareReportText(data, period) {
+  if (!data) return '';
+  const s = data.student || {};
+  const pText = period ? (period.charAt(0).toUpperCase() + period.slice(1)) : 'Overall';
+  const subjects = data.subject_radar || [];
+  
+  let text = `📚 *Student Report Card - ${s.name}*\n`;
+  text += `*Period:* ${pText}\n`;
+  text += `*Average Score:* ${Math.round(s.avg_score || 0)}%\n`;
+  text += `*Attendance:* ${Math.round(s.attendance_pct || 0)}%\n`;
+  if (data.rank) {
+    text += `*Class Rank:* ${data.rank}/${data.total_students}\n`;
+  }
+  
+  if (subjects.length > 0) {
+    text += `\n*Subject Details:*\n`;
+    subjects.forEach(sub => {
+      const avg = sub.test_count > 0 ? `${Math.round(sub.test_avg)}%` : '—';
+      const att = sub.att_total > 0 ? `${Math.round(sub.attendance_pct)}%` : '—';
+      text += `• ${sub.emoji || ''} ${sub.subject}: Avg ${avg} | Att. ${att}\n`;
+    });
+  }
+  
+  text += `\nGenerated via Tutoria LMS.`;
+  return text;
+}
 
 export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, onDownloadPDF }) {
   const [selSubject, setSelSubject] = useState('all');
-  const [attPeriod,  setAttPeriod]  = useState('month');
-  const [testPeriod, setTestPeriod] = useState('month');
-  const [vidPeriod,  setVidPeriod]  = useState('month');
-  const [showSuggestions,   setShowSuggestions]   = useState(false);
-  const [showBreakdown,     setShowBreakdown]      = useState(false);
+  const currentMonthId = useMemo(() => getCurrentMonthId(), []);
+  const [attPeriod,  setAttPeriod]  = useState(currentMonthId);
+  const [testPeriod, setTestPeriod] = useState(currentMonthId);
+  const [vidPeriod,  setVidPeriod]  = useState(currentMonthId);
+  const [showSuggestions,       setShowSuggestions]       = useState(false);
+  const [suggestions,           setSuggestions]           = useState('');
+  const [displayedSuggestions,  setDisplayedSuggestions]  = useState('');
+  const [suggestionsLoading,    setSuggestionsLoading]    = useState(false);
+  const [suggestionsError,      setSuggestionsError]      = useState('');
+  const [showBreakdown,         setShowBreakdown]         = useState(false);
   const [heatmapSubject,    setHeatmapSubject]     = useState('all');
+  
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(async () => {
+    const text = shareReportText(data, period);
+    if (!text) return;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${data.student?.name || 'Student'} - Report Card`,
+          text: text,
+        });
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fallback to copy
+      }
+    }
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy report: ', err);
+    }
+  }, [data, period]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -245,6 +426,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const attHeatmapRaw  = data?.attendance_heatmap || [];
   const vidHeatmapRaw  = data?.video_heatmap || [];
   const testHeatmapRaw = data?.test_heatmap || [];
+  const assignStats  = data?.assignment_stats  || { total: 0, submitted: 0, graded: 0, avg_marks_pct: 0, total_points_from_assignments: 0 };
+  const assignScores = data?.assignment_scores  || [];
+  const assignHeatmapRaw = data?.assignment_heatmap || [];
+  const gradedAssignments = assignScores.filter(a => a.marks_obtained != null);
 
   // Per-subject heatmap data (switched by heatmapSubject selector)
   const attData  = heatmapSubject === 'all'
@@ -270,12 +455,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     const activeDays = vhm.filter(d => d.minutes > 0).length;
     const consistency = vhm.length > 0 ? Math.round((activeDays / vhm.length) * 100) : 0;
     return [
-      { metric: 'Test Accuracy',    value: Math.round(student.avg_score || 0),       classAvg: 65 },
-      { metric: 'Attendance',       value: Math.round(student.attendance_pct || 0),  classAvg: 75 },
-      { metric: 'Video Completion', value: videoPct,                                 classAvg: 60 },
-      { metric: 'Consistency',      value: consistency,                              classAvg: 70 },
-      { metric: 'Topic Mastery',    value: Math.round(data?.topic_mastery_pct || 0), classAvg: 60 },
-      { metric: 'Points',           value: Math.min(100, Math.round(((student.points || 0) / 500) * 100)), classAvg: 50 },
+      { metric: 'Accuracy',    fullName: 'Test Accuracy',    value: Math.round(student.avg_score || 0),       classAvg: 65 },
+      { metric: 'Attendance',  fullName: 'Attendance',       value: Math.round(student.attendance_pct || 0),  classAvg: 75 },
+      { metric: 'Videos',      fullName: 'Video Completion', value: videoPct,                                 classAvg: 60 },
+      { metric: 'Consistency', fullName: 'Consistency',      value: consistency,                              classAvg: 70 },
+      { metric: 'Mastery',     fullName: 'Topic Mastery',    value: Math.round(data?.topic_mastery_pct || 0), classAvg: 60 },
+      { metric: 'Points',      fullName: 'Points',           value: Math.min(100, Math.round(((student.points || 0) / 500) * 100)), classAvg: 50 },
     ];
   }, [data, videoPct]);
 
@@ -358,8 +543,98 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const vidDays   = vidSliced.filter(d => d.minutes > 0).length;
   const vidMins   = Math.round(vidSliced.reduce((a, d) => a + (d.minutes || 0), 0));
 
+  // Typing effect for AI suggestions
+  useEffect(() => {
+    if (!suggestions || suggestionsLoading || typeof suggestions !== 'string') {
+      setDisplayedSuggestions('');
+      return;
+    }
+    
+    let i = 0;
+    const interval = setInterval(() => {
+      setDisplayedSuggestions(suggestions.slice(0, i));
+      i++;
+      if (i > suggestions.length) {
+        clearInterval(interval);
+      }
+    }, 12); // Speed: 12ms per char
+
+    return () => clearInterval(interval);
+  }, [suggestions, suggestionsLoading]);
+
+  const renderMarkdown = (text) => {
+    if (!text || typeof text !== 'string') return null;
+    const lines = text.split('\n');
+    const isTyping = text !== suggestions;
+    
+    return lines.map((line, i) => {
+      const isLast = i === lines.length - 1;
+      const cursor = (isLast && isTyping) ? <span className="animate-pulse text-amber-500 font-bold ml-1">▍</span> : null;
+      
+      const trimmed = line.trim();
+      if (trimmed === '') return <div key={i} className="h-2">{cursor}</div>;
+      
+      if (
+        trimmed.includes('Focus of the Week') || 
+        trimmed.includes('What\'s Going Well') || 
+        trimmed.includes('What I Noticed') || 
+        trimmed.includes('Recommended Actions') || 
+        trimmed.includes('Next Level Goal') || 
+        trimmed.includes('AI Mentor Message')
+      ) {
+        return <h3 key={i} className="font-bold text-neutral-800 text-[15px] mt-4 mb-2">{trimmed}{cursor}</h3>;
+      }
+      
+      const parts = trimmed.split(/(\*\*.*?\*\*)/g).map((part, j) => 
+        part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={j} className="text-neutral-800 font-semibold">{part.slice(2, -2)}</strong> : part
+      );
+      
+      if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+        const inner = trimmed.substring(2);
+        const innerParts = inner.split(/(\*\*.*?\*\*)/g).map((part, j) => 
+          part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={j} className="text-neutral-800 font-semibold">{part.slice(2, -2)}</strong> : part
+        );
+        return <li key={i} className="ml-5 list-disc text-neutral-600 mb-1.5 leading-relaxed text-sm">{innerParts}{cursor}</li>;
+      }
+      
+      return <p key={i} className="mb-2 text-neutral-600 leading-relaxed text-sm">{parts}{cursor}</p>;
+    });
+  };
+
   // AI Suggestions
-  const suggestions = useMemo(() => generateSuggestions(data), [data]);
+  const handleAnalyzePerformance = useCallback(async () => {
+    if (showSuggestions) {
+      setShowSuggestions(false);
+      return;
+    }
+    setShowSuggestions(true);
+    if (suggestions) return; // already generated
+
+    setSuggestionsLoading(true);
+    setSuggestionsError('');
+    try {
+      const stats = {
+        student_name: student.name || 'Student',
+        attendance_data: `Attendance is ${student.attendance_pct || 0}%`,
+        video_progress_data: `Video completion is ${videoPct}%`,
+        assignment_data: `Assignment average is ${assignStats.avg_marks_pct}%`,
+        test_data: `Test average is ${student.avg_score || 0}%, attempted ${testsAttempted}, missed ${testsMissed}`,
+        topic_data: `Weakest topics: ${weakestTopics.slice(0, 3).map(t => t.topic).join(', ')}`,
+        recent_activity_data: '',
+      };
+      const res = await aiApi.generateInsights(student.id, stats);
+      let finalSuggestions = res.insights || '';
+      if (Array.isArray(finalSuggestions)) {
+        // Fallback for older cached responses that returned arrays of objects
+        finalSuggestions = finalSuggestions.map(s => `* **${s.type.toUpperCase()}**: ${s.text}`).join('\n\n');
+      }
+      setSuggestions(finalSuggestions);
+    } catch (e) {
+      setSuggestionsError(e.message || 'Failed to generate insights. Is the AI API key configured in Teacher Settings?');
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [showSuggestions, suggestions, student, videoPct, weakestTopics, testsAttempted, testsMissed, assignStats]);
 
   // Detailed breakdown table
   const breakdownRows = useMemo(() => {
@@ -427,14 +702,13 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-0.5 p-1 bg-neutral-100/80 rounded-xl">
-                {['weekly', 'monthly', 'overall'].map(p => (
-                  <button key={p} onClick={() => onPeriodChange?.(p)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all capitalize ${period === p ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}>
-                    {p}
-                  </button>
-                ))}
+              <div className="flex items-center gap-0.5 p-1">
               </div>
+              <button onClick={handleShare}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-neutral-200 rounded-xl shadow-sm hover:bg-neutral-50 transition-colors">
+                {copied ? <CheckCircle2 size={13} className="text-green-600 animate-pulse" /> : <Share2 size={13} />}
+                {copied ? 'Copied!' : 'Share'}
+              </button>
               <button onClick={handleDownloadPDF}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-neutral-200 rounded-xl shadow-sm hover:bg-neutral-50 transition-colors">
                 <Download size={13} /> PDF
@@ -460,24 +734,18 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           <div className="flex flex-col lg:flex-row gap-4">
 
             {/* Radar Chart */}
-            <div className="glass-panel border-white/60 shadow-sm rounded-2xl p-5 lg:w-[300px] flex-shrink-0 flex flex-col items-center">
+            <div className="glass-panel border-white/60 shadow-sm rounded-2xl p-5 w-full lg:w-[320px] flex-shrink-0 flex flex-col items-center justify-between">
               <p className="text-xs font-semibold text-neutral-500 mb-1">Performance Radar</p>
-              <ResponsiveContainer width="100%" height={260}>
-                <RadarChart data={radarData} margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
-                  <PolarGrid stroke="#e5e7eb" />
-                  <PolarAngleAxis dataKey="metric" tick={{ fontSize: 9.5, fill: '#6b7280', fontWeight: 600 }} />
-                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
-                  <Radar name="Class Avg" dataKey="classAvg" stroke="#d1d5db" fill="#d1d5db" fillOpacity={0.15} strokeWidth={1.5} strokeDasharray="5 3" />
-                  <Radar name="You" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.22} strokeWidth={2.5} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: 11, padding: '8px 12px' }}
-                    formatter={(v, name) => [`${v}%`, name]}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
-              <div className="flex items-center gap-4 text-[10px] text-neutral-400 font-medium -mt-2">
-                <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-indigo-400 rounded" />You</span>
-                <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-neutral-300 rounded" />Class Avg</span>
+              <CustomRadarChart data={radarData} />
+              <div className="flex items-center gap-4 text-[10px] text-neutral-400 font-medium mt-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                  You
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border border-dashed border-neutral-400 bg-neutral-100" />
+                  Class Avg
+                </span>
               </div>
             </div>
 
@@ -499,7 +767,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     const diff = row.value - row.classAvg;
                     return (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/40'}>
-                        <td className="px-5 py-2.5 text-xs font-semibold text-neutral-700">{row.metric}</td>
+                        <td className="px-5 py-2.5 text-xs font-semibold text-neutral-700">{row.fullName}</td>
                         <td className="px-4 py-2.5 text-center">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${diff >= 0 ? 'bg-emerald-100/60 text-emerald-700' : 'bg-red-100/60 text-red-700'}`}>
                             {row.value}%
@@ -555,6 +823,140 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ── ASSIGNMENT PERFORMANCE ────────────────────────────────────── */}
+        {assignStats.total > 0 && (
+          <div>
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-3">Assignment Performance</p>
+
+            {/* KPI row */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <KPICard
+                icon={ClipboardList}
+                color="amber"
+                label="Submitted"
+                value={`${assignStats.submitted}/${assignStats.total}`}
+                sub={`${assignStats.graded} graded`}
+              />
+              <KPICard
+                icon={Target}
+                color="blue"
+                label="Avg Mark"
+                value={`${assignStats.avg_marks_pct}%`}
+                sub="of graded"
+              />
+              <KPICard
+                icon={Star}
+                color="amber"
+                label="Pts Earned"
+                value={assignStats.total_points_from_assignments}
+                sub="from assignments"
+              />
+            </div>
+
+            {/* Bar chart of individual assignment scores */}
+            {gradedAssignments.length > 0 && (
+              <div className="glass-panel border-white/60 shadow-sm rounded-2xl p-5 mb-3">
+                <p className="text-xs font-semibold text-neutral-700 mb-4">Assignment Scores</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={gradedAssignments} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <XAxis
+                      dataKey="assignment_title"
+                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      tickFormatter={t => t.length > 14 ? t.slice(0, 14) + '…' : t}
+                    />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} unit="%" />
+                    <Tooltip
+                      contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: 11, padding: '8px 12px' }}
+                      formatter={(v, _name, props) => [`${v}/100`, props.payload.subject_name || 'Assignment']}
+                      labelFormatter={l => l}
+                    />
+                    <Bar dataKey="marks_obtained" radius={[4, 4, 0, 0]}>
+                      {gradedAssignments.map((entry, idx) => (
+                        <Cell
+                          key={idx}
+                          fill={entry.marks_obtained >= 60 ? '#f59e0b' : '#ef4444'}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="text-[10px] text-neutral-400 text-center mt-2">
+                  Amber ≥ 60% · Red &lt; 60%
+                </p>
+              </div>
+            )}
+
+            {/* Assignment by subject */}
+            {subjectRadar.some(s => (s.assignment_total || 0) > 0) && (
+              <div className="glass-panel border-white/60 shadow-sm rounded-2xl p-5 mb-3">
+                <p className="text-xs font-semibold text-neutral-700 mb-4">Assignments by Subject</p>
+                <div className="space-y-3">
+                  {subjectRadar.filter(s => (s.assignment_total || 0) > 0).map(s => {
+                    const total = s.assignment_total || 0;
+                    const submitted = s.assignment_submitted || 0;
+                    const pct = total > 0 ? Math.round((submitted / total) * 100) : 0;
+                    return (
+                      <div key={s.subject_id} className="flex items-center gap-3">
+                        <span className="text-lg w-6 flex-shrink-0">{s.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-neutral-800 truncate">{s.subject}</span>
+                            <span className="text-neutral-500 flex-shrink-0 ml-2">
+                              {submitted}/{total}
+                              {(s.assignment_avg || 0) > 0 && ` · ${s.assignment_avg}%`}
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-amber-400 rounded-full transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Assignment submission heatmap */}
+            {assignHeatmapRaw.length > 0 && (() => {
+              const { weeks, dateMap, dates } = buildHeatmapWeeks(assignHeatmapRaw);
+              const DAY_LABELS = ['S','M','T','W','T','F','S'];
+              return (
+                <div className="glass-panel border-white/60 shadow-sm rounded-2xl p-5">
+                  <p className="text-xs font-semibold text-neutral-700 mb-4">Submission Activity</p>
+                  {weeks.length > 0 && (
+                    <div className="overflow-x-auto pb-1">
+                      <div className="flex gap-1 mb-1">
+                        {DAY_LABELS.map((d, i) => (
+                          <div key={i} className="w-5 text-center text-[9px] text-neutral-400 font-medium">{d}</div>
+                        ))}
+                      </div>
+                      <div className="flex gap-1">
+                        {weeks.map((week, wi) => (
+                          <div key={wi} className="flex flex-col gap-1">
+                            {week.map((day, di) => {
+                              const entry = dateMap?.[day];
+                              const inRange = dates && dates.length > 0 && day >= dates[0] && day <= dates[dates.length - 1];
+                              return (
+                                <div key={di} title={entry ? `${entry.count} submission${entry.count !== 1 ? 's' : ''}` : day}
+                                  className={`w-5 h-5 rounded-sm ${inRange && entry ? 'bg-amber-400' : inRange ? 'bg-neutral-100' : 'opacity-0'}`}
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -662,13 +1064,13 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           kpiValue={`${testKpi}%`}
           kpiSub={totalTestsAvail > 0 ? `${testsAttempted} of ${totalTestsAvail} tests taken` : `${testsAttempted} test${testsAttempted !== 1 ? 's' : ''} taken`}
           data={testSliced}
-          colorFn={d => d && d.count > 0 ? 'bg-green-500' : 'bg-neutral-100'}
+          colorFn={d => d && d.count > 0 ? 'bg-sky-500' : 'bg-neutral-100'}
           labelFn={d => `${d.count} test${d.count !== 1 ? 's' : ''} taken`}
           details={[
-            { label: 'Attempted', value: testsAttempted,         color: 'bg-green-500'   },
-            { label: 'Missed',    value: testsMissed,             color: 'bg-red-400'     },
+            { label: 'Attempted', value: testsAttempted,         color: 'bg-sky-500'     },
+            { label: 'Missed',    value: testsMissed,             color: 'bg-rose-500'    },
             { label: 'Available', value: totalTestsAvail || '—', color: 'bg-neutral-300' },
-            { label: 'Rate',      value: `${testKpi}%`,           color: 'bg-indigo-500'  },
+            { label: 'Rate',      value: `${testKpi}%`,           color: 'bg-violet-500'  },
           ]}
           localPeriod={testPeriod}
           setLocalPeriod={setTestPeriod}
@@ -701,7 +1103,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
         {/* ── AI SUGGESTION BOX ──────────────────────────────────────────── */}
         <div className="glass-panel border-white/60 shadow-sm rounded-2xl overflow-hidden">
-          <button onClick={() => setShowSuggestions(s => !s)}
+          <button onClick={handleAnalyzePerformance}
             className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/40 transition-colors">
             <span className="flex items-center gap-2.5 text-sm font-bold text-neutral-900">
               <Sparkles size={17} className="text-amber-500" />
@@ -717,20 +1119,22 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
           {showSuggestions && (
             <div className="border-t border-neutral-100/80 px-5 py-4 bg-neutral-50/50 space-y-3">
-              {suggestions.length === 0 ? (
+              {suggestionsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm font-medium text-neutral-500">
+                  <Loader2 size={16} className="animate-spin text-amber-500" /> Analyzing performance & generating coaching advice...
+                </div>
+              ) : suggestionsError ? (
+                <div className="p-4 rounded-xl text-sm font-medium bg-red-50 text-red-700 border border-red-100">
+                  {suggestionsError}
+                </div>
+              ) : suggestions ? (
+                <div className="p-2 text-neutral-800">
+                  {renderMarkdown(displayedSuggestions)}
+                </div>
+              ) : (
                 <div className="flex items-center gap-3 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl p-4 border border-emerald-100">
                   <CheckCircle2 size={17} /> No significant issues detected — performance looks great!
                 </div>
-              ) : (
-                suggestions.map((s, i) => {
-                  const style = SUGGESTION_STYLES[s.type] || SUGGESTION_STYLES.tip;
-                  return (
-                    <div key={i} className={`flex items-start gap-3 p-4 rounded-xl text-sm font-medium leading-relaxed border ${style.bg}`}>
-                      <span className="text-base flex-shrink-0 mt-0.5">{style.icon}</span>
-                      <span>{s.text}</span>
-                    </div>
-                  );
-                })
               )}
             </div>
           )}

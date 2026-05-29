@@ -10,7 +10,7 @@ const REFRESH_KEY  = 'tutoria_refresh_token';
 const _cache = new Map();
 const CACHE_TTL = 60_000;
 // These endpoints change too frequently to cache
-const NO_CACHE = ['/student/tests/history', '/notifications', '/auth/me', '/live-classes'];
+const NO_CACHE = ['/student/tests/history', '/notifications', '/auth/me', '/live-classes', '/assignments', '/student/assignments'];
 
 // Refresh the access token using the stored refresh token.
 // Uses a shared promise so concurrent 401 responses all wait for the same refresh
@@ -243,6 +243,8 @@ export const teacherApi = {
   list:   ()    => apiClient('/teachers'),
   create: (data) => apiClient('/teachers', { method: 'POST', body: JSON.stringify(data) }),
   remove: (id)  => apiClient(`/teachers/${id}`, { method: 'DELETE' }),
+  getSettings: () => apiClient('/teacher/settings'),
+  updateSettings: (data) => apiClient('/teacher/settings', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const reportApi = {
@@ -252,4 +254,83 @@ export const reportApi = {
   // Student fetches their own report (uses 'me' alias resolved server-side)
   getMy: (period = 'overall') =>
     apiClient(`/students/me/report/v2?period=${period}`),
+};
+
+export const assignmentApi = {
+  getByClass: (classId) => apiClient(`/assignments?class_id=${classId}`),
+
+  create: async (formData) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_BASE}/assignments/create`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Failed to create assignment');
+    }
+    _cache.clear();
+    return res.json();
+  },
+
+  update: (id, data) =>
+    apiClient(`/assignments/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  delete: (id) =>
+    apiClient(`/assignments/${id}`, { method: 'DELETE' }),
+
+  addAttachments: async (id, formData) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_BASE}/assignments/${id}/attachments`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Failed to upload files');
+    }
+    _cache.clear();
+    return res.json();
+  },
+
+  deleteAttachment: (id, attId) =>
+    apiClient(`/assignments/${id}/attachments/${attId}`, { method: 'DELETE' }),
+
+  getSubmissions: (id) => apiClient(`/assignments/${id}/submissions`),
+
+  submit: async (id, formData) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_BASE}/assignments/${id}/submit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Failed to submit assignment');
+    }
+    _cache.clear();
+    return res.json();
+  },
+
+  grade: (id, subId, data) =>
+    apiClient(`/assignments/${id}/submissions/${subId}/grade`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteSubmission: (assignmentId, submissionId) =>
+    apiClient(`/assignments/${assignmentId}/submissions/${submissionId}`, { method: 'DELETE' }),
+
+  deleteMySubmission: (assignmentId) =>
+    apiClient(`/assignments/${assignmentId}/my-submission`, { method: 'DELETE' }),
+
+  getAllMyAssignments: () => apiClient('/student/assignments'),
+};
+
+export const aiApi = {
+  generateInsights: (studentId, stats) => 
+    apiClient('/insights/generate', { method: 'POST', body: JSON.stringify({ student_id: studentId, stats }) }),
 };

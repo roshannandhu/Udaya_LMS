@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, AlertTriangle, Download } from 'lucide-react';
+import { Loader2, AlertTriangle, Download, Share2, CheckCircle2 } from 'lucide-react';
 import { Modal, Btn, Avatar } from '../ui';
 import { reportApi } from '../../lib/api';
-import StudentReportCard from '../shared/StudentReportCard';
+import StudentReportCard, { shareReportText } from '../shared/StudentReportCard';
 
 const PERIODS = [
   { id: 'weekly',  label: 'Weekly'  },
@@ -58,6 +58,34 @@ export default function StudentReportModal({ open, onClose, studentId }) {
     doc.save(`${s.name}_Report_${period}.pdf`);
   }, [period]);
 
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(async (reportData) => {
+    if (!reportData) return;
+    const text = shareReportText(reportData, period);
+    if (!text) return;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${reportData.student?.name || 'Student'} - Report Card`,
+          text: text,
+        });
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fallback to copy
+      }
+    }
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy report: ', err);
+    }
+  }, [period]);
+
   if (!open) return null;
 
   return (
@@ -85,9 +113,14 @@ export default function StudentReportModal({ open, onClose, studentId }) {
             ))}
           </div>
           {data && (
-            <Btn size="sm" variant="default" icon={Download} onClick={() => handleDownloadPDF(data)}>
-              PDF
-            </Btn>
+            <>
+              <Btn size="sm" variant="default" icon={copied ? CheckCircle2 : Share2} onClick={() => handleShare(data)}>
+                {copied ? 'Copied!' : 'Share'}
+              </Btn>
+              <Btn size="sm" variant="default" icon={Download} onClick={() => handleDownloadPDF(data)}>
+                PDF
+              </Btn>
+            </>
           )}
         </div>
       </div>

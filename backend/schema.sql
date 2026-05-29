@@ -527,3 +527,64 @@ CREATE INDEX IF NOT EXISTS idx_sub_teachers_primary ON sub_teachers(primary_teac
 ALTER TABLE sub_teachers ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_anon_sub_teachers" ON sub_teachers;
 CREATE POLICY "deny_anon_sub_teachers" ON sub_teachers FOR ALL USING (false);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION: Assignments feature
+-- Run in Supabase SQL Editor to enable assignments for teachers and students.
+-- ══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS assignments (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id    UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    due_date    TIMESTAMPTZ,
+    created_by  UUID,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
+
+ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_assignments" ON assignments;
+CREATE POLICY "deny_anon_assignments" ON assignments FOR ALL USING (false);
+
+CREATE TABLE IF NOT EXISTS assignment_attachments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id   UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    file_url        TEXT NOT NULL,
+    file_name       TEXT NOT NULL,
+    file_type       TEXT,
+    storage_path    TEXT NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_assignment_attachments_aid ON assignment_attachments(assignment_id);
+
+ALTER TABLE assignment_attachments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_assignment_attachments" ON assignment_attachments;
+CREATE POLICY "deny_anon_assignment_attachments" ON assignment_attachments FOR ALL USING (false);
+
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id       UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    student_id          UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    file_url            TEXT NOT NULL,
+    file_name           TEXT NOT NULL,
+    file_type           TEXT,
+    storage_path        TEXT NOT NULL,
+    marks_obtained      NUMERIC,
+    points_earned       INTEGER,
+    prev_points_earned  INTEGER DEFAULT 0,
+    graded_at           TIMESTAMPTZ,
+    submitted_at        TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(assignment_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assignment_submissions_aid ON assignment_submissions(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_assignment_submissions_sid ON assignment_submissions(student_id);
+
+ALTER TABLE assignment_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_assignment_submissions" ON assignment_submissions;
+CREATE POLICY "deny_anon_assignment_submissions" ON assignment_submissions FOR ALL USING (false);

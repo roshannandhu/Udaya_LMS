@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle, Share2 } from 'lucide-react';
 import { Btn, Tag, Divider, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, reportApi } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
-import StudentReportCard from '../../components/shared/StudentReportCard';
+import StudentReportCard, { shareReportText } from '../../components/shared/StudentReportCard';
 
 export default function StudentDetailPage() {
   const { studentId } = useParams();
@@ -29,6 +29,66 @@ export default function StudentDetailPage() {
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState(null);
+
+  const [copied, setCopied] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!reportData) return;
+    const { default: jsPDF } = await import('jspdf');
+    await import('jspdf-autotable');
+    const doc = new jsPDF();
+    const s = reportData.student || {};
+    const subjectRadar = reportData.subject_radar || [];
+    
+    doc.setFontSize(20); doc.text('Student Report Card', 14, 20);
+    doc.setFontSize(12);
+    doc.text(`Name: ${s.name}  |  Username: @${s.username}`, 14, 30);
+    doc.text(
+      `Period: ${reportPeriod.charAt(0).toUpperCase() + reportPeriod.slice(1)}  |  Avg Score: ${s.avg_score || 0}%  |  Attendance: ${s.attendance_pct || 0}%  |  Rank: ${reportData.rank ? `${reportData.rank}/${reportData.total_students}` : 'N/A'}`,
+      14, 38
+    );
+    if (subjectRadar.length > 0) {
+      doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
+      doc.autoTable({
+        startY: 56,
+        head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
+        body: subjectRadar.map(r => [
+          `${r.emoji} ${r.subject}`,
+          r.test_count > 0 ? `${r.test_avg}%` : '—',
+          r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
+          r.att_total > 0 ? `${r.attendance_pct}%` : '—',
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [99, 102, 241] },
+      });
+    }
+    doc.save(`${s.name}_Report_${reportPeriod}.pdf`);
+  };
+
+  const handleShare = async () => {
+    const text = shareReportText(reportData, reportPeriod);
+    if (!text) return;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${student?.name || 'Student'} - Report Card`,
+          text: text,
+        });
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fallback to copy
+      }
+    }
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy report: ', err);
+    }
+  };
 
   const { defaultStudentPassword } = useSettingsStore();
 
@@ -190,6 +250,16 @@ export default function StudentDetailPage() {
             {s.blocked && <Tag color="red" className="ml-2">Blocked</Tag>}
           </div>
           <div className="flex gap-2 flex-shrink-0 relative">
+            {reportData && (
+              <>
+                <Btn variant="default" size="sm" icon={copied ? CheckCircle2 : Share2} onClick={handleShare} className="bg-white border-[#EBEAE7] text-[#1A1A19]">
+                  {copied ? 'Copied!' : 'Share'}
+                </Btn>
+                <Btn variant="default" size="sm" icon={Download} onClick={handleDownloadPDF} className="bg-white border-[#EBEAE7] text-[#1A1A19]">
+                  Export PDF
+                </Btn>
+              </>
+            )}
             <Btn variant="default" size="sm" icon={Edit2} onClick={() => setEditOpen(true)} className="bg-white border-[#EBEAE7] text-[#1A1A19]">Edit</Btn>
             <Btn variant="default" size="sm" icon={MoreVertical} onClick={() => setMenuOpen(!menuOpen)} className="bg-white border-[#EBEAE7] text-[#1A1A19]" />
             {menuOpen && (
@@ -219,12 +289,19 @@ export default function StudentDetailPage() {
             <AlertTriangle size={16} />{reportError}
           </div>
         ) : reportData ? (
-          <StudentReportCard
-            data={reportData}
-            period={reportPeriod}
-            onPeriodChange={setReportPeriod}
-            showHeader={false}
-          />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-4 md:px-6 pt-5 pb-2 flex-wrap gap-3">
+              <h2 className="text-sm font-bold text-neutral-500 uppercase tracking-widest">Performance Report</h2>
+              <div className="flex items-center gap-0.5 p-1">
+              </div>
+            </div>
+            <StudentReportCard
+              data={reportData}
+              period={reportPeriod}
+              onPeriodChange={setReportPeriod}
+              showHeader={false}
+            />
+          </div>
         ) : null}
       </div>
 

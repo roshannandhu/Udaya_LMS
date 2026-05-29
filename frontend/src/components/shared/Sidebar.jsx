@@ -17,7 +17,7 @@ const TEACHER_ITEMS = [
 const STUDENT_ITEMS = [
   { id: 'home',        label: 'Home',        icon: Home,          path: '/student' },
   { id: 'subjects',    label: 'Subjects',    icon: BookOpen,      path: '/student/subjects' },
-  { id: 'tests',       label: 'Tests',       icon: FileQuestion,  path: '/student/tests' },
+  { id: 'tests',       label: 'Tests & Assignments', icon: FileQuestion,  path: '/student/tests' },
   { id: 'broadcasts',  label: 'Broadcasts',  icon: MessageSquare, path: '/student/broadcasts' },
   { id: 'live',        label: 'Live Classes',icon: Video,         path: '/student/live-classes' },
   { id: 'leaderboard', label: 'Ranking',     icon: Trophy,        path: '/student/leaderboard' },

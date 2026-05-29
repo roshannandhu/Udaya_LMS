@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Home, BookOpen, MessageSquare, Calendar, MoreHorizontal, Users, Video } from 'lucide-react';
+import { Home, BookOpen, MessageSquare, Calendar, MoreHorizontal, Users, Video, FileQuestion } from 'lucide-react';
 
 const TEACHER_ITEMS = [
   { id: 'today',      label: 'Home',       icon: Home },
@@ -14,7 +14,7 @@ const STUDENT_ITEMS = [
   { id: 'home',       label: 'Home',       icon: Home },
   { id: 'subjects',   label: 'Subjects',   icon: BookOpen },
   { id: 'broadcasts', label: 'Broadcasts', icon: MessageSquare },
-  { id: 'live',       label: 'Live',       icon: Video },
+  { id: 'tests',      label: 'Tests',      icon: FileQuestion },
   { id: 'profile',    label: 'Profile',    icon: Users },
   { id: 'more',       label: 'More',       icon: MoreHorizontal },
 ];

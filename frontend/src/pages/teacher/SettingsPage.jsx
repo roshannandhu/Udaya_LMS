@@ -126,6 +126,10 @@ export default function SettingsPage() {
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
 
+  const [aiSettings, setAiSettings] = useState({ ai_provider: 'gemini', ai_api_key: '' });
+  const [aiSaved, setAiSaved] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+
   useEffect(() => {
     if (!isPrimary) return;
     setTeamLoading(true);
@@ -133,6 +137,13 @@ export default function SettingsPage() {
       .then(setSubTeachers)
       .catch(() => {})
       .finally(() => setTeamLoading(false));
+      
+    teacherApi.getSettings()
+      .then(res => {
+        if (res.ai_provider) setAiSettings(s => ({ ...s, ai_provider: res.ai_provider }));
+        if (res.ai_api_key) setAiSettings(s => ({ ...s, ai_api_key: res.ai_api_key }));
+      })
+      .catch(() => {});
   }, [isPrimary]);
 
   const handleAddTeacher = async () => {
@@ -209,6 +220,18 @@ export default function SettingsPage() {
     setTerminationPin(pinInput.trim());
     setPinSaved(true);
     setTimeout(() => setPinSaved(false), 1500);
+  };
+
+  const handleSaveAiSettings = async () => {
+    setAiLoading(true);
+    try {
+      await teacherApi.updateSettings(aiSettings);
+      setAiSaved(true);
+      setTimeout(() => setAiSaved(false), 2000);
+    } catch (e) {
+      alert('Failed to save AI settings');
+    }
+    setAiLoading(false);
   };
 
   return (
@@ -396,6 +419,37 @@ export default function SettingsPage() {
                 <CheckCircle2 size={11} /> Password is set — click the eye to reveal it
               </p>
             )}
+          </div>
+        </div>
+
+        {/* AI Insight Settings */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">AI Insights</p>
+          <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4 space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-0.5">AI Provider & API Key</p>
+              <p className="text-xs text-neutral-500 mb-3">Used for generating smart insights on student report cards.</p>
+              <div className="flex gap-2 mb-2">
+                <select 
+                  value={aiSettings.ai_provider} 
+                  onChange={e => setAiSettings({ ...aiSettings, ai_provider: e.target.value })}
+                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all"
+                >
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+                <SecretInput
+                  value={aiSettings.ai_api_key}
+                  onChange={e => setAiSettings({ ...aiSettings, ai_api_key: e.target.value })}
+                  placeholder="Paste your API Key here"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Btn variant="primary" size="sm" onClick={handleSaveAiSettings} disabled={aiLoading}>
+                  {aiLoading ? 'Saving...' : aiSaved ? 'Saved ✓' : 'Save AI Settings'}
+                </Btn>
+              </div>
+            </div>
           </div>
         </div>
 

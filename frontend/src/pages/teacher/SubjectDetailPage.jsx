@@ -3,14 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Plus, Upload, MoreVertical, Video, FileQuestion,
   Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock,
-  Trash2, Users,
+  Trash2, Users, ClipboardList, Paperclip, Star, CalendarClock,
 } from 'lucide-react';
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
-import { apiClient, attendanceApi, videoApi } from '../../lib/api';
+import { apiClient, attendanceApi, videoApi, assignmentApi } from '../../lib/api';
 import AttendanceGrid from '../../components/teacher/AttendanceGrid';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import NewTestModal from '../../components/teacher/NewTestModal';
 import { EditVideoModal } from '../../components/teacher/Modals';
+import NewAssignmentModal from '../../components/teacher/NewAssignmentModal';
+import AssignmentSubmissionsSheet from '../../components/teacher/AssignmentSubmissionsSheet';
 import { useAppCache } from '../../store';
 
 /* ─── VideoAddModal ──────────────────────────────────────── */
@@ -430,6 +432,10 @@ export default function SubjectDetailPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [thumbnailUrls, setThumbnailUrls] = useState({});
+  const [assignments, setAssignments]           = useState([]);
+  const [newAssignOpen, setNewAssignOpen]       = useState(false);
+  const [editAssignment, setEditAssignment]     = useState(null);
+  const [viewSubmissionsFor, setViewSubmissionsFor] = useState(null);
 
   useEffect(() => {
     if (!videoMenuId) return;
@@ -463,6 +469,25 @@ export default function SubjectDetailPage() {
     } catch(err) { console.error(err); }
   };
 
+  const fetchAssignmentsData = async () => {
+    try {
+      const data = await assignmentApi.getByClass(classId);
+      setAssignments(data?.assignments || []);
+    } catch(err) { console.error(err); }
+  };
+
+  const handleDeleteAssignment = async (assignmentId) => {
+    if (!window.confirm('Delete this assignment? All student submissions will also be removed.')) return;
+    try {
+      await assignmentApi.delete(assignmentId);
+      setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+      // Clear the submissions sheet if it was open for the deleted assignment
+      if (viewSubmissionsFor?.id === assignmentId) setViewSubmissionsFor(null);
+    } catch (err) {
+      alert(err.message || 'Failed to delete assignment');
+    }
+  };
+
   const fetchVideosData = async () => {
     try {
       const data = await apiClient(`/videos?class_id=${classId}`);
@@ -485,13 +510,15 @@ export default function SubjectDetailPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [videosData, testsData, lowAttData] = await Promise.all([
+        const [videosData, testsData, lowAttData, assignData] = await Promise.all([
           apiClient(`/videos?class_id=${classId}`),
           apiClient(`/tests?class_id=${classId}`),
           attendanceApi.getLowAttendance(standardId).catch(() => ({ flagged_count: 0 })),
+          assignmentApi.getByClass(classId).catch(() => ({ assignments: [] })),
         ]);
         setVideos(videosData || []);
         setTests(testsData  || []);
+        setAssignments(assignData?.assignments || []);
         setLowAttendanceCount(lowAttData?.flagged_count || lowAttData?.count || 0);
         loadThumbnails(videosData || []);
 
@@ -514,10 +541,11 @@ export default function SubjectDetailPage() {
   }, [standardId, classId]);
 
   const TABS = [
-    { id: 'videos',     label: 'Videos',     count: videos.length },
-    { id: 'tests',      label: 'Tests',      count: tests.length },
-    { id: 'students',   label: 'Students',   count: students.length },
-    { id: 'attendance', label: 'Attendance', count: lowAttendanceCount, alert: lowAttendanceCount > 0 },
+    { id: 'videos',      label: 'Videos',      count: videos.length },
+    { id: 'tests',       label: 'Tests',       count: tests.length },
+    { id: 'assignments', label: 'Assignments', count: assignments.length },
+    { id: 'students',    label: 'Students',    count: students.length },
+    { id: 'attendance',  label: 'Attendance',  count: lowAttendanceCount, alert: lowAttendanceCount > 0 },
   ];
 
   if (loading) {
@@ -567,6 +595,11 @@ export default function SubjectDetailPage() {
           {tab === 'tests' && (
             <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>
               New test
+            </Btn>
+          )}
+          {tab === 'assignments' && (
+            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>
+              New assignment
             </Btn>
           )}
         </div>
@@ -717,6 +750,80 @@ export default function SubjectDetailPage() {
           )
         )}
 
+        {/* ══ Assignments tab ══ */}
+        {tab === 'assignments' && (
+          assignments.length === 0 ? (
+            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                <ClipboardList size={28} className="text-neutral-400" />
+              </div>
+              <h3 className="font-semibold text-neutral-800 mb-1">No assignments yet</h3>
+              <p className="text-sm text-neutral-500 mb-6">Create your first assignment for students.</p>
+              <Btn variant="primary" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>
+                New assignment
+              </Btn>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {assignments.map(a => {
+                const now = new Date();
+                const due = a.due_date ? new Date(a.due_date) : null;
+                const isPast = due && due < now;
+                const isNear = due && !isPast && (due - now) < 24 * 3600 * 1000;
+                const submittedCount = a.submitted_count ?? 0;
+                return (
+                  <div key={a.id} className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-semibold text-sm text-neutral-900 mb-1">{a.title}</h4>
+                        {a.description && (
+                          <p className="text-xs text-neutral-500 line-clamp-2">{a.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Btn size="sm" variant="ghost" icon={Edit2}
+                          onClick={() => { setEditAssignment(a); setNewAssignOpen(true); }}>
+                          Edit
+                        </Btn>
+                        <Btn size="sm" variant="ghost" icon={Users}
+                          onClick={() => setViewSubmissionsFor(a)}>
+                          Submissions
+                        </Btn>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {due && (
+                        <div className={`flex items-center gap-1 text-xs font-medium ${isPast ? 'text-red-600' : isNear ? 'text-amber-600' : 'text-neutral-500'}`}>
+                          <CalendarClock size={11} />
+                          Due {due.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          {isPast && <Tag color="red">Closed</Tag>}
+                        </div>
+                      )}
+                      <span className="text-xs text-neutral-400">
+                        {submittedCount} submitted
+                      </span>
+                      {(a.assignment_attachments || []).length > 0 && (
+                        <span className="flex items-center gap-1 text-xs text-neutral-400">
+                          <Paperclip size={11} />
+                          {a.assignment_attachments.length} file{a.assignment_attachments.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={() => handleDeleteAssignment(a.id)}
+                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
         {/* ══ Students tab ══ */}
         {tab === 'students' && (
           <div>
@@ -801,6 +908,27 @@ export default function SubjectDetailPage() {
       <VideoViewersModal
         video={selectedVideo}
         onClose={() => setSelectedVideo(null)}
+      />
+      <NewAssignmentModal
+        open={newAssignOpen}
+        onClose={() => { setNewAssignOpen(false); setEditAssignment(null); }}
+        classId={classId}
+        editAssignment={editAssignment}
+        onSuccess={() => fetchAssignmentsData()}
+      />
+      <AssignmentSubmissionsSheet
+        open={!!viewSubmissionsFor}
+        onClose={() => setViewSubmissionsFor(null)}
+        assignment={viewSubmissionsFor}
+        totalStudents={students.length}
+        onSubmissionDeleted={() => {
+          // Update submitted_count on the card after teacher deletes a submission
+          setAssignments(prev => prev.map(a =>
+            a.id === viewSubmissionsFor?.id
+              ? { ...a, submitted_count: Math.max(0, (a.submitted_count || 1) - 1) }
+              : a
+          ));
+        }}
       />
 
       {/* Delete confirmation */}

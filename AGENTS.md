@@ -40,6 +40,11 @@ npm run dev
 2. **Backend** — Authenticates via Supabase Auth, returns JWT token + user data
 3. **Routing** — `/teacher/*` or `/student/*` based on role in user data
 
+## Key Features
+- **Assignments:** Supabase SQL backed system (`assignments`, `assignment_submissions`, `assignment_attachments`).
+- **AI Mentorship:** Gemini powered report cards. API keys are dynamically stored in `backend/teacher_settings.json` and configurable from the UI.
+- **Reporting:** PDF Generation and interactive UI charts using Recharts.
+
 ## Key files
 
 - `backend/main.py` — All FastAPI routes, endpoints, and WS manager

@@ -72,3 +72,9 @@ If you are spinning up a fresh database on your own Supabase project:
 1. Go to the Supabase SQL Editor.
 2. Copy and paste the contents of `backend/schema.sql` and run it to create the tables.
 3. Copy and paste the contents of `backend/optimize_indexes.sql` and run it to optimize the database.
+
+## Features & Modules
+* **Student Portal & Teacher Portal**: Role-based access with JWT authentication.
+* **Assignments Module**: Teachers can create assignments with attachments, and students can submit their work for grading.
+* **AI Mentorship (Report Cards)**: Analyzes student performance and generates dynamic, personalized insights.
+  * *Note: AI Mentorship requires an API key (e.g., Gemini). Teachers can configure this directly via the UI in the Settings page. The API key is securely saved to `backend/teacher_settings.json`.*

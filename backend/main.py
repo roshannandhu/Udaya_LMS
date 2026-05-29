@@ -234,6 +234,14 @@ class LiveClassUpdate(BaseModel):
     title: Optional[str] = None
     status: Optional[str] = None
 
+class AssignmentUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[str] = None
+
+class GradeSubmissionRequest(BaseModel):
+    marks_obtained: float
+
 # --- WebSocket Connection Manager ---
 class ConnectionManager:
     def __init__(self):
@@ -1343,8 +1351,10 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
             continue
         day = ts[:10]
         vid = vp.get("videos") or {}
-        # estimate minutes watched from progress_secs
+        # estimate minutes watched from progress_secs (fallback to duration if completed)
         watched_secs = vp.get("progress_secs") or 0
+        if vp.get("completed") and watched_secs == 0:
+            watched_secs = vid.get("duration_secs") or 600  # fallback to 10 mins if null
         if day not in vid_by_date:
             vid_by_date[day] = {"minutes": 0, "count": 0}
         vid_by_date[day]["minutes"] += round(watched_secs / 60, 1)
@@ -1398,6 +1408,76 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
     mastered = sum(1 for t in topic_map if t["score_pct"] >= 60)
     topic_mastery_pct = round(mastered / len(topic_map) * 100, 1) if topic_map else 0
 
+    # ── Assignment data ────────────────────────────────────────────────────
+    assignment_stats: dict = {"total": 0, "submitted": 0, "graded": 0, "avg_marks_pct": 0, "total_points_from_assignments": 0}
+    assignment_scores: list = []
+    assignment_heatmap: list = []
+    try:
+        if subjects:
+            class_ids_for_assign = [s["id"] for s in subjects]
+            all_assigns_res = service_supabase.table("assignments").select(
+                "id, class_id, title"
+            ).in_("class_id", class_ids_for_assign).execute()
+            all_assigns = all_assigns_res.data or []
+            assign_ids = [a["id"] for a in all_assigns]
+
+            if assign_ids:
+                subs_res = service_supabase.table("assignment_submissions").select(
+                    "assignment_id, marks_obtained, points_earned, submitted_at, graded_at"
+                ).eq("student_id", student_id).in_("assignment_id", assign_ids).execute()
+                my_assign_subs = subs_res.data or []
+            else:
+                my_assign_subs = []
+
+            assign_sub_map = {s["assignment_id"]: s for s in my_assign_subs}
+
+            for a in all_assigns:
+                sub = assign_sub_map.get(a["id"])
+                subj = sub_map.get(a["class_id"], {})
+                assignment_scores.append({
+                    "assignment_id": a["id"],
+                    "assignment_title": a["title"],
+                    "class_id": a["class_id"],
+                    "subject_name": subj.get("name", ""),
+                    "emoji": subj.get("emoji", "📐"),
+                    "submitted_at": sub.get("submitted_at") if sub else None,
+                    "marks_obtained": sub.get("marks_obtained") if sub else None,
+                    "points_earned": sub.get("points_earned") if sub else None,
+                    "graded_at": sub.get("graded_at") if sub else None,
+                })
+
+            graded_subs = [s for s in my_assign_subs if s.get("marks_obtained") is not None]
+            avg_marks_pct = round(sum(float(s["marks_obtained"]) for s in graded_subs) / len(graded_subs), 1) if graded_subs else 0
+            assignment_stats = {
+                "total": len(all_assigns),
+                "submitted": len(my_assign_subs),
+                "graded": len(graded_subs),
+                "avg_marks_pct": avg_marks_pct,
+                "total_points_from_assignments": sum((s.get("points_earned") or 0) for s in my_assign_subs),
+            }
+
+            from collections import defaultdict as _defaultdict
+            assign_heat: dict = _defaultdict(int)
+            for s in my_assign_subs:
+                ts = s.get("submitted_at") or ""
+                if ts:
+                    assign_heat[ts[:10]] += 1
+            assignment_heatmap = [{"date": d, "count": c} for d, c in sorted(assign_heat.items())]
+
+            for sr in subject_radar:
+                sid = sr["subject_id"]
+                subj_assigns = [a for a in all_assigns if a["class_id"] == sid]
+                subj_graded = [assign_sub_map[a["id"]] for a in subj_assigns if a["id"] in assign_sub_map and assign_sub_map[a["id"]].get("marks_obtained") is not None]
+                sr["assignment_avg"] = round(sum(float(s["marks_obtained"]) for s in subj_graded) / len(subj_graded), 1) if subj_graded else 0
+                sr["assignment_total"] = len(subj_assigns)
+                sr["assignment_submitted"] = len([a for a in subj_assigns if a["id"] in assign_sub_map])
+    except Exception as _exc:
+        print(f"Assignment report data error (non-fatal): {_exc}")
+        for sr in subject_radar:
+            sr.setdefault("assignment_avg", 0)
+            sr.setdefault("assignment_total", 0)
+            sr.setdefault("assignment_submitted", 0)
+
     # ── Per-subject heatmaps (wrapped so any error can't crash the endpoint) ─
     attendance_heatmap_by_subject: dict = {}
     video_heatmap_by_subject: dict = {}
@@ -1440,7 +1520,10 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                 vid_by_subj[subj_id] = {}
             if day_key not in vid_by_subj[subj_id]:
                 vid_by_subj[subj_id][day_key] = {"minutes": 0, "count": 0}
-            vid_by_subj[subj_id][day_key]["minutes"] += round((vp_item.get("progress_secs") or 0) / 60, 1)
+            watched_secs = vp_item.get("progress_secs") or 0
+            if vp_item.get("completed") and watched_secs == 0:
+                watched_secs = vid_info.get("duration_secs") or 600  # fallback to 10 mins if null
+            vid_by_subj[subj_id][day_key]["minutes"] += round(watched_secs / 60, 1)
             vid_by_subj[subj_id][day_key]["count"] += 1
         video_heatmap_by_subject = {
             subj_id: [{"date": dk, **dv} for dk, dv in sorted(days_dict.items())]
@@ -1479,6 +1562,9 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "attendance_heatmap": attendance_heatmap,
         "video_heatmap": video_heatmap,
         "test_heatmap": test_heatmap,
+        "assignment_stats": assignment_stats,
+        "assignment_scores": assignment_scores,
+        "assignment_heatmap": assignment_heatmap,
         "attendance_heatmap_by_subject": attendance_heatmap_by_subject,
         "video_heatmap_by_subject":      video_heatmap_by_subject,
         "test_heatmap_by_subject":       test_heatmap_by_subject,
@@ -3422,6 +3508,35 @@ def mark_video_complete(video_id: str, user = Depends(verify_token)):
 
     return {"points_earned": points_earned, "total_points": new_points}
 
+@app.post("/api/video-progress")
+def update_video_progress(data: dict, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    video_id = data.get("video_id")
+    progress_secs = int(data.get("progress_secs", 0))
+    student_id = user["student_id"]
+
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Missing video_id")
+
+    # Check if a progress record already exists to preserve completed flag
+    existing = service_supabase.table("video_progress").select("completed").eq("video_id", video_id).eq("student_id", student_id).execute()
+    already_completed = bool(existing.data and existing.data[0].get("completed"))
+
+    # Upsert progress record
+    service_supabase.table("video_progress").upsert({
+        "video_id": video_id,
+        "student_id": student_id,
+        "progress_secs": progress_secs,
+        "completed": already_completed,
+        "last_watched_at": datetime.now().isoformat()
+    }, on_conflict="video_id,student_id").execute()
+
+    return {"status": "ok"}
+
 # --- Reminders ---
 @app.get("/api/reminders")
 def get_reminders(user = Depends(verify_token)):
@@ -4171,6 +4286,756 @@ async def zoom_webhook(request: Request):
             # which may not be ready immediately after meeting ends.
 
     return {"status": "ok"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ASSIGNMENTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+ALLOWED_ASSIGNMENT_TYPES = {
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+def _calc_assignment_points(marks_pct: float) -> int:
+    if marks_pct >= 90: return 100
+    elif marks_pct >= 75: return 75
+    elif marks_pct >= 60: return 50
+    elif marks_pct >= 40: return 25
+    else: return 10
+
+def _verify_teacher_owns_class(class_id: str, teacher_id: str):
+    subj = service_supabase.table("subject_classes").select("standard_id").eq("id", class_id).single().execute()
+    if not subj.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    std = service_supabase.table("standards").select("teacher_id").eq("id", subj.data["standard_id"]).single().execute()
+    if not std.data or std.data["teacher_id"] != teacher_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+async def _ensure_assignments_bucket():
+    try:
+        await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("assignments"))
+    except Exception:
+        await asyncio.to_thread(lambda: service_supabase.storage.create_bucket(
+            "assignments", options={"public": True}
+        ))
+
+
+@app.post("/api/assignments/create")
+async def create_assignment(
+    class_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    due_date: Optional[str] = Form(None),
+    files: List[UploadFile] = File(default=[]),
+    user = Depends(verify_token)
+):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    teacher_id = user["teacher_id"]
+    _verify_teacher_owns_class(class_id, teacher_id)
+
+    row = service_supabase.table("assignments").insert({
+        "class_id": class_id,
+        "title": title.strip(),
+        "description": description.strip(),
+        "due_date": due_date or None,
+        "created_by": user["user_id"],
+    }).execute()
+    assignment = row.data[0] if row.data else {}
+    assignment_id = assignment["id"]
+
+    attachments = []
+    valid_files = [f for f in files if f and f.filename]
+    if valid_files:
+        await _ensure_assignments_bucket()
+        for f in valid_files:
+            file_bytes = await f.read()
+            if not file_bytes:
+                continue
+            safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f.filename)
+            storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
+            ct = f.content_type or "application/octet-stream"
+            await asyncio.to_thread(
+                lambda path=storage_path, b=file_bytes, c=ct: service_supabase.storage.from_("assignments").upload(
+                    path, b, {"content-type": c}
+                )
+            )
+            public_url = await asyncio.to_thread(
+                lambda path=storage_path: service_supabase.storage.from_("assignments").get_public_url(path)
+            )
+            att_row = service_supabase.table("assignment_attachments").insert({
+                "assignment_id": assignment_id,
+                "file_url": str(public_url),
+                "file_name": f.filename,
+                "file_type": f.content_type,
+                "storage_path": storage_path,
+            }).execute()
+            if att_row.data:
+                attachments.append(att_row.data[0])
+
+    assignment["assignment_attachments"] = attachments
+    return assignment
+
+
+@app.get("/api/assignments")
+async def list_assignments(class_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    res = service_supabase.table("assignments").select(
+        "*, assignment_attachments(*)"
+    ).eq("class_id", class_id).order("created_at", desc=True).execute()
+    assignments = res.data or []
+
+    # Replace stored public URLs with 1-hour signed URLs so files open
+    # regardless of whether the assignments bucket is configured as public.
+    for a in assignments:
+        for att in (a.get("assignment_attachments") or []):
+            sp = att.get("storage_path")
+            if not sp:
+                continue
+            try:
+                signed = await asyncio.to_thread(
+                    lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                )
+                url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
+                if url:
+                    att["file_url"] = url
+            except Exception:
+                pass  # fall back to stored URL
+
+    if user["role"] in ("teacher", "sub_teacher"):
+        for a in assignments:
+            sub_res = service_supabase.table("assignment_submissions").select("id", count="exact").eq("assignment_id", a["id"]).execute()
+            a["submitted_count"] = sub_res.count if sub_res.count is not None else len(sub_res.data or [])
+    else:
+        student_id = user.get("student_id")
+        for a in assignments:
+            if student_id:
+                sub_res = service_supabase.table("assignment_submissions").select(
+                    "id, file_url, file_name, marks_obtained, points_earned, submitted_at, graded_at, storage_path"
+                ).eq("assignment_id", a["id"]).eq("student_id", student_id).execute()
+                if sub_res.data:
+                    my_sub = dict(sub_res.data[0])
+                    sp = my_sub.pop("storage_path", None)
+                    if sp:
+                        try:
+                            signed = await asyncio.to_thread(
+                                lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                            )
+                            url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
+                            if url:
+                                my_sub["file_url"] = url
+                        except Exception:
+                            pass
+                    a["my_submission"] = my_sub
+                else:
+                    a["my_submission"] = None
+            else:
+                a["my_submission"] = None
+
+    return {"assignments": assignments}
+
+
+@app.patch("/api/assignments/{assignment_id}")
+async def update_assignment(assignment_id: str, body: AssignmentUpdate, user = Depends(verify_token)):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    a_res = service_supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.title is not None: updates["title"] = body.title.strip()
+    if body.description is not None: updates["description"] = body.description.strip()
+    if body.due_date is not None: updates["due_date"] = body.due_date or None
+
+    row = service_supabase.table("assignments").update(updates).eq("id", assignment_id).execute()
+    return row.data[0] if row.data else {}
+
+
+@app.post("/api/assignments/{assignment_id}/attachments")
+async def add_assignment_attachments(
+    assignment_id: str,
+    files: List[UploadFile] = File(...),
+    user = Depends(verify_token)
+):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    a_res = service_supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    await _ensure_assignments_bucket()
+    attachments = []
+    for f in files:
+        if not f or not f.filename:
+            continue
+        file_bytes = await f.read()
+        if not file_bytes:
+            continue
+        safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f.filename)
+        storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
+        ct = f.content_type or "application/octet-stream"
+        await asyncio.to_thread(
+            lambda path=storage_path, b=file_bytes, c=ct: service_supabase.storage.from_("assignments").upload(
+                path, b, {"content-type": c}
+            )
+        )
+        public_url = await asyncio.to_thread(
+            lambda path=storage_path: service_supabase.storage.from_("assignments").get_public_url(path)
+        )
+        att_row = service_supabase.table("assignment_attachments").insert({
+            "assignment_id": assignment_id,
+            "file_url": str(public_url),
+            "file_name": f.filename,
+            "file_type": f.content_type,
+            "storage_path": storage_path,
+        }).execute()
+        if att_row.data:
+            attachments.append(att_row.data[0])
+    return {"attachments": attachments}
+
+
+@app.delete("/api/assignments/{assignment_id}/attachments/{attachment_id}")
+async def delete_assignment_attachment(assignment_id: str, attachment_id: str, user = Depends(verify_token)):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    a_res = service_supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    att_res = service_supabase.table("assignment_attachments").select("storage_path").eq("id", attachment_id).single().execute()
+    if att_res.data and att_res.data.get("storage_path"):
+        try:
+            path = att_res.data["storage_path"]
+            await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("assignments").remove([path])
+            )
+        except Exception:
+            pass
+    service_supabase.table("assignment_attachments").delete().eq("id", attachment_id).execute()
+    return {"ok": True}
+
+
+@app.delete("/api/assignments/{assignment_id}")
+async def delete_assignment(assignment_id: str, user = Depends(verify_token)):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    a_res = service_supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    att_res = service_supabase.table("assignment_attachments").select("storage_path").eq("assignment_id", assignment_id).execute()
+    sub_res = service_supabase.table("assignment_submissions").select("storage_path, student_id, points_earned").eq("assignment_id", assignment_id).execute()
+
+    for sub in (sub_res.data or []):
+        pts = sub.get("points_earned") or 0
+        if pts > 0:
+            try:
+                stu = service_supabase.table("students").select("points").eq("id", sub["student_id"]).single().execute()
+                if stu.data:
+                    new_pts = max(0, (stu.data.get("points") or 0) - pts)
+                    service_supabase.table("students").update({"points": new_pts}).eq("id", sub["student_id"]).execute()
+            except Exception:
+                pass
+
+    paths = [r["storage_path"] for r in (att_res.data or []) if r.get("storage_path")]
+    paths += [r["storage_path"] for r in (sub_res.data or []) if r.get("storage_path")]
+    if paths:
+        try:
+            await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("assignments").remove(paths)
+            )
+        except Exception:
+            pass
+
+    service_supabase.table("assignments").delete().eq("id", assignment_id).execute()
+    return {"ok": True}
+
+
+@app.post("/api/assignments/{assignment_id}/submit")
+async def submit_assignment(
+    assignment_id: str,
+    file: UploadFile = File(...),
+    user = Depends(verify_token)
+):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(status_code=403, detail="Student account required")
+
+    if file.content_type not in ALLOWED_ASSIGNMENT_TYPES:
+        raise HTTPException(status_code=422, detail="File type not allowed. Upload an image, PDF, or Word document.")
+
+    existing = service_supabase.table("assignment_submissions").select("id").eq("assignment_id", assignment_id).eq("student_id", student_id).execute()
+    if existing.data:
+        raise HTTPException(status_code=409, detail="You have already submitted this assignment.")
+
+    a_res = service_supabase.table("assignments").select("id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=422, detail="File is empty")
+
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in file.filename)
+    storage_path = f"submissions/{assignment_id}/{student_id}_{uuid.uuid4()}_{safe_name}"
+
+    await _ensure_assignments_bucket()
+    ct = file.content_type or "application/octet-stream"
+    await asyncio.to_thread(
+        lambda: service_supabase.storage.from_("assignments").upload(
+            storage_path, file_bytes, {"content-type": ct}
+        )
+    )
+    public_url = await asyncio.to_thread(
+        lambda: service_supabase.storage.from_("assignments").get_public_url(storage_path)
+    )
+
+    row = service_supabase.table("assignment_submissions").insert({
+        "assignment_id": assignment_id,
+        "student_id": student_id,
+        "file_url": str(public_url),
+        "file_name": file.filename,
+        "file_type": file.content_type,
+        "storage_path": storage_path,
+    }).execute()
+    return row.data[0] if row.data else {}
+
+
+@app.get("/api/assignments/{assignment_id}/submissions")
+async def get_assignment_submissions(assignment_id: str, user = Depends(verify_token)):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    a_res = service_supabase.table("assignments").select("class_id, title").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    subs = service_supabase.table("assignment_submissions").select(
+        "*, students(id, name, username, avatar_url)"
+    ).eq("assignment_id", assignment_id).order("submitted_at").execute()
+
+    # Generate signed URLs so the teacher can open student submission files
+    for sub in (subs.data or []):
+        sp = sub.get("storage_path")
+        if sp:
+            try:
+                signed = await asyncio.to_thread(
+                    lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                )
+                url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
+                if url:
+                    sub["file_url"] = url
+            except Exception:
+                pass
+
+    return {"submissions": subs.data or [], "assignment": a_res.data}
+
+
+@app.post("/api/assignments/{assignment_id}/submissions/{submission_id}/grade")
+async def grade_assignment_submission(
+    assignment_id: str,
+    submission_id: str,
+    body: GradeSubmissionRequest,
+    user = Depends(verify_token)
+):
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if body.marks_obtained < 0 or body.marks_obtained > 100:
+        raise HTTPException(status_code=422, detail="Marks must be between 0 and 100")
+
+    sub_res = service_supabase.table("assignment_submissions").select(
+        "student_id, prev_points_earned"
+    ).eq("id", submission_id).eq("assignment_id", assignment_id).single().execute()
+    if not sub_res.data:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    sub = sub_res.data
+    student_id = sub["student_id"]
+
+    a_res = service_supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    new_pts = _calc_assignment_points(body.marks_obtained)
+    prev_pts = sub.get("prev_points_earned") or 0
+
+    stu_res = service_supabase.table("students").select("points").eq("id", student_id).single().execute()
+    if stu_res.data:
+        current_pts = stu_res.data.get("points") or 0
+        updated_pts = max(0, current_pts - prev_pts + new_pts)
+        service_supabase.table("students").update({"points": updated_pts}).eq("id", student_id).execute()
+
+    updated = service_supabase.table("assignment_submissions").update({
+        "marks_obtained": body.marks_obtained,
+        "points_earned": new_pts,
+        "prev_points_earned": new_pts,
+        "graded_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", submission_id).execute()
+
+    return updated.data[0] if updated.data else {}
+
+
+@app.delete("/api/assignments/{assignment_id}/submissions/{submission_id}")
+async def teacher_delete_submission(
+    assignment_id: str,
+    submission_id: str,
+    user = Depends(verify_token)
+):
+    """Teacher removes a student submission (reverts points if graded)."""
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    a_res = service_supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not a_res.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    _verify_teacher_owns_class(a_res.data["class_id"], user["teacher_id"])
+
+    sub_res = service_supabase.table("assignment_submissions").select(
+        "storage_path, student_id, points_earned"
+    ).eq("id", submission_id).eq("assignment_id", assignment_id).single().execute()
+    if not sub_res.data:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    sub = sub_res.data
+
+    # Revert student points if the submission was graded
+    pts = sub.get("points_earned") or 0
+    if pts > 0:
+        try:
+            stu = service_supabase.table("students").select("points").eq("id", sub["student_id"]).single().execute()
+            if stu.data:
+                new_pts = max(0, (stu.data.get("points") or 0) - pts)
+                service_supabase.table("students").update({"points": new_pts}).eq("id", sub["student_id"]).execute()
+        except Exception:
+            pass
+
+    sp = sub.get("storage_path")
+    if sp:
+        try:
+            await asyncio.to_thread(lambda: service_supabase.storage.from_("assignments").remove([sp]))
+        except Exception:
+            pass
+
+    service_supabase.table("assignment_submissions").delete().eq("id", submission_id).execute()
+    return {"ok": True}
+
+
+@app.delete("/api/assignments/{assignment_id}/my-submission")
+async def student_delete_own_submission(
+    assignment_id: str,
+    user = Depends(verify_token)
+):
+    """Student retracts their own submission — only allowed when not yet graded."""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    student_id = user.get("student_id")
+    if not student_id:
+        raise HTTPException(status_code=403, detail="Student account required")
+
+    sub_res = service_supabase.table("assignment_submissions").select(
+        "id, storage_path, marks_obtained"
+    ).eq("assignment_id", assignment_id).eq("student_id", student_id).single().execute()
+    if not sub_res.data:
+        raise HTTPException(status_code=404, detail="No submission found")
+
+    sub = sub_res.data
+    if sub.get("marks_obtained") is not None:
+        raise HTTPException(status_code=403, detail="Graded submissions cannot be retracted. Contact your teacher.")
+
+    sp = sub.get("storage_path")
+    if sp:
+        try:
+            await asyncio.to_thread(lambda: service_supabase.storage.from_("assignments").remove([sp]))
+        except Exception:
+            pass
+
+    service_supabase.table("assignment_submissions").delete().eq("id", sub["id"]).execute()
+    return {"ok": True}
+
+
+@app.get("/api/student/assignments")
+async def get_all_student_assignments(user = Depends(verify_token)):
+    """All assignments across all of the student's subjects, with my_submission and signed URLs."""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    student_id = user.get("student_id")
+    std_id     = user.get("standard_id")
+    if not student_id or not std_id:
+        return {"assignments": []}
+
+    # All subjects in the student's standard
+    subs_res = service_supabase.table("subject_classes").select("id, name, emoji").eq("standard_id", std_id).execute()
+    subjects  = subs_res.data or []
+    if not subjects:
+        return {"assignments": []}
+
+    class_ids = [s["id"] for s in subjects]
+    sub_map   = {s["id"]: s for s in subjects}
+
+    # All assignments for those subjects (with teacher attachments)
+    res = service_supabase.table("assignments").select(
+        "*, assignment_attachments(*)"
+    ).in_("class_id", class_ids).order("created_at", desc=True).execute()
+    assignments = res.data or []
+    if not assignments:
+        return {"assignments": []}
+
+    # Signed URLs for teacher-uploaded question files
+    for a in assignments:
+        for att in (a.get("assignment_attachments") or []):
+            sp = att.get("storage_path")
+            if not sp:
+                continue
+            try:
+                signed = await asyncio.to_thread(
+                    lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                )
+                url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
+                if url:
+                    att["file_url"] = url
+            except Exception:
+                pass
+
+    # Student's submissions for all these assignments
+    assign_ids = [a["id"] for a in assignments]
+    subs2_res  = service_supabase.table("assignment_submissions").select(
+        "assignment_id, id, file_url, file_name, marks_obtained, points_earned, submitted_at, graded_at, storage_path"
+    ).eq("student_id", student_id).in_("assignment_id", assign_ids).execute()
+
+    sub_by_assign: dict = {}
+    for s in (subs2_res.data or []):
+        sp2 = s.pop("storage_path", None)
+        if sp2:
+            try:
+                signed2 = await asyncio.to_thread(
+                    lambda p=sp2: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                )
+                url2 = (signed2 or {}).get("signedUrl") or (signed2 or {}).get("signedURL")
+                if url2:
+                    s["file_url"] = url2
+            except Exception:
+                pass
+        sub_by_assign[s["assignment_id"]] = s
+
+    # Attach subject info and submission data to each assignment
+    for a in assignments:
+        cls_info = sub_map.get(a["class_id"], {})
+        a["subject_name"]  = cls_info.get("name", "")
+        a["subject_emoji"] = cls_info.get("emoji", "📐")
+        a["my_submission"] = sub_by_assign.get(a["id"])
+
+    return {"assignments": assignments}
+
+# ─── TEACHER SETTINGS (AI API KEYS) ────────────────────────────────────────
+
+SETTINGS_FILE = Path(__file__).resolve().parent / "teacher_settings.json"
+
+def get_teacher_settings():
+    if SETTINGS_FILE.exists():
+        try:
+            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def save_teacher_settings(data: dict):
+    SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+class TeacherSettingsInput(BaseModel):
+    ai_provider: Optional[str] = None
+    ai_api_key: Optional[str] = None
+
+@app.get("/api/teacher/settings")
+def get_settings(user: dict = Depends(get_current_user)):
+    if user.get("role") != "teacher":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return get_teacher_settings()
+
+@app.post("/api/teacher/settings")
+def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current_user)):
+    if user.get("role") != "teacher":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    settings = get_teacher_settings()
+    if data.ai_provider is not None:
+        settings["ai_provider"] = data.ai_provider
+    if data.ai_api_key is not None:
+        settings["ai_api_key"] = data.ai_api_key
+    save_teacher_settings(settings)
+    return {"success": True}
+
+# ─── AI INSIGHTS GENERATION ──────────────────────────────────────────────
+
+class InsightsRequest(BaseModel):
+    student_id: str
+    stats: dict  # Passed from the frontend (attendance, test avg, etc.)
+
+@app.post("/api/insights/generate")
+async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
+    # Read API key
+    settings = get_teacher_settings()
+    provider = settings.get("ai_provider", "gemini")
+    api_key = settings.get("ai_api_key")
+
+    if not api_key:
+        raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
+
+    viewer_role = user.get("role", "student")
+    
+    if viewer_role == "teacher":
+        role_context = """
+Write as if you are reporting directly to the teacher about the student.
+Use third-person perspective when discussing the student (e.g. "Student John is doing well" instead of "Hi John, you are doing well").
+Do NOT address the student directly. Address the teacher or provide an objective analysis.
+"""
+        greeting_rule = "* Start with a brief, objective summary about the student's progress."
+    else:
+        role_context = """
+Write as if you are talking directly to the student.
+"""
+        greeting_rule = "* Start with a warm greeting using the student's name."
+
+    prompt = f"""
+You are an expert educational mentor and student success coach.
+
+Your job is NOT to describe statistics.
+
+Your job is to analyze the student's learning behavior, identify root causes of performance issues, and provide personalized, encouraging, and actionable guidance.
+
+{role_context}
+
+IMPORTANT RULES:
+{greeting_rule}
+* Never sound like a dashboard, analyst, or report generator.
+* Never simply repeat percentages or metrics unless necessary.
+* Focus on WHY something is happening.
+* Identify the student's biggest opportunity for improvement.
+* Give practical actions the student can perform this week.
+* Keep the tone positive, motivating, and supportive.
+* Praise strengths before discussing weaknesses.
+* Be specific when mentioning subjects, topics, videos, assignments, attendance, or tests.
+* If a topic is weak, explain exactly what the student should do.
+* If the student is performing well, challenge them with the next goal.
+* Avoid generic advice such as "study harder" or "focus more."
+* Explain the likely root cause behind low performance.
+* End with encouragement.
+
+Generate the response using the following sections:
+
+Focus of the Week
+* ONE high-impact action that will improve performance the most.
+
+What's Going Well
+* Mention strengths and positive habits.
+
+What I Noticed
+* Explain patterns and root causes in simple language.
+
+Recommended Actions
+* Give 3-5 concrete actions the student can take.
+
+Next Level Goal
+* Suggest a realistic improvement target.
+
+AI Mentor Message
+* A natural, conversational paragraph written directly to the student.
+
+Student Data:
+Name: {req.stats.get("student_name", "Student")}
+Attendance: {req.stats.get("attendance_data", "N/A")}
+Video Progress: {req.stats.get("video_progress_data", "N/A")}
+Assignment Performance: {req.stats.get("assignment_data", "N/A")}
+Test Performance: {req.stats.get("test_data", "N/A")}
+Topic Performance: {req.stats.get("topic_data", "N/A")}
+Recent Activity: {req.stats.get("recent_activity_data", "N/A")}
+
+OUTPUT REQUIREMENTS:
+* Use markdown.
+* Keep total response between 150 and 300 words.
+* Make it feel like a real mentor personally reviewed the student's progress.
+* Do not mention that you are an AI.
+* Do not list raw percentages unless they help explain a point.
+* Prioritize actionable guidance over observations.
+* Focus on the student's next step, not just their past performance.
+"""
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            if provider == "gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}]
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 404:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
+                    resp = await client.post(url, json=payload)
+                if not resp.is_success:
+                    raise Exception(f"Gemini API error: {resp.text}")
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"]
+            elif provider == "openai":
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {api_key}"}
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                resp = await client.post(url, headers=headers, json=payload)
+                if not resp.is_success:
+                    raise Exception(f"OpenAI API error: {resp.text}")
+                data = resp.json()
+                text = data["choices"][0]["message"]["content"]
+            else:
+                raise Exception("Unknown provider")
+
+            # For the new conversational prompt, we just return the raw text
+            text = text.strip()
+            return {"insights": text}
+    except Exception as e:
+        print(f"[!] AI Generation Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
