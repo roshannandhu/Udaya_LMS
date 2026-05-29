@@ -48,7 +48,11 @@
       "Bash(git push *)",
       "Bash(Get-Content -Path \"E:\\\\IMP projects\\\\Udaya\\\\backend\\\\main.py\" -TotalCount 1230)",
       "Bash(Select-Object -Last 30)",
-      "Bash(Format-List FullName)"
+      "Bash(Format-List FullName)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(npx eslint *)"
     ]
   }
 }

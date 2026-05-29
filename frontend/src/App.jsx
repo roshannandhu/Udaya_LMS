@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 
 import LoginPage from './pages/LoginPage';
@@ -6,62 +6,77 @@ import { useAuthStore, ROLES } from './lib/auth';
 import { useAppCache } from './store';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
-import TodayPage          from './pages/teacher/TodayPage';
-import SubjectsPage       from './pages/teacher/SubjectsPage';
-import StandardDetailPage from './pages/teacher/StandardDetailPage';
-import SubjectDetailPage  from './pages/teacher/SubjectDetailPage';
-import StudentsPage       from './pages/teacher/StudentsPage';
-import StudentDetailPage  from './pages/teacher/StudentDetailPage';
-import BroadcastsPage     from './pages/teacher/BroadcastsPage';
-import MorePage           from './pages/teacher/MorePage';
-import QuestionBankPage   from './pages/teacher/QuestionBankPage';
-import TeacherProfilePage from './pages/teacher/TeacherProfilePage';
-import TestsPage          from './pages/teacher/TestsPage';
-import ReportsPage        from './pages/teacher/ReportsPage';
-import RemindersPage      from './pages/teacher/RemindersPage';
-import SettingsPage       from './pages/teacher/SettingsPage';
-import AttendancePage     from './pages/teacher/AttendancePage';
-import TeacherLiveClassesPage from './pages/teacher/TeacherLiveClassesPage';
-import StudentLiveClassesPage from './pages/student/StudentLiveClassesPage';
+import StudentLayout      from './pages/student/StudentLayout';
 
-import StudentLayout          from './pages/student/StudentLayout';
-import StudentHomePage        from './pages/student/StudentHomePage';
-import StudentSubjectsPage    from './pages/student/StudentSubjectsPage';
-import StudentSubjectViewPage from './pages/student/StudentSubjectViewPage';
-import StudentVideoPlayerPage from './pages/student/StudentVideoPlayerPage';
-import StudentTestsPage       from './pages/student/StudentTestsPage';
-import StudentTestTakingPage  from './pages/student/StudentTestTakingPage';
-import StudentTestResultPage  from './pages/student/StudentTestResultPage';
-import StudentTestReviewPage  from './pages/student/StudentTestReviewPage';
-import StudentBroadcastsPage  from './pages/student/StudentBroadcastsPage';
-import StudentProfilePage     from './pages/student/StudentProfilePage';
-import StudentChangePasswordPage from './pages/student/StudentChangePasswordPage';
-import StudentLeaderboardPage   from './pages/student/StudentLeaderboardPage';
-import StudentMorePage        from './pages/student/StudentMorePage';
+const TodayPage               = lazy(() => import('./pages/teacher/TodayPage'));
+const SubjectsPage            = lazy(() => import('./pages/teacher/SubjectsPage'));
+const StandardDetailPage      = lazy(() => import('./pages/teacher/StandardDetailPage'));
+const SubjectDetailPage       = lazy(() => import('./pages/teacher/SubjectDetailPage'));
+const StudentsPage            = lazy(() => import('./pages/teacher/StudentsPage'));
+const StudentDetailPage       = lazy(() => import('./pages/teacher/StudentDetailPage'));
+const BroadcastsPage          = lazy(() => import('./pages/teacher/BroadcastsPage'));
+const MorePage                = lazy(() => import('./pages/teacher/MorePage'));
+const QuestionBankPage        = lazy(() => import('./pages/teacher/QuestionBankPage'));
+const TeacherProfilePage      = lazy(() => import('./pages/teacher/TeacherProfilePage'));
+const TestsPage               = lazy(() => import('./pages/teacher/TestsPage'));
+const ReportsPage             = lazy(() => import('./pages/teacher/ReportsPage'));
+const RemindersPage           = lazy(() => import('./pages/teacher/RemindersPage'));
+const SettingsPage            = lazy(() => import('./pages/teacher/SettingsPage'));
+const AttendancePage          = lazy(() => import('./pages/teacher/AttendancePage'));
+const TeacherLiveClassesPage  = lazy(() => import('./pages/teacher/TeacherLiveClassesPage'));
+const StudentLiveClassesPage  = lazy(() => import('./pages/student/StudentLiveClassesPage'));
+
+const StudentHomePage            = lazy(() => import('./pages/student/StudentHomePage'));
+const StudentSubjectsPage        = lazy(() => import('./pages/student/StudentSubjectsPage'));
+const StudentSubjectViewPage     = lazy(() => import('./pages/student/StudentSubjectViewPage'));
+const StudentVideoPlayerPage     = lazy(() => import('./pages/student/StudentVideoPlayerPage'));
+const StudentTestsPage           = lazy(() => import('./pages/student/StudentTestsPage'));
+const StudentTestTakingPage      = lazy(() => import('./pages/student/StudentTestTakingPage'));
+const StudentTestResultPage      = lazy(() => import('./pages/student/StudentTestResultPage'));
+const StudentTestReviewPage      = lazy(() => import('./pages/student/StudentTestReviewPage'));
+const StudentBroadcastsPage      = lazy(() => import('./pages/student/StudentBroadcastsPage'));
+const StudentProfilePage         = lazy(() => import('./pages/student/StudentProfilePage'));
+const StudentChangePasswordPage  = lazy(() => import('./pages/student/StudentChangePasswordPage'));
+const StudentLeaderboardPage     = lazy(() => import('./pages/student/StudentLeaderboardPage'));
+const StudentMorePage            = lazy(() => import('./pages/student/StudentMorePage'));
+const StudentReportPage          = lazy(() => import('./pages/student/StudentReportPage'));
+
+function PageLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white/30">
+      <div className="animate-pulse flex items-center gap-2">
+        <div className="w-8 h-8 bg-neutral-200 rounded-lg"></div>
+        <span className="text-neutral-500">Loading...</span>
+      </div>
+    </div>
+  );
+}
 
 function AuthHandler() {
   const navigate = useNavigate();
-  const { role, verifyWithBackend, isLoading, user } = useAuthStore();
+  const { verifyWithBackend } = useAuthStore();
   const prefetchAll = useAppCache(s => s.prefetchAll);
 
   useEffect(() => {
-    verifyWithBackend();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && user) {
-      // Kick off background prefetch as soon as user is verified
-      prefetchAll();
-      const currentPath = window.location.pathname;
-      if (currentPath === '/login' || currentPath === '/') {
-        if (role === ROLES.TEACHER) {
-          navigate('/teacher', { replace: true });
-        } else if (role === ROLES.STUDENT) {
-          navigate('/student', { replace: true });
+    let cancelled = false;
+    (async () => {
+      await verifyWithBackend();
+      if (cancelled) return;
+      const { isLoading, user, role } = useAuthStore.getState();
+      if (!isLoading && user) {
+        prefetchAll();
+        const currentPath = window.location.pathname;
+        if (currentPath === '/login' || currentPath === '/') {
+          if (role === ROLES.TEACHER) {
+            navigate('/teacher', { replace: true });
+          } else if (role === ROLES.STUDENT) {
+            navigate('/student', { replace: true });
+          }
         }
       }
-    }
-  }, [role, isLoading, user, navigate]);
+    })();
+    return () => { cancelled = true; };
+  }, [navigate, prefetchAll]);
 
   return null;
 }
@@ -87,14 +102,17 @@ function ProtectedTeacherRoute({ children }) {
 }
 
 function ProtectedStudentRoute({ children }) {
-  const { role, isLoading, user, enforceSingleDevice } = useAuthStore();
+  const role            = useAuthStore(s => s.role);
+  const isLoading       = useAuthStore(s => s.isLoading);
+  const user            = useAuthStore(s => s.user);
+  const enforceSingleDevice = useAuthStore(s => s.enforceSingleDevice);
   const location = useLocation();
 
   useEffect(() => {
-    if (user && role === ROLES.STUDENT) {
+    if (user?.id && role === ROLES.STUDENT) {
       enforceSingleDevice(user.id);
     }
-  }, [user, role, enforceSingleDevice]);
+  }, [user?.id, role, enforceSingleDevice]);
 
   if (isLoading) {
     return (
@@ -165,6 +183,7 @@ export default function App() {
           <Route path="more" element={<StudentMorePage />} />
           <Route path="change-password" element={<StudentChangePasswordPage />} />
           <Route path="leaderboard" element={<StudentLeaderboardPage />} />
+          <Route path="report" element={<StudentReportPage />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/login" replace />} />

@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, Target, CheckCircle2, Trophy, BookOpen, ChevronRight, ShieldOff, Shield, Eye } from 'lucide-react';
-import { Btn, Avatar, Tag, Divider, Modal, Input, SectionHeader, Skeleton } from '../../components/ui';
-import { apiClient } from '../../lib/api';
+import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { Btn, Tag, Divider, Modal, Input, Skeleton } from '../../components/ui';
+import { apiClient, reportApi } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
-import AttendanceStudentCard from '../../components/teacher/AttendanceStudentCard';
-import StudentReportModal from '../../components/teacher/StudentReportModal';
+import ReportCardUI from '../../components/shared/ReportCardUI';
 
 export default function StudentDetailPage() {
   const { studentId } = useParams();
@@ -13,8 +12,8 @@ export default function StudentDetailPage() {
 
   const [student, setStudent] = useState(null);
   const [standard, setStandard] = useState(null);
-  const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  
   const [editOpen, setEditOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -24,8 +23,17 @@ export default function StudentDetailPage() {
   const [resetPwLoading, setResetPwLoading] = useState(false);
   const [viewPwResult, setViewPwResult] = useState(null);
   const [viewPwLoading, setViewPwLoading] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+
+  const [reportPeriod, setReportPeriod] = useState('overall');
+  const [reportData, setReportData] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState(null);
+
+  const [suggestions, setSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const { defaultStudentPassword } = useSettingsStore();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,12 +43,8 @@ export default function StudentDetailPage() {
         setEditForm({ name: s.name || '', email: s.email || '', phone: s.phone || '' });
 
         if (s.standard_id) {
-          const [std, subs] = await Promise.all([
-            apiClient(`/standards/${s.standard_id}`).catch(() => null),
-            apiClient(`/subjects?standard_id=${s.standard_id}`).catch(() => []),
-          ]);
+          const std = await apiClient(`/standards/${s.standard_id}`).catch(() => null);
           setStandard(std);
-          setSubjects(subs || []);
         }
       } catch (err) {
         console.error('Student fetch error:', err);
@@ -50,6 +54,30 @@ export default function StudentDetailPage() {
     };
     fetchData();
   }, [studentId]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    setReportLoading(true);
+    setReportError(null);
+    setSuggestions(null);
+    reportApi.getV2(studentId, reportPeriod)
+      .then(d => setReportData(d))
+      .catch(e => setReportError(e.message || 'Failed to load report'))
+      .finally(() => setReportLoading(false));
+  }, [studentId, reportPeriod]);
+
+  const handleGenerateSuggestions = async () => {
+    setLoadingSuggestions(true);
+    try {
+      const res = await reportApi.generateSuggestions(studentId, reportPeriod);
+      setSuggestions(res.suggestions);
+    } catch (e) {
+      console.error(e);
+      setSuggestions(["Failed to generate suggestions."]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -65,8 +93,6 @@ export default function StudentDetailPage() {
       console.error(err);
     }
   };
-
-  const { defaultStudentPassword } = useSettingsStore();
 
   const handleResetPassword = async () => {
     setResetPwLoading(true);
@@ -130,6 +156,105 @@ export default function StudentDetailPage() {
     }
   };
 
+  const {
+    radarData,
+    performanceData,
+    multiLineData,
+    attHeatmap, attStats,
+    vidHeatmap, vidStats
+  } = useMemo(() => {
+    if (!reportData) return {};
+    const data = reportData;
+
+    const sr = (data.subject_radar || []).map(r => ({
+      subject: r.subject,
+      score: r.test_avg || 0,
+      classAvg: r.classAvg || 0
+    }));
+
+    const stats = data.student || student || {};
+    const attPct = Math.round(stats.attendance_pct || 0);
+    const vp = data.video_heatmap || [];
+    const videoPct = vp.length ? Math.round((vp.filter(d => d.minutes > 0).length / vp.length) * 100) : 0;
+    const pd = [
+      { subject: "Knowledge", score: Math.round(stats.avg_score || 0), classAvg: 65 },
+      { subject: "Attendance", score: attPct, classAvg: 75 },
+      { subject: "Activity", score: videoPct, classAvg: 60 },
+      { subject: "Consistency", score: Math.round((stats.avg_score || 0) * 0.9), classAvg: 70 },
+      { subject: "Points", score: Math.min(100, (stats.points || 0) / 10), classAvg: 50 },
+    ];
+
+    const tl = data.test_timeline || [];
+    const mData = {};
+    tl.forEach(t => {
+      const sub = t.subject || 'Unknown';
+      if (!mData[sub]) mData[sub] = { weeks: [], topics: {} };
+      const dStr = t.date ? t.date.slice(5, 10) : 'Test'; 
+      const wName = `${dStr} ${t.test_title.slice(0, 8)}`;
+      if (!mData[sub].weeks.includes(wName)) mData[sub].weeks.push(wName);
+      
+      const topic = t.test_title || 'General';
+      if (!mData[sub].topics[topic]) mData[sub].topics[topic] = [];
+      mData[sub].topics[topic].push(t.score_pct);
+    });
+
+    Object.keys(mData).forEach(sub => {
+      const targetLen = mData[sub].weeks.length;
+      Object.keys(mData[sub].topics).forEach(top => {
+        const arr = mData[sub].topics[top];
+        while (arr.length < targetLen) arr.unshift(arr[0] || 0);
+      });
+    });
+
+    const ah = data.attendance_heatmap || [];
+    const aStats = {
+      present: ah.reduce((a, d) => a + (d.present || 0), 0),
+      absent: ah.reduce((a, d) => a + (d.absent || 0), 0),
+      late: ah.reduce((a, d) => a + (d.late || 0), 0),
+    };
+
+    const vh = data.video_heatmap || [];
+    const vStats = {
+      days: vh.filter(d => d.minutes > 0).length,
+      mins: Math.round(vh.reduce((a, d) => a + (d.minutes || 0), 0)),
+    };
+
+    const makeHeatmapGrid = (heatmapData, type) => {
+      const dateMap = {};
+      heatmapData.forEach(d => {
+        if (type === 'attendance') {
+           dateMap[d.date] = (d.present || 0) > 0 ? 3 : (d.late || 0) > 0 ? 2 : (d.absent || 0) > 0 ? 1 : 0;
+        } else {
+           dateMap[d.date] = d.minutes > 60 ? 4 : d.minutes > 30 ? 3 : d.minutes > 10 ? 2 : d.minutes > 0 ? 1 : 0;
+        }
+      });
+      const grid = [];
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(today.getDate() - (12 * 7 - 1));
+      while (start.getDay() !== 0) start.setDate(start.getDate() - 1);
+      
+      let currentWeek = [];
+      for (let i = 0; i < 12 * 7; i++) {
+        const dStr = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`;
+        currentWeek.push(dateMap[dStr] || 0);
+        if (currentWeek.length === 7) { grid.push(currentWeek); currentWeek = []; }
+        start.setDate(start.getDate() + 1);
+      }
+      return grid;
+    };
+
+    return {
+      radarData: sr,
+      performanceData: pd,
+      multiLineData: mData,
+      attHeatmap: makeHeatmapGrid(ah, 'attendance'),
+      attStats: aStats,
+      vidHeatmap: makeHeatmapGrid(vh, 'video'),
+      vidStats: vStats
+    };
+  }, [reportData, student]);
+
   if (loading) {
     return (
       <div>
@@ -139,9 +264,9 @@ export default function StudentDetailPage() {
             <Skeleton className="h-5 w-40" />
           </div>
         </div>
-        <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto space-y-4">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-32 w-full" />
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-neutral-400 min-h-screen">
+          <Loader2 size={32} className="animate-spin mb-4 text-neutral-300" />
+          <p className="text-sm">Loading...</p>
         </div>
       </div>
     );
@@ -169,105 +294,66 @@ export default function StudentDetailPage() {
   const s = student || {};
 
   return (
-    <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md"><ArrowLeft size={16} /></button>
-          <div className="flex-1 min-w-0">
-            <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Students / {standard?.name}</p>
-            <h1 className="text-base font-semibold truncate">{s.name}</h1>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
-        <div className="flex items-start gap-4 mb-8 pb-8 border-b border-white/60">
-          <Avatar name={s.name} src={s.avatar_url} size="xl" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <h2 className="text-xl font-semibold">{s.name}</h2>
-              {s.blocked && <Tag color="red">Blocked</Tag>}
+    <div className="bg-[#FAFAF9] min-h-screen">
+      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-md transition-colors"><ArrowLeft size={16} /></button>
+            <div className="flex-1 min-w-0">
+              <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Students / {standard?.name}</p>
+              <h1 className="text-base font-semibold truncate text-[#1A1A19]">{s.name}</h1>
             </div>
-            <p className="text-sm text-neutral-500 mb-3">@{s.username}</p>
-            <div className="flex items-center gap-3 text-xs text-neutral-600 flex-wrap">
-              {s.email && <span className="flex items-center gap-1"><Mail size={12} /> {s.email}</span>}
-              {s.phone && <span className="flex items-center gap-1"><Phone size={12} /> {s.phone}</span>}
-              {standard && <Tag color="gray">{standard.emoji} {standard.name}</Tag>}
-            </div>
+            {s.blocked && <Tag color="red" className="ml-2">Blocked</Tag>}
           </div>
           <div className="flex gap-2 flex-shrink-0 relative">
-            <Btn variant="default" size="sm" icon={Edit2} onClick={() => setEditOpen(true)}>Edit</Btn>
-            <Btn variant="default" size="sm" icon={MoreVertical} onClick={() => setMenuOpen(!menuOpen)} />
+            <Btn variant="default" size="sm" icon={Edit2} onClick={() => setEditOpen(true)} className="bg-white border-[#EBEAE7] text-[#1A1A19]">Edit</Btn>
+            <Btn variant="default" size="sm" icon={MoreVertical} onClick={() => setMenuOpen(!menuOpen)} className="bg-white border-[#EBEAE7] text-[#1A1A19]" />
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-10 w-48 py-1 z-50 rounded-xl glass-panel border border-white/60 shadow-lg backdrop-blur-md">
-                  <button onClick={() => { navigate('/teacher/broadcasts', { state: { stdId: s.standard_id } }); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><MessageSquare size={13} /> Message standard</button>
-                  <button onClick={() => { setReportOpen(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><Download size={13} /> Export report</button>
-                  <button onClick={handleResetPassword} disabled={resetPwLoading} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><Lock size={13} /> {resetPwLoading ? 'Resetting…' : 'Reset password'}</button>
-                  <button onClick={handleViewPassword} disabled={viewPwLoading} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/40 text-left"><Eye size={13} /> {viewPwLoading ? 'Loading…' : 'View password'}</button>
-                  <button onClick={handleToggleBlock} disabled={blockLoading} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-amber-50 text-left text-amber-700">
-                    {s.blocked ? <Shield size={13} /> : <ShieldOff size={13} />} {blockLoading ? 'Updating…' : s.blocked ? 'Unblock student' : 'Block student'}
+                <div className="absolute right-0 top-10 w-56 py-1 z-50 rounded-xl bg-white border border-[#EBEAE7] shadow-lg">
+                  <button onClick={() => { navigate('/teacher/broadcasts', { state: { stdId: s.standard_id } }); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#FAFAF9] text-left text-[#1A1A19]"><MessageSquare size={14} /> Message standard</button>
+                  <button onClick={handleResetPassword} disabled={resetPwLoading} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#FAFAF9] text-left text-[#1A1A19]"><Lock size={14} /> {resetPwLoading ? 'Resetting…' : 'Reset password'}</button>
+                  <button onClick={handleViewPassword} disabled={viewPwLoading} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[#FAFAF9] text-left text-[#1A1A19]"><Eye size={14} /> {viewPwLoading ? 'Loading…' : 'View password'}</button>
+                  <button onClick={handleToggleBlock} disabled={blockLoading} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-amber-50 text-left text-amber-700">
+                    {s.blocked ? <Shield size={14} /> : <ShieldOff size={14} />} {blockLoading ? 'Updating…' : s.blocked ? 'Unblock student' : 'Block student'}
                   </button>
-                  <Divider className="my-1" />
-                  <button onClick={() => { setConfirmRemove(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-red-50 text-left text-red-600"><Trash2 size={13} /> Remove from standard</button>
+                  <Divider className="my-1 border-[#EBEAE7]" />
+                  <button onClick={() => { setConfirmRemove(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-left text-red-600"><Trash2 size={14} /> Remove from standard</button>
                 </div>
               </>
             )}
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          {[
-            { label: 'Avg score',  value: s.avg_score != null ? `${Math.round(s.avg_score)}%` : '—', icon: Target },
-            { label: 'Attendance', value: s.attendance_pct != null ? `${Math.round(s.attendance_pct)}%` : '—', icon: CheckCircle2 },
-            { label: 'Points',     value: s.points ?? 0, icon: Trophy },
-            { label: 'Subjects',   value: subjects.length, icon: BookOpen },
-          ].map((stat, i) => (
-            <div key={i} className="p-4 glass-panel border-white/60 shadow-sm rounded-xl">
-              <stat.icon size={14} className="text-neutral-500 mb-2" />
-              <p className="text-xl font-semibold tracking-tight">{stat.value}</p>
-              <p className="text-xs text-neutral-600">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {s.standard_id && (
-          <button
-            onClick={() => navigate('/teacher/broadcasts', { state: { stdId: s.standard_id } })}
-            className="w-full flex items-center gap-3 p-3.5 glass-panel rounded-xl hover:bg-white/50 transition-colors text-left mb-8 border border-white/60">
-            <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center flex-shrink-0">
-              <MessageSquare size={14} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">Broadcast to {standard?.name || 'class'}</p>
-              <p className="text-xs text-neutral-500">Send a message to all students in this class</p>
-            </div>
-            <ChevronRight size={14} className="text-neutral-400" />
-          </button>
-        )}
-
-        <div className="mb-8">
-          <AttendanceStudentCard studentId={studentId} />
-        </div>
-
-        {subjects.length > 0 && (
-          <div className="mb-8">
-            <SectionHeader title="Enrolled in" count={subjects.length} />
-            <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden">
-              {subjects.map((c, i) => (
-                <button key={c.id} onClick={() => navigate(`/teacher/subjects/${c.standard_id}/${c.id}`)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/70 transition-colors text-left ${i < subjects.length - 1 ? 'border-b border-white/40' : ''}`}>
-                  <span className="text-lg">{c.emoji}</span>
-                  <p className="flex-1 text-sm font-medium truncate">{c.name}</p>
-                  <ChevronRight size={14} className="text-neutral-400" />
-                </button>
-              ))}
-            </div>
+      <div className="max-w-5xl mx-auto">
+        {reportLoading ? (
+          <div className="flex justify-center py-16"><Loader2 size={26} className="animate-spin text-neutral-400" /></div>
+        ) : reportError ? (
+          <div className="flex items-center gap-2 p-4 m-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100">
+            <AlertTriangle size={16} />{reportError}
           </div>
+        ) : (
+          <ReportCardUI
+            student={{...student, standard: standard}}
+            period={reportPeriod}
+            onPeriodChange={setReportPeriod}
+            radarData={radarData}
+            performanceData={performanceData}
+            multiLineData={multiLineData}
+            attendanceGrid={attHeatmap}
+            attendanceStats={attStats}
+            videoGrid={vidHeatmap}
+            videoStats={vidStats}
+            suggestions={suggestions}
+            loadingSuggestions={loadingSuggestions}
+            onGenerateSuggestions={handleGenerateSuggestions}
+          />
         )}
       </div>
 
+      {/* Edit Modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit student">
         <div className="space-y-4">
           <Input label="Full name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} autoFocus />
@@ -280,6 +366,7 @@ export default function StudentDetailPage() {
         </div>
       </Modal>
 
+      {/* Password Modals */}
       <Modal open={!!resetPwResult} onClose={() => setResetPwResult(null)} title="Password reset" size="sm">
         <p className="text-sm text-neutral-600 mb-3">New temporary password for <strong>{s.name}</strong>:</p>
         <div className="flex items-center gap-2 p-3 bg-neutral-900 text-white rounded-lg font-mono text-base mb-3 select-all">
@@ -343,7 +430,6 @@ export default function StudentDetailPage() {
         </div>
       </Modal>
 
-      <StudentReportModal open={reportOpen} onClose={() => setReportOpen(false)} studentId={studentId} />
     </div>
   );
 }

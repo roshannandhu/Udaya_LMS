@@ -165,10 +165,29 @@ Columns: `student_id, standard_id, subject_class_id, subject_name, total_session
 ### `videos`
 ```sql
 id UUID PK, class_id UUID FK → subject_classes(id) ON DELETE CASCADE,
-title TEXT, description TEXT, cloudflare_video_id TEXT, duration_secs INTEGER,
+title TEXT, description TEXT, source_type TEXT DEFAULT 'upload',
+youtube_video_id TEXT, youtube_url TEXT,
+cloudflare_video_id TEXT, storage_path TEXT, duration_secs INTEGER,
 size_bytes BIGINT, allow_download BOOLEAN DEFAULT true,
 created_by UUID,          -- teacher's auth.users.id
 created_at TIMESTAMPTZ
+```
+
+### `live_classes`
+```sql
+id UUID PK, class_id UUID FK → subject_classes(id) ON DELETE CASCADE,
+title TEXT, scheduled_at TIMESTAMPTZ, duration_mins INTEGER DEFAULT 60,
+zoom_meeting_id TEXT, zoom_join_url TEXT, zoom_start_url TEXT,
+status TEXT DEFAULT 'scheduled',
+created_by UUID, created_at TIMESTAMPTZ
+```
+
+### `live_class_attendance`
+```sql
+id UUID PK, live_class_id UUID FK → live_classes(id) ON DELETE CASCADE,
+student_id UUID FK → students(id) ON DELETE CASCADE,
+joined_at TIMESTAMPTZ, left_at TIMESTAMPTZ, duration_mins INTEGER,
+attended BOOLEAN DEFAULT false, UNIQUE(live_class_id, student_id)
 ```
 
 ### `video_progress`
@@ -356,10 +375,27 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 | GET | `/api/videos` | any | Query: `?class_id=`. Students get same response (no access restriction beyond auth). |
 | POST | `/api/videos` | teacher | Body JSON: `{ class_id, title, description?, cloudflare_video_id?, duration_secs?, allow_download? }`. For already-uploaded videos. |
 | POST | `/api/videos/upload` | teacher | Multipart form: `file` + `class_id` + `title` + optional fields. Uploads to Cloudflare Stream. Requires `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_STREAM_API_TOKEN` in env. |
+| POST | `/api/videos/youtube` | teacher | Body: `{ class_id, title, description?, youtube_video_id, youtube_url }`. Creates an unlisted YouTube video link. |
+| GET | `/api/videos/{video_id}/token` | any | Returns the YouTube video ID for the iframe API. Requires standard enrollment match. |
+| GET | `/api/videos/{video_id}/thumbnail` | any | Returns the YouTube thumbnail URL. |
 | PATCH | `/api/videos/{video_id}` | teacher | Body: `{ title?, description?, allow_download? }`. Ownership checked via `created_by`. |
 | DELETE | `/api/videos/{video_id}` | teacher | Deletes from Cloudflare Stream + DB. Ownership checked. |
 | GET | `/api/videos/{video_id}/stats` | teacher | Returns watch count, completion count, download count for a video. |
 | POST | `/api/videos/{video_id}/complete` | student | Body: `{ progress_secs?, downloaded? }`. Marks video as completed/updates progress in `video_progress`. Adds points to student. |
+
+---
+
+### Live Classes & Zoom
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/live-classes` | any | Query: `?class_id=`. Returns scheduled, live, and ended classes. |
+| POST | `/api/live-classes` | teacher | Body: `{ class_id, title, scheduled_at, duration_mins? }`. Creates a Zoom meeting via S2S OAuth. |
+| GET | `/api/live-classes/{live_class_id}/join-token` | any | Returns Zoom SDK signature for joining within app. URL is never exposed. |
+| POST | `/api/live-classes/{live_class_id}/end` | teacher | Ends the class and fetches attendance from Zoom participant reports. |
+| POST | `/api/live-classes/{live_class_id}/cancel` | teacher | Cancels a scheduled class. |
+| GET | `/api/live-classes/{live_class_id}/attendance` | teacher | Returns the attendance list. |
+| POST | `/api/zoom/webhook` | public | Zoom webhook endpoint to receive meeting events (ended, joined, left). |
 
 ---
 

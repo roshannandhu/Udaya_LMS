@@ -59,12 +59,19 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-transparent">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-10 justify-center">
+        <div className="flex flex-col items-center gap-4 mb-10 justify-center">
           {lmsLogo
-            ? <img src={lmsLogo} alt="logo" className="w-9 h-9 rounded-lg object-cover" />
-            : <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center"><GraduationCap size={18} className="text-white" /></div>
+            ? <img src={lmsLogo} alt="logo" className="w-16 h-16 rounded-2xl object-cover shadow-sm border border-neutral-200" />
+            : <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center shadow-lg ring-4 ring-indigo-50/50">
+                <GraduationCap size={32} className="text-white drop-shadow-md" />
+              </div>
           }
-          <span className="font-semibold tracking-tight text-lg">{lmsName || 'Tutoria'}</span>
+          <span 
+            className="font-black text-4xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-500 text-center drop-shadow-sm"
+            style={{ fontFamily: '"Outfit", "Plus Jakarta Sans", "Inter", sans-serif' }}
+          >
+            {lmsName || 'Tutoria'}
+          </span>
         </div>
 
         <div className="glass-panel border border-white/60 p-8 rounded-2xl shadow-lg backdrop-blur-md">

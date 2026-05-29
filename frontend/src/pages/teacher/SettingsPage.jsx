@@ -104,6 +104,7 @@ export default function SettingsPage() {
     terminationPin, setTerminationPin,
     notifTestSubmission, notifNewStudent, notifBroadcastReply, notifWeeklyReport, setNotif,
     securitySingleDevice, securityAutoLogout, setSecurityPref,
+    studentsCanViewReport, setStudentsCanViewReport,
   } = useSettingsStore();
 
   const logoInputRef = useRef(null);
@@ -210,6 +211,11 @@ export default function SettingsPage() {
           <Row label="New student joined" checked={notifNewStudent} onChange={v => setNotif('notifNewStudent', v)} />
           <Row label="Broadcast replies" sub="Student replies to announcements" checked={notifBroadcastReply} onChange={v => setNotif('notifBroadcastReply', v)} />
           <Row label="Weekly report" sub="Every Monday morning" checked={notifWeeklyReport} onChange={v => setNotif('notifWeeklyReport', v)} />
+        </Section>
+
+        {/* Student Portal */}
+        <Section title="Student Portal">
+          <Row label="Students can view their report card" sub="If off, the Report Card button is hidden from students" checked={studentsCanViewReport} onChange={setStudentsCanViewReport} />
         </Section>
 
         {/* Security — now persisted */}

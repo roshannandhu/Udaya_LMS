@@ -4,8 +4,6 @@ import { Modal, Btn } from '../ui';
 import { parseImportFile } from '../../lib/bulkImport';
 import { apiClient } from '../../lib/api';
 import { useSettingsStore } from '../../store';
-import * as XLSX from 'xlsx';
-
 export default function BulkImportModal({ open, onClose, standards, existingStudents, onImportComplete, initialStandardId = null }) {
   const [step, setStep] = useState('upload'); // upload | preview | importing | done
   const [file, setFile] = useState(null);
@@ -17,7 +15,8 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
   const fileInputRef = useRef(null);
   const { defaultStudentPassword } = useSettingsStore();
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await import('xlsx');
     const initStd = initialStandardId ? standards.find(s => s.id === initialStandardId) : null;
     const stdName = initStd ? initStd.name : '10th Standard';
     const wsData = [
@@ -128,8 +127,9 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
     }
   };
 
-  const downloadCredentials = () => {
+  const downloadCredentials = async () => {
     if (!data) return;
+    const XLSX = await import('xlsx');
     const validStudents = data.students.filter(s => s.status !== 'error' && s.matched_standard_id);
     
     const wsData = [
@@ -149,7 +149,6 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
     });
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    // Autofit columns slightly
     ws['!cols'] = [{wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 25}];
     
     const wb = XLSX.utils.book_new();

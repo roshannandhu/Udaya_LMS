@@ -24,7 +24,8 @@ function setCachedActivity(data) {
 export default function TodayPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { standards, refreshStandards } = useAppCache();
+  const standards        = useAppCache(s => s.standards);
+  const refreshStandards  = useAppCache(s => s.refreshStandards);
 
   // Hydrate instantly from sessionStorage — no loading flicker
   const [stats, setStats]       = useState(() => getCachedStats());

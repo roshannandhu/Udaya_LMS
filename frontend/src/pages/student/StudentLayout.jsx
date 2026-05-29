@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import BottomNav from '../../components/shared/BottomNav';
@@ -50,7 +50,9 @@ export default function StudentLayout() {
     <div className="min-h-screen flex flex-col lg:pl-[240px]">
       <Sidebar type="student" />
       <div className="flex-1 flex flex-col">
-        <Outlet />
+        <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
+          <Outlet />
+        </Suspense>
       </div>
       <BottomNav active={active} setActive={setActive} type="student" />
     </div>

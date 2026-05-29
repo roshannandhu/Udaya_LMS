@@ -65,10 +65,14 @@ export default function StudentLiveClassesPage() {
     fetchAll();
   }, [standardId]);
 
+  // Refresh list + clock every 30s so students see "Live" status when teacher starts
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
+    const id = setInterval(() => {
+      setNow(Date.now());
+      fetchAll();
+    }, 30000);
     return () => clearInterval(id);
-  }, []);
+  }, [standardId]);
 
   const handleJoin = async (lc) => {
     try {

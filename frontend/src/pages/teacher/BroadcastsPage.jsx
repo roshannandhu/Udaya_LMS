@@ -11,7 +11,12 @@ export default function BroadcastsPage() {
   const location = useLocation();
 
   // Use global cache for standards + students
-  const { standards, students, standardsReady, studentsReady, refreshStandards, refreshStudents } = useAppCache();
+  const standards       = useAppCache(s => s.standards);
+  const students        = useAppCache(s => s.students);
+  const standardsReady  = useAppCache(s => s.standardsReady);
+  const studentsReady   = useAppCache(s => s.studentsReady);
+  const refreshStandards = useAppCache(s => s.refreshStandards);
+  const refreshStudents  = useAppCache(s => s.refreshStudents);
   const loading = !standardsReady || !studentsReady;
 
   const [activeStdId, setActiveStdId] = useState(location.state?.stdId || null);

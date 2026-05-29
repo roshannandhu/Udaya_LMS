@@ -4,6 +4,22 @@ Format: newest first. Each entry includes what changed, which files, and why.
 
 ---
 
+## May 2026 — Zoom Live Classes & YouTube Integration
+
+### Feature: Zoom Live Classes
+- **Files:** `backend/main.py`, `backend/schema.sql`, frontend components.
+- Teacher can schedule a live class, which automatically creates a Zoom meeting via Zoom Server-to-Server OAuth.
+- Students can join the live class inside the app using the Zoom Web SDK without the URL ever being exposed.
+- Zoom webhooks and API are used to track participant duration and save attendance.
+
+### Feature: YouTube Unlisted Video Support
+- **Files:** `backend/main.py`, `backend/schema.sql`, frontend components.
+- Teacher can provide a YouTube URL for unlisted videos instead of uploading.
+- App embeds a custom YouTube IFrame player for students.
+- Native YouTube controls are hidden to prevent students from copying the video URL.
+
+---
+
 ## May 2026 — Standard Termination: Full Storage Lifecycle Fix
 
 ### Bugfix: Orphaned Storage files after standard termination

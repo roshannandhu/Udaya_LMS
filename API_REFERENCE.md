@@ -93,9 +93,12 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 
 | Method | Path | Auth | Body / Query | Response |
 |---|---|---|---|---|
-| GET | `/videos` | any | `?class_id=` | `[{ id, class_id, title, description, cloudflare_video_id, duration_secs, allow_download, created_by, created_at }]` |
+| GET | `/videos` | any | `?class_id=` | `[{ id, class_id, title, description, source_type, cloudflare_video_id, duration_secs, allow_download, created_by, created_at }]` |
 | POST | `/videos` | teacher | `{ class_id, title, description?, cloudflare_video_id?, duration_secs?, allow_download? }` | Created video |
 | POST | `/videos/upload` | teacher | multipart: `file, class_id, title, description?, allow_download?` | Video object with `cloudflare_video_id` (CF UID or Supabase Storage HTTPS URL) |
+| POST | `/videos/youtube` | teacher | `{ class_id, title, description?, youtube_video_id, youtube_url }` | Created video object without `youtube_video_id` |
+| GET | `/videos/{video_id}/token` | any | — | `{ token: youtube_video_id, source_type, title }` |
+| GET | `/videos/{video_id}/thumbnail` | any | — | `{ thumbnail_url, source_type }` |
 | POST | `/students/me/avatar` | student | multipart: `file` | `{ avatar_url }` — Supabase Storage URL |
 | PATCH | `/videos/{video_id}` | teacher | `{ title?, description?, allow_download? }` | Updated video |
 | DELETE | `/videos/{video_id}` | teacher | — | `{ message }` — also deletes from Cloudflare |
@@ -103,10 +106,31 @@ All endpoints require `Authorization: Bearer <token>` unless marked `[public]`.
 | POST | `/videos/{video_id}/complete` | student | `{ progress_secs?, downloaded? }` | `{ message }` — awards points |
 
 **Notes:**
+- `GET /videos` intentionally strips `youtube_video_id` from the response.
+- `GET /videos/{video_id}/token` verifies standard enrollment before returning the YouTube video ID as a `token` to load the custom player.
 - `POST /videos/upload` uses Cloudflare Stream when `CLOUDFLARE_ACCOUNT_ID`+`CLOUDFLARE_STREAM_API_TOKEN` are set; otherwise falls back to Supabase Storage `videos` bucket (auto-created). In the fallback path, `cloudflare_video_id` contains a full HTTPS URL — detect with `startsWith('https://')`.
 - `POST /students/me/avatar` stores in Supabase Storage `avatars` bucket and writes URL to `students.avatar_url`.
 - PATCH/DELETE verify `created_by == current user`
 - `POST /videos` (JSON) is for manually adding video records without uploading
+
+---
+
+## Live Classes
+
+| Method | Path | Auth | Body / Query | Response |
+|---|---|---|---|---|
+| GET | `/live-classes` | any | `?class_id=` | `[live_class objects]` |
+| POST | `/live-classes` | teacher | `{ class_id, title, scheduled_at, duration_mins? }` | Created live class object with zoom IDs |
+| GET | `/live-classes/{live_class_id}/join-token` | any | — | `{ meeting_id, signature, sdk_key, role, display_name }` |
+| POST | `/live-classes/{live_class_id}/end` | teacher | — | `{ message, attended, absent, total }` |
+| POST | `/live-classes/{live_class_id}/cancel` | teacher | — | `{ message }` |
+| GET | `/live-classes/{live_class_id}/attendance` | teacher | — | `[{ student_id, attended, joined_at, left_at, duration_mins }]` |
+| POST | `/zoom/webhook` | public | Zoom webhook payload | Processing result |
+
+**Notes:**
+- `POST /live-classes` uses Zoom Server-to-Server OAuth to automatically create a Zoom meeting.
+- `GET .../join-token` generates an HMAC-SHA256 signature for the Zoom Web SDK. The raw Zoom URL is never sent.
+- `POST .../end` queries the Zoom API for the participant list and generates the `live_class_attendance` records.
 
 ---
 

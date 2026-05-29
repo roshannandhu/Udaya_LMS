@@ -3,26 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { Play, FileQuestion, ChevronRight, Loader2 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { apiClient, testApi } from '../../lib/api';
+import { useAppCache } from '../../store';
 import { Skeleton } from '../../components/ui';
 
 export default function StudentSubjectsPage() {
   const navigate = useNavigate();
-  const [subjects, setSubjects] = useState([]);
   const [videoCounts, setVideoCounts] = useState({});
   const [testCounts, setTestCounts] = useState({});
   const [loading, setLoading] = useState(true);
+  const subjects = useAppCache(s => s.subjects);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [subs, vids, tests] = await Promise.all([
-          apiClient('/subjects'),
+        const [vids, tests] = await Promise.all([
           apiClient('/videos'),
           testApi.getTests(),
         ]);
-
-        const subsArr = Array.isArray(subs) ? subs : [];
-        setSubjects(subsArr);
 
         // count videos per subject
         const vc = {};

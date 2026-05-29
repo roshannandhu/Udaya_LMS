@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS attendance_records (
 );
 
 -- Attendance Summary View (per student per subject, computed from attendance_records)
+DROP VIEW IF EXISTS attendance_summary CASCADE;
 CREATE OR REPLACE VIEW attendance_summary AS
 SELECT
     ar.student_id,
@@ -234,6 +235,17 @@ CREATE TABLE IF NOT EXISTS invite_requests (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Question Bank
+CREATE TABLE IF NOT EXISTS question_bank (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID NOT NULL,
+    subject TEXT,
+    question TEXT NOT NULL,
+    options JSONB NOT NULL,
+    correct_idx INTEGER NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── Migration helpers (run these if upgrading an existing DB) ──────────────
 -- ALTER TABLE standards ADD COLUMN IF NOT EXISTS attendance_threshold INTEGER DEFAULT 75;
 -- ALTER TABLE students RENAME COLUMN attendance TO attendance_pct;
@@ -315,17 +327,6 @@ CREATE POLICY "deny_anon_question_bank"      ON question_bank      FOR ALL TO an
 --   Used by: POST /api/upload  (broadcast file attachments — images, PDFs)
 --   Path pattern: {uuid}-{filename}
 -- Stored in column: broadcasts.attachment_url
---
--- Question Bank
-CREATE TABLE IF NOT EXISTS question_bank (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    teacher_id UUID NOT NULL,
-    subject TEXT,
-    question TEXT NOT NULL,
-    options JSONB NOT NULL,
-    correct_idx INTEGER NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
 
 -- ── Broadcast Scheduling Migration ─────────────────────────────────────────────
 -- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
@@ -349,7 +350,7 @@ ALTER TABLE videos
   ADD COLUMN IF NOT EXISTS youtube_url TEXT;
 
 -- storage_path becomes optional (YouTube videos have no storage path)
-ALTER TABLE videos ALTER COLUMN storage_path DROP NOT NULL;
+-- ALTER TABLE videos ALTER COLUMN storage_path DROP NOT NULL;
 
 -- ── Migration 2: Create live_classes table ────────────────────────────────────
 
@@ -416,3 +417,18 @@ CREATE POLICY "deny_all_lca" ON live_class_attendance FOR ALL USING (false);
 -- 3. Confirm RLS enabled (expect rowsecurity=true for both)
 -- SELECT tablename, rowsecurity FROM pg_tables
 -- WHERE tablename IN ('live_classes','live_class_attendance');
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PERFORMANCE OPTIMIZATION INDEXES
+-- Added to prevent Sequential Scans and eliminate loading lags for dashboard queries.
+-- ══════════════════════════════════════════════════════════════════════════════
+CREATE INDEX IF NOT EXISTS idx_students_standard ON students(standard_id);
+CREATE INDEX IF NOT EXISTS idx_students_phone ON students(phone);
+CREATE INDEX IF NOT EXISTS idx_subject_classes_standard ON subject_classes(standard_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance_records(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_subject ON attendance_records(subject_class_id);
+CREATE INDEX IF NOT EXISTS idx_videos_class ON videos(class_id);
+CREATE INDEX IF NOT EXISTS idx_video_progress_student ON video_progress(student_id);
+CREATE INDEX IF NOT EXISTS idx_tests_class ON tests(class_id);
+CREATE INDEX IF NOT EXISTS idx_test_attempts_student ON test_attempts(student_id);
+CREATE INDEX IF NOT EXISTS idx_broadcasts_standard ON broadcasts(standard_id);

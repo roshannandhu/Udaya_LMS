@@ -14,7 +14,12 @@ export default function StudentsPage() {
   const [importOpen, setImportOpen] = useState(false);
 
   // Pull from global cache (instant if prefetched)
-  const { students, standards, studentsReady, standardsReady, refreshStudents, refreshStandards } = useAppCache();
+  const students        = useAppCache(s => s.students);
+  const standards       = useAppCache(s => s.standards);
+  const studentsReady   = useAppCache(s => s.studentsReady);
+  const standardsReady  = useAppCache(s => s.standardsReady);
+  const refreshStudents  = useAppCache(s => s.refreshStudents);
+  const refreshStandards = useAppCache(s => s.refreshStandards);
   const loading = !studentsReady || !standardsReady;
 
   useEffect(() => {

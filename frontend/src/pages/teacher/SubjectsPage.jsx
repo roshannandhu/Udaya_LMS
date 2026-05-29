@@ -206,7 +206,14 @@ export default function SubjectsPage() {
   const [activeStdForSubject, setActiveStdForSubject] = useState(null);
   const [activeStdForStudent, setActiveStdForStudent] = useState(null);
 
-  const { standards, subjects, students, standardsReady, subjectsReady, refreshStandards, refreshSubjects, refreshStudents } = useAppCache();
+  const standards      = useAppCache(s => s.standards);
+  const subjects       = useAppCache(s => s.subjects);
+  const students       = useAppCache(s => s.students);
+  const standardsReady = useAppCache(s => s.standardsReady);
+  const subjectsReady  = useAppCache(s => s.subjectsReady);
+  const refreshStandards  = useAppCache(s => s.refreshStandards);
+  const refreshSubjects   = useAppCache(s => s.refreshSubjects);
+  const refreshStudents   = useAppCache(s => s.refreshStudents);
   const loading = !standardsReady || !subjectsReady;
 
   useEffect(() => {

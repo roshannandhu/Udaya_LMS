@@ -1,0 +1,13 @@
+{
+  "appId": "com.tutoria.lms",
+  "appName": "Tutoria",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}

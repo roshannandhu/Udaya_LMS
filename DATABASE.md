@@ -16,7 +16,9 @@ All tables live in Supabase (PostgreSQL). The full DDL is in `backend/schema.sql
 | `student_sessions` | Single-device enforcement — one row per student |
 | `attendance_records` | Day-by-day attendance marks |
 | `attendance_summary` | **VIEW** — computed attendance % per student per subject |
-| `videos` | Video metadata (Cloudflare IDs) |
+| `videos` | Video metadata (Cloudflare IDs, YouTube URLs) |
+| `live_classes` | Zoom meeting instances for subjects |
+| `live_class_attendance` | Per-student join/leave tracking for live classes |
 | `video_progress` | Per-student per-video watch progress |
 | `tests` | MCQ test definitions |
 | `questions` | MCQ questions — `correct_idx` must NEVER reach students |
@@ -111,12 +113,43 @@ id                UUID PK DEFAULT gen_random_uuid()
 class_id          UUID FK → subject_classes(id) ON DELETE CASCADE
 title             TEXT NOT NULL
 description       TEXT
+source_type       TEXT DEFAULT 'upload' CHECK (source_type IN ('upload', 'youtube'))
+youtube_video_id  TEXT
+youtube_url       TEXT
 cloudflare_video_id TEXT
+storage_path      TEXT
 duration_secs     INTEGER
 size_bytes        BIGINT
 allow_download    BOOLEAN DEFAULT true
 created_by        UUID                    -- teacher's auth.users.id
 created_at        TIMESTAMPTZ DEFAULT NOW()
+```
+
+### `live_classes`
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+class_id        UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE
+title           TEXT NOT NULL
+scheduled_at    TIMESTAMPTZ NOT NULL
+duration_mins   INTEGER NOT NULL DEFAULT 60
+zoom_meeting_id TEXT
+zoom_join_url   TEXT
+zoom_start_url  TEXT
+status          TEXT NOT NULL DEFAULT 'scheduled'
+created_by      UUID REFERENCES auth.users(id)
+created_at      TIMESTAMPTZ DEFAULT now()
+```
+
+### `live_class_attendance`
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+live_class_id   UUID NOT NULL REFERENCES live_classes(id) ON DELETE CASCADE
+student_id      UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE
+joined_at       TIMESTAMPTZ
+left_at         TIMESTAMPTZ
+duration_mins   INTEGER
+attended        BOOLEAN NOT NULL DEFAULT false
+UNIQUE (live_class_id, student_id)
 ```
 
 ### `video_progress`

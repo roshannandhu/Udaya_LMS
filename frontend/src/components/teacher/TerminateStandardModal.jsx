@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Download, Shield, Loader2, CheckCircle2 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { Modal, Btn, Input } from '../ui';
 import { apiClient } from '../../lib/api';
 import { useSettingsStore } from '../../store';
@@ -32,7 +31,8 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
     }
   }, [step, studentCount]);
 
-  const downloadBackup = () => {
+  const downloadBackup = async () => {
+    const XLSX = await import('xlsx');
     const wsData = [
       ['Name', 'Email', 'Phone', 'Standard'],
       ...(students || []).map(s => [s.name || '', s.email || '', s.phone || '', standard?.name || '']),

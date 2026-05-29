@@ -14,7 +14,7 @@
 
 ---
 
-## Feature 1 — YouTube Unlisted Video Support 🔲
+## Feature 1 — YouTube Unlisted Video Support ✅
 
 **Replaces:** Direct file upload to Supabase Storage / Cloudflare Stream  
 **Why:** Teacher uploads video privately to YouTube (Unlisted), pastes the link here. Zero hosting cost. Students watch inside the app — never see the URL.
@@ -141,7 +141,7 @@ Returns `{ thumbnail_url: "https://img.youtube.com/vi/<id>/mqdefault.jpg" }` for
 
 ---
 
-## Feature 2 — Zoom Live Classes 🔲
+## Feature 2 — Zoom Live Classes ✅
 
 **What it does:** Teacher schedules a live class inside the app. Zoom meeting is created automatically via API. Students join the class inside the app (no Zoom URL ever shown). Attendance is pulled from Zoom after the class ends.
 

@@ -12,7 +12,12 @@ export default function AttendancePage() {
   const navigate = useNavigate();
 
   // Pull from global cache — instant if already prefetched
-  const { standards, subjects: allSubjects, standardsReady, subjectsReady, refreshStandards, refreshSubjects } = useAppCache();
+  const standards       = useAppCache(s => s.standards);
+  const allSubjects     = useAppCache(s => s.subjects);
+  const standardsReady  = useAppCache(s => s.standardsReady);
+  const subjectsReady   = useAppCache(s => s.subjectsReady);
+  const refreshStandards = useAppCache(s => s.refreshStandards);
+  const refreshSubjects   = useAppCache(s => s.refreshSubjects);
   const loading = !standardsReady || !subjectsReady;
 
   const [activeStdId, setActiveStdId]           = useState(null);

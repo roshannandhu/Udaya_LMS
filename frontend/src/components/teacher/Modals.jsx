@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Upload, Plus, Shield, QrCode, Check, FileText, Layers, Minus, Loader2, Clock, X, Database, Search } from 'lucide-react';
+import { UserPlus, Upload, Plus, Shield, QrCode, Check, FileText, Layers, Minus, Loader2, Clock, X, Database, Search, Link } from 'lucide-react';
+
+function extractYouTubeId(url) {
+  const patterns = [
+    /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url?.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
 import { Modal } from '../ui';
 import { Btn, Input, Textarea, Toggle } from '../ui';
 import { testApi, apiClient } from '../../lib/api';
@@ -35,7 +49,7 @@ export function NewStandardModal({ open, onClose }) {
 }
 
 export function NewSubjectModal({ open, onClose, standardId }) {
-  const { standards } = useAppCache();
+  const standards = useAppCache(s => s.standards);
   const std = standards.find((s) => s.id === standardId);
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('📐');
@@ -155,7 +169,8 @@ export function UploadVideoModal({ open, onClose, subjectName }) {
 }
 
 export function NewTestModal({ open, onClose, defaultClassId, onSuccess }) {
-  const { standards, subjects } = useAppCache();
+  const standards = useAppCache(s => s.standards);
+  const subjects  = useAppCache(s => s.subjects);
   const [form, setForm] = useState({
     title: '', duration: 30, totalMarks: 20,
     classId: defaultClassId || '',
@@ -381,6 +396,8 @@ export function EditVideoModal({ open, onClose, video, onSuccess }) {
   const [description, setDescription] = useState('');
   const [allowDownload, setAllowDownload] = useState(true);
   const [chapters, setChapters] = useState([]);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [ytVideoId, setYtVideoId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -391,6 +408,14 @@ export function EditVideoModal({ open, onClose, video, onSuccess }) {
       setAllowDownload(video.allow_download !== false);
       setChapters(video.chapters ? [...video.chapters].sort((a, b) => a.start_secs - b.start_secs) : []);
       setError('');
+      if (video.source_type === 'youtube' && video.cloudflare_video_id?.startsWith('yt:')) {
+        const id = video.cloudflare_video_id.slice(3);
+        setYtVideoId(id);
+        setYoutubeUrl(`https://www.youtube.com/watch?v=${id}`);
+      } else {
+        setYoutubeUrl('');
+        setYtVideoId(null);
+      }
     }
   }, [open, video]);
 
@@ -414,13 +439,18 @@ export function EditVideoModal({ open, onClose, video, onSuccess }) {
 
   const handleSave = async () => {
     if (!title.trim()) { setError('Title is required'); return; }
+    if (video?.source_type === 'youtube' && youtubeUrl.trim() && !ytVideoId) {
+      setError('Invalid YouTube URL'); return;
+    }
     setSaving(true);
     setError('');
     try {
       const sorted = [...chapters].sort((a, b) => a.start_secs - b.start_secs);
+      const payload = { title: title.trim(), description: description.trim() || null, allow_download: allowDownload, chapters: sorted };
+      if (video?.source_type === 'youtube' && ytVideoId) payload.youtube_video_id = ytVideoId;
       await apiClient(`/videos/${video.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title: title.trim(), description: description.trim() || null, allow_download: allowDownload, chapters: sorted }),
+        body: JSON.stringify(payload),
       });
       if (onSuccess) onSuccess();
       onClose();
@@ -431,11 +461,72 @@ export function EditVideoModal({ open, onClose, video, onSuccess }) {
     }
   };
 
+  // Derive the playback URL for non-YouTube (uploaded) videos
+  const uploadedVideoUrl = video?.source_type !== 'youtube' && video?.cloudflare_video_id
+    ? (video.cloudflare_video_id.startsWith('https://')
+        ? video.cloudflare_video_id
+        : `https://watch.cloudflarestream.com/${video.cloudflare_video_id}`)
+    : null;
+
   return (
     <Modal open={open} onClose={onClose} title="Edit Video" size="md">
       <div className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
         {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 p-2.5 rounded-lg">{error}</div>}
         <Input label="Title" value={title} onChange={e => setTitle(e.target.value)} />
+
+        {/* Show the video URL for uploaded (non-YouTube) videos */}
+        {uploadedVideoUrl && (
+          <div>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 flex items-center gap-1.5 block">
+              <Link size={11} /> Video link
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={uploadedVideoUrl}
+                className="flex-1 px-3 py-2 rounded-md bg-neutral-50 border border-neutral-200 text-xs text-neutral-500 font-mono truncate"
+              />
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => navigator.clipboard.writeText(uploadedVideoUrl)}
+              >
+                Copy
+              </Btn>
+            </div>
+          </div>
+        )}
+
+        {video?.source_type === 'youtube' && (
+          <div>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 block flex items-center gap-1.5">
+              <Link size={11} /> YouTube URL
+            </label>
+            <input
+              type="url"
+              value={youtubeUrl}
+              onChange={e => {
+                const url = e.target.value;
+                setYoutubeUrl(url);
+                setYtVideoId(extractYouTubeId(url) || null);
+              }}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="w-full px-3 py-2 rounded-md bg-white/50 border border-white/60 outline-none text-sm focus:ring-2 focus:ring-neutral-900/20"
+            />
+            {ytVideoId && (
+              <div className="mt-2 flex items-center gap-2">
+                <img
+                  src={`https://img.youtube.com/vi/${ytVideoId}/mqdefault.jpg`}
+                  className="w-24 rounded object-cover"
+                  style={{ aspectRatio: '16/9' }}
+                  alt="thumbnail"
+                />
+                <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded font-medium">✓ Valid URL</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Description</label>
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}

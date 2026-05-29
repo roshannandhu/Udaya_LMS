@@ -40,7 +40,10 @@ export default function TestsPage() {
   };
 
   // Serve subjects + standards from cache (instant)
-  const { subjects, standards, refreshSubjects, refreshStandards } = useAppCache();
+  const subjects        = useAppCache(s => s.subjects);
+  const standards       = useAppCache(s => s.standards);
+  const refreshSubjects  = useAppCache(s => s.refreshSubjects);
+  const refreshStandards = useAppCache(s => s.refreshStandards);
 
   const fetchTests = async () => {
     try {

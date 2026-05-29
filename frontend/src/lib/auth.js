@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import { getApiBaseUrl } from './api';
+import { getApiBaseUrl, apiClient } from './api';
+import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
 
-const API_BASE = getApiBaseUrl();
-const ROLE_KEY = 'tutoria_user_role';
-const TOKEN_KEY = 'tutoria_token';
-const NAME_KEY = 'tutoria_user_name';
+const API_BASE    = getApiBaseUrl();
+const ROLE_KEY    = 'tutoria_user_role';
+const TOKEN_KEY   = 'tutoria_token';
+const REFRESH_KEY = 'tutoria_refresh_token';
+const NAME_KEY    = 'tutoria_user_name';
 
 const generateDeviceFingerprint = () => {
   const stored = localStorage.getItem('tutoria_device_id');
@@ -50,6 +52,7 @@ export const useAuthStore = create((set, get) => ({
       }
 
       localStorage.setItem(TOKEN_KEY, data.token);
+      if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
       localStorage.setItem(ROLE_KEY, data.user.role);
       localStorage.setItem(NAME_KEY, data.user.name || '');
 
@@ -58,6 +61,13 @@ export const useAuthStore = create((set, get) => ({
         role: data.user.role,
         isLoading: false
       });
+
+      // Native app: lock screen capture for students, keep open for teachers
+      if (data.user.role === 'student') {
+        enableScreenSecurity();
+      } else {
+        disableScreenSecurity();
+      }
 
       const needsPwdChange = data.user.role === 'student' && data.user.must_change_pwd;
       return { success: true, role: data.user.role, requiresPasswordChange: needsPwdChange };
@@ -75,29 +85,22 @@ export const useAuthStore = create((set, get) => ({
       return;
     }
 
-    // Already rendered with cached credentials — verify quietly in background
+    // apiClient auto-refreshes on 401 using the stored refresh_token.
+    // If refresh fails it dispatches 'auth:logout' (handled below).
     try {
-      const response = await fetch(`${API_BASE}/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const user = await response.json();
-        localStorage.setItem(ROLE_KEY, user.role || 'student');
-        localStorage.setItem(NAME_KEY, user.name || '');
-        // Update store with fresh server data, keep isLoading false
-        set({ user, role: user.role || 'student', isLoading: false });
-      } else {
-        // Token expired/invalid — clear and redirect to login
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(ROLE_KEY);
-        localStorage.removeItem(NAME_KEY);
-        set({ user: null, role: null, isLoading: false });
-      }
+      const user = await apiClient('/auth/me');
+      localStorage.setItem(ROLE_KEY, user.role || 'student');
+      localStorage.setItem(NAME_KEY, user.name || '');
+      set({ user, role: user.role || 'student', isLoading: false });
     } catch (error) {
-      // Network failure — keep the cached session alive, just mark loading done
-      console.warn('Auth verify failed (network?), keeping cached session:', error.message);
-      set({ isLoading: false });
+      if (error.message === 'Session expired. Please log in again.') {
+        // auth:logout event has already cleared localStorage + set state
+        set({ isLoading: false });
+      } else {
+        // Network failure — keep cached session alive
+        console.warn('Auth verify failed (network?), keeping cached session:', error.message);
+        set({ isLoading: false });
+      }
     }
   },
 
@@ -140,8 +143,10 @@ export const useAuthStore = create((set, get) => ({
     } catch (e) {}
 
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem(NAME_KEY);
+    disableScreenSecurity(); // always unlock on logout
     set({ user: null, role: null, isLoading: false });
   },
 
@@ -175,3 +180,14 @@ export const useAuthStore = create((set, get) => ({
     }
   }
 }));
+
+// Force-logout when apiClient gets a 401 and refresh fails
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:logout', () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(ROLE_KEY);
+    localStorage.removeItem(NAME_KEY);
+    useAuthStore.setState({ user: null, role: null, isLoading: false });
+  });
+}

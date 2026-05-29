@@ -141,6 +141,7 @@ class VideoUpdate(BaseModel):
     description: Optional[str] = None
     allow_download: Optional[bool] = None
     chapters: Optional[List[Any]] = None
+    youtube_video_id: Optional[str] = None
 
 class YouTubeVideo(BaseModel):
     class_id: str
@@ -557,12 +558,33 @@ def login(request: LoginRequest):
 
         return {
             "token": response.session.access_token,
+            "refresh_token": response.session.refresh_token,
             "user": user_info,
         }
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+@app.post("/api/auth/refresh")
+def refresh_access_token(request: RefreshTokenRequest):
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    try:
+        response = supabase.auth.refresh_session(request.refresh_token)
+        if not response.session:
+            raise HTTPException(status_code=401, detail="Refresh failed")
+        return {
+            "token": response.session.access_token,
+            "refresh_token": response.session.refresh_token,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Refresh failed")
 
 @app.post("/api/auth/logout")
 def logout():
@@ -1046,7 +1068,7 @@ def get_student_report(student_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Student not found")
 
     # Get all test attempts with test titles
-    attempts_res = service_supabase.table("test_attempts").select("*, tests(title, total_marks, created_at)").eq("student_id", student_id).order("created_at").execute()
+    attempts_res = service_supabase.table("test_attempts").select("*, tests(title, total_marks, created_at)").eq("student_id", student_id).order("submitted_at").execute()
 
     # Calculate performance history
     history = []
@@ -1059,11 +1081,255 @@ def get_student_report(student_id: str, user = Depends(verify_token)):
             "date": a["created_at"],
             "flagged": a.get("flagged", False)
         })
-        
+
+    # Get video watch history
+    video_progress_res = service_supabase.table("video_progress").select(
+        "video_id, completed, progress_secs, last_watched_at, videos(title, duration_secs, subject_classes(name))"
+    ).eq("student_id", student_id).order("last_watched_at", desc=True).execute()
+
+    video_history = []
+    for r in (video_progress_res.data or []):
+        vid = r.get("videos") or {}
+        sc = vid.get("subject_classes") or {}
+        video_history.append({
+            "video_id": r["video_id"],
+            "title": vid.get("title", "Unknown Video"),
+            "subject_name": sc.get("name", ""),
+            "completed": r.get("completed", False),
+            "progress_secs": r.get("progress_secs", 0),
+            "duration_secs": vid.get("duration_secs"),
+            "last_watched_at": r.get("last_watched_at"),
+        })
+
     return {
         "student": student_res.data,
-        "history": history
+        "history": history,
+        "video_history": video_history,
     }
+
+@app.get("/api/students/{student_id}/report/v2")
+def get_student_report_v2(student_id: str, period: str = "overall", user = Depends(verify_token)):
+    """Enhanced report with radar data, heatmaps, topic map, period filtering.
+    Pass student_id='me' to fetch the logged-in student's own report."""
+    if user["role"] not in ("teacher", "student"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    # Resolve 'me' alias — avoids route shadowing by /{student_id}/report
+    if student_id == "me":
+        if user["role"] != "student":
+            raise HTTPException(status_code=403, detail="Student only for /me/ routes")
+        student_id = user.get("student_id") or user.get("user_id") or ""
+    # Students can only fetch their own report
+    if user["role"] == "student" and user.get("student_id") != student_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    if period == "weekly":
+        period_start = (now - timedelta(days=7)).isoformat()
+    elif period == "monthly":
+        period_start = (now - timedelta(days=30)).isoformat()
+    else:
+        period_start = None  # overall — no filter
+
+    # ── Student profile ──────────────────────────────────────────────
+    student_res = service_supabase.table("students").select(
+        "id, name, username, email, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, created_at"
+    ).eq("id", student_id).single().execute()
+    if not student_res.data:
+        raise HTTPException(status_code=404, detail="Student not found")
+    student = student_res.data
+
+    # ── Get all subjects for this standard ───────────────────────────
+    std_id = student.get("standard_id")
+    if std_id:
+        subjects_res = service_supabase.table("subject_classes").select("id, name, emoji").eq("standard_id", std_id).execute()
+        subjects = subjects_res.data or []
+    else:
+        subjects = []
+    sub_map = {s["id"]: s for s in subjects}
+
+    # ── Test attempts (period filtered) ──────────────────────────────
+    q = service_supabase.table("test_attempts").select(
+        "id, score, correct_count, wrong_count, submitted_at, flagged, tests(id, title, total_marks, class_id)"
+    ).eq("student_id", student_id).order("submitted_at")
+    if period_start:
+        q = q.gte("submitted_at", period_start)
+    attempts_res = q.execute()
+    attempts = attempts_res.data or []
+
+    # Build test timeline
+    test_timeline = []
+    for a in attempts:
+        t = a.get("tests") or {}
+        total = t.get("total_marks") or 100
+        score_pct = round((a.get("score") or 0) / total * 100, 1)
+        class_id = t.get("class_id", "")
+        sub = sub_map.get(class_id, {})
+        test_timeline.append({
+            "date": a.get("submitted_at") or a.get("created_at"),
+            "test_title": t.get("title", "Test"),
+            "test_id": t.get("id"),
+            "subject_id": class_id,
+            "subject": sub.get("name", ""),
+            "emoji": sub.get("emoji", "📐"),
+            "score_pct": score_pct,
+            "flagged": a.get("flagged", False),
+        })
+
+    # ── Video progress (period filtered) ─────────────────────────────
+    vq = service_supabase.table("video_progress").select(
+        "video_id, completed, progress_secs, last_watched_at, videos(id, title, duration_secs, class_id)"
+    ).eq("student_id", student_id)
+    if period_start:
+        vq = vq.gte("last_watched_at", period_start)
+    vp_res = vq.execute()
+    vp_rows = vp_res.data or []
+
+    # All videos per subject (total count for video_pct)
+    all_vids_res = service_supabase.table("videos").select("id, class_id, title").in_("class_id", [s["id"] for s in subjects]).execute() if subjects else None
+    all_vids = all_vids_res.data if all_vids_res else []
+
+    # ── Attendance records (period filtered) ─────────────────────────
+    aq = service_supabase.table("attendance_records").select(
+        "date, status, subject_class_id"
+    ).eq("student_id", student_id).order("date")
+    if period_start:
+        aq = aq.gte("date", period_start[:10])
+    att_res = aq.execute()
+    att_rows = att_res.data or []
+
+    # ── Subject-level aggregates (for radar) ─────────────────────────
+    subject_scores: dict = {}  # class_id → {scores:[], video_total, video_done, present, total}
+    for s in subjects:
+        subject_scores[s["id"]] = {"scores": [], "video_total": 0, "video_done": 0, "present": 0, "absent": 0, "late": 0, "att_total": 0}
+
+    for t in test_timeline:
+        sid = t["subject_id"]
+        if sid in subject_scores:
+            subject_scores[sid]["scores"].append(t["score_pct"])
+
+    for v in all_vids:
+        sid = v["class_id"]
+        if sid in subject_scores:
+            subject_scores[sid]["video_total"] += 1
+
+    for vp in vp_rows:
+        vid = vp.get("videos") or {}
+        sid = vid.get("class_id", "")
+        if sid in subject_scores and vp.get("completed"):
+            subject_scores[sid]["video_done"] += 1
+
+    for ar in att_rows:
+        sid = ar.get("subject_class_id", "")
+        if sid in subject_scores:
+            subject_scores[sid]["att_total"] += 1
+            status = ar.get("status", "absent")
+            if status == "present":
+                subject_scores[sid]["present"] += 1
+            elif status == "late":
+                subject_scores[sid]["late"] += 1
+            else:
+                subject_scores[sid]["absent"] += 1
+
+    subject_radar = []
+    for s in subjects:
+        sid = s["id"]
+        d = subject_scores[sid]
+        test_avg = round(sum(d["scores"]) / len(d["scores"]), 1) if d["scores"] else 0
+        video_pct = round(d["video_done"] / d["video_total"] * 100, 1) if d["video_total"] > 0 else 0
+        att_pct = round((d["present"] + d["late"] * 0.5) / d["att_total"] * 100, 1) if d["att_total"] > 0 else 0
+        subject_radar.append({
+            "subject_id": sid,
+            "subject": s["name"],
+            "emoji": s.get("emoji", "📐"),
+            "test_avg": test_avg,
+            "video_pct": video_pct,
+            "attendance_pct": att_pct,
+            "test_count": len(d["scores"]),
+            "video_total": d["video_total"],
+            "video_done": d["video_done"],
+            "att_present": d["present"],
+            "att_total": d["att_total"],
+        })
+
+    # ── Topic map (video ↔ test matching by word overlap) ────────────
+    STOPWORDS = {"the","a","an","of","in","on","for","to","and","with","chapter","test","weekly","unit","lesson","class","intro","introduction","part","section","basic","basics","advanced"}
+    def keywords(title: str):
+        return {w for w in title.lower().split() if w not in STOPWORDS and len(w) > 2}
+
+    topic_map = []
+    vp_by_vid = {vp["video_id"]: vp for vp in vp_rows}
+    for t in test_timeline:
+        t_kw = keywords(t["test_title"])
+        best_vid = None
+        best_score_overlap = 0
+        for v in all_vids:
+            if v.get("class_id") != t["subject_id"]:
+                continue
+            overlap = len(t_kw & keywords(v["title"]))
+            if overlap > best_score_overlap:
+                best_score_overlap = overlap
+                best_vid = v
+        if best_vid and best_score_overlap >= 1:
+            vp = vp_by_vid.get(best_vid["id"], {})
+            # derive a clean topic name from overlapping words
+            overlap_words = t_kw & keywords(best_vid["title"])
+            topic_name = " ".join(w.capitalize() for w in sorted(overlap_words)[:3]) or t["test_title"]
+            topic_map.append({
+                "topic": topic_name,
+                "subject": t["subject"],
+                "video_title": best_vid["title"],
+                "test_title": t["test_title"],
+                "score_pct": t["score_pct"],
+                "video_completed": bool(vp.get("completed")),
+            })
+
+    # ── Attendance heatmap (daily) ────────────────────────────────────
+    att_by_date: dict = {}
+    for ar in att_rows:
+        d = ar["date"]
+        if d not in att_by_date:
+            att_by_date[d] = {"present": 0, "absent": 0, "late": 0, "total": 0}
+        att_by_date[d]["total"] += 1
+        s = ar.get("status", "absent")
+        if s in ("present", "absent", "late"):
+            att_by_date[d][s] += 1
+    attendance_heatmap = [{"date": d, **v} for d, v in sorted(att_by_date.items())]
+
+    # ── Video heatmap (daily minutes) ────────────────────────────────
+    vid_by_date: dict = {}
+    for vp in vp_rows:
+        ts = vp.get("last_watched_at", "")
+        if not ts:
+            continue
+        day = ts[:10]
+        vid = vp.get("videos") or {}
+        # estimate minutes watched from progress_secs
+        watched_secs = vp.get("progress_secs") or 0
+        if day not in vid_by_date:
+            vid_by_date[day] = {"minutes": 0, "count": 0}
+        vid_by_date[day]["minutes"] += round(watched_secs / 60, 1)
+        vid_by_date[day]["count"] += 1
+    video_heatmap = [{"date": d, **v} for d, v in sorted(vid_by_date.items())]
+
+    return {
+        "student": student,
+        "period": period,
+        "subject_radar": subject_radar,
+        "test_timeline": test_timeline,
+        "topic_map": topic_map,
+        "attendance_heatmap": attendance_heatmap,
+        "video_heatmap": video_heatmap,
+        "subjects": subjects,
+    }
+
+
+# /students/me/report removed — use /students/me/report/v2 instead
+# (literal 'me' path would be shadowed by /{student_id}/report in FastAPI's route order)
+
 
 @app.post("/api/admin/create-student")
 def create_student_admin(request: CreateStudentRequest, user = Depends(verify_token)):
@@ -1126,6 +1392,33 @@ def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_
         service_supabase.table("students").update(allowed).eq("id", user["user_id"]).execute()
     return {"message": "Profile updated"}
 
+@app.get("/api/students/me/videos")
+def get_my_videos(user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    student_id = user["user_id"]
+    res = service_supabase.table("video_progress").select(
+        "video_id, completed, progress_secs, last_watched_at, videos(title, duration_secs, subject_classes(name))"
+    ).eq("student_id", student_id).order("last_watched_at", desc=True).execute()
+
+    result = []
+    for r in (res.data or []):
+        vid = r.get("videos") or {}
+        sc = vid.get("subject_classes") or {}
+        result.append({
+            "video_id": r["video_id"],
+            "title": vid.get("title", "Unknown Video"),
+            "subject_name": sc.get("name", ""),
+            "completed": r.get("completed", False),
+            "progress_secs": r.get("progress_secs", 0),
+            "duration_secs": vid.get("duration_secs"),
+            "last_watched_at": r.get("last_watched_at"),
+        })
+    return result
+
 @app.post("/api/students/me/avatar")
 async def upload_student_avatar(file: UploadFile = File(...), user = Depends(verify_token)):
     if user["role"] != "student":
@@ -1139,11 +1432,11 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
 
     try:
         try:
-            service_supabase.storage.get_bucket("avatars")
+            await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("avatars"))
         except:
-            service_supabase.storage.create_bucket("avatars", options={"public": True})
+            await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("avatars", options={"public": True}))
         try:
-            service_supabase.storage.from_("avatars").remove([file_name])
+            await asyncio.to_thread(lambda: service_supabase.storage.from_("avatars").remove([file_name]))
         except:
             pass
         await asyncio.to_thread(
@@ -1152,7 +1445,9 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
         public_url = await asyncio.to_thread(
             lambda: service_supabase.storage.from_("avatars").get_public_url(file_name)
         )
-        service_supabase.table("students").update({"avatar_url": str(public_url)}).eq("id", user["user_id"]).execute()
+        await asyncio.to_thread(
+            lambda: service_supabase.table("students").update({"avatar_url": str(public_url)}).eq("id", user["user_id"]).execute()
+        )
         return {"avatar_url": public_url}
     except Exception as e:
         print("Avatar upload error:", e)
@@ -1250,7 +1545,7 @@ def delete_student(student_id: str, user = Depends(verify_token)):
 
 # Videos
 @app.get("/api/videos")
-def get_videos(class_id: Optional[str] = None, user = Depends(verify_token)):
+def get_videos(class_id: Optional[str] = None, limit: Optional[int] = None, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -1305,15 +1600,20 @@ def get_videos(class_id: Optional[str] = None, user = Depends(verify_token)):
                 v.setdefault("my_completed", False)
                 v.setdefault("progress_secs", None)
 
-    # Add virtual source_type; never expose the raw cloudflare_video_id for YouTube videos
+    if limit:
+        videos = videos[:limit]
+
+    # Add virtual source_type + thumbnail_url; never expose raw cloudflare_video_id for YouTube
     for v in videos:
         cf = v.get("cloudflare_video_id") or ""
         if cf.startswith("yt:"):
+            yt_id = cf[3:]
             v["source_type"] = "youtube"
-            v["cloudflare_video_id"] = None  # hide the raw yt: ID
+            v["thumbnail_url"] = f"https://img.youtube.com/vi/{yt_id}/mqdefault.jpg"
+            v["cloudflare_video_id"] = None
         else:
             v["source_type"] = "upload"
-        # Remove columns that might exist if migration ran
+            v["thumbnail_url"] = None
         v.pop("youtube_video_id", None)
         v.pop("youtube_url", None)
 
@@ -1529,11 +1829,24 @@ def update_video(video_id: str, updates: VideoUpdate, user = Depends(verify_toke
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    existing = service_supabase.table("videos").select("created_by").eq("id", video_id).single().execute()
-    if not existing.data or existing.data.get("created_by") != user["user_id"]:
+    existing = service_supabase.table("videos").select(
+        "created_by, subject_classes(standards(teacher_id))"
+    ).eq("id", video_id).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    uid = user["user_id"]
+    creator = existing.data.get("created_by")
+    sc = existing.data.get("subject_classes") or {}
+    std = (sc.get("standards") or {}) if isinstance(sc, dict) else {}
+    teacher_via_std = std.get("teacher_id") if isinstance(std, dict) else None
+    if creator != uid and teacher_via_std != uid:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    raw = updates.model_dump()
+    update_data = {k: v for k, v in raw.items() if v is not None and k != "youtube_video_id"}
+    if raw.get("youtube_video_id"):
+        update_data["cloudflare_video_id"] = f"yt:{raw['youtube_video_id']}"
     if update_data:
         service_supabase.table("videos").update(update_data).eq("id", video_id).execute()
 
@@ -1546,8 +1859,19 @@ async def delete_video(video_id: str, user=Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    vid = service_supabase.table("videos").select("cloudflare_video_id, created_by").eq("id", video_id).single().execute()
-    if not vid.data or vid.data.get("created_by") != user["user_id"]:
+    vid = service_supabase.table("videos").select(
+        "cloudflare_video_id, created_by, subject_classes(standards(teacher_id))"
+    ).eq("id", video_id).single().execute()
+    if not vid.data:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    uid = user["user_id"]
+    creator = vid.data.get("created_by")
+    sc = vid.data.get("subject_classes") or {}
+    std = (sc.get("standards") or {}) if isinstance(sc, dict) else {}
+    teacher_via_std = std.get("teacher_id") if isinstance(std, dict) else None
+    # Allow if: created_by matches OR teacher owns the standard (handles old videos with NULL created_by)
+    if creator != uid and teacher_via_std != uid:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     cf_id = vid.data.get("cloudflare_video_id") or ""
@@ -3425,6 +3749,8 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
 
     if lc["status"] == "cancelled":
         raise HTTPException(status_code=400, detail="This class has been cancelled")
+    if lc["status"] == "ended":
+        raise HTTPException(status_code=400, detail="This class has already ended")
 
     class_result = service_supabase.table("subject_classes") \
         .select("standard_id").eq("id", lc["class_id"]).single().execute()
@@ -3437,6 +3763,9 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
             raise HTTPException(status_code=403, detail="Not your class")
         role_num = 1
         display_name = user.get("name", "Teacher")
+        # Transition to live when teacher joins
+        if lc["status"] == "scheduled":
+            service_supabase.table("live_classes").update({"status": "live"}).eq("id", live_class_id).execute()
     else:
         if user.get("standard_id") != required_std:
             raise HTTPException(status_code=403, detail="Not enrolled in this class")

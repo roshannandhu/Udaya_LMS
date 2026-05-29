@@ -4,6 +4,7 @@ import { Trophy, Target, BookOpen, ChevronRight, Play, MessageSquare, Clock, Loa
 import { Tag, Avatar, Skeleton } from '../../components/ui';
 import { apiClient, leaderboardApi, testApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import { useAppCache } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
 
 export default function StudentHomePage() {
@@ -11,13 +12,12 @@ export default function StudentHomePage() {
   const { user } = useAuthStore();
 
   const [loading, setLoading] = useState(true);
-  const [student, setStudent] = useState(null);
-  const [subjects, setSubjects] = useState([]);
   const [tests, setTests] = useState([]);
   const [myAttempts, setMyAttempts] = useState({});
   const [broadcasts, setBroadcasts] = useState([]);
   const [videos, setVideos] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
+  const subjects = useAppCache(s => s.subjects);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -26,26 +26,21 @@ export default function StudentHomePage() {
     const load = async () => {
       setLoading(true);
       try {
-        const me = await apiClient('/auth/me');
-        setStudent(me);
+        // Use standard_id from Zustand (set at login) to fire all calls in parallel
+        const standardId = user?.standard_id;
 
-        // For students, standard_id comes from the students table via /auth/me
-        const standardId = me?.standard_id || user?.standard_id;
-
-        const [subs, testsData, history, broads, vids, lb] = await Promise.all([
-          apiClient('/subjects').catch(() => []),
+        const [testsData, history, broads, vids, lb] = await Promise.all([
           testApi.getTests().catch(() => []),
           testApi.getStudentTestHistory().catch(() => []),
           standardId
             ? apiClient(`/broadcasts?standard_id=${standardId}`).catch(() => [])
             : Promise.resolve([]),
-          apiClient('/videos').catch(() => []),
+          apiClient('/videos?limit=5').catch(() => []),
           standardId
             ? leaderboardApi.get(standardId).catch(() => ({ leaderboard: [] }))
             : Promise.resolve({ leaderboard: [] }),
         ]);
 
-        setSubjects(Array.isArray(subs) ? subs : []);
         setTests(Array.isArray(testsData) ? testsData : []);
 
         const attemptsMap = {};
@@ -77,7 +72,7 @@ export default function StudentHomePage() {
   });
   const latestBroadcast = broadcasts[0];
   const recentVideos = videos.slice(0, 3);
-  const myRank = leaderboard.find(l => l.id === (student?.id || user?.id));
+  const myRank = leaderboard.find(l => l.id === user?.id);
   const top3 = leaderboard.slice(0, 3);
 
   if (loading) {
@@ -100,7 +95,7 @@ export default function StudentHomePage() {
     );
   }
 
-  const displayName = student?.name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student';
+  const displayName = user?.name?.split(' ')[0] || 'Student';
 
   return (
     <div>
@@ -113,7 +108,7 @@ export default function StudentHomePage() {
           </div>
           <div className="flex items-center gap-1">
             <NotificationBell />
-            <Avatar name={student?.name || user?.name || '?'} src={student?.avatar_url} size="sm" />
+            <Avatar name={user?.name || '?'} src={user?.avatar_url} size="sm" />
           </div>
         </div>
       </div>
@@ -122,8 +117,8 @@ export default function StudentHomePage() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
-            { label: 'Points',    value: student?.points ?? 0,                    icon: Trophy  },
-            { label: 'Avg score', value: student?.avg_score ? `${Math.round(student.avg_score)}%` : '—', icon: Target  },
+            { label: 'Points',    value: user?.points ?? 0,                    icon: Trophy  },
+            { label: 'Avg score', value: user?.avg_score ? `${Math.round(user.avg_score)}%` : '—', icon: Target  },
             { label: 'Subjects',  value: subjects.length,                          icon: BookOpen },
           ].map((s, i) => (
             <div key={i} className="p-3 glass-panel rounded-xl text-center">

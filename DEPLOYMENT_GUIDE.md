@@ -1,8 +1,8 @@
-# Tutoria LMS — Deployment Guide
+# Tutoria LMS — Complete Deployment Guide
 
-> Costs and options for deploying Tutoria for **500 students + 4–5 teachers** as a web app + Android app.
-> **Video load assumption**: 10 videos/day × 500 MB each = 5 GB/day, 150 GB/month new uploads.
-> Last updated: May 2026
+> **Updated:** May 2026  
+> **Stack:** React 18 + Vite (frontend) · FastAPI Python (backend) · Supabase PostgreSQL (DB) · YouTube Unlisted (video) · Zoom Server-to-Server OAuth (live classes)  
+> **Scale assumption:** 500 students · 4–5 teachers · Indian market
 
 ---
 
@@ -10,537 +10,654 @@
 
 | Part | What it is | Hosting type needed |
 |---|---|---|
-| **Frontend** | React + Vite static build (`frontend/dist/`) | Any static file host / CDN |
+| **Frontend** | React + Vite static build (`frontend/dist/`) | Static file host / CDN |
 | **Backend** | FastAPI Python server (`backend/main.py`) | **Always-on server** (WebSocket!) |
-| **Database** | Supabase PostgreSQL | Already cloud-hosted (Supabase) |
-| **Video** | Cloudflare Stream (or alternative — see below) | Cloud video host |
-| **File Storage** | Supabase Storage (avatars, attachments) | Already cloud-hosted (Supabase) |
+| **Database** | Supabase PostgreSQL | Already cloud-hosted ✅ |
+| **Video** | YouTube Unlisted (embed via IFrame API) | **Free — no hosting needed** ✅ |
+| **Live Classes** | Zoom Server-to-Server OAuth | Zoom account (see below) ✅ |
+| **File Storage** | Supabase Storage (avatars, broadcast attachments) | Already cloud-hosted ✅ |
 
-> ⚠️ **Critical**: The backend uses **WebSocket** for real-time broadcasts. You **cannot** deploy to serverless platforms like AWS Lambda, Vercel Functions, or Netlify Functions. The server must stay alive continuously.
-
----
-
-## ⚠️ VIDEO IS THE DOMINANT COST — Read This First
-
-With 10 videos/day × 500 MB each, video hosting will be **the largest single expense** — far exceeding backend and database costs combined. You must choose a video strategy before picking a hosting plan.
-
-### Video Load Numbers
-
-| Metric | Calculation | Result |
-|---|---|---|
-| Upload per day | 10 videos × 500 MB | **5 GB/day** |
-| Upload per month | 5 GB × 30 days | **150 GB/month** |
-| Video duration (est.) | 500 MB at 720p / 3 Mbps | **~20 min per video** |
-| New minutes stored/month | 10 × 20 min × 30 days | **6,000 min/month** |
-| Delivery (moderate) | 150 students/day × 1.5 videos × 20 min | **135,000 min/month** |
-| Delivery (heavy) | 300 students/day × 2 videos × 20 min | **360,000 min/month** |
-
-> ⚠️ Storage is **cumulative** — every video you upload stays stored every following month unless you delete it.
+> ⚠️ **Critical:** The backend uses **WebSockets** for real-time broadcasts. You **cannot** deploy to serverless platforms (AWS Lambda, Vercel Functions, Netlify Functions). The server must run continuously.
 
 ---
 
-## Video Hosting Options Compared
+## ✅ Current Video Architecture: YouTube Unlisted
 
-### Option A — Cloudflare Stream (Current Setup, Most Expensive)
+Videos are **no longer uploaded to the server**. Teachers paste a YouTube Unlisted URL into the app. The video is embedded using the sandboxed YouTube IFrame API inside the student portal. Students **cannot** copy the URL or open YouTube — the player is fully sandboxed.
 
-Cloudflare Stream pricing: **$5 per 1,000 minutes stored/month** + **$1 per 1,000 minutes delivered**
+**Cost: ₹0/month** — Google pays for all video storage and delivery.
 
-**Storage grows every month because old videos stay stored:**
-
-| Month | Total Minutes Stored | Storage Cost | Delivery Cost (moderate) | **Total/month** |
-|---|---|---|---|---|
-| Month 1 | 6,000 min | $30 | $135 | **$165** (~₹14,000) |
-| Month 2 | 12,000 min | $60 | $135 | **$195** (~₹16,700) |
-| Month 3 | 18,000 min | $90 | $135 | **$225** (~₹19,300) |
-| Month 6 | 36,000 min | $180 | $135 | **$315** (~₹27,000) |
-| Month 12 | 72,000 min | $360 | $135 | **$495** (~₹42,500) |
-
-**Verdict**: Starts manageable but becomes very expensive. Only viable if you regularly delete old videos to cap total storage.
-
-**To control costs on Cloudflare Stream**: Delete videos from subjects/standards that have ended. Keep max ~6,000 stored minutes at any time → cap at ~$30/month storage.
+### YouTube Video Requirements for Teachers
+1. Upload video to YouTube
+2. Set visibility to **Unlisted** (not Private, not Public)
+3. Copy the URL and paste it in the Tutoria subject detail page
+4. The app validates it and stores only the video ID, never the raw URL
 
 ---
 
-### Option B — Backblaze B2 + Cloudflare CDN ⭐ Best Value
+## ✅ Live Classes: Zoom Server-to-Server OAuth
 
-Backblaze B2 + Cloudflare are **bandwidth alliance partners** — data delivered via Cloudflare is **free** from Backblaze. You only pay for storage.
+Live classes are created via the Zoom API and joined inside the app using the Zoom Web SDK. Students never see the Zoom meeting URL.
 
-| Metric | Cost |
-|---|---|
-| Storage | $0.006/GB/month |
-| Delivery via Cloudflare CDN | **$0** (Bandwidth Alliance) |
-| Month 1 (150 GB stored) | **$0.90/month** |
-| Month 3 (450 GB stored) | **$2.70/month** |
-| Month 6 (900 GB stored) | **$5.40/month** |
-| Month 12 (1,800 GB stored) | **$10.80/month** |
+### Zoom Credentials Required (add to `backend/.env`)
+```
+ZOOM_ACCOUNT_ID=...
+ZOOM_CLIENT_ID=...
+ZOOM_CLIENT_SECRET=...
+ZOOM_SDK_KEY=...
+ZOOM_SDK_SECRET=...
+ZOOM_WEBHOOK_SECRET_TOKEN=...
+```
 
-**Trade-off**: Requires a code change — the app currently uploads to Cloudflare Stream. You'd change the backend to upload to B2 and use a native `<video>` player or HLS.js instead of the Stream embed. This is a moderate change (~2–3 hours of work).
+### Zoom Plan Costs
 
----
-
-### Option C — Cloudflare R2 (No Egress Fees via Cloudflare)
-
-| Metric | Cost |
-|---|---|
-| Storage | $0.015/GB/month (first 10 GB free) |
-| Delivery via Cloudflare Workers/Pages | **$0** (no egress fees) |
-| Month 1 (150 GB stored) | **$2.25/month** |
-| Month 3 (450 GB stored) | **$6.75/month** |
-| Month 6 (900 GB stored) | **$13.50/month** |
-| Month 12 (1,800 GB stored) | **$27/month** |
-
-**Trade-off**: Same as B2 — requires code change. Advantage: stays entirely within Cloudflare ecosystem, no separate account.
-
----
-
-### Option D — Bunny.net (Easy, Affordable)
-
-Bunny.net is a video CDN with a simple API.
-
-| Metric | Cost |
-|---|---|
-| Storage | $0.01/GB/month |
-| CDN delivery (Asia/India) | $0.04/GB |
-| Month 1 storage (150 GB) | $1.50 |
-| Delivery: 1,500 GB/month (moderate) | $60 |
-| **Total month 1** | **~$62/month** (~₹5,300) |
-| Month 6 storage (900 GB) | $9 |
-| **Total month 6** | **~$69/month** (~₹5,900) |
-
-More stable than Cloudflare Stream (flat delivery cost). Requires code change.
-
----
-
-### Option E — YouTube Unlisted (Free)
-
-Upload teacher videos to YouTube as **Unlisted** (not public, only accessible with the link). Embed the YouTube player in the app.
-
-| Metric | Cost |
-|---|---|
-| Storage | **Free** (unlimited) |
-| Delivery | **Free** (Google pays) |
-| Monthly cost | **$0** |
-
-**Trade-offs**:
-- YouTube ads may appear (unless teacher has YouTube Premium)
-- Students can use 3rd-party tools to download
-- No reliable download tracking (current `allow_download` feature won't work)
-- Videos could be found if someone shares the URL
-- Requires code change to swap Cloudflare Stream embed for YouTube embed
-
-**Best for**: Lowest budget. Perfectly fine if you accept the trade-offs.
-
----
-
-### Video Hosting Decision Table
-
-| Option | Month 6 Cost | Code Change? | Best For |
+| Plan | Price | Meeting Limit | Best for |
 |---|---|---|---|
-| **YouTube Unlisted** | **$0** | Yes (iframe swap) | Tightest budget |
-| **Backblaze B2 + Cloudflare** | **~$5.40** | Yes (upload + player) | Best value overall ⭐ |
-| **Cloudflare R2** | **~$13.50** | Yes (upload + player) | Stay in CF ecosystem |
-| **Bunny.net** | **~$69** | Yes (API + player) | Good balance |
-| **Cloudflare Stream (current)** | **~$315** | No change needed | High budget only |
+| **Zoom Basic (Free)** | $0/month | 40 min/meeting, 100 participants | Testing only |
+| **Zoom Pro** | $15.99/month (~₹1,350) | 30 hr/meeting, 100 participants | ✅ Small class (up to 100 students) |
+| **Zoom Business** | $19.99/month (~₹1,680) | 30 hr/meeting, 300 participants | Large classes |
+| **Zoom Education** | Contact sales | Unlimited | Schools/colleges |
 
-> 💡 **Recommendation**: For long-term cost, switch to **Backblaze B2 + Cloudflare** or **YouTube Unlisted**. If you want zero code changes for now, use Cloudflare Stream but implement a **video deletion policy** — delete videos when a term/standard ends to keep stored minutes under 6,000 (≈ $30/month storage).
-
----
-
-## Pre-Deployment Checklist (All Options)
-
-Before deploying anywhere:
-
-1. **Update CORS** in `backend/main.py`:
-   ```python
-   allow_origins=["https://yourdomain.com", "https://www.yourdomain.com"]
-   ```
-
-2. **Update frontend API URL** in `frontend/.env.local`:
-   ```
-   VITE_API_URL=https://your-backend-domain.com/api
-   ```
-
-3. **Build frontend**:
-   ```bash
-   cd frontend && npm run build
-   ```
-
-4. **Set backend env vars** on your server:
-   ```
-   SUPABASE_URL=...
-   SUPABASE_KEY=...
-   SUPABASE_SERVICE_KEY=...
-   CLOUDFLARE_ACCOUNT_ID=...
-   CLOUDFLARE_STREAM_API_TOKEN=...
-   ```
-
-5. **Run backend**: `uvicorn main:app --host 0.0.0.0 --port 8001`
-
-6. **Replace WebSocket URL** in frontend from `ws://` to `wss://` for HTTPS production
+> 💡 **Recommendation:** Zoom Pro ($15.99/month) — handles live classes for up to 100 students at a time. If you split batches, one Pro account is enough for 500 students across multiple time slots.
 
 ---
 
-## Option 1 — Completely Free (Testing Only)
+## Pre-Deployment Checklist
 
-**Cost: ₹0 / $0 per month** (video cost extra — see above)
+Before going live on any platform:
 
-| Service | Provider | Free Tier |
-|---|---|---|
-| Frontend | Vercel or Netlify | Unlimited static sites |
-| Backend | Render.com free tier | 750 hours/month, 512 MB RAM |
-| Database | Supabase free tier | 500 MB DB, 1 GB storage, 50K MAU |
-| Video | YouTube Unlisted | Free (requires code change) |
+**1. Update CORS in `backend/main.py`:**
+```python
+allow_origins=["https://yourdomain.com", "https://www.yourdomain.com"]
+```
 
-### Steps
-1. **Frontend → Vercel**: New Project → set root to `frontend/` → add `VITE_API_URL` env → deploy
-2. **Backend → Render.com**: New Web Service → root `backend/` → build: `pip install -r requirements.txt` → start: `uvicorn main:app --host 0.0.0.0 --port $PORT` → add env vars
+**2. Update frontend API URL in `frontend/.env.local`:**
+```
+VITE_API_URL=https://your-backend-domain.com/api
+```
 
-### ⚠️ Free Tier Limitations
-- Render free tier **spins down after 15 minutes of inactivity** → 30–60 second cold start for students
-- WebSocket drops when server is asleep
-- **Not suitable for live production with 500 students**
+**3. Build frontend:**
+```bash
+cd frontend && npm run build
+```
+
+**4. Set all backend environment variables on the server:**
+```
+SUPABASE_URL=...
+SUPABASE_KEY=...
+SUPABASE_SERVICE_KEY=...
+ZOOM_ACCOUNT_ID=...
+ZOOM_CLIENT_ID=...
+ZOOM_CLIENT_SECRET=...
+ZOOM_SDK_KEY=...
+ZOOM_SDK_SECRET=...
+ZOOM_WEBHOOK_SECRET_TOKEN=...
+```
+
+**5. Start backend:**
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8001 --workers 2
+```
+
+**6. Update WebSocket URL in frontend from `ws://` to `wss://` for HTTPS**
+
+**7. Run database indexes** (paste `backend/optimize_indexes.sql` in Supabase SQL Editor)
+
+**8. Delete the demo endpoint** before going live:
+```
+# Remove or comment out: POST /api/demo/create-accounts
+```
 
 ---
 
-## Option 2 — Budget-Friendly (Recommended for Production)
+## OPTION 1 — 100% Free (Development / Early Testing)
 
-**Infrastructure cost: ~₹600–1,000/month + video cost on top**
+**Monthly cost: ₹0 / $0** (not for production with 500 students)
 
-### Option 2A — Render Starter (Simplest)
-
-| Service | Provider | Monthly Cost |
+| Service | Provider | Free Tier Limit |
 |---|---|---|
-| Frontend | Netlify (free) | $0 |
-| Backend | Render Starter | $7/month (~₹600) |
-| Database | Supabase free tier | $0 |
-| Domain | Namecheap .com | ~$1/month (~₹85) |
-| Video | See video table above | $0–315/month |
-| **Infrastructure total** | | **~$8/month (~₹700)** |
+| Frontend | Vercel or Netlify | Unlimited static builds |
+| Backend | Render.com Free | 512 MB RAM, spins down after 15 min idle |
+| Database | Supabase Free | 500 MB DB, 1 GB storage, 50,000 MAU |
+| Video | YouTube Unlisted | ✅ Free |
+| Live Classes | Zoom Basic | 40 min limit per class |
 
-Render Starter: always-on, 512 MB RAM, 0.5 CPU. Enough for API + WebSocket for 500 students. Upgrade to $25/month if RAM is insufficient during peak upload times.
+### ⚠️ Free Tier Critical Warning
+- Render free tier **sleeps after 15 minutes of no traffic**
+- Cold start takes **30–60 seconds** — students will see loading screens
+- **WebSocket drops when server is asleep**
+- **Not suitable for 500 students in production**
 
-> ⚠️ **Upload note**: Uploading 10 × 500 MB videos/day through the backend is intensive. The current code streams each upload to Cloudflare through FastAPI — consider staggering uploads (not all at once) on Render Starter.
+---
 
-### Option 2B — Railway
+## OPTION 2 — Railway ⭐ Simplest Paid Option
 
-| Service | Provider | Monthly Cost |
+Railway is the easiest platform for deploying FastAPI with zero DevOps knowledge.
+
+### Pricing
+
+| Plan | Price | What you get |
 |---|---|---|
-| Frontend | Netlify (free) | $0 |
-| Backend | Railway Hobby | $5 base + ~$3–5 usage |
-| Database | Supabase free tier | $0 |
-| Domain | Namecheap | ~$1/month |
-| **Infrastructure total** | | **~$9–11/month** |
+| **Hobby** | $5/month base + usage | 8 GB RAM, 8 vCPU, 100 GB egress |
+| **Pro** | $20/month | Teams, priority support |
+| **Usage billing** | ~$0.000463/vCPU-hour + $0.000231/GB-hour | Pay for what you use |
 
-### Option 2C — DigitalOcean Droplet
+### Estimated Monthly Railway Cost for Tutoria Backend
 
-| Service | Provider | Monthly Cost |
+| Usage | Estimated Cost |
+|---|---|
+| 1 vCPU + 1 GB RAM, always-on (30 days) | ~$8–12/month |
+| 1 vCPU + 2 GB RAM, always-on (30 days) | ~$12–16/month |
+| $5 base fee included | ✅ |
+
+### Railway Full Stack Estimate
+
+| Component | Provider | Monthly Cost |
 |---|---|---|
+| Backend (FastAPI) | Railway Hobby | $10–15 (usage-based) |
 | Frontend | Netlify (free) | $0 |
-| Backend | DO Droplet 2 GB RAM | $12/month (~₹1,030) |
-| Database | Supabase free tier | $0 |
-| Domain | Namecheap | ~$1/month |
-| **Infrastructure total** | | **~$13/month (~₹1,115)** |
+| Database | Supabase Free | $0 |
+| Video | YouTube Unlisted | $0 |
+| Zoom Live Classes | Zoom Pro | $16 (~₹1,350) |
+| Domain | Namecheap .com | ~$1 (~₹85) |
+| **Total** | | **~$27–32/month (~₹2,300–2,750)** |
 
-Use the **2 GB Droplet ($12)** instead of 1 GB — the 1 GB will struggle when teachers upload 500 MB video files.
+### Railway Deployment Steps
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Login and init
+railway login
+railway init
+
+# Deploy backend
+cd backend
+railway up
+
+# Set environment variables
+railway variables set SUPABASE_URL=... SUPABASE_KEY=... # etc.
+
+# Get your deployed URL
+railway open
+```
+
+### Railway Pros & Cons
+
+| ✅ Pros | ❌ Cons |
+|---|---|
+| Zero-config deployment | Usage billing can be unpredictable |
+| GitHub auto-deploy on push | Less control than VPS |
+| Built-in HTTPS & custom domains | More expensive than DO at scale |
+| Excellent for small teams | |
+
+---
+
+## OPTION 3 — Render.com ⭐ Best Value Managed Platform
+
+### Pricing
+
+| Plan | Price | RAM | CPU | Always-on? |
+|---|---|---|---|---|
+| Free | $0 | 512 MB | 0.1 vCPU | ❌ Sleeps |
+| **Starter** | **$7/month** | 512 MB | 0.5 vCPU | ✅ Yes |
+| Standard | $25/month | 2 GB | 1 vCPU | ✅ Yes |
+| Pro | $85/month | 4 GB | 2 vCPU | ✅ Yes |
+
+### Render Full Stack Estimate
+
+| Component | Provider | Monthly Cost |
+|---|---|---|
+| Backend (FastAPI) | Render Starter | $7 (~₹600) |
+| Frontend | Netlify (free) | $0 |
+| Database | Supabase Free | $0 |
+| Video | YouTube Unlisted | $0 |
+| Zoom Live Classes | Zoom Pro | $16 (~₹1,350) |
+| Domain | Namecheap .com | ~$1 (~₹85) |
+| **Total** | | **~$24/month (~₹2,060)** |
+
+### Render Deployment Steps
+1. **Backend → Render:**
+   - New Web Service → connect GitHub repo
+   - Root Directory: `backend`
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - Add all env vars in the Environment tab
+   - Plan: Starter ($7/month)
+
+2. **Frontend → Netlify:**
+   - New Site → connect GitHub repo
+   - Base directory: `frontend`
+   - Build command: `npm run build`
+   - Publish directory: `frontend/dist`
+   - Add `VITE_API_URL` env var
+
+---
+
+## OPTION 4 — DigitalOcean Droplet ⭐ Best Control-to-Price
+
+A virtual private server (VPS) gives you full control. DigitalOcean is the most popular choice for solo developers.
+
+### Pricing
+
+| Droplet Size | RAM | vCPU | SSD | Monthly | Best for |
+|---|---|---|---|---|---|
+| Basic 1 GB | 1 GB | 1 vCPU | 25 GB | **$6/month** | Too small |
+| **Basic 2 GB** | 2 GB | 1 vCPU | 50 GB | **$12/month** | ✅ Tutoria |
+| Basic 4 GB | 4 GB | 2 vCPU | 80 GB | $24/month | Future scale |
+| Basic 8 GB | 8 GB | 4 vCPU | 160 GB | $48/month | Heavy load |
+
+### DigitalOcean Full Stack Estimate
+
+| Component | Provider | Monthly Cost |
+|---|---|---|
+| Backend (FastAPI) | DO Droplet 2 GB | $12 (~₹1,030) |
+| Frontend | Netlify (free) | $0 |
+| Database | Supabase Free | $0 |
+| Video | YouTube Unlisted | $0 |
+| Zoom Live Classes | Zoom Pro | $16 (~₹1,350) |
+| Domain | Namecheap .com | ~$1 (~₹85) |
+| **Total** | | **~$29/month (~₹2,490)** |
+
+### DigitalOcean Setup (Ubuntu 22.04)
 
 ```bash
-# Ubuntu 22.04 on the droplet:
-sudo apt update && sudo apt install python3-pip nginx certbot python3-certbot-nginx -y
+# Connect to droplet
+ssh -i ~/.ssh/id_rsa root@<your-droplet-ip>
+
+# System setup
+apt update && apt upgrade -y
+apt install python3-pip python3-venv nginx certbot python3-certbot-nginx -y
+
+# Clone and setup app
+git clone https://github.com/yourusername/tutoria /opt/tutoria
+cd /opt/tutoria/backend
 pip3 install -r requirements.txt
 
-# Systemd auto-restart:
-sudo nano /etc/systemd/system/tutoria.service
+# Create .env file
+nano /opt/tutoria/backend/.env
+# Paste all your environment variables
+
+# Create systemd service (auto-restart on crash/reboot)
+nano /etc/systemd/system/tutoria.service
 ```
+
 ```ini
 [Unit]
-Description=Tutoria FastAPI
+Description=Tutoria FastAPI Backend
 After=network.target
+
 [Service]
-User=ubuntu
-WorkingDirectory=/home/ubuntu/tutoria/backend
-EnvironmentFile=/home/ubuntu/tutoria/backend/.env
-ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8001
+User=root
+WorkingDirectory=/opt/tutoria/backend
+EnvironmentFile=/opt/tutoria/backend/.env
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 2
 Restart=always
 RestartSec=5
+
 [Install]
 WantedBy=multi-user.target
 ```
-```bash
-sudo systemctl enable tutoria && sudo systemctl start tutoria
-# Nginx + SSL:
-sudo certbot --nginx -d api.yourdomain.com
-```
-
-### Option 2D — Fly.io (Cheapest Always-On)
-
-| Service | Provider | Monthly Cost |
-|---|---|---|
-| Frontend | Netlify (free) | $0 |
-| Backend | Fly.io shared-cpu-1x 1 GB | ~$5–7/month |
-| **Infrastructure total** | | **~$6–8/month (~₹520–690)** |
 
 ```bash
-cd backend
-fly launch
-fly secrets set SUPABASE_URL=... SUPABASE_KEY=... SUPABASE_SERVICE_KEY=...
-fly deploy
+systemctl enable tutoria && systemctl start tutoria
+
+# Nginx with WebSocket support
+nano /etc/nginx/sites-available/tutoria
 ```
 
----
-
-## Option 3 — AWS (Enterprise / Scalable)
-
-**Infrastructure cost: ~$25–45/month + video cost on top**
-
-### Architecture
-
-```
-Students/Teachers
-     ↓
-Route 53 → CloudFront → S3 (frontend, static)
-                     → ALB → EC2 (FastAPI backend)
-                               ↓
-                          Supabase (DB)
-                          Video host (CF Stream / B2 / R2)
-```
-
-### Per-Service Cost Breakdown (Infrastructure only, excludes video)
-
-| AWS Service | Spec | Monthly Cost |
-|---|---|---|
-| **EC2 t3.small** | 2 vCPU, 2 GB RAM | ~$15–16 |
-| **EC2 t3.medium** (for heavy uploads) | 2 vCPU, 4 GB RAM | ~$30–33 |
-| **S3** (frontend ~5 MB) | Storage + requests | ~$0.10 |
-| **CloudFront** (frontend CDN) | First 1 TB/month free | $0 |
-| **Route 53** (DNS) | 1 hosted zone | $0.50 |
-| **ACM** (SSL) | Free with CloudFront | $0 |
-| **EC2 data transfer** | ~10 GB API/month | ~$0.90 |
-| **Total (t3.small)** | | **~$17–20/month** |
-| **Total (t3.medium)** | | **~$32–35/month** |
-
-> **EC2 size for video uploads**: With 10 × 500 MB uploads/day going through FastAPI, a **t3.medium (4 GB RAM)** is strongly recommended. The t3.small may run out of memory buffering large uploads. Region: **ap-south-1 (Mumbai)** for India.
-
-### Step-by-Step AWS Setup
-
-**1. Launch EC2**
-- AMI: Ubuntu 22.04 LTS, Instance: t3.medium, Region: ap-south-1
-- Security group: ports 22, 80, 443
-
-**2. Install and configure**
-```bash
-ssh -i key.pem ubuntu@<ip>
-sudo apt update && sudo apt install python3-pip nginx certbot python3-certbot-nginx -y
-git clone <repo> /home/ubuntu/tutoria
-cd /home/ubuntu/tutoria/backend && pip3 install -r requirements.txt
-# Create .env with all keys
-sudo systemctl enable tutoria && sudo systemctl start tutoria
-sudo certbot --nginx -d api.yourdomain.com
-```
-
-**3. Nginx config (with WebSocket support)**
 ```nginx
 server {
     server_name api.yourdomain.com;
-    client_max_body_size 600M;   # allow 500 MB video uploads
+    
     location / {
         proxy_pass http://127.0.0.1:8001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_read_timeout 3600;
         proxy_send_timeout 3600;
     }
 }
 ```
 
-**4. S3 + CloudFront (frontend)**
+```bash
+ln -s /etc/nginx/sites-available/tutoria /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# Free SSL certificate
+certbot --nginx -d api.yourdomain.com
+```
+
+---
+
+## OPTION 5 — AWS (Enterprise / Scalable)
+
+AWS is the most powerful option but also the most complex to manage and most expensive.
+
+### Architecture on AWS
+
+```
+Students / Teachers
+      ↓
+Route 53 (DNS) → CloudFront (CDN) → S3 (frontend static files)
+                                  → ALB → EC2 (FastAPI backend)
+                                               ↓
+                                         Supabase (DB)
+                                         YouTube (video)
+                                         Zoom (live classes)
+```
+
+### EC2 Instance Pricing (ap-south-1 Mumbai — best for India)
+
+| Instance | RAM | vCPU | On-Demand/month | Reserved 1yr/month | Best for |
+|---|---|---|---|---|---|
+| t3.micro | 1 GB | 2 | ~$8 | ~$5 | Too small |
+| **t3.small** | 2 GB | 2 | **~$16** | **~$10** | ✅ Light use |
+| **t3.medium** | 4 GB | 2 | **~$33** | **~$21** | ✅ Recommended |
+| t3.large | 8 GB | 2 | ~$66 | ~$42 | Heavy load |
+| t3.xlarge | 16 GB | 4 | ~$133 | ~$84 | Very heavy |
+
+> 💡 **For Tutoria with 500 students:** `t3.small` (reserved) is sufficient since video is on YouTube, not on EC2. `t3.medium` gives comfortable headroom.
+
+### AWS Full Cost Breakdown (Monthly, no upfront)
+
+| AWS Service | Spec | Monthly Cost |
+|---|---|---|
+| EC2 t3.small (On-Demand) | 2 GB, 2 vCPU | ~$16 |
+| EC2 t3.small (1yr Reserved) | 2 GB, 2 vCPU | ~$10 |
+| EC2 t3.medium (On-Demand) | 4 GB, 2 vCPU | ~$33 |
+| S3 (frontend, ~5 MB dist) | Storage + requests | ~$0.10 |
+| CloudFront (frontend CDN) | First 1 TB/month | $0 |
+| Route 53 (DNS) | 1 hosted zone | $0.50 |
+| ACM (SSL certificate) | With CloudFront | $0 |
+| EC2 data transfer out | ~10 GB API/month | ~$0.90 |
+
+### AWS Full Stack Estimates
+
+| Configuration | Infrastructure | Zoom | Total/month |
+|---|---|---|---|
+| t3.small On-Demand + S3/CF | ~$17.50 | $16 | **~$33.50 (~₹2,880)** |
+| t3.small Reserved 1yr + S3/CF | ~$11.50 | $16 | **~$27.50 (~₹2,360)** |
+| t3.medium On-Demand + S3/CF | ~$34.50 | $16 | **~$50.50 (~₹4,340)** |
+| t3.medium Reserved 1yr + S3/CF | ~$22.50 | $16 | **~$38.50 (~₹3,310)** |
+
+> 💡 **AWS Free Tier (first 12 months):** 750 hours t2.micro, 5 GB S3, 15 GB data transfer. Good for testing — not enough for production.
+
+### AWS Step-by-Step Setup
+
+**1. Launch EC2**
+```
+- AMI: Ubuntu 22.04 LTS
+- Instance: t3.small or t3.medium
+- Region: ap-south-1 (Mumbai)
+- Security Group: ports 22, 80, 443
+- Allocate Elastic IP (fixed public IP)
+```
+
+**2. Deploy backend (same as DigitalOcean steps above)**
+
+**3. Frontend on S3 + CloudFront**
 ```bash
 cd frontend && npm run build
 aws s3 sync dist/ s3://tutoria-frontend --delete
-# Create CloudFront distribution → point to S3 → attach domain
+
+# Create CloudFront distribution:
+# Origin: S3 bucket (with OAC)
+# Alternate domain: yourdomain.com
+# SSL: Use ACM certificate (free)
+# Default root object: index.html
+# Error page: 404 → /index.html (for React Router)
 ```
 
-### AWS Billing Setup
-- AWS Console → Billing → Budgets → Create budget → alert at $50/month
-- Free tier first 12 months: 750 hours t2.micro, 5 GB S3, 15 GB transfer
+**4. Route 53 DNS**
+```
+A record:   api.yourdomain.com → EC2 Elastic IP
+CNAME:      yourdomain.com    → CloudFront domain
+```
 
-### AWS Infrastructure Cost Summary (no video)
-
-| EC2 Size | Monthly (infra only) | Recommended for |
-|---|---|---|
-| t3.small (2 GB) | ~$17–20 | Low upload frequency |
-| t3.medium (4 GB) | ~$32–35 | 10 videos/day uploads ✅ |
-| t3.large (8 GB) | ~$60–65 | Future scaling |
-
----
-
-## Full Monthly Cost Estimates (Infrastructure + Video Combined)
-
-This table shows **realistic total monthly costs** for your scenario (10 videos/day × 500 MB, 500 students):
-
-### With Cloudflare Stream (no code change needed)
-
-| Setup | Infra | Video (Month 1) | Video (Month 6) | Total Month 1 | Total Month 6 |
-|---|---|---|---|---|---|
-| Render + Netlify | $8 | $165 | $315 | **$173** (₹14,800) | **$323** (₹27,700) |
-| DigitalOcean 2 GB | $13 | $165 | $315 | **$178** (₹15,300) | **$328** (₹28,200) |
-| AWS t3.medium | $33 | $165 | $315 | **$198** (₹17,000) | **$348** (₹29,900) |
-
-### With Backblaze B2 + Cloudflare (code change required)
-
-| Setup | Infra | Video (Month 1) | Video (Month 6) | Total Month 1 | Total Month 6 |
-|---|---|---|---|---|---|
-| Render + Netlify | $8 | $0.90 | $5.40 | **$8.90** (₹765) | **$13.40** (₹1,150) ⭐ |
-| DigitalOcean 2 GB | $13 | $0.90 | $5.40 | **$13.90** (₹1,195) | **$18.40** (₹1,580) |
-| AWS t3.medium | $33 | $0.90 | $5.40 | **$33.90** (₹2,915) | **$38.40** (₹3,300) |
-
-### With YouTube Unlisted (code change required, free video)
-
-| Setup | Infra | Video | Total/month |
-|---|---|---|---|
-| Render + Netlify | $8 | $0 | **$8** (₹690) |
-| DigitalOcean 2 GB | $13 | $0 | **$13** (₹1,115) |
-| AWS t3.medium | $33 | $0 | **$33** (₹2,835) |
+**5. Set billing alert**
+```
+AWS Console → Billing → Budgets → Create budget → Alert at $60/month
+```
 
 ---
 
-## Option 4 — GoDaddy
+## OPTION 6 — GoDaddy
 
-GoDaddy is primarily a domain registrar. **Not suitable for Python/FastAPI hosting.**
+GoDaddy is primarily a **domain registrar**, not a developer platform.
 
-### Domain (what GoDaddy IS good for)
-- `.com` domain: ~$12–15/year (₹1,000–1,300/year)
-- `.in` domain: ~$3–5/year
+### What GoDaddy is good for ✅
+| Item | Price |
+|---|---|
+| `.com` domain | ~$12–15/year (~₹1,000–1,300/year) |
+| `.in` domain | ~$3–5/year |
+| `.co.in` domain | ~$2–3/year |
 
-### Hosting Plans Reality
+### GoDaddy Hosting Plans Reality Check
 
-| Plan | Price | FastAPI + WebSocket? |
+| Plan | Price | Can run FastAPI + WebSocket? |
 |---|---|---|
-| Shared Hosting | $3–6/month | ❌ PHP only, no Python |
-| VPS 1 (1 CPU, 1 GB) | $5–8/month | ✅ But too small for video uploads |
-| VPS 2 (2 CPU, 2 GB) | $15–18/month | ✅ Usable, overpriced vs alternatives |
-| Dedicated | $80+/month | ✅ Overkill |
+| Shared Hosting | $3–6/month | ❌ PHP-only, no Python |
+| Managed WordPress | $5–10/month | ❌ WordPress only |
+| VPS 1 (1 CPU, 1 GB) | $5–8/month | ✅ But too small |
+| **VPS 2 (2 CPU, 2 GB)** | **$15–18/month** | ✅ Usable, overpriced |
+| VPS 3 (4 CPU, 4 GB) | $30–35/month | ✅ Good, overpriced |
+| Dedicated Server | $80+/month | ✅ Overkill |
 
-**GoDaddy VPS ($15–18/month) vs DigitalOcean Droplet ($12/month)**: identical specs, GoDaddy costs more and has less developer-friendly tooling.
+**GoDaddy VPS ($15–18/month) vs DigitalOcean Droplet ($12/month):**  
+Identical specs, GoDaddy costs more and has worse developer tooling.
 
-### Verdict on GoDaddy
+### GoDaddy Verdict
 - ✅ **Buy your domain here** if you prefer their UI
-- ❌ **Do not host the app on GoDaddy** — use Render, DigitalOcean, or AWS instead
-- Point your GoDaddy domain DNS (A/CNAME records) to your actual host
+- ❌ **Do not host the app on GoDaddy** — inferior value
+- ✅ **Point GoDaddy DNS to DigitalOcean / Render / Railway:**
+  - GoDaddy Dashboard → DNS → Add A Record → point to your server IP
 
 ---
 
-## Option 5 — Android App
+## OPTION 7 — Other Hosting Services Compared
 
-### Free: PWA (Already Configured — Use This)
+| Provider | Monthly | Always-On | Ease | Best For |
+|---|---|---|---|---|
+| **Fly.io** | $5–8 | ✅ | ⭐⭐⭐⭐ | Low-budget always-on |
+| **Heroku Eco** | $5 + $7/dyno | ✅ | ⭐⭐⭐⭐ | Easy deploy |
+| **Azure App Service B1** | ~$13 | ✅ | ⭐⭐⭐ | Microsoft stack |
+| **Google Cloud Run** | ~$5–15 (pay-per-use) | ⚠️ | ⭐⭐⭐ | Serverless (WebSocket tricky) |
+| **Hetzner Cloud CX21** | €4/month (~₹370) | ✅ | ⭐⭐⭐ | Cheapest VPS in Europe |
+| **Linode/Akamai 2 GB** | $12/month | ✅ | ⭐⭐⭐⭐ | Good alternative to DO |
 
-Your app **already has PWA support** (vite-plugin-pwa + manifest.json + service worker). Students can install it from their Android phone without the Play Store.
+### Fly.io Quick Deploy
+```bash
+cd backend
+fly launch            # creates fly.toml
+fly secrets set SUPABASE_URL=... SUPABASE_KEY=...  # all env vars
+fly deploy
+```
+
+---
+
+## Deploying as an Android App
+
+### Method 1 — PWA (Already Configured — Recommended ✅)
+
+**Cost: ₹0 — No developer account needed**
+
+Your app **already has PWA support** via `vite-plugin-pwa`. Students install it from Chrome browser without any app store.
 
 **How students install:**
-1. Open the web app in Chrome on Android
-2. Tap "Add to Home Screen" banner (auto-appears) or Chrome menu → "Install app"
-3. A full-screen app icon appears on the home screen
-4. It opens without a browser bar — indistinguishable from a native app
+1. Open the Tutoria URL in Chrome on Android
+2. Chrome shows a banner: **"Add Tutoria to Home Screen"** (auto-appears)
+3. Or: Chrome menu (⋮) → **"Install app"**
+4. A full-screen app icon appears on the home screen
+5. It launches without a browser bar — looks and feels like a native app
 
-**Cost: ₹0** — no developer account, no Play Store.
+**PWA Features in Tutoria:**
+- Offline support (Workbox service worker)
+- App icon (192×192 and 512×512 configured in `vite.config.js`)
+- Standalone display mode (no browser UI)
+- Background sync-ready architecture
+- Auto-update on new deployments
 
 ---
 
-### Optional: Google Play Store Listing
+### Method 2 — Google Play Store via PWA Builder
 
-A Play Store listing improves discoverability but is not required for 500 known students.
+**Cost: $25 one-time (~₹2,100)**
 
 | Item | Cost |
 |---|---|
-| Google Play Developer Account | **$25 one-time (~₹2,100)** |
+| Google Play Developer Account | **$25 one-time** |
 | Annual renewal | $0 |
-| App publishing (free app) | $0 |
+| Publishing a free app | $0 |
+| PWA Builder tool | Free (Microsoft) |
 
-**Build the APK from your existing PWA** using PWA Builder (free Microsoft tool):
-1. Deploy your web app to HTTPS
-2. Go to pwabuilder.com → enter your URL → validate
-3. Click Android → download the `.aab` file
-4. Sign the AAB (instructions in PWA Builder)
-5. Upload to Google Play Console
+**Steps (no native code required):**
+1. Deploy your app to HTTPS (any option above)
+2. Go to [pwabuilder.com](https://www.pwabuilder.com) → enter your URL
+3. Click **Android** → click **Generate Package**
+4. Download the `.aab` file (Android App Bundle)
+5. Sign the AAB (PWA Builder includes instructions)
+6. Upload to [Google Play Console](https://play.google.com/console)
+7. Fill in app details, screenshots, privacy policy
+8. Submit for review (~2–3 business day review time)
 
-No native code required — it wraps your PWA in a TWA (Trusted Web Activity).
-
----
-
-## Summary Comparison Table
-
-### Infrastructure Only (excluding video)
-
-| Option | Monthly (INR) | Always-On | Upload 500 MB videos? |
-|---|---|---|---|
-| Render free + Vercel | ₹0 | ❌ (cold starts) | Limited |
-| Fly.io + Netlify | ₹520–690 | ✅ | OK if staggered |
-| Render Starter + Netlify | ₹600–700 | ✅ | OK if staggered |
-| DigitalOcean 2 GB + Netlify | ₹1,030–1,115 | ✅ | ✅ Comfortable |
-| AWS t3.medium + S3/CF | ₹2,750–3,000 | ✅ | ✅ Best for uploads |
-| GoDaddy VPS 2 | ₹1,300–1,550 | ✅ | OK, overpriced |
-
-### Total Monthly (Infrastructure + Video, Month 6)
-
-| Setup | Cloudflare Stream | Backblaze B2 + CF | YouTube Free |
-|---|---|---|---|
-| Render + Netlify | ₹27,700 | **₹1,150** ⭐ | ₹690 |
-| DigitalOcean 2 GB | ₹28,200 | ₹1,580 | ₹1,115 |
-| AWS t3.medium | ₹29,900 | ₹3,300 | ₹2,835 |
+**Play Store Listing Tips:**
+- App name: "Tutoria — Your Learning Platform" (or your custom name from Settings)
+- Category: Education
+- Screenshots: Take them from Chrome DevTools mobile emulator
+- Privacy Policy: Use a free generator like [privacypolicygenerator.info](https://privacypolicygenerator.info)
 
 ---
 
-## Recommended Setup for Your Use Case
+### Method 3 — Apple App Store (iOS)
 
-**500 students · 4–5 teachers · 10 videos/day × 500 MB · Web + Android · India**
+| Item | Cost |
+|---|---|
+| Apple Developer Program | **$99/year (~₹8,500/year)** |
+| Mac required for building | ✅ Required |
 
-### Phase 1: Launch (minimal cost, Cloudflare Stream as-is)
+PWA on iOS has limitations (no push notifications, no background sync). For iOS, consider React Native as a future upgrade. **Not recommended until you have budget.**
 
-| Component | Choice | Monthly |
+---
+
+## Full Monthly Cost Comparison Table
+
+### Infrastructure + Zoom (Video is always free via YouTube)
+
+| Platform | Backend Plan | Monthly (INR) | Monthly (USD) | Difficulty |
+|---|---|---|---|---|
+| Render + Netlify | Starter ($7) | **~₹2,060** | ~$24 | ⭐ Easiest |
+| Railway + Netlify | Hobby (~$12) | **~₹2,400** | ~$28 | ⭐⭐ Easy |
+| Fly.io + Netlify | shared-cpu-1x (~$6) | **~₹1,900** | ~$22 | ⭐⭐ Easy |
+| DigitalOcean + Netlify | 2 GB Droplet ($12) | **~₹2,490** | ~$29 | ⭐⭐⭐ Medium |
+| AWS t3.small Reserved + S3 | Reserved 1yr | **~₹2,360** | ~$27.50 | ⭐⭐⭐⭐ Hard |
+| AWS t3.medium On-Demand + S3 | On-Demand | **~₹4,340** | ~$50.50 | ⭐⭐⭐⭐ Hard |
+| GoDaddy VPS 2 + Netlify | VPS 2 ($16) | **~₹2,750** | ~$32 | ⭐⭐⭐ Medium |
+
+> All prices include Zoom Pro ($16/month). Remove Zoom if using Zoom Basic (free, 40 min limit).
+
+---
+
+## Recommended Plans by Budget
+
+### 🟢 Budget Plan — ₹2,000–2,500/month
+
+**Best pick: Render Starter + Netlify + Namecheap**
+
+| Component | Choice | Cost |
 |---|---|---|
 | Backend | Render Starter | $7 (~₹600) |
 | Frontend | Netlify free | $0 |
 | Database | Supabase free | $0 |
-| Video | Cloudflare Stream | ~$165 (~₹14,200) — Month 1 |
-| Domain | Namecheap .com | ~$1 (~₹85) |
-| **Total Month 1** | | **~₹14,900/month** |
-| **Total Month 6** | | **~₹27,800/month** |
+| Video | YouTube Unlisted | $0 |
+| Live Classes | Zoom Pro | $16 (~₹1,350) |
+| Domain | Namecheap `.com` | ~$1 (~₹85) |
+| **Total** | | **~₹2,035/month** |
 
-⚠️ Cloudflare Stream cost keeps rising. Implement a video deletion policy (delete old terms) to cap stored minutes.
+One-time costs:
+- Domain registration: ₹1,000–1,300 (1 year)
+- Google Play (optional): ₹2,100 (one-time)
 
 ---
 
-### Phase 2: Cost Optimization (switch video storage)
+### 🔵 Best Value Plan — ₹2,400–2,800/month
 
-Switch video uploads from Cloudflare Stream to **Backblaze B2 + Cloudflare** (code change, ~2–4 hours):
+**Best pick: DigitalOcean 2 GB + Netlify + Namecheap**
 
-| Component | Choice | Monthly |
+| Component | Choice | Cost |
 |---|---|---|
-| Backend | Render Starter | $7 (~₹600) |
+| Backend | DigitalOcean 2 GB Droplet | $12 (~₹1,030) |
 | Frontend | Netlify free | $0 |
 | Database | Supabase free | $0 |
-| Video | Backblaze B2 + CF CDN | ~$5 (~₹430) |
-| Domain | Namecheap .com | ~$1 (~₹85) |
-| **Total (stable)** | | **~₹1,115/month** |
+| Video | YouTube Unlisted | $0 |
+| Live Classes | Zoom Pro | $16 (~₹1,350) |
+| Domain | Namecheap `.com` | ~$1 (~₹85) |
+| **Total** | | **~₹2,465/month** |
 
-This is the best long-term choice — video costs stay nearly flat as your library grows.
-
----
-
-### Android
-
-- **Share the PWA link** → students install from Chrome → zero cost ✅
-- **Play Store** (optional, later): $25 one-time + PWA Builder
+**Why DigitalOcean over Render:** Full VPS control, no memory limits, can run Nginx + backend on one machine, permanent storage on disk. Harder to set up but more stable.
 
 ---
 
-### One-Time Costs
+### 🔴 Enterprise Plan — ₹3,000–5,000/month
+
+**Best pick: AWS t3.small Reserved + S3 + CloudFront**
+
+| Component | Choice | Cost |
+|---|---|---|
+| Backend | AWS EC2 t3.small (1yr Reserved) | ~$10 (~₹860) |
+| Frontend | AWS S3 + CloudFront | ~$0.50 (~₹43) |
+| Database | Supabase Pro (if needed) | $25 (~₹2,150) |
+| Video | YouTube Unlisted | $0 |
+| Live Classes | Zoom Pro | $16 (~₹1,350) |
+| Domain | Namecheap or Route 53 | ~$1–$0.50 |
+| **Total** | | **~₹4,400/month** |
+
+**Why AWS:** Best reliability (99.99% SLA), full control, automatic scaling groups, CloudWatch monitoring, RDS if you move off Supabase later.
+
+---
+
+## Supabase Free vs Pro
+
+The free Supabase tier is good enough to start. Upgrade when you hit limits.
+
+| Limit | Free Tier | Pro ($25/month) |
+|---|---|---|
+| Database size | 500 MB | 8 GB |
+| Storage | 1 GB | 100 GB |
+| Monthly Active Users | 50,000 | Unlimited |
+| Realtime connections | 200 | 500 |
+| Database backups | None | Daily |
+| Point-in-time recovery | ❌ | ✅ |
+
+> 💡 For 500 students with text data only (no video), you will comfortably stay within the free tier for at least 6–12 months.
+
+---
+
+## Domain Options
+
+| Provider | `.com` / year | `.in` / year | Notes |
+|---|---|---|---|
+| **Namecheap** | $9–11 | $3–5 | Best price, easy DNS |
+| **GoDaddy** | $12–15 | $3–5 | Good UI, slightly pricier |
+| **Porkbun** | $9–10 | $3–4 | Cheapest, great for devs |
+| **Google Domains** | $12 | N/A | Acquired by Squarespace |
+| **AWS Route 53** | $11 | N/A | Best if using AWS |
+
+> 💡 Buy `.com` for professional credibility. `.in` is cheaper and good for India-only platforms.
+
+---
+
+## One-Time Cost Summary
 
 | Item | Cost |
 |---|---|
 | Domain name (.com, 1 year) | ₹1,000–1,300 |
-| Google Play Developer (optional) | ₹2,100 |
+| Google Play Developer Account | ₹2,100 (optional) |
+| Apple Developer Program | ₹8,500/year (not recommended now) |
+| Initial server setup (your time) | 4–8 hours |
 
 ---
 
@@ -548,18 +665,20 @@ This is the best long-term choice — video costs stay nearly flat as your libra
 
 - [ ] Update CORS in `backend/main.py` with production domain
 - [ ] Set `VITE_API_URL` to production backend URL and rebuild frontend
-- [ ] Confirm `SUPABASE_SERVICE_KEY` is only in backend env vars, never in frontend
-- [ ] Enable HTTPS on all services (Render/Netlify/Fly.io all provide free SSL)
+- [ ] Confirm `SUPABASE_SERVICE_KEY` is **only in backend env vars**, never in frontend
+- [ ] Enable HTTPS on all services (all platforms above provide free SSL)
 - [ ] Update WebSocket URL in frontend from `ws://` to `wss://`
-- [ ] Set `client_max_body_size 600M` in Nginx if using it (allows 500 MB uploads)
-- [ ] Disable or delete `POST /api/demo/create-accounts` endpoint before going live
-- [ ] Set up Supabase DB backups (Supabase dashboard → Settings → Database → Backups)
-- [ ] Set up billing alerts (AWS: CloudWatch → Billing, Render: email alerts)
+- [ ] Remove or disable `POST /api/demo/create-accounts` endpoint
+- [ ] Set up Supabase DB backups (Supabase Dashboard → Settings → Database → Backups)
+- [ ] Set up billing alerts (AWS: CloudWatch Billing, Render: email alerts, DO: billing alerts)
 - [ ] Test WebSocket broadcasts on production domain
-- [ ] Test single-device enforcement with 2 phones on the same account
-- [ ] Test video upload on production with a 500 MB file before giving to teachers
+- [ ] Test single-device enforcement with 2 phones on the same student account
+- [ ] Run the performance index SQL from `backend/optimize_indexes.sql` in Supabase SQL Editor
+- [ ] Test Zoom live class creation and join flow end-to-end
+- [ ] Test YouTube video playback — confirm students cannot see the URL
 - [ ] Share PWA "Add to Home Screen" instructions with all 500 students
+- [ ] Set up error monitoring (optional: free tier of [Sentry.io](https://sentry.io))
 
 ---
 
-*Stack: React 18 + Vite (frontend) · FastAPI Python (backend) · Supabase PostgreSQL (DB) · Video: Cloudflare Stream (current) or Backblaze B2 / YouTube (recommended for cost)*
+*Stack: React 18 + Vite 5 (frontend) · FastAPI Python (backend) · Supabase PostgreSQL (DB) · YouTube Unlisted (video — free) · Zoom Server-to-Server OAuth (live classes)*

@@ -1,18 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
-import { useAppCache } from '../../store';
-import { Edit2, LogOut, Target, CheckCircle2, Trophy, BookOpen, Lock, Camera, Loader2 } from 'lucide-react';
+import { useAppCache, useSettingsStore } from '../../store';
+import { Edit2, LogOut, Target, CheckCircle2, Trophy, BookOpen, Lock, Camera, Loader2, PlayCircle, ChevronDown, ChevronUp, BarChart2 } from 'lucide-react';
 import { Avatar, Modal, Btn, Input, Skeleton } from '../../components/ui';
 import { apiClient } from '../../lib/api';
 import AttendanceStudentCard from '../../components/teacher/AttendanceStudentCard';
 
+function relTime(iso) {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 export default function StudentProfilePage() {
   const navigate = useNavigate();
   const { user, clearAuth } = useAuthStore();
+  const studentsCanViewReport = useSettingsStore(s => s.studentsCanViewReport);
 
   const [student, setStudent] = useState(null);
   const [subjects, setSubjects] = useState([]);
+  const [myVideos, setMyVideos] = useState([]);
+  const [videosExpanded, setVideosExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
@@ -24,12 +38,14 @@ export default function StudentProfilePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [me, subs] = await Promise.all([
+        const [me, subs, vids] = await Promise.all([
           apiClient('/auth/me'),
           apiClient('/subjects'),
+          apiClient('/students/me/videos').catch(() => []),
         ]);
         setStudent(me);
         setSubjects(Array.isArray(subs) ? subs : []);
+        setMyVideos(Array.isArray(vids) ? vids : []);
         setEditForm({ name: me?.name || '', email: me?.email || '', phone: me?.phone || '' });
       } catch (err) {
         console.error(err);
@@ -151,6 +167,47 @@ export default function StudentProfilePage() {
           <AttendanceStudentCard studentId={student?.id || user?.id} />
         )}
 
+        {/* My Videos */}
+        {myVideos.length > 0 && (
+          <div className="glass-panel rounded-2xl overflow-hidden">
+            <button
+              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/30 transition-colors"
+              onClick={() => setVideosExpanded(x => !x)}
+            >
+              <h2 className="font-semibold flex items-center gap-2 text-sm">
+                <PlayCircle size={16} className="text-neutral-500" />
+                My Videos
+                <span className="text-xs font-normal text-neutral-500">
+                  {myVideos.filter(v => v.completed).length} of {myVideos.length} completed
+                </span>
+              </h2>
+              {videosExpanded ? <ChevronUp size={14} className="text-neutral-400" /> : <ChevronDown size={14} className="text-neutral-400" />}
+            </button>
+            {videosExpanded && (
+              <div className="border-t border-white/40 divide-y divide-white/30">
+                {myVideos.map(v => (
+                  <div key={v.video_id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{v.title}</p>
+                      {v.subject_name && <p className="text-xs text-neutral-400">{v.subject_name}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {v.last_watched_at && (
+                        <span className="text-xs text-neutral-400">{relTime(v.last_watched_at)}</span>
+                      )}
+                      {v.completed ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Done</span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">In progress</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* About */}
         <div className="glass-panel rounded-2xl p-4">
           <h2 className="font-semibold mb-3">About</h2>
@@ -177,6 +234,14 @@ export default function StudentProfilePage() {
         </div>
 
         {/* Actions */}
+        {studentsCanViewReport && (
+          <button onClick={() => navigate('/student/report')}
+            className="w-full flex items-center gap-3 p-4 glass-panel rounded-2xl hover:bg-white/40 transition-colors">
+            <BarChart2 size={20} className="text-blue-500" />
+            <span className="font-medium">My Report Card</span>
+          </button>
+        )}
+
         <button onClick={() => navigate('/student/change-password')}
           className="w-full flex items-center gap-3 p-4 glass-panel rounded-2xl hover:bg-white/40 transition-colors">
           <Lock size={20} className="text-neutral-500" />

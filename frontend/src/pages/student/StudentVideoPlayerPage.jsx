@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
 import { Btn, Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth';
+import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import {
   isVideoSaved,
   saveVideoOffline,
@@ -22,6 +24,7 @@ function toMmSs(secs) {
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
+  const user = useAuthStore(s => s.user);
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
@@ -49,6 +52,46 @@ export default function StudentVideoPlayerPage() {
   const ytPlayerRef   = useRef(null);
   const ytProgressRef = useRef(null);
   const [chapterActive, setChapterActive] = useState(-1);
+  const [isPlaying,          setIsPlaying]          = useState(false);
+  const [duration,           setDuration]           = useState(0);
+  const [volume,             setVolume]             = useState(100);
+  const [isMuted,            setIsMuted]            = useState(false);
+  const [showControls,       setShowControls]       = useState(true);
+  const [playbackRate,       setPlaybackRate]       = useState(1);
+  const [quality,            setQuality]            = useState('auto');
+  const [availableQualities, setAvailableQualities] = useState([]);
+  const [showSpeedMenu,      setShowSpeedMenu]      = useState(false);
+  const [showQualityMenu,    setShowQualityMenu]    = useState(false);
+  const [seekFeedback,       setSeekFeedback]       = useState(null);
+  const [ccEnabled,          setCcEnabled]          = useState(false);
+  const [isFullscreen,       setIsFullscreen]       = useState(false);
+  const playerContainerRef  = useRef(null);
+  const controlsTimerRef    = useRef(null);
+  const tapTimerRef         = useRef(null);
+  const lastTapRef          = useRef({ time: 0, zone: null });
+  const singleTapTimerRef   = useRef(null);
+
+  // Throttled time update (250ms instead of 60fps)
+  useEffect(() => {
+    let interval;
+    const updateTime = () => {
+      if (ytPlayerRef.current?.getCurrentTime) {
+        const t = ytPlayerRef.current.getCurrentTime();
+        setCurrentTime(t);
+        const d = ytPlayerRef.current.getDuration?.();
+        if (d && d > 0) setDuration(d);
+        if (video?.chapters?.length) {
+          let idx = -1;
+          for (let i = video.chapters.length - 1; i >= 0; i--) {
+            if (t >= video.chapters[i].start_secs) { idx = i; break; }
+          }
+          setChapterActive(idx);
+        }
+      }
+    };
+    interval = setInterval(updateTime, 250);
+    return () => clearInterval(interval);
+  }, [video?.chapters]);
 
   // Track online/offline status
   useEffect(() => {
@@ -185,24 +228,41 @@ export default function StudentVideoPlayerPage() {
     loadYTApi().then(() => {
       ytPlayerRef.current = new window.YT.Player('yt-player-mount', {
         videoId: ytToken,
-        width: '100%',
-        height: '100%',
-        playerVars: { rel: 0, modestbranding: 1, fs: 1, iv_load_policy: 3, controls: 1 },
+        playerVars: {
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          iv_load_policy: 3,
+          disablekb: 1,
+          enablejsapi: 1,
+          origin: window.location.origin,
+          cc_load_policy: 0,
+        },
         events: {
           onReady: e => {
             setYtPlayerReady(true);
+            setDuration(e.target.getDuration());
+            setVolume(e.target.getVolume());
+            setIsMuted(e.target.isMuted());
+            const quals = e.target.getAvailableQualityLevels() || [];
+            setAvailableQualities(quals);
             const saved = video?.progress_secs || 0;
             if (saved > 30) e.target.seekTo(saved, true);
           },
           onStateChange: e => {
             const S = window.YT.PlayerState;
-            if (e.data === S.PLAYING) startYtProgress(e.target);
-            else stopYtProgress();
+            setIsPlaying(e.data === S.PLAYING);
+            if (e.data === S.PLAYING) {
+              startYtProgress(e.target);
+              // Refresh quality list once playback starts (more accurate than onReady)
+              const quals = e.target.getAvailableQualityLevels?.() || [];
+              if (quals.length > 0) setAvailableQualities(quals);
+            } else {
+              stopYtProgress();
+            }
             if (e.data === S.ENDED) markComplete();
           },
-          onError: () => {
-            setYtError('Video cannot be played. Make sure the video is Unlisted on YouTube.');
-          },
+          onError: () => setYtError('Video cannot be played. Make sure it is Unlisted on YouTube.'),
         },
       });
     });
@@ -237,6 +297,116 @@ export default function StudentVideoPlayerPage() {
       ytPlayerRef.current.playVideo();
     }
   };
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  function showControlsTemporarily() {
+    setShowControls(true);
+    clearTimeout(controlsTimerRef.current);
+    if (ytPlayerRef.current?.getPlayerState?.() === 1) {
+      controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+    }
+  }
+
+  function seekRelative(secs) {
+    const p = ytPlayerRef.current;
+    if (!p) return;
+    const dur = p.getDuration?.() || 0;
+    p.seekTo(Math.max(0, Math.min(p.getCurrentTime() + secs, dur)), true);
+    setSeekFeedback({ side: secs > 0 ? 'right' : 'left' });
+    clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = setTimeout(() => setSeekFeedback(null), 700);
+  }
+
+  function handleKeyDown(e) {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    const p = ytPlayerRef.current;
+    if (!p) return;
+    switch (e.key) {
+      case ' ':
+      case 'k':
+        e.preventDefault();
+        p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
+        break;
+      case 'ArrowLeft':  e.preventDefault(); seekRelative(-10); break;
+      case 'ArrowRight': e.preventDefault(); seekRelative(10);  break;
+      case 'ArrowUp': {
+        e.preventDefault();
+        const vUp = Math.min(100, (p.getVolume() || 0) + 10);
+        p.setVolume(vUp); setVolume(vUp); p.unMute(); setIsMuted(false);
+        break;
+      }
+      case 'ArrowDown': {
+        e.preventDefault();
+        const vDn = Math.max(0, (p.getVolume() || 0) - 10);
+        p.setVolume(vDn); setVolume(vDn);
+        break;
+      }
+      case 'm':
+        p.isMuted() ? (p.unMute(), setIsMuted(false)) : (p.mute(), setIsMuted(true));
+        break;
+      case 'f':
+        toggleFullscreen();
+        break;
+    }
+    showControlsTemporarily();
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      playerContainerRef.current?.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  function handlePlayerTap(e) {
+    const container = playerContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? (rect.left + rect.width / 2);
+    const pct = (clientX - rect.left) / rect.width;
+    const zone = pct < 0.3 ? 'left' : pct > 0.7 ? 'right' : 'center';
+    const now = Date.now();
+    const last = lastTapRef.current;
+    clearTimeout(singleTapTimerRef.current);
+    if (now - last.time < 300 && last.zone === zone) {
+      // Double-tap detected
+      lastTapRef.current = { time: 0, zone: null };
+      if (zone === 'left')       seekRelative(-10);
+      else if (zone === 'right') seekRelative(10);
+      else                       toggleFullscreen();
+    } else {
+      // First tap — wait to see if double-tap follows
+      lastTapRef.current = { time: now, zone };
+      showControlsTemporarily();
+      if (zone === 'center') {
+        singleTapTimerRef.current = setTimeout(() => {
+          const p = ytPlayerRef.current;
+          if (!p) return;
+          p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
+          showControlsTemporarily();
+        }, 300);
+      }
+    }
+  }
+
+  function toggleCC() {
+    const p = ytPlayerRef.current;
+    if (!p) return;
+    if (ccEnabled) {
+      p.setOption('captions', 'track', {});
+      setCcEnabled(false);
+    } else {
+      p.loadModule('captions');
+      p.setOption('captions', 'track', { languageCode: 'en' });
+      setCcEnabled(true);
+    }
+  }
 
   const handleMarkComplete = async () => {
     setIsMarking(true);
@@ -326,34 +496,240 @@ export default function StudentVideoPlayerPage() {
   const showNoPlayer = isOnline && !video.cloudflare_video_id && !isYouTube;
 
   if (video?.source_type === 'youtube') {
+    const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const QUALITY_LABELS = {
+      hd1080: '1080p', hd720: '720p', large: '480p',
+      medium: '360p', small: '240p', tiny: '144p', auto: 'Auto',
+    };
+
+    const guardLabel = user?.username || user?.name || 'student';
     return (
+      <ScreenshotGuard label={guardLabel} className="min-h-screen bg-black flex flex-col">
       <div className="min-h-screen bg-black flex flex-col">
 
-        {/* Back button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-20 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white"
-        >
-          <ArrowLeft size={18} />
-        </button>
-
         {/* Player container */}
-        <div className="w-full bg-black" style={{ aspectRatio: '16/9', position: 'relative' }}>
-          {ytError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
+        <div
+          ref={playerContainerRef}
+          className="relative w-full bg-black select-none outline-none"
+          style={{ aspectRatio: '16/9' }}
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+          onMouseMove={showControlsTemporarily}
+          onTouchStart={showControlsTemporarily}
+        >
+          {/* Empty div — YT.Player constructor injects controlled iframe here */}
+          <div id="yt-player-mount" className="w-full h-full" />
+
+          {/* Transparent click interceptor — blocks YouTube overlay UI and handles
+              tap gestures: single-center=play/pause, double-left=−10s,
+              double-right=+10s, double-center=fullscreen */}
+          <div
+            className="absolute inset-0"
+            style={{ zIndex: 2, touchAction: 'manipulation' }}
+            onClick={handlePlayerTap}
+          />
+
+          {/* Pause overlay — visually covers YouTube pause screen (logo + copy-link UI) */}
+          {!isPlaying && ytPlayerReady && !ytError && (
+            <div
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              style={{ zIndex: 3, background: 'rgba(0,0,0,0.5)' }}
+            >
+              <div className="w-16 h-16 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                <svg width="28" height="28" fill="white" viewBox="0 0 24 24">
+                  <polygon points="5,3 19,12 5,21"/>
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Loading spinner */}
+          {!ytPlayerReady && !ytError && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 5 }}>
+              <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+
+          {/* Error */}
+          {ytError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center" style={{ zIndex: 5 }}>
               <p className="text-white/70 text-sm">{ytError}</p>
               <button onClick={() => navigate(-1)} className="text-white/50 text-xs underline mt-1">Go back</button>
             </div>
-          ) : (
-            <>
-              {!ytPlayerReady && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                </div>
-              )}
-              <div id="yt-player-mount" className="w-full h-full" />
-            </>
           )}
+
+          {/* Seek feedback flash */}
+          {seekFeedback && (
+            <div className={`absolute top-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center gap-1 ${seekFeedback.side === 'left' ? 'left-8' : 'right-8'}`} style={{ zIndex: 12 }}>
+              <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <span className="text-white text-xl font-bold">{seekFeedback.side === 'left' ? '«' : '»'}</span>
+              </div>
+              <span className="text-white/80 text-xs font-medium">10s</span>
+            </div>
+          )}
+
+          {/* Back button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(-1); }}
+            className="absolute top-3 left-3 z-20 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          {/* Custom control bar (auto-hides while playing) */}
+          <div
+            className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            style={{ zIndex: 15 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none rounded-b" />
+
+            <div className="relative px-3 pb-3 pt-8">
+              {/* Progress bar */}
+              <div className="mb-2">
+                <input
+                  type="range"
+                  min={0} max={duration || 100} step={0.5}
+                  value={currentTime}
+                  onMouseDown={() => {
+                    clearTimeout(controlsTimerRef.current);
+                    setShowControls(true);
+                  }}
+                  onChange={e => {
+                    const v = Number(e.target.value);
+                    ytPlayerRef.current?.seekTo(v, true);
+                    setCurrentTime(v);
+                  }}
+                  onMouseUp={showControlsTemporarily}
+                  onTouchEnd={showControlsTemporarily}
+                  className="w-full h-1 accent-white cursor-pointer"
+                  style={{ background: `linear-gradient(to right, white ${(currentTime / (duration || 1)) * 100}%, rgba(255,255,255,0.3) 0%)` }}
+                />
+              </div>
+
+              {/* Controls row */}
+              <div className="flex items-center gap-2 text-white">
+                {/* Play/Pause */}
+                <button
+                  onClick={() => {
+                    const p = ytPlayerRef.current;
+                    p?.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
+                  }}
+                  className="p-1 hover:text-white/80 transition-colors flex-shrink-0"
+                >
+                  {isPlaying ? (
+                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                      <polygon points="5,3 19,12 5,21"/>
+                    </svg>
+                  )}
+                </button>
+
+                {/* Time */}
+                <span className="text-xs font-mono flex-shrink-0 tabular-nums">
+                  {toMmSs(currentTime)} / {toMmSs(duration)}
+                </span>
+
+                <div className="flex-1" />
+
+                {/* Mute */}
+                <button
+                  onClick={() => {
+                    const p = ytPlayerRef.current;
+                    if (!p) return;
+                    if (isMuted) { p.unMute(); setIsMuted(false); }
+                    else         { p.mute();   setIsMuted(true);  }
+                  }}
+                  className="p-1 hover:text-white/80 transition-colors flex-shrink-0"
+                >
+                  {isMuted || volume === 0 ? (
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                      <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                  )}
+                </button>
+
+                {/* Speed */}
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowSpeedMenu(prev => !prev); setShowQualityMenu(false); }}
+                    className="text-xs font-medium px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
+                  >
+                    {playbackRate === 1 ? '1×' : `${playbackRate}×`}
+                  </button>
+                  {showSpeedMenu && (
+                    <div className="absolute bottom-8 right-0 bg-black/90 backdrop-blur-sm rounded-lg overflow-hidden min-w-[80px] shadow-xl border border-white/10">
+                      {SPEEDS.map(s => (
+                        <button key={s} onClick={() => {
+                          ytPlayerRef.current?.setPlaybackRate(s);
+                          setPlaybackRate(s);
+                          setShowSpeedMenu(false);
+                        }} className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 transition-colors ${playbackRate === s ? 'text-white font-semibold' : 'text-white/70'}`}>
+                          {s === 1 ? 'Normal' : `${s}×`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quality */}
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowQualityMenu(prev => !prev); setShowSpeedMenu(false); }}
+                    className="text-xs font-medium px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
+                  >
+                    {QUALITY_LABELS[quality] || 'Auto'}
+                  </button>
+                  {showQualityMenu && (
+                    <div className="absolute bottom-8 right-0 bg-black/90 backdrop-blur-sm rounded-lg overflow-hidden min-w-[80px] shadow-xl border border-white/10">
+                      {/* Use player-reported qualities when available; fall back to full fixed list */}
+                      {(availableQualities.length > 0
+                        ? ['auto', ...availableQualities]
+                        : ['auto', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny']
+                      ).map(q => (
+                        <button key={q} onClick={() => {
+                          ytPlayerRef.current?.setPlaybackQuality(q);
+                          setQuality(q);
+                          setShowQualityMenu(false);
+                        }} className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 transition-colors ${quality === q ? 'text-white font-semibold' : 'text-white/70'}`}>
+                          {QUALITY_LABELS[q] || q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* CC */}
+                <button
+                  onClick={toggleCC}
+                  className={`text-xs font-bold px-1.5 py-0.5 rounded transition-colors ${ccEnabled ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                >
+                  CC
+                </button>
+
+                {/* Fullscreen */}
+                <button onClick={toggleFullscreen} className="p-1 hover:text-white/80 transition-colors flex-shrink-0">
+                  {isFullscreen ? (
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 0 2 2v3"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Info below player */}
@@ -364,17 +740,19 @@ export default function StudentVideoPlayerPage() {
           )}
           {completed && (
             <div className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
-              <CheckCircle size={14} />
-              Completed · +10 points
+              <CheckCircle size={14} /> Completed · +10 points
             </div>
           )}
         </div>
 
       </div>
+      </ScreenshotGuard>
     );
   }
 
+  const guardLabel = user?.username || user?.name || 'student';
   return (
+    <ScreenshotGuard label={guardLabel}>
     <div>
       <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
@@ -597,5 +975,6 @@ export default function StudentVideoPlayerPage() {
         </div>
       </div>
     </div>
+    </ScreenshotGuard>
   );
 }

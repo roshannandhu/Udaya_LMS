@@ -16,17 +16,19 @@ export default function StudentSubjectViewPage() {
   const [videos, setVideos] = useState([]);
   const [tests, setTests] = useState([]);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
   const [myAttempts, setMyAttempts] = useState({});
   const [loading, setLoading] = useState(true);
-  const [thumbnailUrls, setThumbnailUrls] = useState({});
 
   useEffect(() => {
+    setLeaderboardLoaded(false);
+    setLeaderboardRows([]);
     const fetchData = async () => {
       setLoading(true);
       try {
         const [vids, tsts, hist, subs] = await Promise.all([
           videoApi.getVideos(classId),
-          testApi.getTests().then(res => (res || []).filter(t => String(t.class_id) === String(classId))),
+          testApi.getTests(classId),
           testApi.getStudentTestHistory(),
           apiClient('/subjects'),
         ]);
@@ -37,11 +39,6 @@ export default function StudentSubjectViewPage() {
         const attemptsMap = {};
         (hist || []).forEach(a => { attemptsMap[a.test_id] = a; });
         setMyAttempts(attemptsMap);
-        // Fetch leaderboard using the subject's standard_id
-        if (sub?.standard_id) {
-          const lb = await leaderboardApi.get(sub.standard_id).catch(() => ({ leaderboard: [] }));
-          setLeaderboardRows(lb?.leaderboard || []);
-        }
       } catch(err) {
         console.error(err);
       } finally {
@@ -51,25 +48,19 @@ export default function StudentSubjectViewPage() {
     fetchData();
   }, [classId]);
 
-  const attempted = new Set(Object.keys(myAttempts));
-
+  // Lazy-load leaderboard only when that tab is opened
   useEffect(() => {
-    async function loadThumbnails() {
-      if (!videos.length) return;
-      const ytVids = videos.filter(v => v.source_type === 'youtube');
-      if (!ytVids.length) return;
-      const pairs = await Promise.all(
-        ytVids.map(async v => {
-          try {
-            const r = await apiClient(`/videos/${v.id}/thumbnail`);
-            return [v.id, r.thumbnail_url || null];
-          } catch { return [v.id, null]; }
-        })
-      );
-      setThumbnailUrls(Object.fromEntries(pairs));
-    }
-    loadThumbnails();
-  }, [videos]);
+    if (tab !== 'Leaderboard' || leaderboardLoaded) return;
+    const loadLb = async () => {
+      if (!subject?.standard_id) return;
+      const lb = await leaderboardApi.get(subject.standard_id).catch(() => ({ leaderboard: [] }));
+      setLeaderboardRows(lb?.leaderboard || []);
+      setLeaderboardLoaded(true);
+    };
+    loadLb();
+  }, [tab, subject?.standard_id, leaderboardLoaded]);
+
+  const attempted = new Set(Object.keys(myAttempts));
 
   if (loading) {
     return (
@@ -108,7 +99,7 @@ export default function StudentSubjectViewPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {videos.map(v => {
                 const isYT = v.source_type === 'youtube';
-                const thumbUrl = isYT ? (thumbnailUrls[v.id] || null) : null;
+                const thumbUrl = v.thumbnail_url || null;
                 const progressPct = v.progress_secs && v.duration_secs
                   ? Math.min(100, Math.round((v.progress_secs / v.duration_secs) * 100))
                   : 0;

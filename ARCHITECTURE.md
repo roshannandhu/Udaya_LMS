@@ -246,17 +246,42 @@ ConnectionManager → Dict[standard_id → List[WebSocket]]
 ```
 Upload: POST /api/videos/upload (multipart)
       → FastAPI streams to Cloudflare Stream API
-      → stores { cloudflare_video_id, duration_secs } in videos table
+      → stores { cloudflare_video_id, duration_secs, source_type='upload' } in videos table
       → requires CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_STREAM_API_TOKEN in .env
 
-Playback: Cloudflare Stream iframe/video embed using cloudflare_video_id
+YouTube: POST /api/videos/youtube
+      → stores { youtube_video_id, youtube_url, source_type='youtube' } in videos table
+
+Playback: Cloudflare Stream embed, native `<video>`, or custom YouTube IFrame player
         → Student watches via StudentVideoPlayerPage
+        → YouTube uses `/api/videos/{id}/token` to retrieve the video ID
+        → Custom transparent overlay prevents URL copy for YouTube videos
         → Progress saved via POST /api/videos/{id}/complete
 
 Offline: src/lib/offlineVideos.js
-       → downloads from videodelivery.net/{cloudflare_video_id}/downloads/default.mp4
+       → downloads from videodelivery.net/{cloudflare_video_id}/downloads/default.mp4 (or Supabase URL)
        → stores in browser Cache API (not IndexedDB)
        → isVideoSaved(), saveVideoOffline(), removeVideoOffline(), getCachedVideoBlobUrl()
+```
+
+---
+
+## Live Class Architecture
+
+```
+Schedule: POST /api/live-classes
+        → Generates Zoom meeting via S2S OAuth API
+        → Saves zoom_meeting_id, zoom_join_url, zoom_start_url to DB
+
+Join (Student): GET /api/live-classes/{id}/join-token
+              → Generates HMAC-SHA256 signature
+              → Student joins directly in browser using Zoom Web SDK
+              → URL is never exposed
+
+End & Attendance: POST /api/live-classes/{id}/end
+                → Queries Zoom participant report API
+                → Calculates duration and saves to `live_class_attendance`
+                → Marks class as 'ended'
 ```
 
 ---
@@ -291,6 +316,12 @@ SUPABASE_KEY=eyJ...           # anon key
 SUPABASE_SERVICE_KEY=eyJ...   # service role key — bypasses RLS
 CLOUDFLARE_ACCOUNT_ID=        # required for video upload
 CLOUDFLARE_STREAM_API_TOKEN=  # required for video upload
+ZOOM_ACCOUNT_ID=              # required for Zoom S2S OAuth
+ZOOM_CLIENT_ID=               # required for Zoom S2S OAuth
+ZOOM_CLIENT_SECRET=           # required for Zoom S2S OAuth
+ZOOM_SDK_KEY=                 # required for Zoom Web SDK
+ZOOM_SDK_SECRET=              # required for Zoom Web SDK
+ZOOM_WEBHOOK_SECRET_TOKEN=    # required for Zoom Webhooks
 ```
 
 ### `frontend/.env.local`

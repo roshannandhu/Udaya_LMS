@@ -30,6 +30,9 @@ export default defineConfig({
       }
     })
   ],
+  optimizeDeps: {
+    exclude: ['@zoom/meetingsdk'],
+  },
   build: {
     rollupOptions: {
       output: {

@@ -224,10 +224,14 @@ export default function StandardDetailPage() {
   const navigate = useNavigate();
 
   // Use global cache (instant from localStorage)
-  const cache = useAppCache();
-  const cachedStandard = cache.standards.find(s => String(s.id) === String(standardId));
-  const cachedSubjects = cache.getSubjectsFor(standardId);
-  const cachedStudents = cache.getStudentsFor(standardId);
+  const allStandards       = useAppCache(s => s.standards);
+  const allSubjects        = useAppCache(s => s.subjects);
+  const allStudents        = useAppCache(s => s.students);
+  const invalidate         = useAppCache(s => s.invalidate);
+  const invalidateStudents = useAppCache(s => s.invalidateStudents);
+  const cachedStandard = allStandards.find(s => String(s.id) === String(standardId));
+  const cachedSubjects = allSubjects.filter(s => String(s.standard_id) === String(standardId));
+  const cachedStudents = allStudents.filter(s => String(s.standard_id) === String(standardId));
 
   const [standard, setStandard] = useState(cachedStandard || null);
   const [subjects, setSubjects] = useState(cachedSubjects);
@@ -411,22 +415,32 @@ export default function StandardDetailPage() {
 
         {tab === 'subjects' && (
           <div>
-            <p className="text-xs text-neutral-500 mb-3">All {students.length} students in {standard?.name} are enrolled in every subject.</p>
-            <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden">
-              {subjects.map((c, i) => (
-                <button key={c.id} onClick={() => navigate(`/teacher/subjects/${standardId}/${c.id}`)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-white/70 transition-colors text-left ${i < subjects.length - 1 ? 'border-b border-white/40' : ''}`}>
-                  <span className="text-xl">{c.emoji || '📐'}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{c.name}</p>
-                    <p className="text-xs text-neutral-500">{c.end_date ? `Ends ${c.end_date}` : 'No end date'}</p>
+            <p className="text-xs text-neutral-500 mb-4">
+              All {students.length} students in {standard?.name} are enrolled in every subject.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {subjects.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => navigate(`/teacher/subjects/${standardId}/${c.id}`)}
+                  className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col min-h-[130px]"
+                >
+                  <span className="text-3xl mb-3 block">{c.emoji || '📐'}</span>
+                  <p className="text-sm font-semibold text-neutral-900 mb-0.5 truncate">{c.name}</p>
+                  <p className="text-xs text-neutral-400">{c.end_date ? `Ends ${c.end_date}` : 'Active'}</p>
+                  <div className="mt-auto pt-3 flex items-center justify-end">
+                    <ChevronRight size={14} className="text-neutral-300 group-hover:text-neutral-500 group-hover:translate-x-0.5 transition-all" />
                   </div>
-                  <ChevronRight size={14} className="text-neutral-400" />
                 </button>
               ))}
-              <button onClick={() => setNewSubjectOpen(true)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/70 transition-colors text-left border-t border-white/40 text-neutral-500">
-                <Plus size={16} /><span className="text-sm font-medium">Add subject</span>
+              <button
+                onClick={() => setNewSubjectOpen(true)}
+                className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 transition-all duration-200 border-2 border-dashed border-white/80 hover:border-neutral-300 flex flex-col items-center justify-center min-h-[130px] text-neutral-400 hover:text-neutral-600 gap-2"
+              >
+                <div className="w-10 h-10 rounded-full border-2 border-neutral-300 flex items-center justify-center">
+                  <Plus size={18} />
+                </div>
+                <span className="text-sm font-medium">Add subject</span>
               </button>
             </div>
           </div>
@@ -443,14 +457,14 @@ export default function StandardDetailPage() {
       <BulkImportModal
         open={bulkImportOpen}
         onClose={() => setBulkImportOpen(false)}
-        standards={cache.standards}
+        standards={allStandards}
         existingStudents={students}
         initialStandardId={standardId}
         onImportComplete={(count) => {
           apiClient(`/students?standard_id=${standardId}`)
             .then(data => {
               setStudents(data || []);
-              cache.invalidateStudents();
+              invalidateStudents();
             });
           setTab('students');
         }}
@@ -480,7 +494,7 @@ export default function StandardDetailPage() {
         students={students}
         subjects={subjects}
         onSuccess={() => {
-          cache.invalidate();
+          invalidate();
           navigate('/teacher/subjects');
         }}
       />

@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Flag, Clock, AlertTriangle, ChevronLeft, ChevronRight, Maximize2, Loader2 } from 'lucide-react';
 import { Btn } from '../../components/ui';
 import { testApi } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth';
+import { WatermarkLayer } from '../../components/shared/ScreenshotGuard';
 
 function useTimer(seconds, onExpire) {
   const [remaining, setRemaining] = useState(seconds);
@@ -23,6 +25,7 @@ function fmt(secs) {
 export default function StudentTestTakingPage() {
   const { testId } = useParams();
   const navigate = useNavigate();
+  const user = useAuthStore(s => s.user);
   
   const [test, setTest] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -141,7 +144,7 @@ export default function StudentTestTakingPage() {
     const handleKeydown = (e) => {
       // Prevent Ctrl+C, Ctrl+V, Ctrl+P, Ctrl+S, F12, etc.
       if (
-        (e.ctrlKey || e.metaKey) && 
+        (e.ctrlKey || e.metaKey) &&
         ['c', 'v', 'p', 's', 'x', 'a'].includes(e.key.toLowerCase())
       ) {
         e.preventDefault();
@@ -150,6 +153,12 @@ export default function StudentTestTakingPage() {
       if (e.key === 'F12') {
         e.preventDefault();
         cheatEvents.current.push({ type: 'dev_tools_blocked', timestamp: new Date().toISOString() });
+      }
+      if (e.key === 'PrintScreen') {
+        e.preventDefault();
+        try { navigator.clipboard.writeText(''); } catch {}
+        cheatEvents.current.push({ type: 'screenshot_attempt', timestamp: new Date().toISOString() });
+        triggerWarning();
       }
     };
 
@@ -276,6 +285,11 @@ export default function StudentTestTakingPage() {
       className="min-h-screen bg-transparent flex flex-col select-none relative"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }} // Crucial for iOS Safari
     >
+      {/* Watermark — student identity visible in any screenshot */}
+      {hasStarted && (
+        <WatermarkLayer label={user?.username || user?.name || 'student'} />
+      )}
+
       {/* Distraction/Focus lost overlay */}
       {!isFocused && !submitted && hasStarted && (
         <div className="absolute inset-0 z-50 bg-neutral-900/90 backdrop-blur-md flex flex-col items-center justify-center text-white px-6 text-center">

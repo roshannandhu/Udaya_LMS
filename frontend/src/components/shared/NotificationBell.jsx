@@ -34,18 +34,21 @@ export default function NotificationBell() {
   };
 
   useEffect(() => {
+    if (!open) return;
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
+    const interval = setInterval(fetchNotifications, 30000);
     const handler = (e) => {
       if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('mousedown', handler);
+    };
   }, [open]);
 
   const markRead = async (id) => {

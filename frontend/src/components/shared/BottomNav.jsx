@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Home, BookOpen, MessageSquare, Calendar, MoreHorizontal, Users, Video } from 'lucide-react';
 
 const TEACHER_ITEMS = [
@@ -19,7 +19,7 @@ const STUDENT_ITEMS = [
   { id: 'more',       label: 'More',       icon: MoreHorizontal },
 ];
 
-export default function BottomNav({ active, setActive, type = 'teacher' }) {
+const BottomNav = memo(function BottomNav({ active, setActive, type = 'teacher' }) {
   const items = type === 'teacher' ? TEACHER_ITEMS : STUDENT_ITEMS;
   return (
     <nav className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-40 glass-nav rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] lg:hidden">
@@ -37,4 +37,6 @@ export default function BottomNav({ active, setActive, type = 'teacher' }) {
       </div>
     </nav>
   );
-}
+});
+
+export default BottomNav;

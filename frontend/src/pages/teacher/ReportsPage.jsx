@@ -1,21 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, Trophy, BarChart3, Download, AlertTriangle, Users, Star } from 'lucide-react';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Avatar, Tag, SectionHeader, Btn, Skeleton } from '../../components/ui';
 import { attendanceApi, apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
-import StudentReportModal from '../../components/teacher/StudentReportModal';
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 export default function ReportsPage() {
   const navigate = useNavigate();
 
   // Standards + students from global cache (instant from localStorage)
-  const { standards, standardsReady, refreshStandards } = useAppCache();
+  const standards       = useAppCache(s => s.standards);
+  const standardsReady  = useAppCache(s => s.standardsReady);
+  const refreshStandards = useAppCache(s => s.refreshStandards);
   const [activeStd, setActiveStd]         = useState(null);
-  const [selectedStudent, setSelectedStudent] = useState(null);
   // Per-standard data loaded fresh when standard is selected
   const [students, setStudents]           = useState([]);
   const [subjects, setSubjects]           = useState([]);
@@ -65,8 +63,10 @@ export default function ReportsPage() {
     }
   };
 
-  const exportAttendancePDF = () => {
+  const exportAttendancePDF = async () => {
     if (!currentStd || lowAttendance.length === 0) return;
+    const { default: jsPDF } = await import('jspdf');
+    await import('jspdf-autotable');
     const doc = new jsPDF();
     doc.text('Attendance Report', 14, 16);
     doc.setFontSize(11);
@@ -85,8 +85,10 @@ export default function ReportsPage() {
     doc.save(`${currentStd.name.replace(/\s+/g, '_')}_Attendance_Report.pdf`);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!currentStd || students.length === 0) return;
+    const { default: jsPDF } = await import('jspdf');
+    await import('jspdf-autotable');
     const doc = new jsPDF();
     const now = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -265,7 +267,7 @@ export default function ReportsPage() {
               ) : (
                 <div className="glass-panel rounded-2xl overflow-hidden">
                   {topStudents.map((s, i) => (
-                    <button key={s.id} onClick={() => setSelectedStudent(s.id)}
+                    <button key={s.id} onClick={() => navigate(`/teacher/students/${s.id}`)}
                       className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-white/40 transition-colors text-left ${i > 0 ? 'border-t border-white/40' : ''}`}>
                       <span className="w-6 text-sm font-bold text-center">
                         {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-neutral-400">#{i+1}</span>}
@@ -334,7 +336,7 @@ export default function ReportsPage() {
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 text-right">Absent (30d)</span>
                   </div>
                   {lowAttendance.map((s, i) => (
-                    <button key={s.student_id} onClick={() => setSelectedStudent(s.student_id)}
+                    <button key={s.student_id} onClick={() => navigate(`/teacher/students/${s.student_id}`)}
                       className={`w-full grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-3 hover:bg-white/40 transition-colors text-left ${i > 0 ? 'border-t border-white/40' : ''}`}>
                       <div className="flex items-center gap-2 min-w-0">
                         <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
@@ -359,12 +361,6 @@ export default function ReportsPage() {
           </>
         )}
       </div>
-      
-      <StudentReportModal 
-        open={!!selectedStudent} 
-        onClose={() => setSelectedStudent(null)} 
-        studentId={selectedStudent} 
-      />
     </div>
   );
 }

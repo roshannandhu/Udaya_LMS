@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Home, BookOpen, Users, MessageSquare, MoreHorizontal, FileQuestion, Trophy, Calendar, BarChart3, Settings, User, Video } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSettingsStore } from '../../store';
@@ -24,7 +24,7 @@ const STUDENT_ITEMS = [
   { id: 'profile',     label: 'Profile',     icon: Users,         path: '/student/profile' },
 ];
 
-export default function Sidebar({ type = 'teacher' }) {
+const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
   const location = useLocation();
   const items = type === 'teacher' ? TEACHER_ITEMS : STUDENT_ITEMS;
   const { lmsName, lmsLogo } = useSettingsStore();
@@ -38,7 +38,6 @@ export default function Sidebar({ type = 'teacher' }) {
       if (path.startsWith('/teacher/broadcasts'))   return 'broadcasts';
       if (path.startsWith('/teacher/live-classes')) return 'live';
       if (path.startsWith('/teacher/reports'))      return 'reports';
-      if (path.startsWith('/teacher/settings'))     return 'settings';
       return 'more';
     } else {
       if (path === '/student' || path === '/student/') return 'home';
@@ -57,14 +56,19 @@ export default function Sidebar({ type = 'teacher' }) {
   return (
     <aside className="hidden lg:flex flex-col w-[220px] fixed top-4 bottom-4 left-4 glass-nav rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] z-50 overflow-hidden">
       <div className="p-5 flex flex-col h-full overflow-y-auto">
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-3 mb-10 mt-2 px-1">
           {lmsLogo
-            ? <img src={lmsLogo} alt="logo" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
-            : <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center flex-shrink-0">
-                <div className="w-3 h-3 bg-white rounded-sm rotate-45" />
+            ? <img src={lmsLogo} alt="logo" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-sm border border-neutral-200" />
+            : <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center flex-shrink-0 shadow-sm">
+                <div className="w-4 h-4 border-2 border-white/90 rounded-sm rotate-45" />
               </div>
           }
-          <span className="font-bold text-lg tracking-tight truncate">{lmsName || 'Tutoria'}</span>
+          <span 
+            className="font-black text-2xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-500 truncate drop-shadow-sm"
+            style={{ fontFamily: '"Outfit", "Plus Jakarta Sans", "Inter", sans-serif' }}
+          >
+            {lmsName || 'Tutoria'}
+          </span>
         </div>
 
         <nav className="space-y-1">
@@ -86,4 +90,6 @@ export default function Sidebar({ type = 'teacher' }) {
       </div>
     </aside>
   );
-}
+});
+
+export default Sidebar;

@@ -3,28 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import { FileQuestion, Clock, CheckCircle2, Loader2, Trophy, CalendarClock, BookOpen } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Tag, Skeleton } from '../../components/ui';
-import { testApi, apiClient } from '../../lib/api';
+import { testApi } from '../../lib/api';
+import { useAppCache } from '../../store';
 
 export default function StudentTestsPage() {
   const navigate = useNavigate();
 
   const [allTests, setAllTests] = useState([]);
   const [myAttempts, setMyAttempts] = useState({});
-  const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const subjects = useAppCache(s => s.subjects);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [testsRes, historyRes, subsRes] = await Promise.all([
+        const [testsRes, historyRes] = await Promise.all([
           testApi.getTests(),
           testApi.getStudentTestHistory(),
-          apiClient('/subjects'),
         ]);
 
         setAllTests(Array.isArray(testsRes) ? testsRes : []);
-        setSubjects(Array.isArray(subsRes) ? subsRes : []);
 
         const attemptsMap = {};
         (Array.isArray(historyRes) ? historyRes : []).forEach(a => {
@@ -117,6 +116,7 @@ export default function StudentTestsPage() {
             <button
               onClick={() => navigate('/student/tests/review', {
                 state: {
+                  source: 'tests-list',
                   test_id: t.id,
                   result: {
                     test_id: t.id,

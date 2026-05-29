@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2 } from 'lucide-react';
 import { Modal, Sheet, Btn, Tag, Avatar, Skeleton } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
@@ -245,14 +245,15 @@ function LiveClassAttendanceSheet({ liveClassId, onClose }) {
 /* ─── Main Page ──────────────────────────────────────── */
 
 export default function TeacherLiveClassesPage() {
-  const { subjects, standards } = useAppCache();
+  const subjects  = useAppCache(s => s.subjects);
+  const standards = useAppCache(s => s.standards);
   const { user } = useAuthStore();
 
   // Enrich subjects with standard name for the schedule modal dropdown
-  const enrichedSubjects = subjects.map(s => ({
+  const enrichedSubjects = useMemo(() => subjects.map(s => ({
     ...s,
     standard_name: standards.find(std => std.id === s.standard_id)?.name || '',
-  }));
+  })), [subjects, standards]);
   const [liveClasses, setLiveClasses] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [showSchedule, setShowSchedule] = useState(false);

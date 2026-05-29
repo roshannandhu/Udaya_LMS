@@ -3,10 +3,54 @@ const port = '8001';
 const API_BASE = hostname === 'localhost' || hostname === '127.0.0.1'
   ? (import.meta.env.VITE_API_URL || `http://localhost:${port}/api`)
   : `http://${hostname}:${port}/api`;
-const TOKEN_KEY = 'tutoria_token';
+const TOKEN_KEY    = 'tutoria_token';
+const REFRESH_KEY  = 'tutoria_refresh_token';
+
+// In-memory GET cache — 60s TTL; busted on any mutation
+const _cache = new Map();
+const CACHE_TTL = 60_000;
+// These endpoints change too frequently to cache
+const NO_CACHE = ['/student/tests/history', '/notifications', '/auth/me', '/live-classes'];
+
+// Refresh the access token using the stored refresh token.
+// Uses a shared promise so concurrent 401 responses all wait for the same refresh
+// instead of the second one immediately triggering logout.
+let _refreshPromise = null;
+async function tryRefreshToken() {
+  if (_refreshPromise) return _refreshPromise;
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return false;
+
+  _refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      localStorage.setItem(TOKEN_KEY, data.token);
+      if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
 
 export async function apiClient(endpoint, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
+  const isGet = !options.method || options.method === 'GET';
+
+  if (isGet && !NO_CACHE.some(p => endpoint.startsWith(p))) {
+    const hit = _cache.get(endpoint);
+    if (hit && Date.now() - hit.ts < CACHE_TTL) return hit.data;
+  }
 
   const headers = {
     'Content-Type': 'application/json',
@@ -22,12 +66,38 @@ export async function apiClient(endpoint, options = {}) {
     headers,
   });
 
+  // On 401, try to refresh the token once, then retry
+  if (response.status === 401 && !options._retry) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      return apiClient(endpoint, { ...options, _retry: true });
+    }
+    // Refresh failed — force logout via event (auth.js listens)
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem('tutoria_user_role');
+    localStorage.removeItem('tutoria_user_name');
+    _cache.clear();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+    }
+    throw new Error('Session expired. Please log in again.');
+  }
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Request failed' }));
     throw new Error(error.detail || `HTTP ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+
+  if (isGet && !NO_CACHE.some(p => endpoint.startsWith(p))) {
+    _cache.set(endpoint, { ts: Date.now(), data });
+  } else if (!isGet) {
+    _cache.clear();
+  }
+
+  return data;
 }
 
 export function getApiBaseUrl() {
@@ -160,4 +230,13 @@ export const liveClassApi = {
   end:           (liveClassId)  => apiClient(`/live-classes/${liveClassId}/end`, { method: 'POST' }),
   cancel:        (liveClassId)  => apiClient(`/live-classes/${liveClassId}/cancel`, { method: 'POST' }),
   getAttendance: (liveClassId)  => apiClient(`/live-classes/${liveClassId}/attendance`),
+};
+
+export const reportApi = {
+  // Teacher fetches a specific student's report
+  getV2: (studentId, period = 'overall') =>
+    apiClient(`/students/${studentId}/report/v2?period=${period}`),
+  // Student fetches their own report (uses 'me' alias resolved server-side)
+  getMy: (period = 'overall') =>
+    apiClient(`/students/me/report/v2?period=${period}`),
 };

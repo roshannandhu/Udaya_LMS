@@ -43,6 +43,7 @@ Last updated: May 2026
 ### Teacher Portal — Videos
 - [x] Upload video to Cloudflare Stream
 - [x] Upload video to Supabase Storage fallback (when Cloudflare not configured — auto-creates `videos` bucket)
+- [x] YouTube Unlisted Video support (adds URL instead of uploading file)
 - [x] Manual video entry (without uploading)
 - [x] Edit video title / description / allow_download
 - [x] Delete video (removes from Cloudflare + DB)
@@ -89,6 +90,13 @@ Last updated: May 2026
 - [x] Edit reminder
 - [x] Delete reminder
 
+### Teacher Portal — Live Classes
+- [x] Schedule live class with Zoom Server-to-Server OAuth
+- [x] Auto-create Zoom meetings via API
+- [x] Start class as host within app using Zoom Web SDK
+- [x] End class and fetch participant list automatically
+- [x] View attendance sheet for past live classes
+
 ### Teacher Portal — Settings
 - [x] Default student password (saved to localStorage, used in bulk + individual add)
 - [x] Change teacher's own password
@@ -100,9 +108,11 @@ Last updated: May 2026
 - [x] Student home (welcome + quick stats)
 - [x] Subjects list
 - [x] Subject view (videos list)
-- [x] Video player (Cloudflare Stream embed or native `<video>` for Supabase Storage URLs)
+- [x] Video player (Cloudflare Stream embed, native `<video>`, or custom YouTube IFrame player without URL leak)
 - [x] Video progress tracking (POST /videos/{id}/complete)
 - [x] Offline video download + playback (Cache API)
+- [x] Live classes tab with scheduled/live/ended status
+- [x] Join live class within app using Zoom Web SDK (URL hidden)
 - [x] Test list (non-draft only)
 - [x] Test taking with timer
 - [x] Anti-cheat (tab switch detection, flagged flag)
@@ -151,5 +161,4 @@ Last updated: May 2026
 
 - [x] PWA manifest + Service Worker — `vite-plugin-pwa` with auto-update SW, manifest.webmanifest, Workbox caching (glob precache + Supabase Storage runtime cache), icon-192.png + icon-512.png, theme-color meta tag.
 - [ ] Parent portal (read-only role)
-- [ ] Live class (WebRTC integration)
 - [ ] Mobile app (React Native)

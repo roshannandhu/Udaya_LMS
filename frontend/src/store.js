@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { apiClient } from './lib/api';
+
+/* ── Selector helper: subscribe to multiple slices without mass re-renders ── */
+export function useAppSelector(selector) {
+  return useAppCache(useShallow(selector));
+}
 
 /* ─── Teacher settings store (persisted) ───────────────────────── */
 export const useSettingsStore = create(
@@ -31,6 +37,10 @@ export const useSettingsStore = create(
       securitySingleDevice: true,
       securityAutoLogout: false,
       setSecurityPref: (key, val) => set({ [key]: val }),
+
+      // Report visibility
+      studentsCanViewReport: true,   // teacher toggles this; false = hides report from students
+      setStudentsCanViewReport: (val) => set({ studentsCanViewReport: val }),
     }),
     { name: 'tutoria-settings', storage: createJSONStorage(() => localStorage) }
   )

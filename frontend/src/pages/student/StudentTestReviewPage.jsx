@@ -21,9 +21,8 @@ export default function StudentTestReviewPage() {
       .finally(() => setLoading(false));
   }, [test_id]);
 
-  // If result has a percentage/score it came via a result page; otherwise go to tests list
   const goBack = () => {
-    if (result?.percentage !== undefined || result?.score !== undefined) {
+    if (state?.source === 'result-page') {
       navigate('/student/tests/result', { state: { result } });
     } else {
       navigate('/student/tests');

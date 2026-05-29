@@ -6,7 +6,9 @@ import { useAppCache } from '../../store';
 export default function SearchPalette({ open, onClose }) {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
-  const { students, subjects, standards } = useAppCache();
+  const students  = useAppCache(s => s.students);
+  const subjects  = useAppCache(s => s.subjects);
+  const standards = useAppCache(s => s.standards);
 
   useEffect(() => { if (open) setQuery(''); }, [open]);
 

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Pin, Paperclip, Loader2, FileText, Image as ImageIcon } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
-import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
+import { broadcastApi, getApiBaseUrl } from '../../lib/api';
+import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 
 function fmtTime(t) { return t || ''; }
 
@@ -16,21 +17,12 @@ export default function StudentBroadcastsPage() {
 
   // Load the student's standard from their profile
   useEffect(() => {
-    const load = async () => {
-      try {
-        const me = await apiClient('/auth/me').catch(() => null);
-        const standardId = me?.standard_id || user?.standard_id;
-        const standardName = me?.standard_name || user?.standard_name;
-        if (standardId) {
-          setStandard({ id: standardId, name: standardName || 'My Class' });
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    const standardId = user?.standard_id;
+    const standardName = user?.standard_name;
+    if (standardId) {
+      setStandard({ id: standardId, name: standardName || 'My Class' });
+    }
+    setLoading(false);
   }, [user?.standard_id]);
 
   useEffect(() => {
@@ -116,9 +108,15 @@ export default function StudentBroadcastsPage() {
             {b.attachments.map((att, i) => (
               <div key={i}>
                 {att.type?.startsWith('image/') ? (
-                  <a href={att.url} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden border border-white/40 shadow-sm hover:opacity-90 transition-opacity">
-                    <img src={att.url} alt="attachment" className="w-full max-h-48 object-cover" />
-                  </a>
+                  <div className="block rounded-lg overflow-hidden border border-white/40 shadow-sm">
+                    <img
+                      src={att.url}
+                      alt="attachment"
+                      className="w-full max-h-48 object-cover"
+                      onContextMenu={e => e.preventDefault()}
+                      draggable={false}
+                    />
+                  </div>
                 ) : (
                   <a href={att.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-white/40 hover:bg-white/60 transition-colors rounded-lg text-sm border border-white/60 shadow-sm">
                     <FileText size={14} className="text-blue-600" />
@@ -182,6 +180,7 @@ export default function StudentBroadcastsPage() {
         </div>
       </div>
 
+      <ScreenshotGuard label={user?.username || user?.name || 'student'}>
       <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
         {broadcasts.length === 0 ? (
           <div className="text-center py-16 glass-panel border-dashed border-white/60 rounded-xl">
@@ -202,6 +201,7 @@ export default function StudentBroadcastsPage() {
           </div>
         )}
       </div>
+      </ScreenshotGuard>
     </div>
   );
 }

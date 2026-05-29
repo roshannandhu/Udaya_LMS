@@ -14,8 +14,11 @@ This repo contains **two artifacts**:
 |-------|------------|
 | Frontend | Vite 5 + React 18 + React Router 6 + Zustand |
 | Backend | FastAPI (Python) |
-| Auth | Clerk (frontend + backend verification) |
+| Auth | Supabase Auth (JWT) |
+| Database | PostgreSQL via Supabase |
 | Styling | Tailwind CSS 3, Inter font |
+| Video | Cloudflare Stream & YouTube Unlisted |
+| Live Classes| Zoom Server-to-Server OAuth |
 
 ## Running the app
 
@@ -33,36 +36,37 @@ npm run dev
 
 ## Auth flow
 
-1. **Frontend** — Clerk handles login UI, gets JWT token
-2. **Backend** — Verifies token via Clerk API, returns user with role
-3. **Routing** — `/teacher/*` or `/student/*` based on backend response
+1. **Frontend** — Custom login UI posts to backend `/api/auth/login`
+2. **Backend** — Authenticates via Supabase Auth, returns JWT token + user data
+3. **Routing** — `/teacher/*` or `/student/*` based on role in user data
 
 ## Key files
 
-- `tutoria/src/lib/auth.js` — Auth store with backend verification
-- `tutoria/src/lib/api.js` — API client for backend calls
-- `backend/main.py` — FastAPI with Clerk token verification
+- `backend/main.py` — All FastAPI routes, endpoints, and WS manager
+- `frontend/src/store.js` — Zustand state management
+- `backend/schema.sql` — Supabase PostgreSQL DDL
 
 ## Environment setup
 
-**Frontend** (`tutoria/.env.local`):
+**Frontend** (`frontend/.env.local`):
 ```
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
-VITE_API_URL=http://localhost:8000/api
+VITE_API_URL=http://localhost:8001/api
 ```
 
 **Backend** (`backend/.env`):
 ```
-CLERK_SECRET_KEY=sk_test_xxx
-CLERK_JWT_KEY=
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=eyJ...
+SUPABASE_SERVICE_KEY=eyJ...
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_STREAM_API_TOKEN=
+ZOOM_ACCOUNT_ID=
+ZOOM_CLIENT_ID=
+ZOOM_CLIENT_SECRET=
+ZOOM_SDK_KEY=
+ZOOM_SDK_SECRET=
+ZOOM_WEBHOOK_SECRET_TOKEN=
 ```
-
-## Clerk setup
-
-1. Go to clerk.com → Your App → API Keys
-2. Copy publishable key → frontend `.env.local`
-3. Copy secret key → backend `.env`
-4. In Clerk Dashboard → Users → Select user → Metadata → Set `{"role": "teacher"}` or `{"role": "student"}`
 
 ## PLAN.md (`/PLAN.md`)
 
