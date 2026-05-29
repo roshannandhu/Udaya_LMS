@@ -95,6 +95,8 @@ CREATE TABLE IF NOT EXISTS videos (
     duration_secs INTEGER,
     size_bytes BIGINT,
     allow_download BOOLEAN DEFAULT true,
+    topic_tag TEXT,
+    chapters JSONB DEFAULT '[]',
     created_by UUID,  -- references auth.users.id
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -122,6 +124,7 @@ CREATE TABLE IF NOT EXISTS tests (
     status TEXT DEFAULT 'draft',
     scheduled_for TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
+    topic_tag TEXT,
     created_by UUID,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -252,11 +255,19 @@ CREATE TABLE IF NOT EXISTS question_bank (
 -- ALTER TABLE students ADD COLUMN IF NOT EXISTS must_change_pwd BOOLEAN DEFAULT true;
 -- ALTER TABLE students DROP COLUMN IF EXISTS supabase_user_id;
 -- ALTER TABLE students DROP COLUMN IF EXISTS first_login;
--- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS message TEXT;
--- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_url TEXT;
--- ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_type TEXT;
--- ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
--- ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS message TEXT;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_url TEXT;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_type TEXT;
+ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
+
+-- ── Broadcast Scheduling Migration ──────────────────────────────────────────
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
+
+-- ── Video Chapters Migration ────────────────────────────────────────────────
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS chapters JSONB DEFAULT '[]';
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS topic_tag TEXT;
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS topic_tag TEXT;
 
 -- ── Row Level Security ────────────────────────────────────────────────────────
 -- The FastAPI backend uses the service_role key which bypasses RLS.
