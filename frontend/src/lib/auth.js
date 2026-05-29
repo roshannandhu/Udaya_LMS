@@ -87,6 +87,7 @@ export const useAuthStore = create((set, get) => ({
 
     // apiClient auto-refreshes on 401 using the stored refresh_token.
     // If refresh fails it dispatches 'auth:logout' (handled below).
+    // If the backend is unreachable (network error), we keep the cached session alive.
     try {
       const user = await apiClient('/auth/me');
       localStorage.setItem(ROLE_KEY, user.role || 'student');
@@ -94,11 +95,12 @@ export const useAuthStore = create((set, get) => ({
       set({ user, role: user.role || 'student', isLoading: false });
     } catch (error) {
       if (error.message === 'Session expired. Please log in again.') {
-        // auth:logout event has already cleared localStorage + set state
+        // auth:logout event has already cleared localStorage + state
         set({ isLoading: false });
       } else {
-        // Network failure — keep cached session alive
-        console.warn('Auth verify failed (network?), keeping cached session:', error.message);
+        // Network failure or connection error — keep cached session alive.
+        // The user stays logged in; the next successful request will work normally.
+        console.warn('Auth verify failed (keeping cached session):', error.message);
         set({ isLoading: false });
       }
     }

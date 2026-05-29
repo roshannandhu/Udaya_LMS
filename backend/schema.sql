@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS standards (
     name TEXT NOT NULL,
     short TEXT,
     emoji TEXT DEFAULT '📚',
-    teacher_id UUID,  -- references auth.users.id
+    teacher_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     start_date DATE,
     end_date DATE,
     attendance_threshold INTEGER DEFAULT 75,
@@ -297,23 +297,58 @@ ALTER TABLE question_bank      ENABLE ROW LEVEL SECURITY;
 -- No additional policies needed for service role.
 -- Deny all access via anon/authenticated keys (everything goes through FastAPI).
 
+DROP POLICY IF EXISTS "deny_anon_standards"          ON standards;
 CREATE POLICY "deny_anon_standards"          ON standards          FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_subject_classes"    ON subject_classes;
 CREATE POLICY "deny_anon_subject_classes"    ON subject_classes    FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_students"           ON students;
 CREATE POLICY "deny_anon_students"           ON students           FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_student_sessions"   ON student_sessions;
 CREATE POLICY "deny_anon_student_sessions"   ON student_sessions   FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_attendance_records" ON attendance_records;
 CREATE POLICY "deny_anon_attendance_records" ON attendance_records  FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_videos"             ON videos;
 CREATE POLICY "deny_anon_videos"             ON videos             FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_video_progress"     ON video_progress;
 CREATE POLICY "deny_anon_video_progress"     ON video_progress     FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_tests"              ON tests;
 CREATE POLICY "deny_anon_tests"              ON tests              FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_questions"          ON questions;
 CREATE POLICY "deny_anon_questions"          ON questions          FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_test_attempts"      ON test_attempts;
 CREATE POLICY "deny_anon_test_attempts"      ON test_attempts      FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_broadcasts"         ON broadcasts;
 CREATE POLICY "deny_anon_broadcasts"         ON broadcasts         FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_broadcast_reads"    ON broadcast_reads;
 CREATE POLICY "deny_anon_broadcast_reads"    ON broadcast_reads    FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_reminders"          ON reminders;
 CREATE POLICY "deny_anon_reminders"          ON reminders          FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_notifications"      ON notifications;
 CREATE POLICY "deny_anon_notifications"      ON notifications      FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_bulk_imports"       ON bulk_imports;
 CREATE POLICY "deny_anon_bulk_imports"       ON bulk_imports       FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_invite_links"       ON invite_links;
 CREATE POLICY "deny_anon_invite_links"       ON invite_links       FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_invite_requests"    ON invite_requests;
 CREATE POLICY "deny_anon_invite_requests"    ON invite_requests    FOR ALL TO anon, authenticated USING (false);
+
+DROP POLICY IF EXISTS "deny_anon_question_bank"      ON question_bank;
 CREATE POLICY "deny_anon_question_bank"      ON question_bank      FOR ALL TO anon, authenticated USING (false);
 
 -- ── Supabase Storage Buckets ──────────────────────────────────────────────────
@@ -443,3 +478,32 @@ CREATE INDEX IF NOT EXISTS idx_video_progress_student ON video_progress(student_
 CREATE INDEX IF NOT EXISTS idx_tests_class ON tests(class_id);
 CREATE INDEX IF NOT EXISTS idx_test_attempts_student ON test_attempts(student_id);
 CREATE INDEX IF NOT EXISTS idx_broadcasts_standard ON broadcasts(standard_id);
+
+-- ── Standards teacher_id index (speeds up ownership checks on delete/update) ────
+CREATE INDEX IF NOT EXISTS idx_standards_teacher ON standards(teacher_id);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION: Fix standards with missing teacher_id
+-- Run this block in Supabase SQL Editor if "Not authorized" appears on delete/update.
+-- Step 1: Find your teacher UUID (copy from Authentication → Users in Supabase dashboard)
+-- Step 2: Paste it below and run
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- STEP 1 — Diagnose: see which standards have no teacher assigned
+-- SELECT id, name, teacher_id FROM standards WHERE teacher_id IS NULL;
+
+-- STEP 2 — Find your teacher's UUID from auth.users
+-- SELECT id, email, created_at FROM auth.users ORDER BY created_at DESC;
+
+-- STEP 3 — Fix: assign all unclaimed standards to your teacher account
+-- Replace 'YOUR-TEACHER-UUID' with the UUID from Step 2
+-- UPDATE standards
+--   SET teacher_id = 'YOUR-TEACHER-UUID'
+--   WHERE teacher_id IS NULL;
+
+-- STEP 4 — (Optional) Enforce NOT NULL going forward so this can never happen again
+-- First run STEP 3 to ensure no NULLs remain, then:
+-- ALTER TABLE standards
+--   ALTER COLUMN teacher_id SET NOT NULL,
+--   ADD CONSTRAINT fk_standards_teacher
+--     FOREIGN KEY (teacher_id) REFERENCES auth.users(id) ON DELETE CASCADE;

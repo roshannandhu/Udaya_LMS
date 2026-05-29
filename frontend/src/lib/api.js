@@ -15,6 +15,7 @@ const NO_CACHE = ['/student/tests/history', '/notifications', '/auth/me', '/live
 // Refresh the access token using the stored refresh token.
 // Uses a shared promise so concurrent 401 responses all wait for the same refresh
 // instead of the second one immediately triggering logout.
+// Returns true (success), false (server rejected token), or throws on network error.
 let _refreshPromise = null;
 async function tryRefreshToken() {
   if (_refreshPromise) return _refreshPromise;
@@ -22,25 +23,22 @@ async function tryRefreshToken() {
   if (!refreshToken) return false;
 
   _refreshPromise = (async () => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-      if (!res.ok) return false;
-      const data = await res.json();
-      localStorage.setItem(TOKEN_KEY, data.token);
-      if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      _refreshPromise = null;
-    }
+    // Network errors are intentionally NOT caught here — they propagate to
+    // apiClient which treats them differently from a genuine "token rejected" response.
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false; // Auth server explicitly rejected the refresh token
+    const data = await res.json();
+    localStorage.setItem(TOKEN_KEY, data.token);
+    if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+    return true;
   })();
 
-  return _refreshPromise;
+  // Clear shared promise on completion or error
+  return _refreshPromise.finally(() => { _refreshPromise = null; });
 }
 
 export async function apiClient(endpoint, options = {}) {
@@ -68,11 +66,20 @@ export async function apiClient(endpoint, options = {}) {
 
   // On 401, try to refresh the token once, then retry
   if (response.status === 401 && !options._retry) {
-    const refreshed = await tryRefreshToken();
+    let refreshed = false;
+    try {
+      refreshed = await tryRefreshToken();
+    } catch {
+      // Network error while refreshing (backend temporarily down).
+      // Do NOT logout — the token itself may still be valid.
+      // The request fails gracefully; the user stays logged in.
+      throw new Error('Connection error. Please check your internet connection.');
+    }
     if (refreshed) {
       return apiClient(endpoint, { ...options, _retry: true });
     }
-    // Refresh failed — force logout via event (auth.js listens)
+    // refresh returned false → auth server explicitly rejected the refresh token
+    // → session is genuinely expired → force logout
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem('tutoria_user_role');

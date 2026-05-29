@@ -796,13 +796,21 @@ def create_standard(standard: Standard, user = Depends(verify_token)):
 
 @app.patch("/api/standards/{standard_id}")
 def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Verify ownership
+    # Verify ownership — also accept standards where teacher_id is NULL (created via DB/migration)
     existing = service_supabase.table("standards").select("teacher_id").eq("id", standard_id).single().execute()
-    if not existing.data or existing.data["teacher_id"] != user["user_id"]:
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Standard not found")
+    stored_tid = existing.data.get("teacher_id")
+    if stored_tid and stored_tid != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    # Auto-claim ownership for unclaimed standards
+    if not stored_tid:
+        service_supabase.table("standards").update({"teacher_id": user["user_id"]}).eq("id", standard_id).execute()
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
     if update_data:
@@ -812,12 +820,17 @@ def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(ve
 
 @app.delete("/api/standards/{standard_id}")
 async def delete_standard(standard_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Ownership check
+    # Ownership check — also accept standards where teacher_id is NULL (created via DB/migration)
     existing = service_supabase.table("standards").select("teacher_id").eq("id", standard_id).single().execute()
-    if not existing.data or existing.data["teacher_id"] != user["user_id"]:
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Standard not found")
+    stored_tid = existing.data.get("teacher_id")
+    if stored_tid and stored_tid != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # 1. Fetch all student IDs + avatar_urls BEFORE any deletes

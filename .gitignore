@@ -24,3 +24,4 @@ verify_run.mjs
 verify_test.js
 verify_test.mjs
 subjects_page_redesign.html
+*.timestamp-*.mjs
