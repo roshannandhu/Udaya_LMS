@@ -507,3 +507,23 @@ CREATE INDEX IF NOT EXISTS idx_standards_teacher ON standards(teacher_id);
 --   ALTER COLUMN teacher_id SET NOT NULL,
 --   ADD CONSTRAINT fk_standards_teacher
 --     FOREIGN KEY (teacher_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION: Sub-teachers table (multi-teacher support)
+-- Run in Supabase SQL Editor to enable teacher team management.
+-- ══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS sub_teachers (
+    id                 UUID PRIMARY KEY,  -- sub-teacher's Supabase auth user UUID
+    primary_teacher_id UUID NOT NULL,     -- primary teacher's auth UUID
+    name               TEXT NOT NULL,
+    email              TEXT,
+    phone              TEXT,
+    created_at         TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_teachers_primary ON sub_teachers(primary_teacher_id);
+
+ALTER TABLE sub_teachers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_sub_teachers" ON sub_teachers;
+CREATE POLICY "deny_anon_sub_teachers" ON sub_teachers FOR ALL USING (false);

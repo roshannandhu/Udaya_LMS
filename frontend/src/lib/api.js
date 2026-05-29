@@ -239,6 +239,12 @@ export const liveClassApi = {
   getAttendance: (liveClassId)  => apiClient(`/live-classes/${liveClassId}/attendance`),
 };
 
+export const teacherApi = {
+  list:   ()    => apiClient('/teachers'),
+  create: (data) => apiClient('/teachers', { method: 'POST', body: JSON.stringify(data) }),
+  remove: (id)  => apiClient(`/teachers/${id}`, { method: 'DELETE' }),
+};
+
 export const reportApi = {
   // Teacher fetches a specific student's report
   getV2: (studentId, period = 'overall') =>

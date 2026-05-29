@@ -105,6 +105,12 @@ async def startup_event():
 
 
 # Models
+class SubTeacherRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    phone: Optional[str] = None
+
 class Standard(BaseModel):
     name: str
     short: Optional[str] = None
@@ -422,16 +428,26 @@ def verify_token(authorization: Optional[str] = Header(None)):
         user_metadata = user.user_metadata or {}
         role = user_metadata.get("role", "student")
 
+        teacher_type       = user_metadata.get("teacher_type", "primary")
+        primary_teacher_id = user_metadata.get("primary_teacher_id")
+        # For sub-teachers, teacher_id resolves to the primary teacher's UUID so that
+        # all standard/subject ownership checks work transparently.
+        effective_teacher_id = (
+            primary_teacher_id if teacher_type == "sub" and primary_teacher_id else user.id
+        )
+
         result = {
             "id": user.id,
-            "user_id": user.id,
-            "teacher_id": user.id,
+            "user_id": user.id,              # always the real user (for created_by / profile ops)
+            "teacher_id": effective_teacher_id,  # primary's UUID for sub-teachers
             "email": user.email,
             "name": user_metadata.get("name", ""),
             "role": role,
             "username": user_metadata.get("username", ""),
             "student_id": None,
             "standard_id": None,
+            "teacher_type": teacher_type,              # "primary" | "sub"
+            "primary_teacher_id": primary_teacher_id,  # None for primary teachers
         }
 
         if role == "student" and service_supabase:
@@ -659,7 +675,7 @@ def get_dashboard_stats(user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    teacher_id = user["user_id"]
+    teacher_id = user["teacher_id"]
     standards = service_supabase.table("standards").select("id").eq("teacher_id", teacher_id).execute()
     standard_ids = [s["id"] for s in standards.data] if standards.data else []
 
@@ -704,7 +720,7 @@ def get_dashboard_activity(user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    teacher_id = user["user_id"]
+    teacher_id = user["teacher_id"]
 
     # Get teacher's standards
     standards = service_supabase.table("standards").select("id").eq("teacher_id", teacher_id).execute()
@@ -759,7 +775,7 @@ def get_standards(user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     if user["role"] == "teacher":
-        response = service_supabase.table("standards").select("*").eq("teacher_id", user["user_id"]).order("created_at", desc=True).execute()
+        response = service_supabase.table("standards").select("*").eq("teacher_id", user["teacher_id"]).order("created_at", desc=True).execute()
     else:
         response = service_supabase.table("standards").select("*").execute()
 
@@ -786,7 +802,7 @@ def create_standard(standard: Standard, user = Depends(verify_token)):
         "name": standard.name,
         "short": standard.short,
         "emoji": standard.emoji,
-        "teacher_id": user["user_id"]
+        "teacher_id": user["teacher_id"]
     }
     try:
         response = service_supabase.table("standards").insert(data).execute()
@@ -806,11 +822,11 @@ def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(ve
     if not existing.data:
         raise HTTPException(status_code=404, detail="Standard not found")
     stored_tid = existing.data.get("teacher_id")
-    if stored_tid and stored_tid != user["user_id"]:
+    if stored_tid and stored_tid != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     # Auto-claim ownership for unclaimed standards
     if not stored_tid:
-        service_supabase.table("standards").update({"teacher_id": user["user_id"]}).eq("id", standard_id).execute()
+        service_supabase.table("standards").update({"teacher_id": user["teacher_id"]}).eq("id", standard_id).execute()
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
     if update_data:
@@ -830,7 +846,7 @@ async def delete_standard(standard_id: str, user = Depends(verify_token)):
     if not existing.data:
         raise HTTPException(status_code=404, detail="Standard not found")
     stored_tid = existing.data.get("teacher_id")
-    if stored_tid and stored_tid != user["user_id"]:
+    if stored_tid and stored_tid != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # 1. Fetch all student IDs + avatar_urls BEFORE any deletes
@@ -952,7 +968,7 @@ def get_subjects(standard_id: Optional[str] = None, user = Depends(verify_token)
         return response.data or []
     else:
         # Teacher: return all subjects for their standards
-        stds = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
+        stds = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
         if not stds.data:
             return []
         std_ids = [s["id"] for s in stds.data]
@@ -966,7 +982,7 @@ def create_subject(subject: SubjectClass, user = Depends(verify_token)):
 
     # Verify standard ownership
     standard = service_supabase.table("standards").select("teacher_id").eq("id", subject.standard_id).single().execute()
-    if not standard.data or standard.data["teacher_id"] != user["user_id"]:
+    if not standard.data or standard.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     data = {
@@ -989,7 +1005,7 @@ def update_subject(subject_id: str, updates: SubjectUpdate, user = Depends(verif
     if not subj.data:
         raise HTTPException(status_code=404, detail="Subject not found")
     std = service_supabase.table("standards").select("teacher_id").eq("id", subj.data["standard_id"]).single().execute()
-    if not std.data or std.data["teacher_id"] != user["user_id"]:
+    if not std.data or std.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
@@ -1009,7 +1025,7 @@ def delete_subject(subject_id: str, user = Depends(verify_token)):
     if not subj.data:
         raise HTTPException(status_code=404, detail="Subject not found")
     std = service_supabase.table("standards").select("teacher_id").eq("id", subj.data["standard_id"]).single().execute()
-    if not std.data or std.data["teacher_id"] != user["user_id"]:
+    if not std.data or std.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     service_supabase.table("subject_classes").delete().eq("id", subject_id).execute()
@@ -1030,7 +1046,7 @@ def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)
         if standard_id:
             response = service_supabase.table("students").select(teacher_fields).eq("standard_id", standard_id).execute()
         else:
-            standards = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
+            standards = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
             standard_ids = [s["id"] for s in (standards.data or [])]
             if standard_ids:
                 response = service_supabase.table("students").select(teacher_fields).in_("standard_id", standard_ids).execute()
@@ -1814,7 +1830,7 @@ async def create_youtube_video(video: YouTubeVideo, user=Depends(verify_token)):
     std_check = service_supabase.table("standards") \
         .select("id") \
         .eq("id", class_check.data["standard_id"]) \
-        .eq("teacher_id", user["user_id"]) \
+        .eq("teacher_id", user["teacher_id"]) \
         .single().execute()
     if not std_check.data:
         raise HTTPException(status_code=403, detail="Not your standard")
@@ -2102,7 +2118,7 @@ async def get_video_token(video_id: str, user=Depends(verify_token)):
         std_check = service_supabase.table("standards") \
             .select("id") \
             .eq("id", required_standard_id) \
-            .eq("teacher_id", user["user_id"]) \
+            .eq("teacher_id", user["teacher_id"]) \
             .single().execute()
         if not std_check.data:
             raise HTTPException(status_code=403, detail="Not your class")
@@ -2178,7 +2194,7 @@ def get_tests(class_id: Optional[str] = None, user = Depends(verify_token)):
         return response.data or []
 
     # Teacher: return all tests for their standards
-    stds = service_supabase.table("standards").select("id").eq("teacher_id", user["user_id"]).execute()
+    stds = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
     if not stds.data:
         return []
     std_ids = [s["id"] for s in stds.data]
@@ -2454,6 +2470,85 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 def health_check():
     db_status = "connected" if supabase else "disconnected"
     return {"status": "ok", "database": db_status}
+
+# ─── Teacher Team Management ─────────────────────────────────────────────────
+
+@app.post("/api/teachers")
+def create_sub_teacher(req: SubTeacherRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Only the primary teacher can add team members")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        new_auth = service_supabase.auth.admin.create_user({
+            "email": req.email,
+            "password": req.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "role": "teacher",
+                "name": req.name,
+                "teacher_type": "sub",
+                "primary_teacher_id": user["user_id"],
+            },
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create account: {str(e)}")
+
+    try:
+        service_supabase.table("sub_teachers").insert({
+            "id": new_auth.user.id,
+            "primary_teacher_id": user["user_id"],
+            "name": req.name,
+            "email": req.email,
+            "phone": req.phone or None,
+        }).execute()
+    except Exception:
+        # If DB insert fails, clean up the auth user so it's not orphaned
+        try:
+            service_supabase.auth.admin.delete_user(new_auth.user.id)
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="Failed to save teacher record")
+
+    return {"id": new_auth.user.id, "name": req.name, "email": req.email, "phone": req.phone}
+
+
+@app.get("/api/teachers")
+def list_sub_teachers(user = Depends(verify_token)):
+    if user["role"] != "teacher" or user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Primary teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    result = service_supabase.table("sub_teachers").select("*").eq(
+        "primary_teacher_id", user["user_id"]
+    ).order("created_at").execute()
+    return result.data or []
+
+
+@app.delete("/api/teachers/{teacher_id}")
+def remove_sub_teacher(teacher_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher" or user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Primary teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    existing = service_supabase.table("sub_teachers").select("id").eq(
+        "id", teacher_id
+    ).eq("primary_teacher_id", user["user_id"]).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    try:
+        service_supabase.auth.admin.delete_user(teacher_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to delete account: {str(e)}")
+
+    service_supabase.table("sub_teachers").delete().eq("id", teacher_id).execute()
+    return {"message": "Teacher removed"}
+
 
 # Demo accounts — teacher-only, for seeding demo data
 @app.post("/api/demo/create-accounts")

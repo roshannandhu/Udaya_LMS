@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, CheckCircle2, ImagePlus, X } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, CheckCircle2, ImagePlus, X, Users, ShieldOff, Trash2, Loader2, UserPlus } from 'lucide-react';
 import { Toggle, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
 import { useSettingsStore } from '../../store';
+import { teacherApi } from '../../lib/api';
 
 function PasswordChange({ onClose }) {
   const { changePassword } = useAuthStore();
@@ -96,6 +97,8 @@ function Row({ label, sub, checked, onChange }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const isPrimary = !user?.teacher_type || user?.teacher_type === 'primary';
   const [pwOpen, setPwOpen] = useState(false);
 
   const {
@@ -114,6 +117,73 @@ export default function SettingsPage() {
   const [pwdSaved, setPwdSaved] = useState(false);
   const [pinInput, setPinInput] = useState(terminationPin || '');
   const [pinSaved, setPinSaved] = useState(false);
+
+  // Team management state (primary teacher only)
+  const [subTeachers, setSubTeachers] = useState([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', email: '', phone: '', password: '' });
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [addSuccess, setAddSuccess] = useState('');
+
+  useEffect(() => {
+    if (!isPrimary) return;
+    setTeamLoading(true);
+    teacherApi.list()
+      .then(setSubTeachers)
+      .catch(() => {})
+      .finally(() => setTeamLoading(false));
+  }, [isPrimary]);
+
+  const handleAddTeacher = async () => {
+    if (!addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim()) {
+      setAddError('Name, email and password are required.'); return;
+    }
+    if (addForm.password.length < 8) {
+      setAddError('Password must be at least 8 characters.'); return;
+    }
+    setAddLoading(true); setAddError(''); setAddSuccess('');
+    try {
+      const created = await teacherApi.create(addForm);
+      setSubTeachers(prev => [...prev, created]);
+      setAddForm({ name: '', email: '', phone: '', password: '' });
+      setAddSuccess(`${created.name}'s account created.`);
+      setTimeout(() => setAddSuccess(''), 3000);
+    } catch (e) {
+      setAddError(e.message || 'Failed to create teacher account.');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleRemoveTeacher = async (id, name) => {
+    if (!window.confirm(`Remove ${name} from your team? They will lose access immediately.`)) return;
+    try {
+      await teacherApi.remove(id);
+      setSubTeachers(prev => prev.filter(t => t.id !== id));
+    } catch (e) {
+      alert(e.message || 'Failed to remove teacher.');
+    }
+  };
+
+  // Block sub-teachers from accessing settings
+  if (!isPrimary) {
+    return (
+      <div>
+        <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+            <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md"><ArrowLeft size={16} /></button>
+            <h1 className="text-base font-semibold flex-1">Settings</h1>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-neutral-400">
+          <ShieldOff size={36} className="text-neutral-300" />
+          <p className="text-sm font-medium text-neutral-500">Settings are only available to the primary teacher.</p>
+          <p className="text-xs text-neutral-400">Contact your primary teacher to change app settings.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSaveName = () => {
     setLmsName(nameInput.trim() || 'Tutoria');
@@ -151,6 +221,64 @@ export default function SettingsPage() {
       </div>
 
       <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+
+        {/* Team Members */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Team Members</p>
+          <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4 space-y-4">
+
+            {/* Existing sub-teachers */}
+            {teamLoading ? (
+              <div className="flex items-center gap-2 text-sm text-neutral-400 py-2">
+                <Loader2 size={14} className="animate-spin" /> Loading team…
+              </div>
+            ) : subTeachers.length > 0 ? (
+              <div className="space-y-2">
+                {subTeachers.map(t => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 p-3 bg-white/30 rounded-lg border border-white/50">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-indigo-700 font-bold text-xs">
+                        {(t.name || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{t.name}</p>
+                        <p className="text-xs text-neutral-500 truncate">{t.email}{t.phone ? ` · ${t.phone}` : ''}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => handleRemoveTeacher(t.id, t.name)}
+                      className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0" title="Remove teacher">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-400 py-1">No team members yet. Add a teacher below.</p>
+            )}
+
+            {/* Add teacher form */}
+            <div className="border-t border-white/40 pt-4 space-y-3">
+              <p className="text-sm font-semibold flex items-center gap-1.5"><UserPlus size={14} /> Add Teacher</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input value={addForm.name} onChange={e => setAddForm(f => ({...f, name: e.target.value}))} placeholder="Full name *"
+                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                <input value={addForm.email} onChange={e => setAddForm(f => ({...f, email: e.target.value}))} placeholder="Email *" type="email"
+                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                <input value={addForm.phone} onChange={e => setAddForm(f => ({...f, phone: e.target.value}))} placeholder="Phone (optional)" type="tel"
+                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                <input value={addForm.password} onChange={e => setAddForm(f => ({...f, password: e.target.value}))} placeholder="Password * (min 8 chars)" type="password"
+                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+              </div>
+              {addError  && <p className="text-xs text-red-600">{addError}</p>}
+              {addSuccess && <p className="text-xs text-green-700 flex items-center gap-1"><CheckCircle2 size={11} /> {addSuccess}</p>}
+              <Btn variant="primary" size="sm" onClick={handleAddTeacher} disabled={addLoading}>
+                {addLoading ? <><Loader2 size={12} className="animate-spin mr-1" />Creating…</> : 'Create Teacher Account'}
+              </Btn>
+              <p className="text-[11px] text-neutral-400">New teachers can access everything except Settings. Share their email + password directly.</p>
+            </div>
+
+          </div>
+        </div>
 
         {/* Branding */}
         <div className="mb-6">
