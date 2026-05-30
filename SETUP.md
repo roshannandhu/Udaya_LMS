@@ -84,6 +84,17 @@ exist in the shared project. Use:
 **Login worked but pages are empty / 401 after a bit**
 - Token refresh needs the backend running. Keep the backend terminal open.
 
+**"Database error querying schema" (HTTP 500) on login**
+- This means a login account was created with a raw `INSERT INTO auth.users`
+  (a "seed SQL"). That leaves required token columns NULL and breaks Supabase
+  Auth for that user. It is NOT an infrastructure problem — recreating the
+  project will not help if you insert users via SQL again.
+- Fix: run `backend/fix_auth_users_nulls.sql` in the Supabase SQL Editor, then
+  log in again. If it still fails, delete the user (Authentication → Users) and
+  recreate it with `python seed_teacher.py`.
+- Prevention: **never** create accounts with `INSERT INTO auth.users`. Use
+  `seed_teacher.py` (Auth admin API) or the dashboard → Authentication → Users.
+
 **Why didn't changing the password in the SQL editor work?**
 - Login passwords are NOT in `schema.sql` / the `students` table. They live in
   Supabase's internal `auth.users` table, managed by Supabase Auth. To change a
