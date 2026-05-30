@@ -96,8 +96,34 @@ exist in the shared project. Use:
 
 Because all `.env` files point at the same Supabase project, **every collaborator
 reads and writes the same live data.** Creating/deleting students, standards,
-videos, etc. affects everyone. If you want an isolated copy, create your own
-Supabase project, run `backend/schema.sql` + `backend/rls_policies.sql` in its
-SQL Editor, put your own keys in the `.env` files, then create a teacher account
-from the Supabase dashboard (Authentication → Users → Add user, and set
-`user_metadata` to `{ "role": "teacher", "name": "Your Name" }`).
+videos, etc. affects everyone.
+
+---
+
+## Optional: run your own isolated copy (own Supabase project)
+
+If you'd rather have an independent database instead of sharing:
+
+1. Create a free Supabase project at https://supabase.com.
+2. In **Project Settings → API**, copy your `Project URL`, `anon` key, and
+   `service_role` key.
+3. Put them into `backend/.env` and `frontend/.env.local` (replace the shared
+   values). `VITE_API_URL` stays `http://localhost:8001/api`.
+4. In the Supabase **SQL Editor**, paste the entire contents of
+   `backend/schema.sql` and run it. That one file is self-contained — it creates
+   every table, index, and RLS policy. (You don't need `rls_policies.sql`; it's
+   an alternative, more granular policy set. Don't run both.)
+5. Create your first teacher login (accounts live in Supabase Auth, NOT in the
+   SQL, so this step is required):
+   ```bash
+   cd backend
+   python seed_teacher.py
+   # or:  py seed_teacher.py        (Windows)
+   ```
+   This creates `admin@udaya.com` / `Admin1234`. To use your own:
+   ```bash
+   python seed_teacher.py --email you@example.com --password YourPass123 --name "Your Name"
+   ```
+   The script is idempotent — re-running it just resets the password.
+6. Start the backend and frontend (steps 1–2 above) and log in. Create students
+   from inside the teacher portal.
