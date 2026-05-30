@@ -14,7 +14,7 @@ export default function LoginPage() {
   const { login, enforceSingleDevice } = useAuthStore();
   const { lmsName, lmsLogo } = useSettingsStore();
 
-  useEffect(() => { document.title = lmsName || 'Tutoria'; }, [lmsName]);
+  useEffect(() => { document.title = lmsName || 'Udaya'; }, [lmsName]);
 
   const handleSubmit = async () => {
     const identifier = mode === 'teacher' ? creds.email : creds.phone;
@@ -70,7 +70,7 @@ export default function LoginPage() {
             className="font-black text-4xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-500 text-center drop-shadow-sm"
             style={{ fontFamily: '"Outfit", "Plus Jakarta Sans", "Inter", sans-serif' }}
           >
-            {lmsName || 'Tutoria'}
+            {lmsName || 'Udaya'}
           </span>
         </div>
 
@@ -163,7 +163,7 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-neutral-400 mt-6">{lmsName || 'Tutoria'} · A learning platform built for tuition</p>
+        <p className="text-center text-xs text-neutral-400 mt-6">{lmsName || 'Udaya'} · A learning platform built for tuition</p>
       </div>
     </div>
   );

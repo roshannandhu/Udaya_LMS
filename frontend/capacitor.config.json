@@ -1,6 +1,6 @@
 {
   "appId": "com.tutoria.lms",
-  "appName": "Tutoria",
+  "appName": "Udaya",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

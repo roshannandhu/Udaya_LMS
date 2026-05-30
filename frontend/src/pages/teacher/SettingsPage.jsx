@@ -111,7 +111,7 @@ export default function SettingsPage() {
   } = useSettingsStore();
 
   const logoInputRef = useRef(null);
-  const [nameInput, setNameInput] = useState(lmsName || 'Tutoria');
+  const [nameInput, setNameInput] = useState(lmsName || 'Udaya');
   const [nameSaved, setNameSaved] = useState(false);
   const [pwdInput, setPwdInput] = useState(defaultStudentPassword || '');
   const [pwdSaved, setPwdSaved] = useState(false);
@@ -197,7 +197,7 @@ export default function SettingsPage() {
   }
 
   const handleSaveName = () => {
-    setLmsName(nameInput.trim() || 'Tutoria');
+    setLmsName(nameInput.trim() || 'Udaya');
     setNameSaved(true);
     setTimeout(() => setNameSaved(false), 1500);
   };
@@ -477,7 +477,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-neutral-400">Tutoria v1.0 Beta · Built with ♥</p>
+        <p className="text-center text-xs text-neutral-400">Udaya v1.0 Beta · Built with ♥</p>
       </div>
     </div>
   );

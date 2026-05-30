@@ -371,7 +371,7 @@ export function shareReportText(data, period) {
     });
   }
   
-  text += `\nGenerated via Tutoria LMS.`;
+  text += `\nGenerated via Udaya LMS.`;
   return text;
 }
 

@@ -67,7 +67,7 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
             className="font-black text-2xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-500 truncate drop-shadow-sm"
             style={{ fontFamily: '"Outfit", "Plus Jakarta Sans", "Inter", sans-serif' }}
           >
-            {lmsName || 'Tutoria'}
+            {lmsName || 'Udaya'}
           </span>
         </div>
 

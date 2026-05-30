@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Tutoria</string>
-    <string name="title_activity_main">Tutoria</string>
+    <string name="app_name">Udaya</string>
+    <string name="title_activity_main">Udaya</string>
     <string name="package_name">com.tutoria.lms</string>
     <string name="custom_url_scheme">com.tutoria.lms</string>
 </resources>

@@ -50,7 +50,7 @@ export default function StudentChangePasswordPage() {
           <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center">
             <Lock size={18} className="text-white" />
           </div>
-          <span className="font-semibold tracking-tight text-lg">Tutoria</span>
+          <span className="font-semibold tracking-tight text-lg">Udaya</span>
         </div>
 
         <div className="glass-panel border border-white/60 p-8 rounded-2xl shadow-lg backdrop-blur-md">
@@ -120,7 +120,7 @@ export default function StudentChangePasswordPage() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-neutral-400 mt-6">Tutoria · A learning platform built for tuition</p>
+        <p className="text-center text-xs text-neutral-400 mt-6">Udaya · A learning platform built for tuition</p>
       </div>
     </div>
   );

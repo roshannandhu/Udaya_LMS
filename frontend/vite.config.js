@@ -8,8 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Tutoria LMS',
-        short_name: 'Tutoria',
+        name: 'Udaya LMS',
+        short_name: 'Udaya',
         start_url: '/',
         display: 'standalone',
         background_color: '#FAFAF9',

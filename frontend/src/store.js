@@ -13,7 +13,7 @@ export const useSettingsStore = create(
   persist(
     (set) => ({
       // Branding
-      lmsName: 'Tutoria',
+      lmsName: 'Udaya',
       setLmsName: (name) => set({ lmsName: name }),
       lmsLogo: null, // base64 data URL or null
       setLmsLogo: (logo) => set({ lmsLogo: logo }),
