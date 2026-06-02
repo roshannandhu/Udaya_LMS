@@ -41,6 +41,7 @@ export default function StudentLayout() {
       subjects: '/student/subjects',
       tests: '/student/tests',
       broadcasts: '/student/broadcasts',
+      live: '/student/live-classes',
       profile: '/student/profile',
       more: '/student/more'
     };

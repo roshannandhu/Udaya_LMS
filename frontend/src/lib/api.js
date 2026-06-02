@@ -236,6 +236,7 @@ export const liveClassApi = {
   getJoinToken:  (liveClassId)  => apiClient(`/live-classes/${liveClassId}/join-token`),
   end:           (liveClassId)  => apiClient(`/live-classes/${liveClassId}/end`, { method: 'POST' }),
   cancel:        (liveClassId)  => apiClient(`/live-classes/${liveClassId}/cancel`, { method: 'POST' }),
+  remove:        (liveClassId)  => apiClient(`/live-classes/${liveClassId}`, { method: 'DELETE' }),
   getAttendance: (liveClassId)  => apiClient(`/live-classes/${liveClassId}/attendance`),
 };
 
@@ -245,6 +246,26 @@ export const teacherApi = {
   remove: (id)  => apiClient(`/teachers/${id}`, { method: 'DELETE' }),
   getSettings: () => apiClient('/teacher/settings'),
   updateSettings: (data) => apiClient('/teacher/settings', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Universal auto-thumbnail base image (teacher's face + blank space on one side)
+  getThumbnail: () => apiClient('/teacher/thumbnail'),
+  uploadThumbnail: async ({ file, textSide }) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const formData = new FormData();
+    if (file) formData.append('file', file);
+    formData.append('text_side', textSide || 'right');
+    const res = await fetch(`${API_BASE}/teacher/thumbnail`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Failed to upload thumbnail');
+    }
+    _cache.clear();
+    return res.json();
+  },
 };
 
 export const reportApi = {
@@ -331,6 +352,48 @@ export const assignmentApi = {
 };
 
 export const aiApi = {
-  generateInsights: (studentId, stats) => 
+  generateInsights: (studentId, stats) =>
     apiClient('/insights/generate', { method: 'POST', body: JSON.stringify({ student_id: studentId, stats }) }),
+
+  // Streams coaching insights token-by-token. Calls onChunk(textDelta) as text
+  // arrives; resolves when the stream closes. Throws on HTTP/stream errors.
+  generateInsightsStream: async (studentId, stats, onChunk) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_BASE}/insights/generate/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ student_id: studentId, stats }),
+    });
+    if (!res.ok || !res.body) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || `AI request failed (${res.status})`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+      for (const evt of events) {
+        const line = evt.split('\n').find(l => l.startsWith('data:'));
+        if (!line) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        let obj;
+        try { obj = JSON.parse(payload); } catch { continue; }
+        if (obj.error) throw new Error(obj.error);
+        if (obj.text) onChunk(obj.text);
+      }
+    }
+  },
 };

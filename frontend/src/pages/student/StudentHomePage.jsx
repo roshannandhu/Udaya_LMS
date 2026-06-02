@@ -102,13 +102,22 @@ export default function StudentHomePage() {
       {/* Header */}
       <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          {/* Mobile: top-left avatar opens Profile (bottom bar has no Profile tab) */}
+          <button
+            onClick={() => navigate('/student/profile')}
+            aria-label="Profile"
+            className="lg:hidden flex-shrink-0 rounded-full ring-2 ring-white/60 hover:ring-white transition-all"
+          >
+            <Avatar name={user?.name || '?'} src={user?.avatar_url} size="sm" />
+          </button>
           <div className="flex-1">
             <p className="text-xs text-neutral-500">{greeting},</p>
             <h1 className="text-base font-semibold leading-tight">{displayName} 👋</h1>
           </div>
           <div className="flex items-center gap-1">
             <NotificationBell />
-            <Avatar name={user?.name || '?'} src={user?.avatar_url} size="sm" />
+            {/* Desktop keeps the avatar on the right; sidebar handles profile nav */}
+            <span className="hidden lg:block"><Avatar name={user?.name || '?'} src={user?.avatar_url} size="sm" /></span>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, ResponsiveContainer, BarChart, Bar, Cell,
@@ -183,12 +183,16 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
         <div className="text-center py-8 text-sm text-neutral-400">No data for this period</div>
       ) : (
         <div className="overflow-x-auto pb-1">
-          <div className="flex gap-1 mb-1">
-            {DAY_LABELS.map((d, i) => (
-              <div key={i} className="w-5 text-center text-[9px] text-neutral-400 font-medium">{d}</div>
-            ))}
-          </div>
+          {/* Weeks are columns; days run top→bottom (Sun→Sat). Day labels sit in a
+              matching vertical column on the left so each label aligns with its row. */}
           <div className="flex gap-1">
+            <div className="flex flex-col gap-1 mr-1">
+              {DAY_LABELS.map((d, i) => (
+                <div key={i} className="h-5 flex items-center text-[9px] text-neutral-400 font-medium leading-none">
+                  {i % 2 === 1 ? d : ''}
+                </div>
+              ))}
+            </div>
             {weeks.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-1">
                 {week.map((day, di) => {
@@ -383,8 +387,8 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const [vidPeriod,  setVidPeriod]  = useState(currentMonthId);
   const [showSuggestions,       setShowSuggestions]       = useState(false);
   const [suggestions,           setSuggestions]           = useState('');
-  const [displayedSuggestions,  setDisplayedSuggestions]  = useState('');
   const [suggestionsLoading,    setSuggestionsLoading]    = useState(false);
+  const [isStreaming,           setIsStreaming]           = useState(false);
   const [suggestionsError,      setSuggestionsError]      = useState('');
   const [showBreakdown,         setShowBreakdown]         = useState(false);
   const [heatmapSubject,    setHeatmapSubject]     = useState('all');
@@ -543,30 +547,13 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const vidDays   = vidSliced.filter(d => d.minutes > 0).length;
   const vidMins   = Math.round(vidSliced.reduce((a, d) => a + (d.minutes || 0), 0));
 
-  // Typing effect for AI suggestions
-  useEffect(() => {
-    if (!suggestions || suggestionsLoading || typeof suggestions !== 'string') {
-      setDisplayedSuggestions('');
-      return;
-    }
-    
-    let i = 0;
-    const interval = setInterval(() => {
-      setDisplayedSuggestions(suggestions.slice(0, i));
-      i++;
-      if (i > suggestions.length) {
-        clearInterval(interval);
-      }
-    }, 12); // Speed: 12ms per char
-
-    return () => clearInterval(interval);
-  }, [suggestions, suggestionsLoading]);
-
+  // The live SSE stream IS the typing effect — text is appended to `suggestions`
+  // as it arrives, so no artificial typewriter is needed.
   const renderMarkdown = (text) => {
     if (!text || typeof text !== 'string') return null;
     const lines = text.split('\n');
-    const isTyping = text !== suggestions;
-    
+    const isTyping = isStreaming;
+
     return lines.map((line, i) => {
       const isLast = i === lines.length - 1;
       const cursor = (isLast && isTyping) ? <span className="animate-pulse text-amber-500 font-bold ml-1">▍</span> : null;
@@ -612,29 +599,51 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
     setSuggestionsLoading(true);
     setSuggestionsError('');
+    setSuggestions('');
+
+    // Enriched context — per-subject breakdown, recent test trend, and weak
+    // topics with their scores + watched status — so advice is concrete.
+    const subjectBreakdown = subjectRadar
+      .map(s => `${s.subject}: test ${Math.round(s.test_avg || 0)}%, attendance ${Math.round(s.attendance_pct || 0)}%, videos ${s.video_done || 0}/${s.video_total || 0}`)
+      .join(' | ') || 'No subject data';
+    const recentTests = testTimeline
+      .slice(-5)
+      .map(t => `${t.test_title} (${t.subject || ''}) ${Math.round(t.score_pct || 0)}%${t.date ? ` on ${t.date}` : ''}`)
+      .join('; ') || 'No recent tests';
+    const weakTopicsDetail = weakestTopics
+      .slice(0, 5)
+      .map(t => `${t.topic} — ${Math.round(t.score || 0)}% — ${t.videoStatus}`)
+      .join('; ') || 'None';
+
+    const stats = {
+      student_name: student.name || 'Student',
+      standard_name: student.standard_name || 'N/A',
+      attendance_data: `Attendance is ${Math.round(student.attendance_pct || 0)}%`,
+      video_progress_data: `Video completion is ${videoPct}% (${doneVids}/${totalVids} videos)`,
+      assignment_data: `Assignment average is ${assignStats.avg_marks_pct}% (submitted ${assignStats.submitted}/${assignStats.total})`,
+      test_data: `Test average is ${Math.round(student.avg_score || 0)}%, attempted ${testsAttempted}, missed ${testsMissed}`,
+      subject_breakdown: subjectBreakdown,
+      recent_tests: recentTests,
+      weak_topics_detail: weakTopicsDetail,
+    };
+
     try {
-      const stats = {
-        student_name: student.name || 'Student',
-        attendance_data: `Attendance is ${student.attendance_pct || 0}%`,
-        video_progress_data: `Video completion is ${videoPct}%`,
-        assignment_data: `Assignment average is ${assignStats.avg_marks_pct}%`,
-        test_data: `Test average is ${student.avg_score || 0}%, attempted ${testsAttempted}, missed ${testsMissed}`,
-        topic_data: `Weakest topics: ${weakestTopics.slice(0, 3).map(t => t.topic).join(', ')}`,
-        recent_activity_data: '',
-      };
-      const res = await aiApi.generateInsights(student.id, stats);
-      let finalSuggestions = res.insights || '';
-      if (Array.isArray(finalSuggestions)) {
-        // Fallback for older cached responses that returned arrays of objects
-        finalSuggestions = finalSuggestions.map(s => `* **${s.type.toUpperCase()}**: ${s.text}`).join('\n\n');
-      }
-      setSuggestions(finalSuggestions);
+      let acc = '';
+      await aiApi.generateInsightsStream(student.id, stats, (chunk) => {
+        acc += chunk;
+        // First chunk: swap the spinner for live streaming text.
+        setSuggestionsLoading(false);
+        setIsStreaming(true);
+        setSuggestions(acc);
+      });
+      setSuggestions(acc);
     } catch (e) {
       setSuggestionsError(e.message || 'Failed to generate insights. Is the AI API key configured in Teacher Settings?');
     } finally {
       setSuggestionsLoading(false);
+      setIsStreaming(false);
     }
-  }, [showSuggestions, suggestions, student, videoPct, weakestTopics, testsAttempted, testsMissed, assignStats]);
+  }, [showSuggestions, suggestions, student, videoPct, doneVids, totalVids, subjectRadar, testTimeline, weakestTopics, testsAttempted, testsMissed, assignStats]);
 
   // Detailed breakdown table
   const breakdownRows = useMemo(() => {
@@ -750,7 +759,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
             </div>
 
             {/* Performance Table */}
-            <div className="flex-1 glass-panel border-white/60 shadow-sm rounded-2xl overflow-hidden">
+            <div className="flex-1 min-w-0 glass-panel border-white/60 shadow-sm rounded-2xl overflow-hidden">
               <div className="px-5 py-3 border-b border-neutral-100/80 bg-neutral-50/50">
                 <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Metrics Breakdown</p>
               </div>
@@ -1129,7 +1138,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                 </div>
               ) : suggestions ? (
                 <div className="p-2 text-neutral-800">
-                  {renderMarkdown(displayedSuggestions)}
+                  {renderMarkdown(suggestions)}
                 </div>
               ) : (
                 <div className="flex items-center gap-3 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl p-4 border border-emerald-100">

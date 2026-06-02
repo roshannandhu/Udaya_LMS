@@ -5,6 +5,7 @@ import { Toggle, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
 import { useSettingsStore } from '../../store';
 import { teacherApi } from '../../lib/api';
+import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 
 function PasswordChange({ onClose }) {
   const { changePassword } = useAuthStore();
@@ -130,6 +131,14 @@ export default function SettingsPage() {
   const [aiSaved, setAiSaved] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
+  // Live-class auto-thumbnail (universal base image + blank-side preference)
+  const thumbInputRef = useRef(null);
+  const [thumb, setThumb] = useState({ url: null, side: 'right' });
+  const [thumbFile, setThumbFile] = useState(null);
+  const [thumbPreview, setThumbPreview] = useState(null);
+  const [thumbSaving, setThumbSaving] = useState(false);
+  const [thumbSaved, setThumbSaved] = useState(false);
+
   useEffect(() => {
     if (!isPrimary) return;
     setTeamLoading(true);
@@ -143,6 +152,10 @@ export default function SettingsPage() {
         if (res.ai_provider) setAiSettings(s => ({ ...s, ai_provider: res.ai_provider }));
         if (res.ai_api_key) setAiSettings(s => ({ ...s, ai_api_key: res.ai_api_key }));
       })
+      .catch(() => {});
+
+    teacherApi.getThumbnail()
+      .then(res => setThumb({ url: res.thumbnail_url || null, side: res.thumbnail_text_side || 'right' }))
       .catch(() => {});
   }, [isPrimary]);
 
@@ -220,6 +233,31 @@ export default function SettingsPage() {
     setTerminationPin(pinInput.trim());
     setPinSaved(true);
     setTimeout(() => setPinSaved(false), 1500);
+  };
+
+  const handleThumbFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setThumbFile(f);
+    const reader = new FileReader();
+    reader.onload = (ev) => setThumbPreview(ev.target.result);
+    reader.readAsDataURL(f);
+  };
+
+  const handleSaveThumb = async () => {
+    setThumbSaving(true);
+    try {
+      const res = await teacherApi.uploadThumbnail({ file: thumbFile, textSide: thumb.side });
+      setThumb({ url: res.thumbnail_url || null, side: res.thumbnail_text_side || 'right' });
+      setThumbFile(null);
+      setThumbPreview(null);
+      setThumbSaved(true);
+      setTimeout(() => setThumbSaved(false), 1800);
+    } catch (e) {
+      alert(e.message || 'Failed to save thumbnail');
+    } finally {
+      setThumbSaving(false);
+    }
   };
 
   const handleSaveAiSettings = async () => {
@@ -353,6 +391,67 @@ export default function SettingsPage() {
               </div>
             </div>
 
+          </div>
+        </div>
+
+        {/* Live Class Auto-Thumbnail */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Live Class Thumbnail</p>
+          <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4 space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-0.5">Universal thumbnail image</p>
+              <p className="text-xs text-neutral-500 mb-3">
+                Upload one image (e.g. your photo) with a blank space on one side. Every scheduled class
+                automatically composites its subject, class and topic into that blank space.
+              </p>
+
+              {/* Live preview */}
+              <div className="max-w-sm mb-3">
+                <LiveClassThumbnail
+                  thumbnailUrl={thumbPreview || thumb.url}
+                  textSide={thumb.side}
+                  standardName="10th Standard"
+                  subjectName="Mathematics"
+                  topic="Trigonometry — Chapter 8"
+                  status="scheduled"
+                  scheduledAt={new Date(Date.now() + 3725000).toISOString()}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Btn variant="default" size="sm" onClick={() => thumbInputRef.current?.click()}>
+                  {(thumbPreview || thumb.url) ? 'Change image' : 'Upload image'}
+                </Btn>
+                <input ref={thumbInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbFile} />
+              </div>
+            </div>
+
+            {/* Blank side */}
+            <div>
+              <p className="text-sm font-medium mb-2">Text position (blank side)</p>
+              <div className="flex gap-2">
+                {['left', 'right'].map(side => (
+                  <button
+                    key={side}
+                    onClick={() => setThumb(t => ({ ...t, side }))}
+                    className={`px-3 py-1.5 rounded-md text-sm capitalize border transition-colors ${
+                      thumb.side === side
+                        ? 'bg-neutral-900 text-white border-neutral-900'
+                        : 'bg-white/40 border-white/60 text-neutral-600 hover:bg-white/70'
+                    }`}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Btn variant="primary" size="sm" onClick={handleSaveThumb} disabled={thumbSaving}>
+                {thumbSaving ? <><Loader2 size={12} className="animate-spin mr-1" />Saving…</> : thumbSaved ? 'Saved ✓' : 'Save thumbnail'}
+              </Btn>
+              <span className="text-[11px] text-neutral-400">Applies to classes scheduled after saving.</span>
+            </div>
           </div>
         </div>
 

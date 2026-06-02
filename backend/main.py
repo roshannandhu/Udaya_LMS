@@ -20,7 +20,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 app = FastAPI(title="Tutoria LMS API")
 
@@ -99,9 +99,53 @@ async def _ensure_plain_password_column():
         print("    ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;")
 
 
+async def _ensure_live_class_columns():
+    """Auto-add live-class auto-thumbnail/passcode columns + teacher_branding table if missing."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
+        return
+    # Probe first — fast path if everything already exists
+    try:
+        service_supabase.table("live_classes").select("thumbnail_url").limit(1).execute()
+        service_supabase.table("teacher_branding").select("teacher_id").limit(1).execute()
+        return
+    except Exception:
+        pass
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+    ddl = """
+        ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS zoom_passcode TEXT;
+        ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+        ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS thumbnail_text_side TEXT DEFAULT 'right';
+        CREATE TABLE IF NOT EXISTS teacher_branding (
+            teacher_id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+            thumbnail_url       TEXT,
+            thumbnail_text_side TEXT DEFAULT 'right',
+            updated_at          TIMESTAMPTZ DEFAULT now()
+        );
+        ALTER TABLE teacher_branding ENABLE ROW LEVEL SECURITY;
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
+            )
+            if resp.is_success:
+                print("[*] Auto-migrated: live_classes thumbnail/passcode columns + teacher_branding table")
+            else:
+                raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Could not auto-migrate live-class columns: {e}")
+        print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
+
+
 @app.on_event("startup")
 async def startup_event():
     await _ensure_plain_password_column()
+    await _ensure_live_class_columns()
 
 
 # Models
@@ -340,9 +384,26 @@ async def zoom_get_token() -> str:
     return token
 
 
+async def zoom_get_zak() -> str:
+    """Fetch the host (S2S app owner) ZAK token.
+    The Web SDK CANNOT start/host a meeting created via S2S OAuth without this token,
+    so the teacher would never become a real host and students stay stuck in the lobby."""
+    import httpx
+    token = await zoom_get_token()
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.zoom.us/v2/users/me/token?type=zak",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Zoom ZAK fetch failed: {resp.text}")
+    return resp.json()["token"]
+
+
 async def zoom_create_meeting(topic: str, start_time: str, duration_mins: int) -> dict:
     """Create a Zoom meeting. start_time is ISO 8601, e.g. '2026-06-01T09:00:00'.
-    Returns {meeting_id, join_url, start_url}."""
+    Returns {meeting_id, join_url, start_url, password}."""
     import httpx
     token = await zoom_get_token()
     payload = {
@@ -352,10 +413,17 @@ async def zoom_create_meeting(topic: str, start_time: str, duration_mins: int) -
         "duration": duration_mins,
         "timezone": "Asia/Kolkata",
         "settings": {
+            # One host (the Zoom-credential owner, hosting from their phone) and
+            # many view-only watchers. Watchers enter muted with no camera.
             "host_video": True,
-            "participant_video": True,
+            "participant_video": False,
+            # Host must start the class first; watchers can only enter once the
+            # webhook has flipped the class to "live". No waiting room because the
+            # owner is on mobile and can't admit people one-by-one.
             "join_before_host": False,
-            "waiting_room": True,
+            "waiting_room": False,
+            "mute_upon_entry": True,
+            "allow_participants_to_rename": False,
             "auto_recording": "none",
             "approval_type": 2,
         },
@@ -370,7 +438,89 @@ async def zoom_create_meeting(topic: str, start_time: str, duration_mins: int) -
     if resp.status_code not in (200, 201):
         raise HTTPException(status_code=502, detail=f"Zoom meeting creation failed: {resp.text}")
     data = resp.json()
-    return {"meeting_id": str(data["id"]), "join_url": data["join_url"], "start_url": data["start_url"]}
+    return {
+        "meeting_id": str(data["id"]),
+        "join_url": data["join_url"],
+        "start_url": data["start_url"],
+        "password": data.get("password", ""),
+    }
+
+
+async def zoom_delete_meeting(meeting_id: str) -> None:
+    """Best-effort delete of a Zoom meeting. Never raises — a missing/already-gone
+    meeting should not block deleting the local record."""
+    import httpx
+    if not meeting_id:
+        return
+    try:
+        token = await zoom_get_token()
+        async with httpx.AsyncClient() as client:
+            await client.delete(
+                f"https://api.zoom.us/v2/meetings/{meeting_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"schedule_for_reminder": "false"},
+                timeout=10.0,
+            )
+    except Exception as e:
+        print(f"[!] Zoom meeting delete failed (ignored): {e}")
+
+
+async def zoom_ensure_joinable(meeting_id: str) -> None:
+    """Best-effort: make sure the meeting has no waiting room, so view-only
+    watchers aren't trapped in a lobby (the host still has to start the class
+    first). Applied to meetings created before this default existed. Never raises."""
+    import httpx
+    if not meeting_id:
+        return
+    try:
+        token = await zoom_get_token()
+        async with httpx.AsyncClient() as client:
+            await client.patch(
+                f"https://api.zoom.us/v2/meetings/{meeting_id}",
+                json={"settings": {
+                    "waiting_room": False,
+                }},
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=10.0,
+            )
+    except Exception as e:
+        print(f"[!] Zoom ensure-joinable failed (ignored): {e}")
+
+
+# Short cache of "is this meeting live?" so the frequently-polled class list
+# doesn't hammer the Zoom API. meeting_id -> (is_live_bool, expires_at).
+_zoom_live_cache: dict = {}
+_ZOOM_LIVE_TTL = 20.0
+
+
+async def zoom_is_meeting_live(meeting_id: str) -> bool:
+    """Ask Zoom directly whether the meeting has been started by the host.
+
+    This is the source of truth for "go live" so we don't depend on the
+    meeting.started webhook reaching us (it can't reach localhost). Zoom's
+    Get-a-Meeting endpoint returns status 'waiting' (not started) or 'started'.
+    Cached briefly. Never raises."""
+    import httpx
+    if not meeting_id:
+        return False
+    hit = _zoom_live_cache.get(meeting_id)
+    if hit and time_module.time() < hit[1]:
+        return hit[0]
+    is_live = False
+    try:
+        token = await zoom_get_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://api.zoom.us/v2/meetings/{meeting_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            )
+        if resp.status_code == 200:
+            is_live = resp.json().get("status") == "started"
+    except Exception as e:
+        print(f"[!] Zoom live-status check failed (treated as not live): {e}")
+    _zoom_live_cache[meeting_id] = (is_live, time_module.time() + _ZOOM_LIVE_TTL)
+    return is_live
 
 
 async def zoom_get_participants(meeting_id: str) -> list:
@@ -418,6 +568,24 @@ def zoom_generate_sdk_signature(meeting_id: str, role: int) -> str:
     return f"{signing_input}.{sig}"
 
 
+# Token validation is on the hot path of EVERY request. Without caching, each request
+# makes a blocking network round-trip to Supabase Auth (supabase.auth.get_user) plus,
+# for students, two more DB queries — which is the dominant source of UI sluggishness.
+# This short-TTL cache makes that work happen at most once per token per _AUTH_TTL window.
+_auth_cache: dict = {}
+_AUTH_TTL = 30.0  # seconds — short enough that role/block/standard changes propagate quickly
+
+
+def _prune_auth_cache():
+    now = time_module.time()
+    expired = [t for t, v in _auth_cache.items() if v["expires_at"] <= now]
+    for t in expired:
+        _auth_cache.pop(t, None)
+    # If still oversized after dropping expired entries, clear the rest (cheap + bounded).
+    if len(_auth_cache) > 500:
+        _auth_cache.clear()
+
+
 def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
@@ -426,6 +594,10 @@ def verify_token(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid authorization format")
 
     token = authorization.replace("Bearer ", "")
+
+    cached = _auth_cache.get(token)
+    if cached and cached["expires_at"] > time_module.time():
+        return cached["result"]
 
     try:
         user_response = supabase.auth.get_user(token)
@@ -484,6 +656,9 @@ def verify_token(authorization: Optional[str] = Header(None)):
             except Exception:
                 pass
 
+        _auth_cache[token] = {"result": result, "expires_at": time_module.time() + _AUTH_TTL}
+        if len(_auth_cache) > 500:
+            _prune_auth_cache()
         return result
     except HTTPException:
         raise
@@ -1701,6 +1876,77 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
     except Exception as e:
         print("Avatar upload error:", e)
         raise HTTPException(status_code=500, detail="Upload failed")
+
+
+@app.get("/api/teacher/thumbnail")
+async def get_teacher_thumbnail(user=Depends(verify_token)):
+    """Return the teacher's universal live-class base thumbnail + blank-side preference."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    try:
+        row = service_supabase.table("teacher_branding") \
+            .select("thumbnail_url, thumbnail_text_side") \
+            .eq("teacher_id", user["teacher_id"]).single().execute()
+        if row.data:
+            return {
+                "thumbnail_url": row.data.get("thumbnail_url"),
+                "thumbnail_text_side": row.data.get("thumbnail_text_side") or "right",
+            }
+    except Exception:
+        pass
+    return {"thumbnail_url": None, "thumbnail_text_side": "right"}
+
+
+@app.post("/api/teacher/thumbnail")
+async def upload_teacher_thumbnail(
+    file: UploadFile = File(None),
+    text_side: str = Form("right"),
+    user=Depends(verify_token),
+):
+    """Upload the teacher's universal base thumbnail image (face + blank space on one side).
+    text_side ('left'|'right') is the blank side where class/subject/topic text is overlaid."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    side = "left" if str(text_side).lower() == "left" else "right"
+    public_url = None
+
+    if file is not None:
+        file_bytes = await file.read()
+        file_ext = os.path.splitext(file.filename or "thumb.jpg")[1] or ".jpg"
+        file_name = f"thumbnails/{user['teacher_id']}{file_ext}"
+        try:
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("thumbnails"))
+            except Exception:
+                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("thumbnails", options={"public": True}))
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.from_("thumbnails").remove([file_name]))
+            except Exception:
+                pass
+            await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("thumbnails").upload(
+                    file_name, file_bytes, {"content-type": file.content_type or "image/jpeg"}
+                )
+            )
+            public_url = await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("thumbnails").get_public_url(file_name)
+            )
+        except Exception as e:
+            print("Thumbnail upload error:", e)
+            raise HTTPException(status_code=500, detail="Upload failed")
+
+    # Upsert branding row. If no new file, keep the existing URL and just update the side.
+    payload = {"teacher_id": user["teacher_id"], "thumbnail_text_side": side}
+    if public_url is not None:
+        payload["thumbnail_url"] = str(public_url)
+    await asyncio.to_thread(
+        lambda: service_supabase.table("teacher_branding").upsert(payload, on_conflict="teacher_id").execute()
+    )
+    return await get_teacher_thumbnail(user)
+
 
 @app.patch("/api/students/{student_id}/block")
 def block_student(student_id: str, blocked: bool, user = Depends(verify_token)):
@@ -4048,15 +4294,70 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
         .order("scheduled_at", desc=True).execute()
     classes = result.data or []
 
+    # Always reflect the teacher's CURRENT universal thumbnail (from settings),
+    # not the value snapshotted onto each class at creation time. This way saving
+    # a new thumbnail in Settings updates every live-class card immediately.
+    try:
+        owner = service_supabase.table("standards") \
+            .select("teacher_id").eq("id", std_id).single().execute()
+        owner_id = owner.data.get("teacher_id") if owner.data else None
+        if owner_id:
+            brand = service_supabase.table("teacher_branding") \
+                .select("thumbnail_url, thumbnail_text_side") \
+                .eq("teacher_id", owner_id).single().execute()
+            if brand.data and brand.data.get("thumbnail_url"):
+                cur_url = brand.data.get("thumbnail_url")
+                cur_side = brand.data.get("thumbnail_text_side") or "right"
+                for lc in classes:
+                    lc["thumbnail_url"] = cur_url
+                    lc["thumbnail_text_side"] = cur_side
+    except Exception:
+        pass  # Fall back to each class's snapshotted thumbnail
+
+    # Auto-detect "go live": for any still-scheduled class, ask Zoom whether the
+    # owner has started the meeting from their phone (the webhook can't reach
+    # localhost, so we poll Zoom — briefly cached). Flip those to "live" so the
+    # cards update on the next refresh without any manual step.
+    scheduled = [lc for lc in classes if lc.get("status") == "scheduled" and lc.get("zoom_meeting_id")]
+    if scheduled:
+        live_flags = await asyncio.gather(
+            *[zoom_is_meeting_live(lc["zoom_meeting_id"]) for lc in scheduled]
+        )
+        now_live_ids = [lc["id"] for lc, is_live in zip(scheduled, live_flags) if is_live]
+        for lc, is_live in zip(scheduled, live_flags):
+            if is_live:
+                lc["status"] = "live"
+        for cid in now_live_ids:
+            await asyncio.to_thread(lambda c=cid: service_supabase.table("live_classes")
+                .update({"status": "live"}).eq("id", c).execute())
+
+    # Fetch all attendance for these classes in ONE query, then aggregate in Python
+    # (avoids an N+1 query-per-class round-trip).
+    att_by_class: dict = {}
+    ids = [lc["id"] for lc in classes]
+    if ids:
+        att_all = service_supabase.table("live_class_attendance") \
+            .select("live_class_id, attended, student_id").in_("live_class_id", ids).execute()
+        for a in (att_all.data or []):
+            att_by_class.setdefault(a["live_class_id"], []).append(a)
+
+    # "Registered" = students enrolled in this standard (a meaningful denominator),
+    # not the number of attendance rows. One count query, reused for every class.
+    enrolled_count = service_supabase.table("students") \
+        .select("id", count="exact").eq("standard_id", std_id).execute().count or 0
+
     for lc in classes:
-        att = service_supabase.table("live_class_attendance") \
-            .select("attended, student_id").eq("live_class_id", lc["id"]).execute()
-        att_data = att.data or []
+        att_data = att_by_class.get(lc["id"], [])
         lc["attended_count"] = sum(1 for a in att_data if a["attended"])
-        lc["total_registered"] = len(att_data)
+        lc["total_registered"] = enrolled_count
+        # Never expose Zoom credentials in the class list — for ANY role. The
+        # owner hosts from their phone; everyone else is a view-only watcher and
+        # only receives SDK join data (at watch time) via the join-token endpoint.
+        lc.pop("zoom_join_url", None)
+        lc.pop("zoom_start_url", None)
+        lc.pop("zoom_meeting_id", None)
+        lc.pop("zoom_passcode", None)
         if user["role"] == "student":
-            lc.pop("zoom_join_url", None)
-            lc.pop("zoom_start_url", None)
             # Attach this student's own attendance
             my_att = next((a for a in att_data if a.get("student_id") == user["user_id"]), None)
             lc["my_attended"] = my_att["attended"] if my_att else None
@@ -4069,15 +4370,15 @@ async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
-    class_result = service_supabase.table("subject_classes") \
-        .select("id, standard_id").eq("id", data.class_id).single().execute()
+    class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
+        .select("id, standard_id").eq("id", data.class_id).single().execute())
     if not class_result.data:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    std_check = service_supabase.table("standards") \
+    std_check = await asyncio.to_thread(lambda: service_supabase.table("standards") \
         .select("id") \
         .eq("id", class_result.data["standard_id"]) \
-        .eq("teacher_id", user["teacher_id"]).single().execute()
+        .eq("teacher_id", user["teacher_id"]).single().execute())
     if not std_check.data:
         raise HTTPException(status_code=403, detail="Not your class")
 
@@ -4087,18 +4388,38 @@ async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
         duration_mins=data.duration_mins,
     )
 
+    db_scheduled_at = data.scheduled_at
+    if len(db_scheduled_at) == 19 and "+" not in db_scheduled_at and "Z" not in db_scheduled_at:
+        db_scheduled_at += "+05:30"
+
+    # Snapshot the teacher's universal auto-thumbnail onto this class so it stays
+    # fixed even if the teacher later changes their base image.
+    thumb_url, thumb_side = None, "right"
+    try:
+        brand = await asyncio.to_thread(lambda: service_supabase.table("teacher_branding") \
+            .select("thumbnail_url, thumbnail_text_side") \
+            .eq("teacher_id", user["teacher_id"]).single().execute())
+        if brand.data:
+            thumb_url = brand.data.get("thumbnail_url")
+            thumb_side = brand.data.get("thumbnail_text_side") or "right"
+    except Exception:
+        pass
+
     insert = {
         "class_id": data.class_id,
         "title": data.title,
-        "scheduled_at": data.scheduled_at,
+        "scheduled_at": db_scheduled_at,
         "duration_mins": data.duration_mins,
         "zoom_meeting_id": zoom_data["meeting_id"],
         "zoom_join_url": zoom_data["join_url"],
         "zoom_start_url": zoom_data["start_url"],
+        "zoom_passcode": zoom_data.get("password", ""),
+        "thumbnail_url": thumb_url,
+        "thumbnail_text_side": thumb_side,
         "status": "scheduled",
         "created_by": user["user_id"],
     }
-    result = service_supabase.table("live_classes").insert(insert).execute()
+    result = await asyncio.to_thread(lambda: service_supabase.table("live_classes").insert(insert).execute())
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create live class")
     return result.data[0]
@@ -4106,8 +4427,8 @@ async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
 
 @app.get("/api/live-classes/{live_class_id}/join-token")
 async def get_join_token(live_class_id: str, user=Depends(verify_token)):
-    lc_result = service_supabase.table("live_classes") \
-        .select("*").eq("id", live_class_id).single().execute()
+    lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
+        .select("*").eq("id", live_class_id).single().execute())
     if not lc_result.data:
         raise HTTPException(status_code=404, detail="Live class not found")
     lc = lc_result.data
@@ -4117,32 +4438,58 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
     if lc["status"] == "ended":
         raise HTTPException(status_code=400, detail="This class has already ended")
 
-    class_result = service_supabase.table("subject_classes") \
-        .select("standard_id").eq("id", lc["class_id"]).single().execute()
+    if not lc.get("zoom_meeting_id"):
+        raise HTTPException(status_code=400, detail="Zoom meeting not created yet")
+
+    # The owner is the only host and starts the class from their Zoom phone app.
+    # Source of truth is Zoom itself (the webhook can't reach localhost): only let
+    # watchers in once Zoom reports the meeting has actually started.
+    if lc["status"] != "live":
+        if await zoom_is_meeting_live(lc["zoom_meeting_id"]):
+            await asyncio.to_thread(lambda: service_supabase.table("live_classes")
+                .update({"status": "live"}).eq("id", live_class_id).execute())
+        else:
+            raise HTTPException(status_code=400, detail="Class has not started yet")
+
+    class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", lc["class_id"]).single().execute())
     required_std = class_result.data["standard_id"] if class_result.data else None
 
+    # Everyone here is a VIEW-ONLY watcher (role 0). Hosting happens only from the
+    # owner's phone app, so we never issue a ZAK or a host-role signature.
     if user["role"] == "teacher":
-        std_check = service_supabase.table("standards") \
-            .select("id").eq("id", required_std).eq("teacher_id", user["teacher_id"]).single().execute()
+        std_check = await asyncio.to_thread(lambda: service_supabase.table("standards") \
+            .select("id").eq("id", required_std).eq("teacher_id", user["teacher_id"]).single().execute())
         if not std_check.data:
             raise HTTPException(status_code=403, detail="Not your class")
-        role_num = 1
         display_name = user.get("name", "Teacher")
-        # Transition to live when teacher joins
-        if lc["status"] == "scheduled":
-            service_supabase.table("live_classes").update({"status": "live"}).eq("id", live_class_id).execute()
     else:
         if user.get("standard_id") != required_std:
             raise HTTPException(status_code=403, detail="Not enrolled in this class")
-        student = service_supabase.table("students") \
-            .select("blocked, name").eq("id", user["user_id"]).single().execute()
+        student = await asyncio.to_thread(lambda: service_supabase.table("students") \
+            .select("blocked, name").eq("id", user["user_id"]).single().execute())
         if not student.data or student.data.get("blocked"):
             raise HTTPException(status_code=403, detail="Account blocked")
-        role_num = 0
         display_name = student.data.get("name", user.get("name", "Student"))
 
-    if not lc.get("zoom_meeting_id"):
-        raise HTTPException(status_code=400, detail="Zoom meeting not created yet")
+        # Deterministic attendance: the authenticated student is joining now. This is
+        # the source of truth (independent of Zoom's report API / name matching).
+        # Best-effort so a write hiccup never blocks the student from joining.
+        try:
+            await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance").upsert({
+                "live_class_id": live_class_id,
+                "student_id":    user["user_id"],
+                "attended":      True,
+                "joined_at":     datetime.now(timezone.utc).isoformat(),
+            }, on_conflict="live_class_id,student_id").execute())
+        except Exception as e:
+            print(f"[!] join attendance record failed (ignored): {e}")
+
+    role_num = 0  # view-only for all portal watchers
+
+    # Ensure the meeting has no waiting room so watchers aren't trapped in a lobby
+    # (covers meetings created before this became the default).
+    await zoom_ensure_joinable(lc["zoom_meeting_id"])
 
     signature = zoom_generate_sdk_signature(lc["zoom_meeting_id"], role_num)
     return {
@@ -4151,6 +4498,7 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
         "sdk_key": ZOOM_SDK_KEY,
         "role": role_num,
         "display_name": display_name,
+        "passcode": lc.get("zoom_passcode", "") or "",
     }
 
 
@@ -4159,62 +4507,79 @@ async def end_live_class(live_class_id: str, user=Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
-    lc_result = service_supabase.table("live_classes") \
-        .select("*").eq("id", live_class_id).single().execute()
+    lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
+        .select("*").eq("id", live_class_id).single().execute())
     if not lc_result.data:
         raise HTTPException(status_code=404, detail="Not found")
     lc = lc_result.data
 
-    service_supabase.table("live_classes") \
-        .update({"status": "ended"}).eq("id", live_class_id).execute()
+    await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
+        .update({"status": "ended"}).eq("id", live_class_id).execute())
 
     participants = await zoom_get_participants(lc.get("zoom_meeting_id", ""))
 
-    class_result = service_supabase.table("subject_classes") \
-        .select("standard_id").eq("id", lc["class_id"]).single().execute()
+    class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", lc["class_id"]).single().execute())
     if not class_result.data:
         return {"message": "ended", "attended": 0, "absent": 0}
 
-    students_result = service_supabase.table("students") \
+    students_result = await asyncio.to_thread(lambda: service_supabase.table("students") \
         .select("id, name, email") \
-        .eq("standard_id", class_result.data["standard_id"]).execute()
+        .eq("standard_id", class_result.data["standard_id"]).execute())
     all_students = students_result.data or []
+
+    # Join-time attendance is the source of truth — load it so we never downgrade a
+    # student who actually joined to "absent" just because Zoom's report is empty/late.
+    existing = await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance") \
+        .select("student_id, attended, joined_at").eq("live_class_id", live_class_id).execute())
+    already = {r["student_id"]: r for r in (existing.data or [])}
 
     p_by_email = {(p.get("user_email") or "").lower(): p for p in participants}
     p_by_name  = {(p.get("user_name")  or "").lower(): p for p in participants}
 
     attended_count = 0
     absent_count   = 0
+    rows = []
 
     for student in all_students:
         em  = (student.get("email") or "").lower()
         nm  = (student.get("name")  or "").lower()
         match = p_by_email.get(em) or p_by_name.get(nm)
+        prior = already.get(student["id"])
+        was_present = bool(prior and prior.get("attended"))
 
-        if match:
+        if match or was_present:
             attended_count += 1
-            dur_secs = match.get("duration", 0)
-            service_supabase.table("live_class_attendance").upsert({
+            row = {
                 "live_class_id": live_class_id,
                 "student_id":    student["id"],
                 "attended":      True,
-                "joined_at":     match.get("join_time"),
-                "left_at":       match.get("leave_time"),
-                "duration_mins": dur_secs // 60 if dur_secs else None,
-            }, on_conflict="live_class_id,student_id").execute()
+                # Prefer the recorded join time; fall back to Zoom's.
+                "joined_at":     (prior or {}).get("joined_at") or (match or {}).get("join_time"),
+            }
+            if match:  # enrich with Zoom-reported duration when available
+                dur_secs = match.get("duration", 0)
+                row["left_at"] = match.get("leave_time")
+                row["duration_mins"] = dur_secs // 60 if dur_secs else None
+            rows.append(row)
         else:
             absent_count += 1
-            service_supabase.table("live_class_attendance").upsert({
+            rows.append({
                 "live_class_id": live_class_id,
                 "student_id":    student["id"],
                 "attended":      False,
-            }, on_conflict="live_class_id,student_id").execute()
+            })
+
+    # Single batched upsert instead of one query per student (was a 50+ query N+1).
+    if rows:
+        await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance") \
+            .upsert(rows, on_conflict="live_class_id,student_id").execute())
 
     return {"message": "Class ended", "attended": attended_count, "absent": absent_count, "total": len(all_students)}
 
 
 @app.post("/api/live-classes/{live_class_id}/cancel")
-async def cancel_live_class(live_class_id: str, user=Depends(verify_token)):
+def cancel_live_class(live_class_id: str, user=Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     # Verify ownership via standard chain (supports sub-teachers)
@@ -4230,14 +4595,75 @@ async def cancel_live_class(live_class_id: str, user=Depends(verify_token)):
     return {"message": "cancelled"}
 
 
-@app.get("/api/live-classes/{live_class_id}/attendance")
-async def get_live_class_attendance(live_class_id: str, user=Depends(verify_token)):
+@app.delete("/api/live-classes/{live_class_id}")
+async def delete_live_class(live_class_id: str, user=Depends(verify_token)):
+    """Permanently delete a live class (and its attendance records + the Zoom meeting)."""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
-    result = service_supabase.table("live_class_attendance") \
-        .select("*, students(id, name, username, avatar_url)") \
-        .eq("live_class_id", live_class_id).execute()
-    return result.data or []
+
+    lc = await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
+        .select("class_id, status, zoom_meeting_id").eq("id", live_class_id).single().execute())
+    if not lc.data:
+        raise HTTPException(status_code=404, detail="Live class not found")
+
+    # Verify ownership via standard chain (supports sub-teachers)
+    _sc = await asyncio.to_thread(lambda: service_supabase.table("subject_classes").select("standard_id").eq("id", lc.data["class_id"]).single().execute())
+    _st = await asyncio.to_thread(lambda: service_supabase.table("standards").select("teacher_id").eq("id", (_sc.data or {}).get("standard_id", "")).single().execute()) if _sc.data else None
+    if not _st or not _st.data or _st.data["teacher_id"] != user["teacher_id"]:
+        raise HTTPException(status_code=403, detail="Not your class")
+
+    if lc.data.get("status") == "live":
+        raise HTTPException(status_code=400, detail="End the class before deleting it.")
+
+    # Best-effort: remove the Zoom meeting too (ignored if already gone)
+    await zoom_delete_meeting(lc.data.get("zoom_meeting_id"))
+
+    # Remove attendance rows first (FK), then the class itself
+    await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance").delete().eq("live_class_id", live_class_id).execute())
+    await asyncio.to_thread(lambda: service_supabase.table("live_classes").delete().eq("id", live_class_id).execute())
+    return {"message": "deleted"}
+
+
+@app.get("/api/live-classes/{live_class_id}/attendance")
+def get_live_class_attendance(live_class_id: str, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    # Resolve the class → standard so we can show the FULL enrolled roster, not just
+    # whoever happens to have an attendance row. Attendance is recorded at join time,
+    # so this is accurate whether or not "End class" was ever pressed.
+    lc = service_supabase.table("live_classes").select("class_id").eq("id", live_class_id).single().execute()
+    if not lc.data:
+        raise HTTPException(status_code=404, detail="Live class not found")
+    sc = service_supabase.table("subject_classes").select("standard_id").eq("id", lc.data["class_id"]).single().execute()
+    std_id = sc.data["standard_id"] if sc.data else None
+
+    students = service_supabase.table("students") \
+        .select("id, name, username, avatar_url") \
+        .eq("standard_id", std_id).execute().data or []
+
+    att_rows = service_supabase.table("live_class_attendance") \
+        .select("student_id, attended, joined_at, left_at, duration_mins") \
+        .eq("live_class_id", live_class_id).execute().data or []
+    att_by_student = {a["student_id"]: a for a in att_rows}
+
+    roster = []
+    for s in students:
+        a = att_by_student.get(s["id"])
+        roster.append({
+            "student_id":    s["id"],
+            "attended":      bool(a and a.get("attended")),
+            "joined_at":     a.get("joined_at") if a else None,
+            "left_at":       a.get("left_at") if a else None,
+            "duration_mins": a.get("duration_mins") if a else None,
+            "students": {
+                "id": s["id"], "name": s.get("name"),
+                "username": s.get("username"), "avatar_url": s.get("avatar_url"),
+            },
+        })
+    # Attended first, then by name
+    roster.sort(key=lambda r: (not r["attended"], (r["students"]["name"] or "").lower()))
+    return roster
 
 
 @app.post("/api/zoom/webhook")
@@ -4911,6 +5337,66 @@ class InsightsRequest(BaseModel):
     student_id: str
     stats: dict  # Passed from the frontend (attendance, test avg, etc.)
 
+# Gemini generation tuning. thinkingBudget=0 disables gemini-2.5-flash's
+# default "thinking" pass — the single biggest latency win for short coaching
+# replies. maxOutputTokens caps a 150-300 word answer so generation can't run long.
+GEMINI_GEN_CONFIG = {
+    "temperature": 0.7,
+    "maxOutputTokens": 512,
+    "thinkingConfig": {"thinkingBudget": 0},
+}
+
+
+def build_insights_prompt(stats: dict, viewer_role: str) -> str:
+    """Build the LLM prompt from the (enriched) stats payload sent by the frontend."""
+    if viewer_role == "teacher":
+        role_context = (
+            "Write as if reporting to the teacher about the student. Use third-person "
+            '("Aisha is improving in Physics"), never address the student directly.'
+        )
+        greeting_rule = "Open with a one-line objective summary of the student's progress."
+    else:
+        role_context = "Write as if you are talking directly to the student."
+        greeting_rule = "Open with a warm greeting using the student's name."
+
+    return f"""You are an expert learning mentor and student-success coach. Diagnose the student's learning behaviour and give specific, encouraging, actionable guidance — do NOT just restate statistics.
+
+{role_context}
+
+RULES:
+* {greeting_rule}
+* Praise real strengths before naming weaknesses.
+* Explain the likely root cause behind any weak area, then give concrete actions the student can do THIS week.
+* Be specific: name the actual subjects, topics, videos and tests from the data. No generic "study harder".
+* Reference the recent test trend and weak topics directly.
+* End with one short line of encouragement. Never say you are an AI.
+
+SECTIONS (use these exact markdown headings):
+Focus of the Week
+What's Going Well
+What I Noticed
+Recommended Actions
+Next Level Goal
+AI Mentor Message
+
+STUDENT DATA:
+Name: {stats.get("student_name", "Student")}
+Standard: {stats.get("standard_name", "N/A")}
+Attendance: {stats.get("attendance_data", "N/A")}
+Video Progress: {stats.get("video_progress_data", "N/A")}
+Assignment Performance: {stats.get("assignment_data", "N/A")}
+Test Performance: {stats.get("test_data", "N/A")}
+Per-subject breakdown: {stats.get("subject_breakdown", "N/A")}
+Recent test trend: {stats.get("recent_tests", "N/A")}
+Weak topics (topic — score — video watched?): {stats.get("weak_topics_detail", stats.get("topic_data", "N/A"))}
+
+OUTPUT REQUIREMENTS:
+* Markdown, 150-300 words total.
+* Lead with actionable next steps, not a recap of the past.
+* Only cite a percentage when it makes a point clearer.
+"""
+
+
 @app.post("/api/insights/generate")
 async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
     # Read API key
@@ -4921,91 +5407,15 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
 
-    viewer_role = user.get("role", "student")
-    
-    if viewer_role == "teacher":
-        role_context = """
-Write as if you are reporting directly to the teacher about the student.
-Use third-person perspective when discussing the student (e.g. "Student John is doing well" instead of "Hi John, you are doing well").
-Do NOT address the student directly. Address the teacher or provide an objective analysis.
-"""
-        greeting_rule = "* Start with a brief, objective summary about the student's progress."
-    else:
-        role_context = """
-Write as if you are talking directly to the student.
-"""
-        greeting_rule = "* Start with a warm greeting using the student's name."
-
-    prompt = f"""
-You are an expert educational mentor and student success coach.
-
-Your job is NOT to describe statistics.
-
-Your job is to analyze the student's learning behavior, identify root causes of performance issues, and provide personalized, encouraging, and actionable guidance.
-
-{role_context}
-
-IMPORTANT RULES:
-{greeting_rule}
-* Never sound like a dashboard, analyst, or report generator.
-* Never simply repeat percentages or metrics unless necessary.
-* Focus on WHY something is happening.
-* Identify the student's biggest opportunity for improvement.
-* Give practical actions the student can perform this week.
-* Keep the tone positive, motivating, and supportive.
-* Praise strengths before discussing weaknesses.
-* Be specific when mentioning subjects, topics, videos, assignments, attendance, or tests.
-* If a topic is weak, explain exactly what the student should do.
-* If the student is performing well, challenge them with the next goal.
-* Avoid generic advice such as "study harder" or "focus more."
-* Explain the likely root cause behind low performance.
-* End with encouragement.
-
-Generate the response using the following sections:
-
-Focus of the Week
-* ONE high-impact action that will improve performance the most.
-
-What's Going Well
-* Mention strengths and positive habits.
-
-What I Noticed
-* Explain patterns and root causes in simple language.
-
-Recommended Actions
-* Give 3-5 concrete actions the student can take.
-
-Next Level Goal
-* Suggest a realistic improvement target.
-
-AI Mentor Message
-* A natural, conversational paragraph written directly to the student.
-
-Student Data:
-Name: {req.stats.get("student_name", "Student")}
-Attendance: {req.stats.get("attendance_data", "N/A")}
-Video Progress: {req.stats.get("video_progress_data", "N/A")}
-Assignment Performance: {req.stats.get("assignment_data", "N/A")}
-Test Performance: {req.stats.get("test_data", "N/A")}
-Topic Performance: {req.stats.get("topic_data", "N/A")}
-Recent Activity: {req.stats.get("recent_activity_data", "N/A")}
-
-OUTPUT REQUIREMENTS:
-* Use markdown.
-* Keep total response between 150 and 300 words.
-* Make it feel like a real mentor personally reviewed the student's progress.
-* Do not mention that you are an AI.
-* Do not list raw percentages unless they help explain a point.
-* Prioritize actionable guidance over observations.
-* Focus on the student's next step, not just their past performance.
-"""
+    prompt = build_insights_prompt(req.stats, user.get("role", "student"))
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             if provider == "gemini":
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
                 payload = {
-                    "contents": [{"parts": [{"text": prompt}]}]
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": GEMINI_GEN_CONFIG,
                 }
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 404:
@@ -5036,6 +5446,114 @@ OUTPUT REQUIREMENTS:
     except Exception as e:
         print(f"[!] AI Generation Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/insights/generate/stream")
+async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends(get_current_user)):
+    """Stream coaching insights token-by-token via Server-Sent Events.
+
+    Emits `data: {"text": "<delta>"}` events as the model generates, and a final
+    `data: {"error": "..."}` event if the upstream call fails mid-stream.
+    """
+    settings = get_teacher_settings()
+    provider = settings.get("ai_provider", "gemini")
+    api_key = settings.get("ai_api_key")
+
+    if not api_key:
+        raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
+
+    prompt = build_insights_prompt(req.stats, user.get("role", "student"))
+
+    def sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
+
+    async def gemini_stream():
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": GEMINI_GEN_CONFIG,
+        }
+        models = ["gemini-2.5-flash", "gemini-flash-latest"]
+        async with httpx.AsyncClient(timeout=60) as client:
+            for idx, model in enumerate(models):
+                url = (
+                    f"https://generativelanguage.googleapis.com/v1beta/models/"
+                    f"{model}:streamGenerateContent?alt=sse&key={api_key}"
+                )
+                try:
+                    async with client.stream("POST", url, json=payload) as resp:
+                        # 404 on the first model → retry with the fallback model name
+                        if resp.status_code == 404 and idx == 0:
+                            continue
+                        if resp.status_code >= 400:
+                            body = (await resp.aread()).decode("utf-8", "ignore")
+                            yield sse({"error": f"Gemini API error: {body[:400]}"})
+                            return
+                        async for line in resp.aiter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            chunk = line[5:].strip()
+                            if not chunk or chunk == "[DONE]":
+                                continue
+                            try:
+                                obj = json.loads(chunk)
+                                parts = obj["candidates"][0]["content"]["parts"]
+                                delta = "".join(p.get("text", "") for p in parts)
+                                if delta:
+                                    yield sse({"text": delta})
+                            except (KeyError, IndexError, json.JSONDecodeError):
+                                continue
+                        yield sse({"done": True})
+                        return
+                except httpx.HTTPError as e:
+                    yield sse({"error": f"Connection error: {e}"})
+                    return
+
+    async def openai_stream():
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        }
+        async with httpx.AsyncClient(timeout=60) as client:
+            try:
+                async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                    if resp.status_code >= 400:
+                        body = (await resp.aread()).decode("utf-8", "ignore")
+                        yield sse({"error": f"OpenAI API error: {body[:400]}"})
+                        return
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        chunk = line[5:].strip()
+                        if not chunk or chunk == "[DONE]":
+                            continue
+                        try:
+                            obj = json.loads(chunk)
+                            delta = obj["choices"][0]["delta"].get("content")
+                            if delta:
+                                yield sse({"text": delta})
+                        except (KeyError, IndexError, json.JSONDecodeError):
+                            continue
+                    yield sse({"done": True})
+            except httpx.HTTPError as e:
+                yield sse({"error": f"Connection error: {e}"})
+
+    async def event_generator():
+        try:
+            gen = openai_stream() if provider == "openai" else gemini_stream()
+            async for evt in gen:
+                yield evt
+        except Exception as e:  # noqa: BLE001 — surface to client instead of hanging
+            print(f"[!] AI Stream Error: {e}")
+            yield sse({"error": str(e)})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 if __name__ == "__main__":

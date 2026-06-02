@@ -4,42 +4,64 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import LoginPage from './pages/LoginPage';
 import { useAuthStore, ROLES } from './lib/auth';
 import { useAppCache } from './store';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
 
-const TodayPage               = lazy(() => import('./pages/teacher/TodayPage'));
-const SubjectsPage            = lazy(() => import('./pages/teacher/SubjectsPage'));
-const StandardDetailPage      = lazy(() => import('./pages/teacher/StandardDetailPage'));
-const SubjectDetailPage       = lazy(() => import('./pages/teacher/SubjectDetailPage'));
-const StudentsPage            = lazy(() => import('./pages/teacher/StudentsPage'));
-const StudentDetailPage       = lazy(() => import('./pages/teacher/StudentDetailPage'));
-const BroadcastsPage          = lazy(() => import('./pages/teacher/BroadcastsPage'));
-const MorePage                = lazy(() => import('./pages/teacher/MorePage'));
-const QuestionBankPage        = lazy(() => import('./pages/teacher/QuestionBankPage'));
-const TeacherProfilePage      = lazy(() => import('./pages/teacher/TeacherProfilePage'));
-const TestsPage               = lazy(() => import('./pages/teacher/TestsPage'));
-const ReportsPage             = lazy(() => import('./pages/teacher/ReportsPage'));
-const RemindersPage           = lazy(() => import('./pages/teacher/RemindersPage'));
-const SettingsPage            = lazy(() => import('./pages/teacher/SettingsPage'));
-const AttendancePage          = lazy(() => import('./pages/teacher/AttendancePage'));
-const TeacherLiveClassesPage  = lazy(() => import('./pages/teacher/TeacherLiveClassesPage'));
-const StudentLiveClassesPage  = lazy(() => import('./pages/student/StudentLiveClassesPage'));
+// Wrap React.lazy so a failed dynamic import (usually a stale chunk after a new
+// deploy/rebuild) triggers ONE automatic reload to fetch fresh assets instead of
+// crashing the whole app. The reload flag is shared with ErrorBoundary.
+const RELOAD_FLAG = 'cl_reloaded';
+function lazyWithRetry(factory) {
+  return lazy(async () => {
+    try {
+      const mod = await factory();
+      try { sessionStorage.removeItem(RELOAD_FLAG); } catch { /* ignore */ }
+      return mod;
+    } catch (err) {
+      if (!sessionStorage.getItem(RELOAD_FLAG)) {
+        try { sessionStorage.setItem(RELOAD_FLAG, '1'); } catch { /* ignore */ }
+        window.location.reload();
+        return new Promise(() => {}); // hold render until the reload happens
+      }
+      throw err; // already retried once — let ErrorBoundary show the fallback
+    }
+  });
+}
 
-const StudentHomePage            = lazy(() => import('./pages/student/StudentHomePage'));
-const StudentSubjectsPage        = lazy(() => import('./pages/student/StudentSubjectsPage'));
-const StudentSubjectViewPage     = lazy(() => import('./pages/student/StudentSubjectViewPage'));
-const StudentVideoPlayerPage     = lazy(() => import('./pages/student/StudentVideoPlayerPage'));
-const StudentTestsPage           = lazy(() => import('./pages/student/StudentTestsPage'));
-const StudentTestTakingPage      = lazy(() => import('./pages/student/StudentTestTakingPage'));
-const StudentTestResultPage      = lazy(() => import('./pages/student/StudentTestResultPage'));
-const StudentTestReviewPage      = lazy(() => import('./pages/student/StudentTestReviewPage'));
-const StudentBroadcastsPage      = lazy(() => import('./pages/student/StudentBroadcastsPage'));
-const StudentProfilePage         = lazy(() => import('./pages/student/StudentProfilePage'));
-const StudentChangePasswordPage  = lazy(() => import('./pages/student/StudentChangePasswordPage'));
-const StudentLeaderboardPage     = lazy(() => import('./pages/student/StudentLeaderboardPage'));
-const StudentMorePage            = lazy(() => import('./pages/student/StudentMorePage'));
-const StudentReportPage          = lazy(() => import('./pages/student/StudentReportPage'));
+const TodayPage               = lazyWithRetry(() => import('./pages/teacher/TodayPage'));
+const SubjectsPage            = lazyWithRetry(() => import('./pages/teacher/SubjectsPage'));
+const StandardDetailPage      = lazyWithRetry(() => import('./pages/teacher/StandardDetailPage'));
+const SubjectDetailPage       = lazyWithRetry(() => import('./pages/teacher/SubjectDetailPage'));
+const StudentsPage            = lazyWithRetry(() => import('./pages/teacher/StudentsPage'));
+const StudentDetailPage       = lazyWithRetry(() => import('./pages/teacher/StudentDetailPage'));
+const BroadcastsPage          = lazyWithRetry(() => import('./pages/teacher/BroadcastsPage'));
+const MorePage                = lazyWithRetry(() => import('./pages/teacher/MorePage'));
+const QuestionBankPage        = lazyWithRetry(() => import('./pages/teacher/QuestionBankPage'));
+const TeacherProfilePage      = lazyWithRetry(() => import('./pages/teacher/TeacherProfilePage'));
+const TestsPage               = lazyWithRetry(() => import('./pages/teacher/TestsPage'));
+const ReportsPage             = lazyWithRetry(() => import('./pages/teacher/ReportsPage'));
+const RemindersPage           = lazyWithRetry(() => import('./pages/teacher/RemindersPage'));
+const SettingsPage            = lazyWithRetry(() => import('./pages/teacher/SettingsPage'));
+const AttendancePage          = lazyWithRetry(() => import('./pages/teacher/AttendancePage'));
+const TeacherLiveClassesPage  = lazyWithRetry(() => import('./pages/teacher/TeacherLiveClassesPage'));
+const StudentLiveClassesPage  = lazyWithRetry(() => import('./pages/student/StudentLiveClassesPage'));
+
+const StudentHomePage            = lazyWithRetry(() => import('./pages/student/StudentHomePage'));
+const StudentSubjectsPage        = lazyWithRetry(() => import('./pages/student/StudentSubjectsPage'));
+const StudentSubjectViewPage     = lazyWithRetry(() => import('./pages/student/StudentSubjectViewPage'));
+const StudentVideoPlayerPage     = lazyWithRetry(() => import('./pages/student/StudentVideoPlayerPage'));
+const StudentTestsPage           = lazyWithRetry(() => import('./pages/student/StudentTestsPage'));
+const StudentTestTakingPage      = lazyWithRetry(() => import('./pages/student/StudentTestTakingPage'));
+const StudentTestResultPage      = lazyWithRetry(() => import('./pages/student/StudentTestResultPage'));
+const StudentTestReviewPage      = lazyWithRetry(() => import('./pages/student/StudentTestReviewPage'));
+const StudentBroadcastsPage      = lazyWithRetry(() => import('./pages/student/StudentBroadcastsPage'));
+const StudentProfilePage         = lazyWithRetry(() => import('./pages/student/StudentProfilePage'));
+const StudentChangePasswordPage  = lazyWithRetry(() => import('./pages/student/StudentChangePasswordPage'));
+const StudentLeaderboardPage     = lazyWithRetry(() => import('./pages/student/StudentLeaderboardPage'));
+const StudentMorePage            = lazyWithRetry(() => import('./pages/student/StudentMorePage'));
+const StudentReportPage          = lazyWithRetry(() => import('./pages/student/StudentReportPage'));
 
 function PageLoading() {
   return (
@@ -134,10 +156,18 @@ function ProtectedStudentRoute({ children }) {
   return children;
 }
 
+// Resets the error boundary whenever the route changes, so a one-off page error
+// doesn't trap the user on the fallback screen after they navigate away.
+function RoutedBoundary({ children }) {
+  const location = useLocation();
+  return <ErrorBoundary routeKey={location.pathname}>{children}</ErrorBoundary>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthHandler />
+      <RoutedBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
@@ -189,6 +219,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </RoutedBoundary>
     </BrowserRouter>
   );
 }

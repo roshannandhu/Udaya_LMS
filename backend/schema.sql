@@ -409,15 +409,31 @@ CREATE TABLE IF NOT EXISTS live_classes (
   zoom_meeting_id TEXT,
   zoom_join_url   TEXT,
   zoom_start_url  TEXT,
+  zoom_passcode   TEXT,
+  thumbnail_url       TEXT,                    -- snapshot of teacher's auto-thumbnail base image
+  thumbnail_text_side TEXT DEFAULT 'right',    -- blank side ('left'|'right') where text overlays
   status          TEXT NOT NULL DEFAULT 'scheduled'
                   CHECK (status IN ('scheduled', 'live', 'ended', 'cancelled')),
   created_by      UUID REFERENCES auth.users(id),
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
+-- Idempotent upgrades for existing databases
+ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS zoom_passcode TEXT;
+ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS thumbnail_text_side TEXT DEFAULT 'right';
+
 CREATE INDEX IF NOT EXISTS idx_live_classes_class_id   ON live_classes(class_id);
 CREATE INDEX IF NOT EXISTS idx_live_classes_status     ON live_classes(status);
 CREATE INDEX IF NOT EXISTS idx_live_classes_scheduled  ON live_classes(scheduled_at);
+
+-- ── teacher_branding: one universal auto-thumbnail base image per teacher ─────
+CREATE TABLE IF NOT EXISTS teacher_branding (
+  teacher_id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  thumbnail_url       TEXT,
+  thumbnail_text_side TEXT DEFAULT 'right',
+  updated_at          TIMESTAMPTZ DEFAULT now()
+);
 
 -- ── Migration 3: Create live_class_attendance table ───────────────────────────
 
@@ -439,12 +455,15 @@ CREATE INDEX IF NOT EXISTS idx_lca_student    ON live_class_attendance(student_i
 
 ALTER TABLE live_classes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_class_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teacher_branding ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "deny_all_live_classes" ON live_classes;
 DROP POLICY IF EXISTS "deny_all_lca" ON live_class_attendance;
+DROP POLICY IF EXISTS "deny_all_teacher_branding" ON teacher_branding;
 
 CREATE POLICY "deny_all_live_classes" ON live_classes FOR ALL USING (false);
 CREATE POLICY "deny_all_lca" ON live_class_attendance FOR ALL USING (false);
+CREATE POLICY "deny_all_teacher_branding" ON teacher_branding FOR ALL USING (false);
 
 -- ── Verification queries (run to confirm migrations applied) ──────────────────
 

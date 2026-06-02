@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Video, Calendar, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { Btn, Tag } from '../../components/ui';
+import { Btn } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi, apiClient } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView from '../../components/ZoomMeetingView';
+import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -16,15 +17,6 @@ function fmtDateTime(iso) {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} at ${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-}
-
-function fmtCountdown(ms) {
-  if (ms <= 0) return '';
-  const totalMin = Math.floor(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h > 0) return `Starts in ${h}h ${m}m`;
-  return `Starts in ${m}m`;
 }
 
 export default function StudentLiveClassesPage() {
@@ -65,12 +57,13 @@ export default function StudentLiveClassesPage() {
     fetchAll();
   }, [standardId]);
 
-  // Refresh list + clock every 30s so students see "Live" status when teacher starts
+  // Refresh list + clock every 60s so students see "Live" status when teacher starts.
+  // Skip the network fetch while the tab is hidden to avoid background fan-out calls.
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
-      fetchAll();
-    }, 30000);
+      if (!document.hidden) fetchAll();
+    }, 60000);
     return () => clearInterval(id);
   }, [standardId]);
 
@@ -91,6 +84,8 @@ export default function StudentLiveClassesPage() {
         sdk_key={activeJoin.sdk_key}
         role={activeJoin.role ?? 0}
         display_name={user?.name || 'Student'}
+        passcode={activeJoin.passcode}
+        zak={activeJoin.zak}
         onLeave={() => { setActiveJoin(null); fetchAll(); }}
       />
     );
@@ -112,38 +107,42 @@ export default function StudentLiveClassesPage() {
             <p className="text-sm text-neutral-500">Live classes from your teachers will appear here.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {liveClasses.map(lc => {
               const isLive = lc.status === 'live';
               const isScheduled = lc.status === 'scheduled';
               const isEnded = lc.status === 'ended';
-              const msUntilStart = new Date(lc.scheduled_at) - now;
-              const within5min = msUntilStart > 0 && msUntilStart <= 300000;
 
               return (
-                <div key={lc.id} className="p-4 rounded-xl glass-panel border-white/60 shadow-sm space-y-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-neutral-900 truncate mb-0.5">{lc.title}</h3>
-                    {lc.subject && (
-                      <p className="text-xs text-neutral-500 mb-2">{lc.subject.name}</p>
-                    )}
+                <div key={lc.id} className="rounded-xl glass-panel border-white/60 shadow-sm overflow-hidden flex flex-col">
+                  <LiveClassThumbnail
+                    thumbnailUrl={lc.thumbnail_url}
+                    textSide={lc.thumbnail_text_side}
+                    subjectName={lc.subject?.name}
+                    standardName={user?.standard_name}
+                    topic={lc.title}
+                    status={lc.status}
+                    scheduledAt={lc.scheduled_at}
+                  />
 
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+                  <div className="p-3 flex flex-col gap-2 flex-1">
+                    <h3 className="text-sm font-semibold text-neutral-900 leading-snug line-clamp-2">{lc.title}</h3>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-neutral-500">
+                      {lc.subject && <span className="truncate max-w-full">{lc.subject.name}</span>}
                       <span className="flex items-center gap-1">
-                        <Calendar size={11} />
+                        <Calendar size={10} />
                         {fmtDateTime(lc.scheduled_at)}
                       </span>
                       {lc.duration_mins > 0 && (
                         <span className="flex items-center gap-1">
-                          <Clock size={11} />
+                          <Clock size={10} />
                           {lc.duration_mins} min
                         </span>
                       )}
                     </div>
-                  </div>
 
                   {/* Status + actions */}
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="mt-auto flex items-center gap-2 flex-wrap pt-1">
                     {isLive && (
                       <>
                         <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">
@@ -151,23 +150,14 @@ export default function StudentLiveClassesPage() {
                           Live now
                         </span>
                         <Btn size="sm" variant="primary" onClick={() => handleJoin(lc)}>
-                          Join class
+                          Watch live class
                         </Btn>
                       </>
                     )}
 
-                    {isScheduled && within5min && (
-                      <>
-                        <Tag color="amber">Starting soon</Tag>
-                        <Btn size="sm" variant="primary" onClick={() => handleJoin(lc)}>
-                          Join class
-                        </Btn>
-                      </>
-                    )}
-
-                    {isScheduled && !within5min && (
+                    {isScheduled && (
                       <span className="text-xs font-medium text-amber-700">
-                        {fmtCountdown(msUntilStart)}
+                        Class has not started yet
                       </span>
                     )}
 
@@ -186,6 +176,7 @@ export default function StudentLiveClassesPage() {
                     {isEnded && lc.my_attended == null && (
                       <span className="text-xs text-neutral-400">Class ended</span>
                     )}
+                  </div>
                   </div>
                 </div>
               );

@@ -22,6 +22,12 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        // Activate a new service worker immediately and drop old precaches so the
+        // app never serves stale chunk references after a deploy (the cause of
+        // "failed to load module" crashes on navigation/reload).
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         runtimeCaching: [{
           urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
           handler: 'CacheFirst',
@@ -30,17 +36,16 @@ export default defineConfig({
       }
     })
   ],
+  // Pre-bundle every heavy dependency that's only imported by lazy routes. Without
+  // this, Vite discovers them on first navigation, re-runs its optimizer, and forces
+  // a full-page reload — which presents as the page "freezing" the first time it opens.
   optimizeDeps: {
-    exclude: ['@zoom/meetingsdk'],
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'zoom-sdk': ['@zoom/meetingsdk'],
-        },
-      },
-    },
+    include: [
+      'react', 'react-dom', 'react-router-dom', 'zustand',
+      '@supabase/supabase-js', 'lucide-react',
+      'recharts', 'jspdf', 'jspdf-autotable', 'html2canvas',
+      'xlsx', 'mammoth', 'papaparse',
+    ],
   },
   server: {
     port: 3001,

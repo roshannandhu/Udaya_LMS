@@ -52,7 +52,27 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(u.get\\('email'\\), '| role=', \\(u.get\\('user_metadata'\\) or {}\\).get\\('role'\\), '| confirmed=', bool\\(u.get\\('email_confirmed_at'\\)\\), '| name=', \\(u.get\\('user_metadata'\\) or {}\\).get\\('name'\\)\\) for u in d.get\\('users', []\\)]; print\\('TOTAL:', len\\(d.get\\('users', []\\)\\)\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\);process.stdin.on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);\\(d.users||[]\\).forEach\\(u=>console.log\\(u.email,'| role=',\\(u.user_metadata||{}\\).role,'| confirmed=',!!u.email_confirmed_at,'| name=',\\(u.user_metadata||{}\\).name\\)\\);console.log\\('TOTAL:',\\(d.users||[]\\).length\\);}\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\);process.stdin.on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);if\\(d.access_token\\){console.log\\('LOGIN OK. role=',\\(d.user.user_metadata||{}\\).role\\)}else{console.log\\('LOGIN FAILED:',JSON.stringify\\(d\\)\\)}}\\)\")",
+      "Bash(cat backend/.env.example)",
+      "Bash(cat frontend/.env.local.example)",
+      "Bash(cat frontend/.env.example)",
+      "PowerShell(cd \"E:\\\\IMP projects\\\\Udaya\\\\backend\"; Start-Process -FilePath \"py\" -ArgumentList \"-m\",\"uvicorn\",\"main:app\",\"--port\",\"8001\" -WindowStyle Hidden -RedirectStandardOutput \"E:\\\\IMP projects\\\\Udaya\\\\backend\\\\_uvlog.txt\" -RedirectStandardError \"E:\\\\IMP projects\\\\Udaya\\\\backend\\\\_uverr.txt\"; Start-Sleep -Seconds 6; try { \\(Invoke-WebRequest -Uri \"http://localhost:8001/api/health\" -UseBasicParsing\\).Content } catch { \"HEALTH ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(Get-CimInstance *)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git restore *)",
+      "Bash(git rm *)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\);process.stdin.on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);console.log\\(d.access_token?\\('OK role='+\\(d.user.user_metadata||{}\\).role\\):\\('FAIL '+JSON.stringify\\(d\\)\\)\\)}\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\);process.stdin.on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);console.log\\(d.access_token?\\('LOGIN OK role='+\\(d.user.user_metadata||{}\\).role\\):\\('FAIL '+JSON.stringify\\(d\\)\\)\\)}\\)\")",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\);process.stdin.on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);console.log\\(d.access_token?'LOGIN OK \\(schema is fine — same schema.sql, works\\)':'FAIL '+JSON.stringify\\(d\\)\\)}\\)\")",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)",
+      "PowerShell($g = Get-Command gh -ErrorAction SilentlyContinue; if \\($g\\) { \"gh found: $\\($g.Source\\)\"; gh auth status 2>&1 | Select-Object -First 5 } else { \"gh NOT installed\" })"
     ]
   }
 }

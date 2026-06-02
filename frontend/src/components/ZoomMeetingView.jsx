@@ -2,18 +2,81 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, AlertCircle, Loader } from 'lucide-react';
 import { WatermarkLayer } from './shared/ScreenshotGuard';
 
-export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, display_name, onLeave }) {
+/**
+ * Zoom **Client View** loaded from Zoom's CDN (global `window.ZoomMtg`).
+ *
+ * Why CDN and not `import '@zoom/meetingsdk'`: the Client View bundle expects
+ * GLOBAL `Redux`/`React`/`ReactDOM`/`lodash` (its internal module is literally
+ * `exports = Redux`). Bundling it with Vite leaves those undefined, so it crashes
+ * at init with "middleware is not a function". Loading the vendor globals + the
+ * SDK from the CDN provides them and renders Zoom's true full-screen native UI.
+ *
+ * Component View (`@zoom/meetingsdk/embedded`) bundles fine but is a floating
+ * widget that renders the video as a strip — it cannot go full-screen — so we
+ * don't use it.
+ */
+
+const ZOOM_VERSION = '6.0.2';
+const ZOOM_CDN = `https://source.zoom.us/${ZOOM_VERSION}`;
+
+// Vendor globals MUST load before the meeting bundle (which references window.Redux etc.).
+const ZOOM_SCRIPTS = [
+  `${ZOOM_CDN}/lib/vendor/react.min.js`,
+  `${ZOOM_CDN}/lib/vendor/react-dom.min.js`,
+  `${ZOOM_CDN}/lib/vendor/redux.min.js`,
+  `${ZOOM_CDN}/lib/vendor/redux-thunk.min.js`,
+  `${ZOOM_CDN}/lib/vendor/lodash.min.js`,
+  `${ZOOM_CDN}/zoom-meeting-${ZOOM_VERSION}.min.js`,
+];
+
+let _zoomLoadPromise = null;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    // Reuse a tag if it's already on the page.
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === 'true') return resolve();
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = false; // preserve execution order
+    s.addEventListener('load', () => { s.dataset.loaded = 'true'; resolve(); });
+    s.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)));
+    document.head.appendChild(s);
+  });
+}
+
+// Inject the CDN scripts in order, once, and resolve with window.ZoomMtg.
+function loadZoomClientView() {
+  if (window.ZoomMtg) return Promise.resolve(window.ZoomMtg);
+  if (_zoomLoadPromise) return _zoomLoadPromise;
+  _zoomLoadPromise = (async () => {
+    for (const src of ZOOM_SCRIPTS) {
+      await loadScript(src);
+    }
+    if (!window.ZoomMtg) throw new Error('Zoom SDK failed to initialize.');
+    return window.ZoomMtg;
+  })().catch((e) => { _zoomLoadPromise = null; throw e; });
+  return _zoomLoadPromise;
+}
+
+export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, display_name, passcode, zak, onLeave }) {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState(null);
   const [showPrintWarn, setShowPrintWarn] = useState(false);
-  const initialized = useRef(false);
   const zoomRef = useRef(null);
+  const startedRef = useRef(false);
   const printTimerRef = useRef(null);
 
   const isStudent = role === 0;
 
+  // Student-only PrintScreen deterrent
   useEffect(() => {
-    if (!isStudent) return;  // teachers are not restricted
+    if (!isStudent) return;
     const onKey = (e) => {
       if (e.key === 'PrintScreen') {
         e.preventDefault();
@@ -28,12 +91,12 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   }, [isStudent]);
 
   useEffect(() => {
-    // Show the #zmmtg-root div that lives in index.html (outside React's DOM)
+    // Reveal the full-screen #zmmtg-root that lives in index.html (outside React).
     const root = document.getElementById('zmmtg-root');
     if (root) root.style.display = 'block';
 
-    if (!initialized.current) {
-      initialized.current = true;
+    if (!startedRef.current) {
+      startedRef.current = true;
       initZoomMeeting();
     }
 
@@ -47,11 +110,11 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   async function initZoomMeeting() {
     try {
       setStatus('loading');
-      const { ZoomMtg } = await import('@zoom/meetingsdk');
+      const ZoomMtg = await loadZoomClientView();
       zoomRef.current = ZoomMtg;
 
-      // Use Zoom's own CDN for AV/WASM files — avoids needing to copy files to /public
-      ZoomMtg.setZoomJSLib('https://source.zoom.us/3.x.x/lib', 'https://source.zoom.us/3.x.x/lib/av');
+      // Load AV/WASM from Zoom's CDN; version must match the SDK + the CSS in index.html.
+      ZoomMtg.setZoomJSLib(`${ZOOM_CDN}/lib`, '/av');
       ZoomMtg.preLoadWasm();
       ZoomMtg.prepareWebSDK();
 
@@ -60,14 +123,18 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
       ZoomMtg.init({
         leaveUrl: window.location.origin,
         patchJsMedia: true,
+        // Default to speaker view so the host (owner) fills the screen.
+        defaultView: 'speaker',
         success: () => {
           ZoomMtg.join({
             meetingNumber: String(meeting_id).replace(/\s/g, ''),
             userName: display_name,
             userEmail: '',
-            signature: signature,
+            signature,
             sdkKey: sdk_key,
-            passWord: '',
+            passWord: passcode || '',
+            // Viewers receive no zak; only a host would.
+            zak: zak || '',
             success: () => setStatus('joined'),
             error: (e) => {
               setError(e?.errorMessage || e?.reason || 'Could not join the meeting. Please try again.');
@@ -81,25 +148,24 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
         },
       });
     } catch (err) {
-      setError('Failed to load Zoom SDK. Please check your internet connection and try again.');
+      console.error('Zoom SDK error:', err);
+      setError(`Failed to load Zoom: ${err?.message || String(err)}`);
       setStatus('error');
     }
   }
 
   function handleLeave() {
     try {
-      zoomRef.current?.leaveMeeting({
-        success: () => onLeave(),
-        error: () => onLeave(),
-      });
-    } catch { onLeave(); }
+      zoomRef.current?.leaveMeeting({});
+    } catch { /* ignore */ }
+    onLeave();
   }
 
-  // #zmmtg-root is in index.html and rendered by Zoom SDK itself.
-  // This component just provides the loading/error overlay and the leave button.
+  // #zmmtg-root (in index.html) hosts Zoom's own full-screen UI. This component
+  // adds the loading/error overlay, the student watermark, and a Leave button.
   return (
     <div className="fixed inset-0 z-[100] pointer-events-none">
-      {/* Watermark only for students — teachers need to see clearly */}
+      {/* Watermark only for students — teachers/admins watch unobstructed */}
       {isStudent && <WatermarkLayer label={display_name || 'student'} />}
 
       {/* PrintScreen warning — students only */}
@@ -114,6 +180,7 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
           ⚠ Screenshot attempt detected
         </div>
       )}
+
       <button
         onClick={handleLeave}
         className="absolute top-4 left-4 z-[110] pointer-events-auto flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-sm text-white text-sm rounded-full hover:bg-black/80 transition-colors"

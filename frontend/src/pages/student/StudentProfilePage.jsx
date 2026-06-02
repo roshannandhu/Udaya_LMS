@@ -234,6 +234,12 @@ export default function StudentProfilePage() {
         </div>
 
         {/* Actions */}
+        <button onClick={() => navigate('/student/leaderboard')}
+          className="w-full flex items-center gap-3 p-4 glass-panel rounded-2xl hover:bg-white/40 transition-colors">
+          <Trophy size={20} className="text-amber-500" />
+          <span className="font-medium">Leaderboard</span>
+        </button>
+
         {studentsCanViewReport && (
           <button onClick={() => navigate('/student/report')}
             className="w-full flex items-center gap-3 p-4 glass-panel rounded-2xl hover:bg-white/40 transition-colors">

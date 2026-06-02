@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2 } from 'lucide-react';
+import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2, Trash2 } from 'lucide-react';
 import { Modal, Sheet, Btn, Tag, Avatar, Skeleton } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi } from '../../lib/api';
 import { useAppCache } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView from '../../components/ZoomMeetingView';
+import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 
 /* ─── Helpers ──────────────────────────────────────── */
 
@@ -29,10 +30,6 @@ function statusColor(status) {
     case 'cancelled': return 'red';
     default:          return 'gray';
   }
-}
-
-function minsUntilStart(iso) {
-  return Math.round((new Date(iso) - Date.now()) / 60000);
 }
 
 function durationLabel(mins) {
@@ -282,12 +279,14 @@ export default function TeacherLiveClassesPage() {
 
   useEffect(() => { fetchAll(); }, [subjects]);
 
-  const handleStartClass = async (lc) => {
+  // Teachers watch the owner's live feed as a view-only participant. Hosting
+  // happens only from the Zoom-credential owner's phone app.
+  const handleWatchClass = async (lc) => {
     try {
       const res = await liveClassApi.getJoinToken(lc.id);
       setActiveJoin({ ...res, liveClass: lc });
     } catch (err) {
-      alert(err?.message || 'Failed to get join token.');
+      alert(err?.message || 'Could not open the live class.');
     }
   };
 
@@ -311,15 +310,26 @@ export default function TeacherLiveClassesPage() {
     }
   };
 
-  /* ── Active join (Zoom) view ── */
+  const handleDeleteClass = async (lc) => {
+    if (!window.confirm(`Delete "${lc.title}" permanently? This removes the class, its attendance records and the Zoom meeting. This cannot be undone.`)) return;
+    try {
+      await liveClassApi.remove(lc.id);
+      await fetchAll();
+    } catch (err) {
+      alert(err?.message || 'Failed to delete class.');
+    }
+  };
+
+  /* ── Live view-only watcher (Zoom) ── */
   if (activeJoin) {
     return (
       <ZoomMeetingView
         meeting_id={activeJoin.meeting_id}
         signature={activeJoin.signature}
         sdk_key={activeJoin.sdk_key}
-        role={activeJoin.role ?? 1}
+        role={activeJoin.role ?? 0}
         display_name={user?.name || 'Teacher'}
+        passcode={activeJoin.passcode}
         onLeave={() => { setActiveJoin(null); fetchAll(); }}
       />
     );
@@ -356,119 +366,94 @@ export default function TeacherLiveClassesPage() {
             <Btn variant="primary" icon={Plus} onClick={() => setShowSchedule(true)}>Schedule</Btn>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {liveClasses.map(lc => {
               const status = lc.status || 'scheduled';
               const isLive = status === 'live';
               const isScheduled = status === 'scheduled';
               const isEnded = status === 'ended';
               const isCancelled = status === 'cancelled';
-              const minsLeft = isScheduled ? minsUntilStart(lc.scheduled_at) : 0;
 
+              const standardName = standards.find(std => std.id === lc.subject?.standard_id)?.name;
               return (
-                <div key={lc.id} className="p-4 rounded-xl glass-panel border-white/60 shadow-sm space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-sm font-semibold text-neutral-900 truncate">{lc.title}</h3>
-                        <Tag color={statusColor(status)}>
-                          {isLive && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block mr-1 animate-pulse" />
-                          )}
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Tag>
-                      </div>
-                      {lc.subject && (
-                        <p className="text-xs text-neutral-500 mb-1.5">{lc.subject.name}</p>
+                <div key={lc.id} className="rounded-xl glass-panel border-white/60 shadow-sm overflow-hidden flex flex-col">
+                  <LiveClassThumbnail
+                    thumbnailUrl={lc.thumbnail_url}
+                    textSide={lc.thumbnail_text_side}
+                    subjectName={lc.subject?.name}
+                    standardName={standardName}
+                    topic={lc.title}
+                    status={status}
+                    scheduledAt={lc.scheduled_at}
+                  />
+                  <div className="p-3 flex flex-col gap-2 flex-1">
+                    <div className="flex items-start gap-2">
+                      <h3 className="flex-1 text-sm font-semibold text-neutral-900 leading-snug line-clamp-2">{lc.title}</h3>
+                      <Tag color={statusColor(status)}>
+                        {isLive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block mr-1 animate-pulse" />
+                        )}
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </Tag>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-neutral-500">
+                      {lc.subject && <span className="truncate max-w-full">{lc.subject.name}</span>}
+                      {!isCancelled && (
+                        <span className="flex items-center gap-1">
+                          <Calendar size={10} />
+                          {fmtDateTime(lc.scheduled_at)}
+                        </span>
                       )}
-                      {isScheduled && (
-                        <div className="flex items-center gap-3 text-xs text-neutral-500">
-                          <span className="flex items-center gap-1">
-                            <Calendar size={11} />
-                            {fmtDateTime(lc.scheduled_at)}
-                          </span>
-                          {lc.duration_mins > 0 && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={11} />
-                              {durationLabel(lc.duration_mins)}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {isLive && lc.duration_mins > 0 && (
-                        <div className="flex items-center gap-1 text-xs text-neutral-500">
-                          <Clock size={11} />
-                          Scheduled: {durationLabel(lc.duration_mins)}
-                        </div>
-                      )}
-                      {isEnded && (
-                        <div className="flex items-center gap-3 text-xs text-neutral-500">
-                          <span className="flex items-center gap-1">
-                            <Calendar size={11} />
-                            {fmtDateTime(lc.scheduled_at)}
-                          </span>
-                          {lc.duration_mins > 0 && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={11} />
-                              {durationLabel(lc.duration_mins)}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {isCancelled && (
-                        <p className="text-xs text-red-500">Cancelled</p>
+                      {lc.duration_mins > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Clock size={10} />
+                          {durationLabel(lc.duration_mins)}
+                        </span>
                       )}
                     </div>
 
-                    {isEnded && (
-                      <button
-                        onClick={() => setAttendanceSheetId(lc.id)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-neutral-600 bg-white/50 border border-white/60 px-2.5 py-1.5 rounded-md hover:bg-white/80 transition-colors flex-shrink-0"
-                      >
-                        <Users size={12} />
-                        {lc.attended_count ?? 0}/{lc.total_registered ?? 0} attended
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-2">
-                    {isScheduled && minsLeft <= 15 && (
-                      <>
-                        <Btn size="sm" variant="primary" onClick={() => handleStartClass(lc)}>
-                          Start class
+                    {/* Action buttons pinned to the bottom */}
+                    <div className="mt-auto flex items-center gap-2 flex-wrap pt-1">
+                      {isScheduled && (
+                        <>
+                          <span className="text-xs text-neutral-500">Start this class from your Zoom app</span>
+                          <Btn size="sm" variant="ghost" onClick={() => handleCancelClass(lc)}>
+                            Cancel
+                          </Btn>
+                        </>
+                      )}
+                      {isLive && (
+                        <>
+                          <Btn size="sm" variant="primary" onClick={() => handleWatchClass(lc)}>
+                            Watch live class
+                          </Btn>
+                          <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
+                            {lc.attended_count ?? 0}/{lc.total_registered ?? 0} joined
+                          </Btn>
+                          <Btn size="sm" variant="dangerSolid" onClick={() => handleEndClass(lc)}>
+                            End class
+                          </Btn>
+                        </>
+                      )}
+                      {isEnded && (
+                        <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
+                          {lc.attended_count ?? 0}/{lc.total_registered ?? 0} attended
                         </Btn>
-                        <Btn size="sm" variant="ghost" onClick={() => handleCancelClass(lc)}>
-                          Cancel
-                        </Btn>
-                      </>
-                    )}
-                    {isScheduled && minsLeft > 15 && (
-                      <>
-                        <span className="text-xs text-neutral-500">Starts in {minsLeft} min</span>
-                        <Btn size="sm" variant="ghost" onClick={() => handleCancelClass(lc)}>
-                          Cancel
-                        </Btn>
-                      </>
-                    )}
-                    {isLive && (
-                      <>
-                        <Btn size="sm" variant="primary" onClick={() => handleStartClass(lc)}>
-                          Join class
-                        </Btn>
-                        <Btn size="sm" variant="dangerSolid" onClick={() => handleEndClass(lc)}>
-                          End class
-                        </Btn>
-                      </>
-                    )}
-                    {isEnded && (
-                      <Btn size="sm" variant="ghost" onClick={() => setAttendanceSheetId(lc.id)}>
-                        View attendance
-                      </Btn>
-                    )}
-                    {isCancelled && (
-                      <span className="text-xs text-neutral-400">This class was cancelled</span>
-                    )}
+                      )}
+                      {isCancelled && (
+                        <span className="text-xs text-neutral-400">This class was cancelled</span>
+                      )}
+                      {!isLive && (
+                        <button
+                          onClick={() => handleDeleteClass(lc)}
+                          title="Delete class"
+                          className="ml-auto flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1.5 rounded-md transition-colors"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
