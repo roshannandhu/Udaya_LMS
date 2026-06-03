@@ -54,7 +54,7 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
   const active = getActiveTab(location.pathname);
 
   return (
-    <aside className="hidden lg:flex flex-col w-[220px] fixed top-4 bottom-4 left-4 glass-nav rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] z-50 overflow-hidden">
+    <aside className="hidden lg:flex flex-col w-[220px] fixed top-4 bottom-4 left-4 glass-nav rounded-2xl shadow-card z-50 overflow-hidden">
       <div className="p-5 flex flex-col h-full overflow-y-auto">
         <div className="flex items-center gap-3 mb-10 mt-2 px-1">
           {lmsLogo
@@ -63,9 +63,9 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
                 <div className="w-4 h-4 border-2 border-white/90 rounded-sm rotate-45" />
               </div>
           }
-          <span 
-            className="font-black text-2xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-500 truncate drop-shadow-sm"
-            style={{ fontFamily: '"Outfit", "Plus Jakarta Sans", "Inter", sans-serif' }}
+          <span
+            className="font-bold text-2xl tracking-tight text-neutral-900 truncate"
+            style={{ fontFamily: '"Fraunces", Georgia, serif' }}
           >
             {lmsName || 'Udaya'}
           </span>
@@ -76,10 +76,10 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
             const isActive = active === item.id;
             return (
               <Link key={item.id} to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-sm font-medium ${
-                  isActive 
-                    ? 'bg-white/60 backdrop-blur-md shadow-sm border border-white/80 text-neutral-900' 
-                    : 'text-neutral-600 hover:bg-white/40 border border-transparent'
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium ${
+                  isActive
+                    ? 'bg-[#F2F1EE] border border-[#EBEAE7] text-neutral-900'
+                    : 'text-neutral-600 hover:bg-[#F2F1EE] border border-transparent'
                 }`}>
                 <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-neutral-900' : 'text-neutral-500'} />
                 {item.label}

@@ -6,11 +6,12 @@ const API_BASE = hostname === 'localhost' || hostname === '127.0.0.1'
 const TOKEN_KEY    = 'tutoria_token';
 const REFRESH_KEY  = 'tutoria_refresh_token';
 
-// In-memory GET cache — 60s TTL; busted on any mutation
+// In-memory GET cache — 120s TTL; busted on any mutation. Lets quick revisits to a
+// page render instantly from cache instead of re-showing a loading skeleton.
 const _cache = new Map();
-const CACHE_TTL = 60_000;
-// These endpoints change too frequently to cache
-const NO_CACHE = ['/student/tests/history', '/notifications', '/auth/me', '/live-classes', '/assignments', '/student/assignments'];
+const CACHE_TTL = 120_000;
+// These endpoints change too frequently to cache (must always be fresh).
+const NO_CACHE = ['/notifications', '/auth/me', '/live-classes'];
 
 // Refresh the access token using the stored refresh token.
 // Uses a shared promise so concurrent 401 responses all wait for the same refresh

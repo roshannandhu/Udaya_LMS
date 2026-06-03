@@ -9,99 +9,77 @@
 
 body {
   font-family: 'Inter', 'SF Pro Text', -apple-system, sans-serif;
-  background-color: #d4d8df;
-  background-image: 
-    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.6) 0px, transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(255,255,255,0.4) 0px, transparent 40%);
-  background-attachment: fixed;
-  background-size: cover;
-  background-repeat: no-repeat;
-  color: #1e293b;
+  background-color: #F6F4EF;   /* flat warm off-white (reference) */
+  color: #1A1A1A;
   min-height: 100vh;
 }
 
-/* Glassmorphism Utilities */
-.glass {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+/* Serif headings to match the reference. */
+h1, h2, h3 {
+  font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
+/* ── Flat surfaces (formerly glassmorphism) ──────────────────────────────
+   Class names are kept so the ~150 existing usages flatten with no JSX edits. */
+.glass,
 .glass-panel {
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 1.5rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  border: 1px solid #EBEAE7;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .glass-nav {
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+  background: #ffffff;
+  border-top: 1px solid #EBEAE7;
+  border-bottom: 1px solid #EBEAE7;
 }
 
 .glass-btn {
-  background: rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 
-    -4px -4px 8px rgba(255, 255, 255, 0.9),
-    4px 4px 8px rgba(0, 0, 0, 0.08),
-    inset 1px 1px 1px rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  border: 1px solid #EBEAE7;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   border-radius: 9999px;
-  transition: all 0.2s ease;
 }
 
 .glass-btn:active, .glass-btn.active {
-  box-shadow: 
-    inset 3px 3px 6px rgba(0, 0, 0, 0.08),
-    inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+  background: #F2F1EE;
 }
 
 .glass-toggle-track {
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: 
-    inset 3px 3px 6px rgba(0, 0, 0, 0.08),
-    inset -3px -3px 6px rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: #E5E4E1;
+  border: 1px solid #EBEAE7;
   border-radius: 9999px;
 }
 
 .glass-toggle-thumb {
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 
-    -2px -2px 4px rgba(255, 255, 255, 1),
-    2px 2px 4px rgba(0, 0, 0, 0.15),
-    inset 1px 1px 1px rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   border-radius: 9999px;
 }
 
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* ── Neutralize blur everywhere (covers all inline backdrop-blur-* utils) ── */
+*, *::before, *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-@keyframes slide-up {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+/* ── Force translucent whites opaque (covers inline bg-white/xx + border-white/xx).
+   Exact-class escaped selectors do NOT match hover:bg-white/xx, so hover states
+   are left intact. */
+.bg-white\/20, .bg-white\/30, .bg-white\/40, .bg-white\/50,
+.bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/90 {
+  background-color: #ffffff !important;
+}
+.border-white\/40, .border-white\/50, .border-white\/60,
+.border-white\/70, .border-white\/80 {
+  border-color: #EBEAE7 !important;
 }
 
-@keyframes slide-left {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-.animate-in.fade-in { animation: fade-in 150ms ease-out; }
-.animate-in.slide-up { animation: slide-up 200ms ease-out; }
-
-@media (min-width: 768px) {
-  .animate-in.slide-left { animation: slide-left 200ms ease-out; }
+/* ── Remove all decorative motion; keep functional loading spinners.
+   Killing `transition` makes state changes instant but leaves CSS `animation`
+   (animate-spin / animate-pulse) working. The fade/slide entrance keyframes are
+   removed so Modal/Sheet `animate-in` classes become inert. */
+*, *::before, *::after {
+  transition: none !important;
 }

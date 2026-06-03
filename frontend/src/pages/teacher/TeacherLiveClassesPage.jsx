@@ -5,7 +5,7 @@ import TopBar from '../../components/shared/TopBar';
 import { liveClassApi } from '../../lib/api';
 import { useAppCache } from '../../store';
 import { useAuthStore } from '../../lib/auth';
-import ZoomMeetingView from '../../components/ZoomMeetingView';
+import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 
 /* ─── Helpers ──────────────────────────────────────── */
@@ -255,6 +255,7 @@ export default function TeacherLiveClassesPage() {
   const [loading, setLoading]         = useState(true);
   const [showSchedule, setShowSchedule] = useState(false);
   const [activeJoin, setActiveJoin]     = useState(null);
+  const [joiningId, setJoiningId]       = useState(null);
   const [attendanceSheetId, setAttendanceSheetId] = useState(null);
 
   const fetchAll = async () => {
@@ -279,14 +280,34 @@ export default function TeacherLiveClassesPage() {
 
   useEffect(() => { fetchAll(); }, [subjects]);
 
+  // Warm the Zoom SDK in the background so the first "Watch" click is instant.
+  // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —
+  // a detached call (`const r = window.requestIdleCallback; r(fn)`) throws
+  // "Illegal invocation" in Chrome and crashes the page on mount.
+  useEffect(() => {
+    const ric = window.requestIdleCallback
+      ? window.requestIdleCallback.bind(window)
+      : (fn) => setTimeout(fn, 1500);
+    const cancel = window.cancelIdleCallback
+      ? window.cancelIdleCallback.bind(window)
+      : clearTimeout;
+    const id = ric(() => preloadZoomSDK());
+    return () => cancel(id);
+  }, []);
+
   // Teachers watch the owner's live feed as a view-only participant. Hosting
   // happens only from the Zoom-credential owner's phone app.
   const handleWatchClass = async (lc) => {
+    if (joiningId) return;
+    setJoiningId(lc.id);
+    preloadZoomSDK();                 // start the 5.6 MB SDK download NOW, in parallel with the token fetch
     try {
       const res = await liveClassApi.getJoinToken(lc.id);
       setActiveJoin({ ...res, liveClass: lc });
     } catch (err) {
       alert(err?.message || 'Could not open the live class.');
+    } finally {
+      setJoiningId(null);
     }
   };
 
@@ -425,8 +446,10 @@ export default function TeacherLiveClassesPage() {
                       )}
                       {isLive && (
                         <>
-                          <Btn size="sm" variant="primary" onClick={() => handleWatchClass(lc)}>
-                            Watch live class
+                          <Btn size="sm" variant="primary" onClick={() => handleWatchClass(lc)} disabled={joiningId === lc.id}>
+                            {joiningId === lc.id
+                              ? <><Loader2 size={13} className="animate-spin" /> Opening…</>
+                              : 'Watch live class'}
                           </Btn>
                           <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
                             {lc.attended_count ?? 0}/{lc.total_registered ?? 0} joined

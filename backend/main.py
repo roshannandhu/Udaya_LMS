@@ -1869,10 +1869,14 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
         public_url = await asyncio.to_thread(
             lambda: service_supabase.storage.from_("avatars").get_public_url(file_name)
         )
+        # The storage path is the same on every re-upload, so the URL is identical
+        # and browsers serve the cached OLD image. Append a version so each upload
+        # yields a unique URL — forcing a fresh fetch on both student and teacher.
+        versioned_url = f"{str(public_url).split('?')[0]}?v={int(time_module.time())}"
         await asyncio.to_thread(
-            lambda: service_supabase.table("students").update({"avatar_url": str(public_url)}).eq("id", user["user_id"]).execute()
+            lambda: service_supabase.table("students").update({"avatar_url": versioned_url}).eq("id", user["user_id"]).execute()
         )
-        return {"avatar_url": public_url}
+        return {"avatar_url": versioned_url}
     except Exception as e:
         print("Avatar upload error:", e)
         raise HTTPException(status_code=500, detail="Upload failed")
@@ -4474,22 +4478,31 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
 
         # Deterministic attendance: the authenticated student is joining now. This is
         # the source of truth (independent of Zoom's report API / name matching).
-        # Best-effort so a write hiccup never blocks the student from joining.
-        try:
-            await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance").upsert({
-                "live_class_id": live_class_id,
-                "student_id":    user["user_id"],
-                "attended":      True,
-                "joined_at":     datetime.now(timezone.utc).isoformat(),
-            }, on_conflict="live_class_id,student_id").execute())
-        except Exception as e:
-            print(f"[!] join attendance record failed (ignored): {e}")
+        # Fire-and-forget so the token returns immediately (no DB round-trip on the
+        # click path); best-effort, errors are swallowed.
+        async def _record_attendance():
+            try:
+                await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance").upsert({
+                    "live_class_id": live_class_id,
+                    "student_id":    user["user_id"],
+                    "attended":      True,
+                    "joined_at":     datetime.now(timezone.utc).isoformat(),
+                }, on_conflict="live_class_id,student_id").execute())
+            except Exception as e:
+                print(f"[!] join attendance record failed (ignored): {e}")
+        asyncio.create_task(_record_attendance())
 
     role_num = 0  # view-only for all portal watchers
 
     # Ensure the meeting has no waiting room so watchers aren't trapped in a lobby
-    # (covers meetings created before this became the default).
-    await zoom_ensure_joinable(lc["zoom_meeting_id"])
+    # (covers meetings created before this became the default). Run in the background
+    # so it doesn't add a Zoom round-trip to the click→watch latency.
+    async def _ensure_joinable_bg():
+        try:
+            await zoom_ensure_joinable(lc["zoom_meeting_id"])
+        except Exception as e:
+            print(f"[!] ensure-joinable failed (ignored): {e}")
+    asyncio.create_task(_ensure_joinable_bg())
 
     signature = zoom_generate_sdk_signature(lc["zoom_meeting_id"], role_num)
     return {

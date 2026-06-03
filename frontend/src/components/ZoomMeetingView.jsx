@@ -64,6 +64,13 @@ function loadZoomClientView() {
   return _zoomLoadPromise;
 }
 
+// Warm the 5.6 MB Zoom SDK in the background (call on the live-classes pages at
+// idle) so the first "Watch" click doesn't pay the full download. Safe to call
+// repeatedly — loadZoomClientView() de-dupes via the shared promise.
+export function preloadZoomSDK() {
+  try { loadZoomClientView(); } catch { /* best-effort */ }
+}
+
 export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, display_name, passcode, zak, onLeave }) {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState(null);

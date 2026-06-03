@@ -4,7 +4,7 @@ import { Btn } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi, apiClient } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
-import ZoomMeetingView from '../../components/ZoomMeetingView';
+import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 
 function fmtDateTime(iso) {
@@ -24,6 +24,7 @@ export default function StudentLiveClassesPage() {
   const [liveClasses, setLiveClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeJoin, setActiveJoin] = useState(null);
+  const [joiningId, setJoiningId] = useState(null);
   const [now, setNow] = useState(Date.now());
 
   const standardId = user?.standard_id;
@@ -57,6 +58,21 @@ export default function StudentLiveClassesPage() {
     fetchAll();
   }, [standardId]);
 
+  // Warm the Zoom SDK in the background so the first "Watch" click is instant.
+  // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —
+  // a detached call (`const r = window.requestIdleCallback; r(fn)`) throws
+  // "Illegal invocation" in Chrome and crashes the page on mount.
+  useEffect(() => {
+    const ric = window.requestIdleCallback
+      ? window.requestIdleCallback.bind(window)
+      : (fn) => setTimeout(fn, 1500);
+    const cancel = window.cancelIdleCallback
+      ? window.cancelIdleCallback.bind(window)
+      : clearTimeout;
+    const id = ric(() => preloadZoomSDK());
+    return () => cancel(id);
+  }, []);
+
   // Refresh list + clock every 60s so students see "Live" status when teacher starts.
   // Skip the network fetch while the tab is hidden to avoid background fan-out calls.
   useEffect(() => {
@@ -68,11 +84,16 @@ export default function StudentLiveClassesPage() {
   }, [standardId]);
 
   const handleJoin = async (lc) => {
+    if (joiningId) return;            // ignore double-clicks while a join is in flight
+    setJoiningId(lc.id);
+    preloadZoomSDK();                 // start the 5.6 MB SDK download NOW, in parallel with the token fetch
     try {
       const res = await liveClassApi.getJoinToken(lc.id);
       setActiveJoin({ ...res, liveClass: lc });
     } catch (err) {
       alert(err?.message || 'Failed to join class.');
+    } finally {
+      setJoiningId(null);
     }
   };
 
@@ -149,8 +170,10 @@ export default function StudentLiveClassesPage() {
                           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                           Live now
                         </span>
-                        <Btn size="sm" variant="primary" onClick={() => handleJoin(lc)}>
-                          Watch live class
+                        <Btn size="sm" variant="primary" onClick={() => handleJoin(lc)} disabled={joiningId === lc.id}>
+                          {joiningId === lc.id
+                            ? <><Loader2 size={13} className="animate-spin" /> Opening…</>
+                            : 'Watch live class'}
                         </Btn>
                       </>
                     )}

@@ -79,9 +79,18 @@ export default function StudentProfilePage() {
         body: form,
       });
       const data = await res.json();
-      setStudent(prev => ({ ...prev, avatar_url: data.avatar_url }));
+      if (!res.ok) throw new Error(data.detail || 'Avatar upload failed');
+      const newUrl = data.avatar_url;
+      setStudent(prev => ({ ...prev, avatar_url: newUrl }));
+      // Reflect on the student's own header/top-left avatar (reads from auth store)
+      const { user: authUser, role, setUser } = useAuthStore.getState();
+      setUser({ ...authUser, avatar_url: newUrl }, role);
+      // Make the teacher's student list pick up the new photo on its next fetch
+      useAppCache.getState().invalidateStudents?.();
+      useAppCache.getState().refreshStudents?.();
     } catch (err) {
       console.error('Avatar upload failed', err);
+      alert(err?.message || 'Avatar upload failed');
     } finally {
       setAvatarUploading(false);
       if (avatarInputRef.current) avatarInputRef.current.value = '';

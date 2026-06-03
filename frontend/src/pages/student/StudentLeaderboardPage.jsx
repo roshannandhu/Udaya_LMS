@@ -87,7 +87,7 @@ export default function StudentLeaderboardPage() {
               <Crown size={20} className="text-amber-500 mb-1" />
               <Avatar name={leaderboard[0]?.name} src={leaderboard[0]?.avatar_url} size="lg" />
               <p className="text-xs font-medium mt-2 truncate max-w-[80px] text-center">{leaderboard[0]?.name}</p>
-              <div className="mt-2 w-full h-24 bg-amber-50/80 backdrop-blur-md border border-amber-200 rounded-t-2xl flex flex-col items-center justify-center" style={{boxShadow: '-4px -4px 10px rgba(255,255,255,0.8), 4px 4px 10px rgba(0,0,0,0.06)'}}>
+              <div className="mt-2 w-full h-24 bg-amber-50 border border-amber-200 rounded-t-2xl flex flex-col items-center justify-center shadow-card">
                 <Star size={18} className="text-amber-500 mb-1" />
                 <p className="text-base font-bold text-amber-700">{leaderboard[0]?.points}</p>
               </div>

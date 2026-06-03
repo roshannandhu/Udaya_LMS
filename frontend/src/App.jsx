@@ -13,7 +13,10 @@ import StudentLayout      from './pages/student/StudentLayout';
 // deploy/rebuild) triggers ONE automatic reload to fetch fresh assets instead of
 // crashing the whole app. The reload flag is shared with ErrorBoundary.
 const RELOAD_FLAG = 'cl_reloaded';
+// Every lazy route's import factory, collected so we can warm them all on idle.
+const _routeFactories = [];
 function lazyWithRetry(factory) {
+  _routeFactories.push(factory);
   return lazy(async () => {
     try {
       const mod = await factory();
@@ -28,6 +31,13 @@ function lazyWithRetry(factory) {
       throw err; // already retried once — let ErrorBoundary show the fallback
     }
   });
+}
+
+// Warm every route chunk in the background. import() is memoized, so a route that
+// later mounts reuses the already-loaded module → navigation has nothing to download
+// and the Suspense loader stops appearing.
+function prefetchRoutes() {
+  _routeFactories.forEach((f) => { try { f(); } catch { /* ignore */ } });
 }
 
 const TodayPage               = lazyWithRetry(() => import('./pages/teacher/TodayPage'));
@@ -87,6 +97,12 @@ function AuthHandler() {
       const { isLoading, user, role } = useAuthStore.getState();
       if (!isLoading && user) {
         prefetchAll();
+        // Warm all route chunks once the app is idle so first navigation to any
+        // page is instant (no on-demand chunk load / Suspense flash).
+        const ric = window.requestIdleCallback
+          ? window.requestIdleCallback.bind(window)
+          : (fn) => setTimeout(fn, 1200);
+        ric(() => prefetchRoutes());
         const currentPath = window.location.pathname;
         if (currentPath === '/login' || currentPath === '/') {
           if (role === ROLES.TEACHER) {

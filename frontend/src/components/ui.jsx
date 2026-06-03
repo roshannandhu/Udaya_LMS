@@ -3,11 +3,11 @@ import { X } from 'lucide-react';
 
 export const Btn = ({ children, variant = 'default', size = 'md', icon: Icon, onClick, className = '', disabled = false, type = 'button' }) => {
   const variants = {
-    primary:     'bg-neutral-900/90 backdrop-blur-sm text-white hover:bg-neutral-800 border border-neutral-900/20 shadow-md shadow-neutral-900/10',
-    default:     'bg-white/50 backdrop-blur-md text-neutral-900 hover:bg-white/80 border border-white/60 shadow-sm',
-    ghost:       'text-neutral-700 hover:bg-white/40 backdrop-blur-sm border border-transparent',
-    danger:      'text-red-600 hover:bg-red-50/50 backdrop-blur-sm border border-transparent',
-    dangerSolid: 'bg-red-600/90 backdrop-blur-sm text-white hover:bg-red-700 border border-red-600/20 shadow-md shadow-red-600/10',
+    primary:     'bg-[#1A1A1A] text-white hover:bg-neutral-800 border border-[#1A1A1A]',
+    default:     'bg-white text-neutral-900 hover:bg-[#F2F1EE] border border-[#EBEAE7]',
+    ghost:       'text-neutral-700 hover:bg-[#F2F1EE] border border-transparent',
+    danger:      'text-red-600 hover:bg-red-50 border border-transparent',
+    dangerSolid: 'bg-red-600 text-white hover:bg-red-700 border border-red-600',
   };
   const sizes = { sm: 'px-2.5 py-1.5 text-xs', md: 'px-3 py-1.5 text-sm', lg: 'px-4 py-2 text-sm' };
   return (
@@ -15,7 +15,7 @@ export const Btn = ({ children, variant = 'default', size = 'md', icon: Icon, on
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-md font-medium transition-colors ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-md font-medium ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
     >
       {Icon && <Icon size={14} strokeWidth={2} />}
       {children}
@@ -33,7 +33,7 @@ export const Input = ({ label, type = 'text', placeholder, value, onChange, auto
       onChange={onChange}
       autoFocus={autoFocus}
       {...rest}
-      className="w-full px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all placeholder:text-neutral-400"
+      className="w-full px-3 py-2 rounded-md bg-white border border-[#EBEAE7] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm placeholder:text-neutral-400"
     />
   </div>
 );
@@ -47,7 +47,7 @@ export const Textarea = ({ label, placeholder, value, onChange, rows = 3, ...res
       onChange={onChange}
       rows={rows}
       {...rest}
-      className="w-full px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all placeholder:text-neutral-400 resize-none"
+      className="w-full px-3 py-2 rounded-md bg-white border border-[#EBEAE7] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm placeholder:text-neutral-400 resize-none"
     />
   </div>
 );
@@ -61,7 +61,7 @@ export const Avatar = ({ name, src, size = 'md' }) => {
   const idx   = (name?.charCodeAt(0) || 0) % bgs.length;
   if (src && !imgError) {
     return <img src={src} alt={name || ''} onError={() => setImgError(true)}
-      className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-white/40`} />;
+      className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-[#EBEAE7]`} />;
   }
   return (
     <div className={`${sizes[size]} rounded-full flex items-center justify-center font-semibold flex-shrink-0`}
@@ -83,8 +83,8 @@ export const Tag = ({ children, color = 'gray' }) => {
   };
   const c = map[color] || map.gray;
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium backdrop-blur-sm border border-white/40 shadow-sm"
-      style={{ background: `${c.bg}b3`, color: c.text }}> {/* b3 = 70% opacity for hex */}
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium"
+      style={{ background: c.bg, color: c.text }}>
       {children}
     </span>
   );
@@ -94,13 +94,13 @@ export const Divider = ({ className = '' }) => <div className={`h-px bg-neutral-
 
 export const EmojiTile = ({ emoji, size = 'md' }) => {
   const sizes = { sm: 'w-8 h-8 text-base', md: 'w-10 h-10 text-xl', lg: 'w-14 h-14 text-2xl', xl: 'w-20 h-20 text-4xl' };
-  return <div className={`${sizes[size]} rounded-lg bg-white/50 backdrop-blur-md border border-white/60 shadow-sm flex items-center justify-center flex-shrink-0`}>{emoji}</div>;
+  return <div className={`${sizes[size]} rounded-lg bg-[#F2F1EE] border border-[#EBEAE7] flex items-center justify-center flex-shrink-0`}>{emoji}</div>;
 };
 
 export const Toggle = ({ checked, onChange }) => (
   <button onClick={() => onChange(!checked)}
-    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-neutral-900' : 'bg-neutral-300'}`}>
-    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
+    className={`relative w-9 h-5 rounded-full flex-shrink-0 ${checked ? 'bg-neutral-900' : 'bg-neutral-300'}`}>
+    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm ${checked ? 'left-4' : 'left-0.5'}`} />
   </button>
 );
 
@@ -126,12 +126,12 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
   if (!open) return null;
   const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-xl' };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/30 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
         className={`w-full ${sizes[size]} max-h-[90vh] overflow-y-auto glass-panel rounded-xl`}>
-        <div className="px-5 py-4 border-b border-white/30 flex items-center justify-between sticky top-0 z-10">
+        <div className="px-5 py-4 border-b border-[#EBEAE7] flex items-center justify-between sticky top-0 z-10 bg-white">
           <h2 className="text-sm font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded hover:bg-white/40"><X size={16} /></button>
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded hover:bg-[#F2F1EE]"><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -154,12 +154,12 @@ export const Sheet = ({ open, onClose, title, children }) => {
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex md:items-center md:justify-end bg-neutral-900/30 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex md:items-center md:justify-end bg-neutral-900/40" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-0 md:bottom-auto md:right-0 md:top-0 w-full md:w-[480px] glass-panel md:rounded-l-2xl rounded-t-2xl flex flex-col max-h-[92vh] md:max-h-none animate-in slide-up border-l border-white/50">
-        <div className="px-5 py-4 border-b border-white/30 flex items-center justify-between flex-shrink-0">
+        className="absolute bottom-0 md:bottom-auto md:right-0 md:top-0 w-full md:w-[480px] glass-panel md:rounded-l-2xl rounded-t-2xl flex flex-col max-h-[92vh] md:max-h-none border-l border-[#EBEAE7]">
+        <div className="px-5 py-4 border-b border-[#EBEAE7] flex items-center justify-between flex-shrink-0">
           <h2 className="text-sm font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded hover:bg-white/40"><X size={16} /></button>
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded hover:bg-[#F2F1EE]"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5">{children}</div>
       </div>

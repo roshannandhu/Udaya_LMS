@@ -16,13 +16,13 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
   const showStudentProfile = location.pathname.startsWith('/student');
 
   return (
-    <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+    <div className="sticky top-0 z-30 glass-nav border-t-0 border-b border-[#EBEAE7]">
       <div className="px-5 md:px-8 py-4 flex items-center gap-3 max-w-5xl mx-auto">
         {showStudentProfile && (
           <button
             onClick={() => navigate('/student/profile')}
             aria-label="Profile"
-            className="lg:hidden flex-shrink-0 rounded-full ring-2 ring-white/60 hover:ring-white transition-all"
+            className="lg:hidden flex-shrink-0 rounded-full ring-2 ring-[#EBEAE7]"
           >
             <Avatar name={user?.name || 'S'} src={user?.avatar_url} size="sm" />
           </button>
@@ -43,7 +43,7 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
         </div>
         {showSearch && (
           <button onClick={() => setSearchOpen(true)}
-            className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/40 rounded-md transition-colors">
+            className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F2F1EE] rounded-md">
             <Search size={16} />
           </button>
         )}
