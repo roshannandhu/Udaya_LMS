@@ -43,7 +43,7 @@ export default defineConfig({
     include: [
       'react', 'react-dom', 'react-router-dom', 'zustand',
       '@supabase/supabase-js', 'lucide-react',
-      'recharts', 'jspdf', 'jspdf-autotable', 'html2canvas',
+      'recharts', 'jspdf', 'jspdf-autotable',
       'xlsx', 'mammoth', 'papaparse',
     ],
   },
