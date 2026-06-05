@@ -653,3 +653,10 @@ CREATE INDEX IF NOT EXISTS idx_reactions_broadcast ON broadcast_reactions(broadc
 ALTER TABLE broadcast_reactions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_all_reactions" ON broadcast_reactions;
 CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);
+
+-- ── Verification (run after the two migrations above; expect 5 rows) ──────────
+-- SELECT 'notes table' AS item FROM information_schema.tables WHERE table_name='notes'
+-- UNION ALL SELECT 'broadcast_reactions table' FROM information_schema.tables WHERE table_name='broadcast_reactions'
+-- UNION ALL SELECT 'broadcasts.expires_at' FROM information_schema.columns WHERE table_name='broadcasts' AND column_name='expires_at'
+-- UNION ALL SELECT 'broadcasts.reply_to' FROM information_schema.columns WHERE table_name='broadcasts' AND column_name='reply_to'
+-- UNION ALL SELECT 'standards.broadcast_ttl_hours' FROM information_schema.columns WHERE table_name='standards' AND column_name='broadcast_ttl_hours';
