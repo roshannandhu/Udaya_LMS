@@ -73,13 +73,13 @@ export default function StudentLiveClassesPage() {
     return () => cancel(id);
   }, []);
 
-  // Refresh list + clock every 60s so students see "Live" status when teacher starts.
+  // Refresh list + clock every 15s — list is now fast (DB only, no Zoom calls).
   // Skip the network fetch while the tab is hidden to avoid background fan-out calls.
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
       if (!document.hidden) fetchAll();
-    }, 60000);
+    }, 15000);
     return () => clearInterval(id);
   }, [standardId]);
 

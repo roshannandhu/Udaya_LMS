@@ -490,7 +490,7 @@ async def zoom_ensure_joinable(meeting_id: str) -> None:
 # Short cache of "is this meeting live?" so the frequently-polled class list
 # doesn't hammer the Zoom API. meeting_id -> (is_live_bool, expires_at).
 _zoom_live_cache: dict = {}
-_ZOOM_LIVE_TTL = 20.0
+_ZOOM_LIVE_TTL = 60.0
 
 
 async def zoom_is_meeting_live(meeting_id: str) -> bool:
@@ -4318,22 +4318,8 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
     except Exception:
         pass  # Fall back to each class's snapshotted thumbnail
 
-    # Auto-detect "go live": for any still-scheduled class, ask Zoom whether the
-    # owner has started the meeting from their phone (the webhook can't reach
-    # localhost, so we poll Zoom — briefly cached). Flip those to "live" so the
-    # cards update on the next refresh without any manual step.
-    scheduled = [lc for lc in classes if lc.get("status") == "scheduled" and lc.get("zoom_meeting_id")]
-    if scheduled:
-        live_flags = await asyncio.gather(
-            *[zoom_is_meeting_live(lc["zoom_meeting_id"]) for lc in scheduled]
-        )
-        now_live_ids = [lc["id"] for lc, is_live in zip(scheduled, live_flags) if is_live]
-        for lc, is_live in zip(scheduled, live_flags):
-            if is_live:
-                lc["status"] = "live"
-        for cid in now_live_ids:
-            await asyncio.to_thread(lambda c=cid: service_supabase.table("live_classes")
-                .update({"status": "live"}).eq("id", c).execute())
+    # Status is updated to "live" by the join-token endpoint when the teacher
+    # starts the meeting. No Zoom polling here — keeps the list endpoint fast.
 
     # Fetch all attendance for these classes in ONE query, then aggregate in Python
     # (avoids an N+1 query-per-class round-trip).
