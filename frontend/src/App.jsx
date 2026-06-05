@@ -59,6 +59,7 @@ const TeacherLiveClassesPage  = lazyWithRetry(() => import('./pages/teacher/Teac
 const StudentLiveClassesPage  = lazyWithRetry(() => import('./pages/student/StudentLiveClassesPage'));
 
 const StudentHomePage            = lazyWithRetry(() => import('./pages/student/StudentHomePage'));
+const StudentCalendarPage        = lazyWithRetry(() => import('./pages/student/CalendarPage'));
 const StudentSubjectsPage        = lazyWithRetry(() => import('./pages/student/StudentSubjectsPage'));
 const StudentSubjectViewPage     = lazyWithRetry(() => import('./pages/student/StudentSubjectViewPage'));
 const StudentVideoPlayerPage     = lazyWithRetry(() => import('./pages/student/StudentVideoPlayerPage'));
@@ -216,6 +217,7 @@ export default function App() {
           </ProtectedStudentRoute>
         }>
           <Route index element={<StudentHomePage />} />
+          <Route path="calendar" element={<StudentCalendarPage />} />
           <Route path="subjects" element={<StudentSubjectsPage />} />
           <Route path="subjects/:classId" element={<StudentSubjectViewPage />} />
           <Route path="subjects/:classId/video/:videoId" element={<StudentVideoPlayerPage />} />

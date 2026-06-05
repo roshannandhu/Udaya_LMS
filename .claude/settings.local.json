@@ -72,7 +72,10 @@
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\);process.stdin.on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);console.log\\(d.access_token?'LOGIN OK \\(schema is fine — same schema.sql, works\\)':'FAIL '+JSON.stringify\\(d\\)\\)}\\)\")",
       "Bash(gh auth *)",
       "Bash(gh repo *)",
-      "PowerShell($g = Get-Command gh -ErrorAction SilentlyContinue; if \\($g\\) { \"gh found: $\\($g.Source\\)\"; gh auth status 2>&1 | Select-Object -First 5 } else { \"gh NOT installed\" })"
+      "PowerShell($g = Get-Command gh -ErrorAction SilentlyContinue; if \\($g\\) { \"gh found: $\\($g.Source\\)\"; gh auth status 2>&1 | Select-Object -First 5 } else { \"gh NOT installed\" })",
+      "Bash(cat frontend/.env.local)",
+      "Bash(cat frontend/.env)",
+      "Bash(ls backend/.env)"
     ]
   }
 }

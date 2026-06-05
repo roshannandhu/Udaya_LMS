@@ -211,6 +211,8 @@ export const broadcastApi = {
     apiClient('/broadcast-reads', { method: 'POST', body: JSON.stringify({ broadcast_ids: broadcastIds }) }),
   getReadCounts: (standardId) =>
     apiClient(`/broadcasts/reads?standard_id=${standardId}`),
+  getReadDetails: (broadcastId) =>
+    apiClient(`/broadcasts/${broadcastId}/reads/details`),
   getTTL: (standardId) =>
     apiClient(`/standards/${standardId}/broadcast-ttl`),
   setTTL: (standardId, ttlHours) =>

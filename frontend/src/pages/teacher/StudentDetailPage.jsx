@@ -202,9 +202,9 @@ export default function StudentDetailPage() {
   if (loading) {
     return (
       <div>
-        <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
           <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md"><ArrowLeft size={16} /></button>
+            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
             <Skeleton className="h-5 w-40" />
           </div>
         </div>
@@ -219,10 +219,10 @@ export default function StudentDetailPage() {
   if (removed) {
     return (
       <div>
-        <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
           <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md"><ArrowLeft size={16} /></button>
-            <h1 className="text-base font-semibold">Student removed</h1>
+            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
+            <h1 className="text-lg md:text-xl font-semibold">Student removed</h1>
           </div>
         </div>
         <div className="px-5 md:px-8 py-16 max-w-5xl mx-auto text-center">
@@ -239,13 +239,13 @@ export default function StudentDetailPage() {
 
   return (
     <div className="bg-[#FAFAF9] min-h-screen">
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-md transition-colors"><ArrowLeft size={16} /></button>
             <div className="flex-1 min-w-0">
               <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Students / {standard?.name}</p>
-              <h1 className="text-base font-semibold truncate text-[#1A1A19]">{s.name}</h1>
+              <h1 className="text-lg md:text-xl font-semibold truncate text-[#1A1A19]">{s.name}</h1>
             </div>
             {s.blocked && <Tag color="red" className="ml-2">Blocked</Tag>}
           </div>
@@ -321,7 +321,7 @@ export default function StudentDetailPage() {
       {/* Password Modals */}
       <Modal open={!!resetPwResult} onClose={() => setResetPwResult(null)} title="Password reset" size="sm">
         <p className="text-sm text-neutral-600 mb-3">New temporary password for <strong>{s.name}</strong>:</p>
-        <div className="flex items-center gap-2 p-3 bg-neutral-900 text-white rounded-lg font-mono text-base mb-3 select-all">
+        <div className="flex items-center gap-2 p-3 bg-ink text-white rounded-pill font-mono text-base mb-3 select-all">
           {resetPwResult}
         </div>
         <p className="text-xs text-neutral-500 mb-4">Share this with the student. They'll be prompted to change it on next login.</p>
@@ -334,7 +334,7 @@ export default function StudentDetailPage() {
         {(viewPwResult === 'error' || viewPwResult === 'column_missing') ? (
           <>
             <p className="text-sm text-neutral-600 mb-3">The <code className="bg-neutral-100 px-1 rounded text-xs">plain_password</code> column is missing. Run this once in your <strong>Supabase SQL Editor</strong>:</p>
-            <div className="p-3 bg-neutral-900 text-white rounded-lg font-mono text-xs mb-4 select-all break-all">
+            <div className="p-3 bg-ink text-white rounded-pill font-mono text-xs mb-4 select-all break-all">
               ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
             </div>
             <p className="text-xs text-neutral-500 mb-4">After running the migration, restart the backend — it will auto-detect the column. New student passwords set after that will be visible here.</p>
@@ -362,7 +362,7 @@ export default function StudentDetailPage() {
         ) : (
           <>
             <p className="text-sm text-neutral-600 mb-3">Last password set for <strong>{s.name}</strong>:</p>
-            <div className="p-3 bg-neutral-900 text-white rounded-lg font-mono text-base mb-3 select-all">
+            <div className="p-3 bg-ink text-white rounded-pill font-mono text-base mb-3 select-all">
               {viewPwResult}
             </div>
             <p className="text-xs text-neutral-500 mb-4">This is the password you last set. Once the student changes it themselves, it won't be visible here.</p>

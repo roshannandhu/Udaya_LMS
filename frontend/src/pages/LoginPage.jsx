@@ -74,17 +74,17 @@ export default function LoginPage() {
           </span>
         </div>
 
-        <div className="glass-panel border border-white/60 p-8 rounded-2xl shadow-lg backdrop-blur-md">
-          <h1 className="text-xl font-semibold mb-1">Welcome back</h1>
+        <div className="glass-panel p-8">
+          <h1 className="text-2xl font-semibold mb-1">Welcome back</h1>
           <p className="text-sm text-neutral-500 mb-6">Sign in to continue</p>
 
-          <div className="flex p-1 bg-white/30 backdrop-blur-sm rounded-lg mb-6 border border-white/40 shadow-inner">
+          <div className="flex p-1 bg-[#F4F2EF] rounded-pill mb-6 border border-[#EFEDEA]">
             {['teacher', 'student'].map((r) => (
               <button
                 key={r}
                 onClick={() => { setMode(r); setError(''); }}
-                className={`flex-1 py-1.5 rounded text-sm font-medium capitalize transition-all
-                  ${mode === r ? 'bg-white/80 text-neutral-900 shadow-sm border border-white/60' : 'text-neutral-600 hover:text-neutral-900 hover:bg-white/40'}`}
+                className={`flex-1 py-1.5 rounded-pill text-sm font-medium capitalize transition-all
+                  ${mode === r ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600 hover:text-neutral-900'}`}
               >
                 {r}
               </button>
@@ -100,7 +100,7 @@ export default function LoginPage() {
                   onChange={(e) => setCreds({ ...creds, phone: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="student@email.com or 9876543210"
-                  className="w-full px-3 py-2 rounded-lg bg-white/50 border border-white/60 focus:border-neutral-400 focus:ring-2 focus:ring-white/50 outline-none text-sm backdrop-blur-sm"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm"
                 />
               </div>
             )}
@@ -114,7 +114,7 @@ export default function LoginPage() {
                   onChange={(e) => setCreds({ ...creds, email: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="priya@academy.com"
-                  className="w-full px-3 py-2 rounded-lg bg-white/50 border border-white/60 focus:border-neutral-400 focus:ring-2 focus:ring-white/50 outline-none text-sm backdrop-blur-sm"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm"
                 />
               </div>
             )}
@@ -128,7 +128,7 @@ export default function LoginPage() {
                   onChange={(e) => setCreds({ ...creds, pwd: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="Enter password"
-                  className="w-full px-3 py-2 pr-9 rounded-lg bg-white/50 border border-white/60 focus:border-neutral-400 focus:ring-2 focus:ring-white/50 outline-none text-sm backdrop-blur-sm"
+                  className="w-full px-3 py-2 pr-9 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm"
                 />
                 <button
                   type="button"
@@ -149,7 +149,7 @@ export default function LoginPage() {
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="w-full py-2 bg-neutral-900 text-white rounded-md font-medium hover:bg-neutral-800 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-ink text-white rounded-pill font-medium hover:bg-neutral-800 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : null}
               {loading ? 'Signing in...' : 'Sign in'}
@@ -157,7 +157,7 @@ export default function LoginPage() {
           </div>
 
           {mode === 'student' && (
-            <div className="mt-5 p-3 rounded-lg bg-white/40 backdrop-blur-sm border border-white/60 text-xs text-neutral-700 leading-relaxed shadow-sm">
+            <div className="mt-5 p-3 rounded-xl bg-pastel-sky border border-black/5 text-xs text-neutral-700 leading-relaxed">
               Sign in with your email or phone number and the password your teacher gave you.
             </div>
           )}

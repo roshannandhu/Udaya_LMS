@@ -795,8 +795,9 @@ def verify_token(authorization: Optional[str] = Header(None)):
                     # Fetch standard name
                     if lookup.data.get("standard_id"):
                         try:
-                            std = service_supabase.table("standards").select("name").eq("id", lookup.data["standard_id"]).single().execute()
+                            std = service_supabase.table("standards").select("name, emoji").eq("id", lookup.data["standard_id"]).single().execute()
                             result["standard_name"] = std.data["name"] if std.data else None
+                            result["standard_emoji"] = std.data.get("emoji") if std.data else None
                         except Exception:
                             result["standard_name"] = None
             except Exception:
@@ -4257,17 +4258,29 @@ async def websocket_endpoint(websocket: WebSocket, standard_id: str, token: Opti
         try:
             db_rows = await asyncio.to_thread(
                 lambda: service_supabase.table("broadcasts")
-                    .select("id, message, attachment_url, attachment_type, created_at, edited, deleted, scheduled_for, reply_to, reply_to_text, expires_at, standard_id")
+                    .select("id, message, text, attachment_url, attachment_type, created_at, edited, deleted, scheduled_for, reply_to, expires_at, standard_id")
                     .eq("standard_id", standard_id)
                     .order("created_at")
                     .execute()
             )
-            if db_rows.data:
-                for row in db_rows.data:
+            rows = db_rows.data or []
+            if rows:
+                # Normalize: coalesce message<-text, then enrich reply_to_text from parent
+                id_to_msg = {}
+                for row in rows:
+                    if not row.get("message") and row.get("text"):
+                        row["message"] = row["text"]
+                    id_to_msg[row["id"]] = row.get("message") or ""
+                for row in rows:
+                    if row.get("reply_to"):
+                        parent = id_to_msg.get(row["reply_to"], "")
+                        row["reply_to_text"] = parent[:120] if parent else None
+                    else:
+                        row["reply_to_text"] = None
                     if not any(b.get("id") == row["id"] for b in manager.broadcast_history):
                         manager.broadcast_history.append(row)
                 manager.save_history()
-                await websocket.send_json({"type": "history", "data": db_rows.data})
+                await websocket.send_json({"type": "history", "data": rows})
         except Exception as e:
             print(f"WS DB history fallback error: {e}")
 
@@ -4442,9 +4455,15 @@ def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
                 pass
         if not broadcast_ids:
             return {}
-        reads = service_supabase.table("broadcast_reads").select("broadcast_id").in_("broadcast_id", broadcast_ids).execute()
+        # Only count reads from students CURRENTLY in this standard, so the count
+        # stays consistent with the read-details modal and the "all read" blue tick.
+        students_res = service_supabase.table("students").select("id").eq("standard_id", standard_id).execute()
+        valid_student_ids = {s["id"] for s in (students_res.data or [])}
+        reads = service_supabase.table("broadcast_reads").select("broadcast_id, student_id").in_("broadcast_id", broadcast_ids).execute()
         counts = {}
         for row in (reads.data or []):
+            if row.get("student_id") not in valid_student_ids:
+                continue
             bid = row["broadcast_id"]
             counts[bid] = counts.get(bid, 0) + 1
         return counts

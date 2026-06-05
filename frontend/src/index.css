@@ -9,7 +9,7 @@
 
 body {
   font-family: 'Inter', 'SF Pro Text', -apple-system, sans-serif;
-  background-color: #F6F4EF;   /* flat warm off-white (reference) */
+  background-color: #EAF4F7;   /* tinted canvas (reference pale blue) */
   color: #1A1A1A;
   min-height: 100vh;
 }
@@ -19,25 +19,28 @@ h1, h2, h3 {
   font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
-/* ── Flat surfaces (formerly glassmorphism) ──────────────────────────────
-   Class names are kept so the ~150 existing usages flatten with no JSX edits. */
+/* ── Soft rounded surfaces (formerly glassmorphism / flat) ───────────────
+   Class names are kept so the ~150 existing usages adopt the new look with
+   no JSX edits: larger radius + soft ambient shadow. */
 .glass,
 .glass-panel {
   background: #ffffff;
-  border: 1px solid #EBEAE7;
-  border-radius: 1rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: 1px solid #EFEDEA;
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 20px rgba(17, 24, 39, 0.06);
 }
 
+/* Flat full-width bar — used by in-page sticky headers (back button + title).
+   Must stay a flat bar (no radius) so it docks cleanly to the top of pages. */
 .glass-nav {
   background: #ffffff;
-  border-top: 1px solid #EBEAE7;
-  border-bottom: 1px solid #EBEAE7;
+  border-top: 1px solid #EFEDEA;
+  border-bottom: 1px solid #EFEDEA;
 }
 
 .glass-btn {
   background: #ffffff;
-  border: 1px solid #EBEAE7;
+  border: 1px solid #EFEDEA;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   border-radius: 9999px;
 }
@@ -48,7 +51,7 @@ h1, h2, h3 {
 
 .glass-toggle-track {
   background: #E5E4E1;
-  border: 1px solid #EBEAE7;
+  border: 1px solid #EFEDEA;
   border-radius: 9999px;
 }
 
@@ -56,6 +59,19 @@ h1, h2, h3 {
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   border-radius: 9999px;
+}
+
+/* Dark rounded top navigation bar (reference). */
+.nav-dark {
+  background: #1A1A1A;
+  color: #ffffff;
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.12);
+}
+
+/* Dotted connector for the learning-journey roadmap. */
+.roadmap-dotted {
+  border-left: 2px dashed #CBE3D8;
 }
 
 /* ── Neutralize blur everywhere (covers all inline backdrop-blur-* utils) ── */
@@ -73,13 +89,17 @@ h1, h2, h3 {
 }
 .border-white\/40, .border-white\/50, .border-white\/60,
 .border-white\/70, .border-white\/80 {
-  border-color: #EBEAE7 !important;
+  border-color: #EFEDEA !important;
 }
 
-/* ── Remove all decorative motion; keep functional loading spinners.
-   Killing `transition` makes state changes instant but leaves CSS `animation`
-   (animate-spin / animate-pulse) working. The fade/slide entrance keyframes are
-   removed so Modal/Sheet `animate-in` classes become inert. */
-*, *::before, *::after {
-  transition: none !important;
+/* ── Motion is now enabled (Framer Motion + Tailwind transitions).
+   Honor the OS "reduce motion" setting by disabling decorative transitions
+   and animations for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

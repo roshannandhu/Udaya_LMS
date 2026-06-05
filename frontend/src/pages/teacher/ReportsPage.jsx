@@ -1,50 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, Trophy, BarChart3, Download, AlertTriangle, Users, Star } from 'lucide-react';
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { Avatar, Tag, SectionHeader, Btn, Skeleton } from '../../components/ui';
-import { attendanceApi, apiClient } from '../../lib/api';
+import { ArrowLeft, Trophy, Download, AlertTriangle, Users, BookOpen, Clock, CheckCircle, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Avatar, Btn, Skeleton } from '../../components/ui';
+import StatCard from '../../components/cards/StatCard';
+import { apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
 
 export default function ReportsPage() {
   const navigate = useNavigate();
 
-  // Standards + students from global cache (instant from localStorage)
   const standards       = useAppCache(s => s.standards);
   const standardsReady  = useAppCache(s => s.standardsReady);
   const refreshStandards = useAppCache(s => s.refreshStandards);
-  const [activeStd, setActiveStd]         = useState(null);
-  // Per-standard data loaded fresh when standard is selected
-  const [students, setStudents]           = useState([]);
-  const [subjects, setSubjects]           = useState([]);
-  const [lowAttendance, setLowAttendance] = useState([]);
-  const [loadingData, setLoadingData]     = useState(false);
+  
+  const [activeStd, setActiveStd] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [loadingData, setLoadingData] = useState(false);
+  
   const loadingStandards = !standardsReady;
 
-  // Set first standard as active once cache is ready
   useEffect(() => {
     if (standards.length > 0 && !activeStd) setActiveStd(standards[0].id);
-  }, [standards]);
+  }, [standards, activeStd]);
 
-  // Background refresh
   useEffect(() => {
     refreshStandards();
-  }, []);
+  }, [refreshStandards]);
 
-  // Load per-standard data when standard changes
   useEffect(() => {
     if (!activeStd) return;
     const load = async () => {
       setLoadingData(true);
       try {
-        const [studs, subs, lowAtt] = await Promise.all([
-          apiClient(`/students?standard_id=${activeStd}`),
-          apiClient(`/subjects?standard_id=${activeStd}`),
-          attendanceApi.getLowAttendance(activeStd, 75),
-        ]);
-        setStudents(Array.isArray(studs) ? studs : []);
-        setSubjects(Array.isArray(subs)  ? subs  : []);
-        setLowAttendance(lowAtt?.students || []);
+        const data = await apiClient(`/reports/standard/${activeStd}/analytics`);
+        setAnalytics(data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -54,55 +44,25 @@ export default function ReportsPage() {
     load();
   }, [activeStd]);
 
-  const handleExportAttendance = async () => {
-    if (!activeStd) return;
-    try {
-      await attendanceApi.downloadExport(activeStd);
-    } catch (err) {
-      alert('Failed to export attendance');
-    }
-  };
-
-  const exportAttendancePDF = async () => {
-    if (!currentStd || lowAttendance.length === 0) return;
-    const { default: jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
-    const doc = new jsPDF();
-    doc.text('Attendance Report', 14, 16);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    // Simulating filter values as requested
-    doc.text(`Standard: ${currentStd.name}  |  Threshold: 75%  |  Date: Last 30 Days`, 14, 24);
-    doc.setTextColor(0);
-    
-    doc.autoTable({
-      startY: 30,
-      head: [['Student', 'Attendance %', 'Absent (30d)']],
-      body: lowAttendance.map(r => [r.name, `${r.attendance_pct}%`, r.absent_days ?? '—']),
-      theme: 'striped',
-      headStyles: { fillColor: [220, 38, 38] },
-    });
-    doc.save(`${currentStd.name.replace(/\s+/g, '_')}_Attendance_Report.pdf`);
-  };
-
   const handleExportPDF = async () => {
-    if (!currentStd || students.length === 0) return;
+    if (!analytics || !currentStd) return;
     const { default: jsPDF } = await import('jspdf');
     await import('jspdf-autotable');
     const doc = new jsPDF();
     const now = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
     doc.setFontSize(20);
-    doc.text('Class Report', 14, 18);
+    doc.text('Class Analytics Report', 14, 18);
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`${currentStd.name}  ·  Generated ${now}`, 14, 26);
     doc.setTextColor(0);
 
+    const overview = analytics.overview;
     doc.setFontSize(12);
-    doc.text(`Students: ${totalStudents}   Avg Score: ${avgScore}%   Avg Attendance: ${avgAttendance}%   Total Points: ${totalPoints}`, 14, 36);
+    doc.text(`Students: ${overview.total_students}   Avg Score: ${overview.avg_score}%   Avg Attendance: ${overview.avg_attendance}%   Total Points: ${overview.total_points}`, 14, 36);
 
-    const rows = [...students]
+    const rows = [...analytics.students]
       .sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0))
       .map((s, i) => [
         i + 1,
@@ -121,74 +81,60 @@ export default function ReportsPage() {
       columnStyles: { 0: { cellWidth: 10 } },
     });
 
-    if (lowAttendance.length > 0) {
+    if (analytics.subject_performance.length > 0) {
       const finalY = doc.lastAutoTable.finalY + 12;
       doc.setFontSize(13);
-      doc.text('Students Below 75% Attendance', 14, finalY);
-      const laRows = lowAttendance.map(s => [s.name, `${s.attendance_pct}%`, s.absent_days ?? '—']);
+      doc.text('Subject Performance', 14, finalY);
+      const subRows = analytics.subject_performance.map(s => [s.subject_name, `${s.avg_score}%`, `${s.avg_attendance}%`]);
       doc.autoTable({
         startY: finalY + 6,
-        head: [['Name', 'Attendance', 'Absent Days (30d)']],
-        body: laRows,
+        head: [['Subject', 'Avg Score', 'Avg Attendance']],
+        body: subRows,
         theme: 'striped',
-        headStyles: { fillColor: [220, 38, 38] },
+        headStyles: { fillColor: [79, 70, 229] },
       });
     }
 
-    doc.save(`${currentStd.name.replace(/\s+/g, '_')}_Report.pdf`);
+    doc.save(`${currentStd.name.replace(/\s+/g, '_')}_Analytics_Report.pdf`);
   };
 
-  // Computed stats
-  const totalStudents = students.length;
-  const avgScore = students.length
-    ? Math.round(students.reduce((s, x) => s + (x.avg_score || 0), 0) / students.length)
-    : 0;
-  const avgAttendance = students.length
-    ? Math.round(students.reduce((s, x) => s + (x.attendance_pct || 0), 0) / students.length)
-    : 0;
-  const totalPoints = students.reduce((s, x) => s + (x.points || 0), 0);
-
-  const topStudents = [...students]
-    .sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0))
-    .slice(0, 8);
-
   const currentStd = standards.find(s => s.id === activeStd);
-
-  // Generate Attendance Distribution Data for Chart
-  const attendanceData = [
-    { name: '> 90%',    count: students.filter(s => s.attendance_pct != null && s.attendance_pct >= 90).length,                                        fill: '#22c55e' },
-    { name: '75%–89%', count: students.filter(s => s.attendance_pct != null && s.attendance_pct >= 75 && s.attendance_pct < 90).length,               fill: '#eab308' },
-    { name: '< 75%',   count: students.filter(s => s.attendance_pct != null && s.attendance_pct < 75).length,                                         fill: '#ef4444' },
-  ];
+  const overview = analytics?.overview || { total_students: 0, avg_score: 0, avg_attendance: 0, total_points: 0 };
+  const students = analytics?.students || [];
+  const subjectPerf = analytics?.subject_performance || [];
+  const recentTests = analytics?.recent_tests || [];
+  
+  const atRiskCount = students.filter(s => s.attendance_pct < 75 || s.avg_score < 40).length;
 
   return (
     <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
+        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
+          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md transition-colors">
             <ArrowLeft size={16} />
           </button>
-          <h1 className="text-base font-semibold flex-1">Reports & Analytics</h1>
-          <Btn variant="default" size="sm" icon={Download} onClick={handleExportPDF} disabled={students.length === 0}>
-            Class Report
+          <h1 className="text-lg md:text-xl font-semibold flex-1">Standard Analytics</h1>
+          <Btn variant="default" size="sm" icon={Download} onClick={handleExportPDF} disabled={!analytics}>
+            Export PDF
           </Btn>
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
-        {/* Standard selector */}
+      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto space-y-8 pb-20">
+        
+        {/* Standard Selector */}
         {loadingStandards ? (
-          <div className="flex gap-2 mb-6">
-            {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-20 rounded-full" />)}
+          <div className="flex gap-2">
+            {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}
           </div>
         ) : (
-          <div className="flex gap-2 mb-6 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
             {standards.map(s => (
               <button key={s.id} onClick={() => setActiveStd(s.id)}
                 className={`px-4 py-1.5 text-sm rounded-full font-medium transition-all border ${
                   activeStd === s.id
-                    ? 'bg-neutral-900 text-white border-neutral-900'
-                    : 'text-neutral-600 border-white/60 glass-panel hover:bg-white/40'
+                    ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
+                    : 'text-neutral-600 border-white/60 glass-panel hover:bg-[#F4F2EF]'
                 }`}>
                 {s.emoji} {s.name}
               </button>
@@ -197,169 +143,148 @@ export default function ReportsPage() {
         )}
 
         {standards.length === 0 && !loadingStandards && (
-          <div className="text-center py-16 text-sm text-neutral-500 glass-panel border-dashed border-white/60 rounded-xl">
-            No standards created yet. Go to Subjects to create one.
+          <div className="text-center py-12 text-neutral-400">
+            No classes assigned.
           </div>
         )}
 
-        {activeStd && (
+        {loadingData ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+             {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+          </div>
+        ) : analytics ? (
           <>
-            {/* Summary cards */}
-            {loadingData ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                {[
-                  { label: 'Students',     value: totalStudents,     icon: Users,      color: 'text-blue-600' },
-                  { label: 'Avg score',    value: `${avgScore}%`,    icon: BarChart3,  color: 'text-green-600' },
-                  { label: 'Avg attend.',  value: `${avgAttendance}%`, icon: TrendingUp, color: avgAttendance >= 75 ? 'text-green-600' : 'text-red-500' },
-                  { label: 'Total points', value: totalPoints,       icon: Star,       color: 'text-amber-600' },
-                ].map((stat, i) => (
-                  <div key={i} className="p-4 glass-panel rounded-xl">
-                    <stat.icon size={16} className={`${stat.color} mb-2`} />
-                    <p className={`text-2xl font-bold tracking-tight ${stat.color}`}>{stat.value}</p>
-                    <p className="text-xs text-neutral-500 mt-0.5">{stat.label}</p>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard title="Total Students" value={overview.total_students} icon={Users} color="bg-blue-100 text-blue-700" />
+              <StatCard title="Avg Score" value={`${overview.avg_score}%`} icon={Trophy} color="bg-emerald-100 text-emerald-700" />
+              <StatCard title="Avg Attendance" value={`${overview.avg_attendance}%`} icon={CheckCircle} color="bg-violet-100 text-violet-700" />
+              <div className="glass-panel p-4 rounded-2xl flex flex-col justify-between border border-red-100 bg-red-50/30 relative overflow-hidden">
+                <div className="flex items-center justify-between z-10">
+                  <p className="text-sm font-medium text-red-800">At-Risk Students</p>
+                  <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                    <AlertTriangle size={16} />
                   </div>
-                ))}
+                </div>
+                <h3 className="text-2xl font-bold text-red-700 mt-2 z-10">{atRiskCount}</h3>
               </div>
-            )}
-
-            {/* Class Analytics Charts */}
-            {!loadingData && students.length > 0 && (
-              <div className="mb-8 glass-panel p-5 rounded-2xl">
-                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                  <BarChart3 size={16} className="text-neutral-500" /> Attendance Distribution
-                </h3>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={attendanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#737373' }} />
-                      <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#737373' }} />
-                      <RechartsTooltip cursor={{fill: 'rgba(0,0,0,0.05)'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Students">
-                        {attendanceData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {/* Top performers */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Top Performers</h3>
-                {topStudents.length > 0 && <Tag color="gray">{totalStudents} total</Tag>}
-              </div>
-              {loadingData ? (
-                <div className="space-y-2">
-                  {[1,2,3].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}
-                </div>
-              ) : topStudents.length === 0 ? (
-                <div className="text-center py-10 text-sm text-neutral-500 glass-panel border-dashed border-white/60 rounded-xl">
-                  No students in this standard yet.
-                </div>
-              ) : (
-                <div className="glass-panel rounded-2xl overflow-hidden">
-                  {topStudents.map((s, i) => (
-                    <button key={s.id} onClick={() => navigate(`/teacher/students/${s.id}`)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-white/40 transition-colors text-left ${i > 0 ? 'border-t border-white/40' : ''}`}>
-                      <span className="w-6 text-sm font-bold text-center">
-                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-neutral-400">#{i+1}</span>}
-                      </span>
-                      <Avatar name={s.name} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{s.name}</p>
-                        <p className="text-xs text-neutral-500">@{s.username}</p>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-right">
-                        <div>
-                          <p className="font-bold text-sm">{Math.round(s.avg_score || 0)}%</p>
-                          <p className="text-neutral-400">avg</p>
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm text-amber-600">{s.points || 0}</p>
-                          <p className="text-neutral-400">pts</p>
-                        </div>
-                        <div>
-                          <p className={`font-bold text-sm ${(s.attendance_pct || 0) < 75 ? 'text-red-500' : 'text-green-600'}`}>
-                            {Math.round(s.attendance_pct || 0)}%
-                          </p>
-                          <p className="text-neutral-400">att.</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* Low Attendance Report */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold">Below Attendance Threshold (75%)</h3>
-                  {lowAttendance.length > 0 && (
-                    <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">
-                      {lowAttendance.length}
-                    </span>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Chart */}
+              <div className="lg:col-span-2 glass-panel p-5 rounded-2xl border border-white/60">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg"><BarChart3 size={16} /></div>
+                  <h2 className="font-semibold">Subject Performance</h2>
+                </div>
+                <div className="h-64">
+                  {subjectPerf.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={subjectPerf} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+                        <XAxis dataKey="subject_name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#737373' }} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#737373' }} />
+                        <RechartsTooltip 
+                          cursor={{ fill: '#f5f5f5' }}
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
+                        />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                        <Bar dataKey="avg_score" name="Avg Score (%)" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={32} />
+                        <Bar dataKey="avg_attendance" name="Avg Attendance (%)" fill="#14b8a6" radius={[4, 4, 0, 0]} barSize={32} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-neutral-400 text-sm">No subject data available</div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Btn variant="default" size="sm" icon={Download} onClick={exportAttendancePDF} disabled={lowAttendance.length === 0}>
-                    Export PDF
-                  </Btn>
-                  <Btn variant="default" size="sm" icon={Download} onClick={handleExportAttendance}>
-                    Export CSV
-                  </Btn>
-                </div>
               </div>
 
-              {loadingData ? (
-                <div className="space-y-2">
-                  {[1,2,3].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}
+              {/* Recent Assessments */}
+              <div className="glass-panel p-5 rounded-2xl border border-white/60 flex flex-col">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg"><Clock size={16} /></div>
+                  <h2 className="font-semibold">Recent Assessments</h2>
                 </div>
-              ) : lowAttendance.length === 0 ? (
-                <div className="text-center py-10 text-sm text-green-700 bg-green-50/60 border border-green-200 rounded-2xl backdrop-blur-sm">
-                  ✅ All students are above the 75% attendance threshold.
-                </div>
-              ) : (
-                <div className="glass-panel rounded-2xl overflow-hidden">
-                  <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-2 border-b border-white/40 bg-white/20">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Student</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 text-right">Attend %</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 text-right">Absent (30d)</span>
-                  </div>
-                  {lowAttendance.map((s, i) => (
-                    <button key={s.student_id} onClick={() => navigate(`/teacher/students/${s.student_id}`)}
-                      className={`w-full grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-3 hover:bg-white/40 transition-colors text-left ${i > 0 ? 'border-t border-white/40' : ''}`}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{s.name}</p>
-                          <p className="text-xs text-neutral-400">@{s.username}</p>
+                {recentTests.length > 0 ? (
+                  <div className="flex-1 space-y-4">
+                    {recentTests.map(t => (
+                      <div key={t.test_id} className="p-3 bg-white/50 rounded-xl border border-[#EFEDEA]">
+                        <div className="flex justify-between items-start mb-1">
+                          <p className="font-medium text-sm text-neutral-900 truncate pr-2" title={t.title}>{t.title}</p>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.avg_score >= 70 ? 'bg-emerald-100 text-emerald-700' : t.avg_score >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                            {t.avg_score}% Avg
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-neutral-500 mt-2">
+                          <span className="flex items-center gap-1"><BookOpen size={12}/> {t.subject_name}</span>
+                          <span>{t.participation}% Participation</span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className={`text-sm font-bold ${s.attendance_pct < 50 ? 'text-red-600' : 'text-amber-600'}`}>
-                          {s.attendance_pct}%
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm text-neutral-600">{s.absent_days ?? '—'}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-neutral-400 text-sm">No recent tests</div>
+                )}
+              </div>
+            </div>
+
+            {/* Student Roster */}
+            <div className="glass-panel rounded-2xl border border-white/60 overflow-hidden">
+              <div className="p-5 border-b border-[#EFEDEA] flex items-center gap-2">
+                <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg"><Users size={16} /></div>
+                <h2 className="font-semibold">Student Roster</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8F7F5] border-b border-[#EFEDEA]">
+                      <th className="py-3 px-5 text-xs font-semibold text-neutral-500">Student</th>
+                      <th className="py-3 px-5 text-xs font-semibold text-neutral-500 text-center">Avg Score</th>
+                      <th className="py-3 px-5 text-xs font-semibold text-neutral-500 text-center">Attendance</th>
+                      <th className="py-3 px-5 text-xs font-semibold text-neutral-500 text-right">Points</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EFEDEA]">
+                    {[...students].sort((a,b) => (b.avg_score||0) - (a.avg_score||0)).map((s) => (
+                      <tr key={s.id} className="hover:bg-white/40 transition-colors">
+                        <td className="py-3 px-5">
+                          <div className="flex items-center gap-3">
+                            <Avatar src={s.avatar_url} name={s.name} size="sm" />
+                            <div>
+                              <p className="font-medium text-sm text-neutral-900">{s.name}</p>
+                              {(s.attendance_pct < 75 || s.avg_score < 40) && (
+                                <p className="text-[10px] font-semibold text-red-500">Requires Attention</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-5 text-center">
+                          <span className={`inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md ${
+                            (s.avg_score||0) >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                            (s.avg_score||0) >= 40 ? 'bg-neutral-100 text-neutral-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {Math.round(s.avg_score||0)}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-5 text-center">
+                           <span className={`inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md ${
+                            (s.attendance_pct||0) >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                            (s.attendance_pct||0) >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {Math.round(s.attendance_pct||0)}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-5 text-right">
+                          <span className="text-sm font-semibold text-neutral-700">{s.points || 0}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );

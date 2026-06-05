@@ -112,7 +112,7 @@ export default function StudentChangePasswordPage() {
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="w-full py-2 bg-neutral-900 text-white rounded-md font-medium hover:bg-neutral-800 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-2 bg-ink text-white rounded-pill font-medium hover:bg-neutral-800 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : null}
               {loading ? 'Saving...' : 'Set Password & Continue'}

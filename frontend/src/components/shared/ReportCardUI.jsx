@@ -26,14 +26,14 @@ function pointsToPath(pts) {
 function PeriodSelector({ value, onChange }) {
   const capitalized = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
   return (
-    <div style={{ display: "flex", gap: 4, background: "#F3F2EF", borderRadius: 8, padding: 3 }}>
+    <div style={{ display: "flex", gap: 4, background: "#EFEDEA", borderRadius: 999, padding: 3 }}>
       {PERIOD_OPTIONS.map((p) => (
         <button
           key={p}
           onClick={() => onChange(p.toLowerCase())}
           style={{
             padding: "5px 14px",
-            borderRadius: 6,
+            borderRadius: 999,
             border: "none",
             cursor: "pointer",
             fontSize: 12,
@@ -400,8 +400,9 @@ export default function ReportCardUI({
 
   const card = (children, extra = {}) => (
     <div style={{
-      background: "#fff", border: "0.5px solid #EBEAE7",
-      borderRadius: 12, padding: "16px",
+      background: "#fff", border: "1px solid #EFEDEA",
+      borderRadius: 20, padding: "16px",
+      boxShadow: "0 4px 20px rgba(17,24,39,0.05)",
       ...extra,
     }}>
       {children}
@@ -417,7 +418,7 @@ export default function ReportCardUI({
   return (
     <div style={{
       fontFamily: "'DM Sans', 'Inter', system-ui, sans-serif",
-      background: "#FAFAF9", minHeight: "100%",
+      background: "transparent", minHeight: "100%",
       padding: "0 0 40px",
       color: "#1A1A19",
     }}>

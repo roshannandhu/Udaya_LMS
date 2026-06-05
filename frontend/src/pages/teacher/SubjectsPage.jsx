@@ -4,22 +4,16 @@ import {
   Plus, Search, X, Loader2, ArrowRight,
   Users, BookOpen, UserPlus, BookPlus
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Modal, Input, Skeleton } from '../../components/ui';
+import { PASTEL, pastelFor } from '../../components/cards/pastel';
+import { springCard } from '../../lib/motion';
 import { apiClient } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
 
 /* ─── Badge colour helpers ─────────────────────────────────────── */
 function getStdNum(name) { const m = name.match(/\d+/); return m ? m[0] : ''; }
-function getGradient(num) {
-  switch (num) {
-    case '10': return 'from-[#EEEDFE] to-[#E3E1FC] text-[#3C3489] border-[#D4D1FA]';
-    case '11': return 'from-[#E1F5EE] to-[#D0EFE5] text-[#085041] border-[#BCE8DA]';
-    case '12': return 'from-[#FBEAF0] to-[#F8DDE6] text-[#72243E] border-[#F4CEDB]';
-    case '9':  return 'from-[#FAEEDA] to-[#F6E3C6] text-[#633806] border-[#F1D7B0]';
-    default:   return 'from-white/60 to-white/40 text-neutral-800 border-white/80';
-  }
-}
 
 /* ─── Modals (New Standard, New Subject, Add Student) ────────── */
 function NewStandardModal({ open, onClose, onSuccess }) {
@@ -52,7 +46,7 @@ function NewStandardModal({ open, onClose, onSuccess }) {
           <div className="flex gap-2 flex-wrap">
             {['📚', '📖', '🎓', '✨', '💡', '🔢', '🧪', '📐'].map(e => (
               <button key={e} onClick={() => setEmoji(e)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-all ${emoji === e ? 'border-neutral-900 bg-white shadow-sm scale-110' : 'border-white/60 hover:bg-white/40'}`}>{e}</button>
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-all ${emoji === e ? 'border-neutral-900 bg-white shadow-sm scale-110' : 'border-white/60 hover:bg-[#F4F2EF]'}`}>{e}</button>
             ))}
           </div>
         </div>
@@ -92,7 +86,7 @@ function NewSubjectModal({ open, onClose, standardId, standardName }) {
           <div className="flex gap-2 flex-wrap">
             {['📐', '🧮', '🔬', '🌍', '📝', '💻', '🎨', '📕'].map(e => (
               <button key={e} onClick={() => setEmoji(e)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-all ${emoji === e ? 'border-neutral-900 bg-white shadow-sm scale-110' : 'border-white/60 hover:bg-white/40'}`}>{e}</button>
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-all ${emoji === e ? 'border-neutral-900 bg-white shadow-sm scale-110' : 'border-white/60 hover:bg-[#F4F2EF]'}`}>{e}</button>
             ))}
           </div>
         </div>
@@ -146,53 +140,48 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
   );
 }
 
-/* ─── Premium Glassmorphic Class Card ────────────────────────── */
+/* ─── Pastel Class Card ──────────────────────────────────────── */
 function PremiumClassCard({ std, subjectsCount, studentsCount, navigate }) {
   const num = getStdNum(std.name);
-  const grad = getGradient(num);
+  const pastel = PASTEL[pastelFor(std.name)];
 
   return (
-    <div 
+    <motion.div
       onClick={() => navigate(`/teacher/subjects/${std.id}`)}
-      className="group relative bg-white/40 backdrop-blur-2xl border border-white/60 rounded-[20px] md:rounded-[24px] p-4 md:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col h-full"
+      whileHover={{ y: -4 }} whileTap={{ scale: 0.99 }} transition={springCard}
+      className="group rounded-card p-5 md:p-6 cursor-pointer flex flex-col h-full border border-black/5"
+      style={{ background: pastel.hex }}
     >
-      {/* Decorative background glow */}
-      <div className="absolute -top-24 -right-24 w-48 h-48 bg-white/40 rounded-full blur-3xl group-hover:bg-white/60 transition-colors pointer-events-none" />
-      
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4 md:mb-8 relative z-10">
-        <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center text-xl md:text-2xl font-bold bg-gradient-to-br border shadow-sm ${grad}`}>
+      <div className="flex items-start justify-between mb-6">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold bg-white/70"
+          style={{ color: pastel.fgHex }}>
           {num || std.emoji || '📚'}
         </div>
-        <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/50 border border-white/60 flex items-center justify-center text-neutral-400 group-hover:bg-neutral-900 group-hover:text-white group-hover:border-neutral-900 transition-all shadow-sm">
+        <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 group-hover:bg-ink group-hover:text-white transition-colors">
           <ArrowRight size={18} />
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 relative z-10">
-        <h3 className="text-lg md:text-xl font-bold text-neutral-900 tracking-tight mb-1">{std.name}</h3>
-        <p className="text-xs md:text-sm text-neutral-500 font-medium mb-4 md:mb-6">Standard Details</p>
-        
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-2 md:gap-3">
-          <div className="bg-white/50 border border-white/60 rounded-xl md:rounded-2xl p-2 md:p-3 flex flex-col gap-1">
+      <div className="flex-1">
+        <h3 className="text-xl font-semibold tracking-tight mb-1" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{std.name}</h3>
+        <p className="text-sm text-neutral-600 mb-5">{std.short || 'Standard details'}</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white/60 rounded-2xl p-3">
             <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
-              <BookOpen size={12} className="md:w-3.5 md:h-3.5" />
-              <span className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wider">Subjects</span>
+              <BookOpen size={13} /><span className="text-[11px] font-semibold uppercase tracking-wider">Subjects</span>
             </div>
-            <span className="text-lg md:text-xl font-bold text-neutral-900">{subjectsCount}</span>
+            <span className="text-xl font-bold text-neutral-900">{subjectsCount}</span>
           </div>
-          <div className="bg-white/50 border border-white/60 rounded-xl md:rounded-2xl p-2 md:p-3 flex flex-col gap-1">
+          <div className="bg-white/60 rounded-2xl p-3">
             <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
-              <Users size={12} className="md:w-3.5 md:h-3.5" />
-              <span className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wider">Students</span>
+              <Users size={13} /><span className="text-[11px] font-semibold uppercase tracking-wider">Students</span>
             </div>
-            <span className="text-lg md:text-xl font-bold text-neutral-900">{studentsCount}</span>
+            <span className="text-xl font-bold text-neutral-900">{studentsCount}</span>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -241,17 +230,17 @@ export default function SubjectsPage() {
         <div className="mb-8 relative max-w-md">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search classes..."
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 focus:border-neutral-400 focus:bg-white/60 outline-none text-sm shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-all font-medium placeholder:text-neutral-400" />
-          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-white/60"><X size={14} /></button>}
+            className="w-full pl-11 pr-4 py-3 rounded-pill bg-white border border-[#EFEDEA] focus:border-neutral-400 outline-none text-sm shadow-soft transition-all font-medium placeholder:text-neutral-400" />
+          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-[#F4F2EF]"><X size={14} /></button>}
         </div>
 
         {/* Content */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1,2,3].map(i => <Skeleton key={i} className="h-72 rounded-[24px]" />)}
+            {[1,2,3].map(i => <Skeleton key={i} className="h-72 rounded-card" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 glass-panel rounded-[32px] border-dashed border-white/80">
+          <div className="text-center py-20 glass-panel rounded-[32px] border-dashed border-[#D8D6D2]">
             <div className="w-20 h-20 bg-white/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/60 shadow-sm">
               <BookOpen size={32} className="text-neutral-300" />
             </div>

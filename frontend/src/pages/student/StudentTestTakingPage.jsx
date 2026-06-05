@@ -304,7 +304,7 @@ export default function StudentTestTakingPage() {
       )}
 
       {/* Header */}
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-sm">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-3xl mx-auto">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-neutral-500 truncate">{test.title}</p>
@@ -352,7 +352,7 @@ export default function StudentTestTakingPage() {
               const selected = answers[q.id] === i;
               return (
                 <button key={i} onClick={() => setAnswers({ ...answers, [q.id]: i })}
-                  className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${selected ? 'border-neutral-900 bg-neutral-900 text-white shadow-md' : 'border-white/60 bg-white/50 hover:bg-white/70'}`}>
+                  className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${selected ? 'border-neutral-900 bg-neutral-900 text-white shadow-md' : 'border-white/60 bg-white/50 hover:bg-[#F4F2EF]'}`}>
                   <span className={`font-mono text-xs mr-2 ${selected ? 'text-neutral-300' : 'text-neutral-500'}`}>{String.fromCharCode(65 + i)}.</span>
                   {opt}
                 </button>
@@ -367,10 +367,10 @@ export default function StudentTestTakingPage() {
       )}
 
       {/* Footer nav */}
-      <div className="sticky bottom-0 glass-nav border-t-0 border-white/40 px-5 md:px-8 py-3 shadow-[0_-4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky bottom-0 bg-canvas border-t border-[#EFEDEA] px-5 md:px-8 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
           <button onClick={() => setCurrent((c) => Math.max(0, c - 1))} disabled={current === 0}
-            className="flex items-center gap-1 px-3 py-2 text-sm rounded-md border border-white/60 disabled:opacity-40 hover:bg-white/50 transition-colors">
+            className="flex items-center gap-1 px-3 py-2 text-sm rounded-md border border-white/60 disabled:opacity-40 hover:bg-[#F4F2EF] transition-colors">
             <ChevronLeft size={15} />Prev
           </button>
 
@@ -386,7 +386,7 @@ export default function StudentTestTakingPage() {
 
           {current < questions.length - 1 ? (
             <button onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))}
-              className="flex items-center gap-1 px-3 py-2 text-sm rounded-md border border-white/60 hover:bg-white/50 transition-colors">
+              className="flex items-center gap-1 px-3 py-2 text-sm rounded-md border border-white/60 hover:bg-[#F4F2EF] transition-colors">
               Next<ChevronRight size={15} />
             </button>
           ) : (

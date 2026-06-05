@@ -50,9 +50,9 @@ export default function StudentTestReviewPage() {
   return (
     <div className="min-h-screen bg-transparent">
       {/* Sticky header */}
-      <div className="sticky top-0 z-30 glass-nav border-b border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-4 py-3 flex items-center gap-3 max-w-2xl mx-auto">
-          <button onClick={goBack} className="p-2 -ml-1 text-neutral-500 hover:text-neutral-900 hover:bg-white/40 rounded-md transition-colors">
+          <button onClick={goBack} className="p-2 -ml-1 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-lg transition-colors">
             <ArrowLeft size={17} />
           </button>
           <div className="flex-1 min-w-0">
@@ -206,7 +206,7 @@ export default function StudentTestReviewPage() {
             <div className="mt-8 pb-6">
               <button
                 onClick={goBack}
-                className="w-full py-3 rounded-2xl glass-panel text-sm font-medium text-neutral-700 hover:bg-white/50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl glass-panel text-sm font-medium text-neutral-700 hover:bg-[#F4F2EF] transition-colors flex items-center justify-center gap-2"
               >
                 <ArrowLeft size={15} /> Back to results
               </button>

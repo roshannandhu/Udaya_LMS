@@ -5,6 +5,7 @@ import TopBar from '../../components/shared/TopBar';
 import BroadcastThread from '../../components/teacher/BroadcastThread';
 import { useStore, useAppCache } from '../../store';
 import { Skeleton } from '../../components/ui';
+import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { broadcastApi } from '../../lib/api';
 
 const TTL_OPTIONS = [
@@ -39,7 +40,7 @@ function TTLPopover({ standardId, onClose }) {
   };
 
   return (
-    <div className="absolute right-0 top-8 z-50 w-56 bg-white/95 backdrop-blur-md border border-white/60 shadow-xl rounded-xl py-1 overflow-hidden">
+    <div className="absolute right-0 top-8 z-50 w-56 bg-white border border-white/60 shadow-xl rounded-xl py-1 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-100">
         <p className="text-xs font-semibold text-neutral-700">Auto-delete after</p>
         <button onClick={onClose} className="p-0.5 text-neutral-400 hover:text-neutral-700 rounded">
@@ -137,9 +138,10 @@ export default function BroadcastsPage() {
               const lastMsg = broadcasts[broadcasts.length - 1];
               const isActive = s.id === activeStdId;
               return (
-                <div key={s.id} className={`flex items-center gap-3 px-4 py-3.5 border-b border-white/40 hover:bg-white/40 transition-colors ${isActive ? 'bg-white/50' : ''}`}>
+                <div key={s.id} className={`flex items-center gap-3 px-4 py-3.5 border-b border-[#F1EFEC] hover:bg-[#F4F2EF] transition-colors ${isActive ? 'bg-pastel-sky/50' : ''}`}>
                   <button onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                    <div className="w-11 h-11 rounded-xl bg-white/50 border border-white/60 shadow-sm flex items-center justify-center text-xl flex-shrink-0">
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0"
+                      style={{ background: PASTEL[pastelFor(s.name)].hex }}>
                       {s.emoji || '📚'}
                     </div>
                     <div className="flex-1 min-w-0">

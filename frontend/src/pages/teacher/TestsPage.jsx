@@ -7,6 +7,14 @@ import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import { testApi } from '../../lib/api';
 import { useAppCache } from '../../store';
 
+const CARD_COLORS = [
+  { bg: 'bg-[#EAF3EB]', text: 'text-green-950', badge: 'bg-white/50 text-green-900' },
+  { bg: 'bg-[#F8E1FB]', text: 'text-purple-950', badge: 'bg-white/50 text-purple-900' },
+  { bg: 'bg-[#FFF6D8]', text: 'text-amber-950', badge: 'bg-white/50 text-amber-900' },
+  { bg: 'bg-[#E5F2FE]', text: 'text-blue-950', badge: 'bg-white/50 text-blue-900' },
+  { bg: 'bg-[#FFEBE5]', text: 'text-orange-950', badge: 'bg-white/50 text-orange-900' }
+];
+
 export default function TestsPage() {
   const navigate = useNavigate();
   const [filter, setFilter]         = useState('all');
@@ -82,93 +90,97 @@ export default function TestsPage() {
   }
 
   return (
-    <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/40 rounded-md">
-            <ArrowLeft size={16} />
+    <div className="pb-28 min-h-screen bg-[#F4F7F6]">
+      <div className="sticky top-0 z-30 bg-[#F4F7F6]/80 backdrop-blur-md border-b border-black/5">
+        <div className="px-5 md:px-8 py-4 flex items-center gap-3 max-w-6xl mx-auto">
+          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-full transition-colors">
+            <ArrowLeft size={18} />
           </button>
-          <h1 className="text-base font-semibold flex-1">All Tests</h1>
-          <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>New test</Btn>
+          <h1 className="text-xl font-bold flex-1">All Tests</h1>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }} className="rounded-full shadow-sm px-4">New test</Btn>
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+      <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
         {/* Filter tabs */}
-        <div className="flex gap-1 mb-5 flex-wrap">
+        <div className="flex items-center gap-2 p-1.5 bg-black/5 rounded-[20px] mb-8 w-max flex-wrap">
           {filters.map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filter === f.id ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-500 hover:text-neutral-900 hover:bg-white/40'}`}>
-              {f.label} <span className={`${filter === f.id ? 'opacity-60' : 'text-neutral-400'}`}>{f.count}</span>
+              className={`flex items-center gap-1.5 px-5 py-2 text-[13px] font-bold rounded-full transition-all ${filter === f.id ? 'bg-white shadow-sm text-black' : 'text-neutral-500 hover:text-black'}`}>
+              {f.label} <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${filter === f.id ? 'bg-black/5 text-black' : 'bg-black/5 text-neutral-400'}`}>{f.count}</span>
             </button>
           ))}
         </div>
 
         {loading ? (
-          <div className="space-y-3">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1,2,3,4].map(i => <Skeleton key={i} className="h-40 rounded-[32px] bg-white/60" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+          <div className="text-center py-20 bg-white shadow-sm rounded-[32px]">
             <FileQuestion size={36} className="mx-auto mb-3 text-neutral-300" />
-            <p className="font-medium text-neutral-600">No {filter !== 'all' ? filter : ''} tests yet</p>
-            <p className="text-sm text-neutral-400 mb-4">Create your first test to get started.</p>
-            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>Create test</Btn>
+            <p className="font-bold text-[17px] text-neutral-600 mb-1">No {filter !== 'all' ? filter : ''} tests yet</p>
+            <p className="text-[13px] font-medium text-neutral-400 mb-5">Create your first test to get started.</p>
+            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }} className="rounded-full shadow-sm">Create test</Btn>
           </div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map(t => {
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map((t, idx) => {
               const sub = subjects.find(x => String(x.id) === String(t.class_id));
               const std = standards.find(x => String(x.id) === String(sub?.standard_id));
-              const statusColor = {
-                completed: 'green', active: 'blue', scheduled: 'amber', draft: 'gray'
-              }[t.status] || 'gray';
+              const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
-                <div key={t.id} className="glass-panel rounded-xl p-4 hover:bg-white/40 transition-colors">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div key={t.id} className={`rounded-[32px] ${theme.bg} p-5 flex flex-col hover:-translate-y-1 hover:shadow-md transition-all h-full`}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h4 className="font-medium text-sm">{t.title}</h4>
-                        {t.negative_marking && <Tag color="red">−{t.penalty}</Tag>}
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <h4 className={`font-bold text-[18px] leading-tight ${theme.text}`}>{t.title}</h4>
+                        {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">−{t.penalty}</span>}
                       </div>
-                      <p className="text-xs text-neutral-500">
-                        {std?.emoji} {std?.name}
-                        {sub?.name ? ` · ${sub.emoji || ''} ${sub.name}` : ''}
-                        {' · '}{t.duration_mins} min · {t.total_marks} marks
-                      </p>
+                      <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/50 flex-wrap">
+                        <span className="bg-white/50 px-2 py-0.5 rounded-full">{std?.emoji} {std?.name}</span>
+                        {sub?.name && <span className="bg-white/50 px-2 py-0.5 rounded-full">{sub.emoji} {sub.name}</span>}
+                        <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.duration_mins}m</span>
+                        <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.total_marks} marks</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                  </div>
+
+                  <div className="mt-auto pt-3 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5">
                       {canEdit(t) ? (
                         <button onClick={() => { setEditTestId(t.id); setNewTestOpen(true); }}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
-                          <Edit2 size={13} className="text-neutral-500" />
+                          className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-bold bg-white hover:bg-neutral-50 shadow-sm rounded-full transition-colors">
+                          <Edit2 size={13} className="text-black" />
                           Edit
                         </button>
                       ) : (
-                        <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-neutral-300 glass-panel border-white/40 rounded-lg cursor-not-allowed select-none" title="Cannot edit after exam starts">
+                        <span className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-bold text-neutral-400 bg-white/40 rounded-full cursor-not-allowed select-none" title="Cannot edit after exam starts">
                           <Edit2 size={13} /> Edit
                         </span>
                       )}
                       <button onClick={() => setResultsTest(t)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium glass-panel border-white/60 rounded-lg hover:bg-white/50 transition-colors">
-                        <ListChecks size={13} className="text-neutral-500" />
+                        className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-bold bg-white hover:bg-neutral-50 shadow-sm rounded-full transition-colors">
+                        <ListChecks size={13} className="text-black" />
                         Results
                       </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleDeleteCard(t)}
                         disabled={deleting && deleteConfirmId === t.id}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${deleteConfirmId === t.id ? 'bg-red-500 text-white hover:bg-red-600' : 'glass-panel border-white/60 text-red-500 hover:bg-red-50'}`}
+                        className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${deleteConfirmId === t.id ? 'bg-red-500 text-white' : 'bg-white text-red-500 hover:bg-red-50 shadow-sm'}`}
                       >
-                        {deleting && deleteConfirmId === t.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                        {deleteConfirmId === t.id ? 'Confirm?' : 'Delete'}
+                        {deleting && deleteConfirmId === t.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
-                      <Tag color={statusColor}>{t.status}</Tag>
                     </div>
                   </div>
+                  
                   {t.scheduled_for && (
-                    <div className="flex items-center gap-1.5 text-xs text-amber-700 pt-2 border-t border-white/40 mt-2">
-                      <Clock size={11} /> Scheduled: {fmtSchedule(t.scheduled_for)}
+                    <div className="flex items-center gap-1.5 text-[12px] font-bold text-amber-700 pt-3 border-t border-black/5 mt-3">
+                      <Clock size={12} /> Scheduled: {fmtSchedule(t.scheduled_for)}
                     </div>
                   )}
                 </div>

@@ -36,9 +36,9 @@ export default function StudentBroadcastsPage() {
 
   useEffect(() => {
     const standardId = user?.standard_id;
-    if (standardId) setStandard({ id: standardId, name: user?.standard_name || 'My Class' });
+    if (standardId) setStandard({ id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || '📚' });
     setLoading(false);
-  }, [user?.standard_id]);
+  }, [user?.standard_id, user?.standard_name, user?.standard_emoji]);
 
   const fetchReactions = (stdId) => {
     broadcastApi.getReactions(stdId || standard?.id)
@@ -180,7 +180,7 @@ export default function StudentBroadcastsPage() {
         <div className="px-4 md:px-8 py-3 flex items-center justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center flex-shrink-0 text-xl">
-              📚
+              {standard.emoji || '📚'}
             </div>
             <div>
               <h1 className="text-lg md:text-xl font-semibold text-neutral-900 leading-tight">{standard.name}</h1>

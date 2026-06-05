@@ -12,7 +12,7 @@ function timeAgo(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ dark = false }) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -65,7 +65,7 @@ export default function NotificationBell() {
     <div className="relative" ref={panelRef}>
       <button
         onClick={() => { setOpen(o => !o); if (!open) fetchNotifications(); }}
-        className="relative p-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/40 rounded-md transition-colors"
+        className={`relative p-2 rounded-lg transition-colors ${dark ? 'text-neutral-300 hover:text-white hover:bg-white/10' : 'text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF]'}`}
       >
         <Bell size={16} />
         {unreadCount > 0 && (

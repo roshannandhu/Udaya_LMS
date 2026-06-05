@@ -59,12 +59,12 @@ export default function TeacherProfilePage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md">
+          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
-          <h1 className="text-base font-semibold flex-1">My Profile</h1>
+          <h1 className="text-lg md:text-xl font-semibold flex-1">My Profile</h1>
         </div>
       </div>
 

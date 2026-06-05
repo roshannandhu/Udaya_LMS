@@ -2,7 +2,7 @@ import React, { Suspense, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import BottomNav from '../../components/shared/BottomNav';
-import Sidebar from '../../components/shared/Sidebar';
+import TopNav from '../../components/shared/TopNav';
 
 function getActiveTab(path) {
   if (path === '/student' || path === '/student/') return 'home';
@@ -49,9 +49,9 @@ export default function StudentLayout() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:pl-[240px]">
-      <Sidebar type="student" />
-      <div className="flex-1 flex flex-col">
+    <div className="min-h-screen flex flex-col">
+      <TopNav type="student" />
+      <div className="flex-1 flex flex-col pb-28 lg:pb-0">
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>

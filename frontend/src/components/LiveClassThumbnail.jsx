@@ -35,6 +35,7 @@ export default function LiveClassThumbnail({
   topic,
   status = 'scheduled',
   scheduledAt,
+  className = '',
 }) {
   const [now, setNow] = useState(Date.now());
 
@@ -54,7 +55,7 @@ export default function LiveClassThumbnail({
   const subjectLine = [standardName, subjectName].filter(Boolean).join(' • ');
 
   return (
-    <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-neutral-900 select-none">
+    <div className={`relative w-full aspect-video overflow-hidden bg-neutral-900 select-none ${className || 'rounded-[24px]'}`}>
       {/* Base image or fallback */}
       {thumbnailUrl ? (
         <img

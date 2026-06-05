@@ -1,40 +1,28 @@
 import React, { memo } from 'react';
-import { Home, BookOpen, MessageSquare, Calendar, MoreHorizontal, Video, FileQuestion } from 'lucide-react';
-
-const TEACHER_ITEMS = [
-  { id: 'today',      label: 'Home',       icon: Home },
-  { id: 'subjects',   label: 'Classes',    icon: BookOpen },
-  { id: 'broadcasts', label: 'Broadcasts', icon: MessageSquare },
-  { id: 'attendance', label: 'Attendance', icon: Calendar },
-  { id: 'live',       label: 'Live',       icon: Video },
-  { id: 'more',       label: 'More',       icon: MoreHorizontal },
-];
-
-const STUDENT_ITEMS = [
-  { id: 'home',       label: 'Home',       icon: Home },
-  { id: 'subjects',   label: 'Subjects',   icon: BookOpen },
-  { id: 'broadcasts', label: 'Broadcasts', icon: MessageSquare },
-  { id: 'tests',      label: 'Tests',      icon: FileQuestion },
-  { id: 'live',       label: 'Live',       icon: Video },
-];
+import { TEACHER_NAV, STUDENT_NAV, MORE_ICON } from './nav-items';
 
 const BottomNav = memo(function BottomNav({ active, setActive, type = 'teacher' }) {
-  const items = type === 'teacher' ? TEACHER_ITEMS : STUDENT_ITEMS;
+  const source = type === 'teacher' ? TEACHER_NAV : STUDENT_NAV;
+  const items = source.filter((i) => i.primary);
+  // Teachers get a "More" tab on mobile to reach students/reports/settings.
+  if (type === 'teacher') items.push({ id: 'more', label: 'More', icon: MORE_ICON });
+
   return (
-    <nav className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-40 glass-nav rounded-2xl shadow-card lg:hidden">
-      <div className="max-w-5xl mx-auto flex p-1">
+    <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pointer-events-none">
+      <nav className="nav-dark max-w-md mx-auto px-4 py-2 flex items-center justify-between rounded-[28px] pointer-events-auto">
         {items.map((item) => {
           const isActive = active === item.id;
           return (
-            <button key={item.id} onClick={() => setActive(item.id)}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[52px] rounded-xl ${isActive ? 'bg-[#F2F1EE] border border-[#EBEAE7] text-neutral-900' : 'text-neutral-500 hover:text-neutral-700 border border-transparent'}`}>
+            <button key={item.id} onClick={() => setActive(item.id)} title={item.label}
+              className={`flex items-center justify-center w-[42px] h-[42px] rounded-full transition-colors flex-shrink-0 ${
+                isActive ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'
+              }`}>
               <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-              <span className={`text-[10px] ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
             </button>
           );
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   );
 });
 

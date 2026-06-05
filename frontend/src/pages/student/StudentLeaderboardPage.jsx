@@ -55,8 +55,8 @@ export default function StudentLeaderboardPage() {
 
         {/* My rank badge */}
         {myRank && (
-          <div className="glass-panel rounded-2xl p-4 mb-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+          <div className="rounded-card p-4 mb-6 flex items-center gap-4 bg-pastel-cream border border-black/5">
+            <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-soft">
               <Trophy size={22} className="text-amber-600" />
             </div>
             <div className="flex-1">
@@ -109,7 +109,7 @@ export default function StudentLeaderboardPage() {
             {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}
           </div>
         ) : leaderboard.length === 0 ? (
-          <div className="text-center py-16 text-sm text-neutral-500 glass-panel rounded-xl border-dashed border-white/60">
+          <div className="text-center py-16 text-sm text-neutral-500 glass-panel rounded-xl border-dashed border-[#D8D6D2]">
             No students on the leaderboard yet. Complete tests to earn points!
           </div>
         ) : (

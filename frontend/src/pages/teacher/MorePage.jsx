@@ -5,6 +5,7 @@ import { FileQuestion, BarChart3, Bell, Settings, ChevronRight, Edit2, LogOut, M
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Modal } from '../../components/ui';
 import { Btn, Input } from '../../components/ui';
+import { PASTEL } from '../../components/cards/pastel';
 import { apiClient } from '../../lib/api';
 
 export default function MorePage() {
@@ -19,15 +20,15 @@ export default function MorePage() {
   const [editSaving, setEditSaving] = useState(false);
 
   const items = [
-    { icon: User,          label: 'My Profile',    sub: 'Edit name & view stats',     onClick: () => navigate('/teacher/profile') },
-    { icon: Database,      label: 'Question Bank', sub: 'Reusable questions',          onClick: () => navigate('/teacher/question-bank') },
-    { icon: Users,         label: 'Students',      sub: 'Manage class students',      onClick: () => navigate('/teacher/students') },
-    { icon: MessageSquare, label: 'Broadcasts',    sub: 'Send messages to students',  onClick: () => navigate('/teacher/broadcasts') },
-    { icon: Calendar,      label: 'Attendance',    sub: 'Mark & view attendance',      onClick: () => navigate('/teacher/attendance') },
-    { icon: BarChart3,     label: 'Reports',       sub: 'Analytics & low attendance', onClick: () => navigate('/teacher/reports') },
-    { icon: Bell,          label: 'Notifications', sub: 'Reminders & alerts',         onClick: () => navigate('/teacher/reminders') },
-    { icon: Settings,      label: 'Settings',      sub: 'App preferences',            onClick: () => navigate('/teacher/settings') },
-    { icon: FileQuestion,  label: 'Help & Support',sub: 'FAQs and contact',           onClick: () => {} },
+    { icon: User,          label: 'My Profile',    sub: 'Edit name & view stats',     color: 'lavender', onClick: () => navigate('/teacher/profile') },
+    { icon: Database,      label: 'Question Bank', sub: 'Reusable questions',          color: 'sky',      onClick: () => navigate('/teacher/question-bank') },
+    { icon: Users,         label: 'Students',      sub: 'Manage class students',      color: 'mint',     onClick: () => navigate('/teacher/students') },
+    { icon: MessageSquare, label: 'Broadcasts',    sub: 'Send messages to students',  color: 'pink',     onClick: () => navigate('/teacher/broadcasts') },
+    { icon: Calendar,      label: 'Attendance',    sub: 'Mark & view attendance',      color: 'cream',    onClick: () => navigate('/teacher/attendance') },
+    { icon: BarChart3,     label: 'Reports',       sub: 'Analytics & low attendance', color: 'peach',    onClick: () => navigate('/teacher/reports') },
+    { icon: Bell,          label: 'Notifications', sub: 'Reminders & alerts',         color: 'lavender', onClick: () => navigate('/teacher/reminders') },
+    { icon: Settings,      label: 'Settings',      sub: 'App preferences',            color: 'sky',      onClick: () => navigate('/teacher/settings') },
+    { icon: FileQuestion,  label: 'Help & Support',sub: 'FAQs and contact',           color: 'mint',     onClick: () => {} },
   ];
 
   const handleSave = async () => {
@@ -66,17 +67,18 @@ export default function MorePage() {
               <p className="font-medium">{profile.name}</p>
               <p className="text-sm text-neutral-500">{profile.email}</p>
             </div>
-            <button onClick={() => setProfileEdit(true)} className="p-2 hover:bg-white/60 rounded-lg">
+            <button onClick={() => setProfileEdit(true)} className="p-2 hover:bg-[#F4F2EF] rounded-lg">
               <Edit2 size={18} className="text-neutral-500" />
             </button>
           </div>
         </div>
 
-        <div className="glass-panel border-white/60 shadow-sm rounded-xl divide-y divide-white/40">
+        <div className="glass-panel divide-y divide-[#F1EFEC]">
           {items.map((item, i) => (
-            <button key={i} onClick={item.onClick} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/40 transition-colors text-left">
-              <div className="w-9 h-9 rounded-xl bg-white/50 border border-white/60 flex items-center justify-center flex-shrink-0">
-                <item.icon size={18} className="text-neutral-600" />
+            <button key={i} onClick={item.onClick} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#F4F2EF] transition-colors text-left">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: PASTEL[item.color]?.hex }}>
+                <item.icon size={18} style={{ color: PASTEL[item.color]?.fgHex }} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm">{item.label}</p>
@@ -87,7 +89,7 @@ export default function MorePage() {
           ))}
         </div>
 
-        <button onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-red-600 glass-panel border-white/60 shadow-sm rounded-xl hover:bg-white/70 transition-colors">
+        <button onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-red-600 glass-panel border-white/60 shadow-sm rounded-xl hover:bg-[#F4F2EF] transition-colors">
           <LogOut size={20} />
           <span className="font-medium">Sign out</span>
         </button>

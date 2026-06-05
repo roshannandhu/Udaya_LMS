@@ -64,15 +64,15 @@ export default function StudentsPage() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search name, username, email…"
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/50 backdrop-blur-sm border border-white/60 focus:border-neutral-400 outline-none text-sm shadow-sm" />
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 outline-none text-sm shadow-sm" />
           </div>
           <select value={stdFilter} onChange={e => setStdFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-white/50 backdrop-blur-sm border border-white/60 outline-none text-sm shadow-sm">
+            className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] outline-none text-sm shadow-sm">
             <option value="all">All standards</option>
             {standards.map(s => <option key={s.id} value={s.id}>{s.emoji} {s.name}</option>)}
           </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-white/50 backdrop-blur-sm border border-white/60 outline-none text-sm shadow-sm">
+            className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] outline-none text-sm shadow-sm">
             <option value="name">Name</option>
             <option value="score">Avg score</option>
             <option value="attendance">Attendance</option>
@@ -86,7 +86,7 @@ export default function StudentsPage() {
             {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+          <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
             <Users size={36} className="mx-auto mb-3 text-neutral-300" />
             <p className="font-medium text-neutral-600">
               {search || stdFilter !== 'all' ? 'No students match your filters' : 'No students yet'}
@@ -102,7 +102,7 @@ export default function StudentsPage() {
               const attendLow = (s.attendance_pct ?? 100) < 75;
               return (
                 <button key={s.id} onClick={() => navigate(`/teacher/students/${s.id}`)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/40 transition-colors text-left ${i > 0 ? 'border-t border-white/40' : ''}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#F4F2EF] transition-colors text-left ${i > 0 ? 'border-t border-white/40' : ''}`}>
                   <Avatar name={s.name} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">

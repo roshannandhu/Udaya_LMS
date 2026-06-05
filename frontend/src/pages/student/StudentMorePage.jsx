@@ -2,25 +2,27 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileQuestion, Trophy, BarChart3, ChevronRight } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
+import { PASTEL } from '../../components/cards/pastel';
 
 export default function StudentMorePage() {
   const navigate = useNavigate();
 
   const items = [
-    { icon: FileQuestion, label: 'Tests',       sub: 'Take tests and view results',         onClick: () => navigate('/student/tests') },
-    { icon: Trophy,       label: 'Leaderboard', sub: 'View class rankings',                  onClick: () => navigate('/student/leaderboard') },
-    { icon: BarChart3,    label: 'Report Card',  sub: 'View your performance report card',   onClick: () => navigate('/student/report') },
+    { icon: FileQuestion, label: 'Tests',       sub: 'Take tests and view results',         color: 'cream',    onClick: () => navigate('/student/tests') },
+    { icon: Trophy,       label: 'Leaderboard', sub: 'View class rankings',                  color: 'lavender', onClick: () => navigate('/student/leaderboard') },
+    { icon: BarChart3,    label: 'Report Card',  sub: 'View your performance report card',   color: 'mint',     onClick: () => navigate('/student/report') },
   ];
 
   return (
     <div className="min-h-screen bg-transparent pb-28">
       <TopBar title="Explore More" showSearch={false} />
       <div className="p-4 space-y-4 max-w-xl mx-auto">
-        <div className="glass-panel border-white/60 shadow-sm rounded-xl divide-y divide-white/40">
+        <div className="glass-panel divide-y divide-[#F1EFEC]">
           {items.map((item, i) => (
-            <button key={i} onClick={item.onClick} className="w-full flex items-center gap-3 px-4 py-4 hover:bg-white/40 transition-colors text-left">
-              <div className="w-10 h-10 rounded-xl bg-white/50 border border-white/60 flex items-center justify-center flex-shrink-0">
-                <item.icon size={20} className="text-neutral-600" />
+            <button key={i} onClick={item.onClick} className="w-full flex items-center gap-3 px-4 py-4 hover:bg-[#F4F2EF] transition-colors text-left">
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: PASTEL[item.color]?.hex }}>
+                <item.icon size={20} style={{ color: PASTEL[item.color]?.fgHex }} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-neutral-800">{item.label}</p>

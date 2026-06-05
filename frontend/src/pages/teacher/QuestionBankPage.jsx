@@ -70,13 +70,13 @@ export default function QuestionBankPage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md">
+          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
           <Database size={16} className="text-neutral-500" />
-          <h1 className="text-base font-semibold flex-1">Question Bank</h1>
+          <h1 className="text-lg md:text-xl font-semibold flex-1">Question Bank</h1>
           <Btn variant="primary" size="sm" icon={Plus} onClick={() => setShowForm(true)}>Add Question</Btn>
         </div>
       </div>
@@ -87,7 +87,7 @@ export default function QuestionBankPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search questions or subjects..."
-            className="w-full pl-9 pr-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 outline-none text-sm" />
+            className="w-full pl-9 pr-3 py-2 rounded-md bg-white border border-[#EFEDEA] outline-none text-sm" />
         </div>
 
         {/* Add form */}
@@ -124,7 +124,7 @@ export default function QuestionBankPage() {
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin text-neutral-400" size={20} /></div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 glass-panel border-dashed border-white/60 rounded-xl">
+          <div className="text-center py-12 glass-panel border-dashed border-[#D8D6D2] rounded-xl">
             <Database size={28} className="mx-auto mb-2 text-neutral-400" />
             <p className="text-sm text-neutral-600">{search ? 'No questions match your search.' : 'Your question bank is empty.'}</p>
             {!search && <Btn variant="default" size="sm" icon={Plus} onClick={() => setShowForm(true)} className="mt-3">Add your first question</Btn>}

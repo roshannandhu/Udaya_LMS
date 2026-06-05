@@ -734,7 +734,7 @@ export default function StudentVideoPlayerPage() {
 
         {/* Info below player */}
         <div className="flex-1 bg-[#FAFAF9] px-4 py-4 space-y-2">
-          <h1 className="text-base font-semibold text-neutral-900">{video.title}</h1>
+          <h1 className="text-lg md:text-xl font-semibold text-neutral-900">{video.title}</h1>
           {video.description && (
             <p className="text-sm text-neutral-500 leading-relaxed">{video.description}</p>
           )}
@@ -754,13 +754,13 @@ export default function StudentVideoPlayerPage() {
   return (
     <ScreenshotGuard label={guardLabel}>
     <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate(`/student/subjects/${classId}`)}
-            className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md">
+            className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
-          <h1 className="text-base font-semibold flex-1 truncate">{video.title}</h1>
+          <h1 className="text-lg md:text-xl font-semibold flex-1 truncate">{video.title}</h1>
           {completed && <Tag color="green"><CheckCircle2 size={11} className="mr-1 inline" />Done</Tag>}
           {!isOnline && (
             <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -859,7 +859,7 @@ export default function StudentVideoPlayerPage() {
                       ? 'Download disabled by teacher'
                       : 'Save for offline viewing'
                   }
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm transition-colors border-white/60 text-neutral-600 hover:bg-white/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm transition-colors border-white/60 text-neutral-600 hover:bg-[#F4F2EF] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <WifiOff size={13} /> Save offline
                 </button>
@@ -929,7 +929,7 @@ export default function StudentVideoPlayerPage() {
               <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden divide-y divide-white/40">
                 {video.chapters.sort((a, b) => a.start_secs - b.start_secs).map((ch, idx) => (
                   <button key={idx} onClick={() => seekTo(ch.start_secs)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/40 ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F4F2EF] ${
                       chapterActive === idx ? 'bg-blue-50/60 border-l-2 border-l-blue-500' : ''
                     }`}>
                     <span className={`text-[11px] font-mono font-medium px-1.5 py-0.5 rounded ${

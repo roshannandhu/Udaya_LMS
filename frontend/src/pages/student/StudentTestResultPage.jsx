@@ -103,7 +103,7 @@ export default function StudentTestResultPage() {
         {result?.test_id && (
           <button
             onClick={() => navigate('/student/tests/review', { state: { source: 'result-page', test_id: result.test_id, result } })}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 glass-panel rounded-2xl text-sm font-medium hover:bg-white/40 transition-colors mb-5"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 glass-panel rounded-2xl text-sm font-medium hover:bg-[#F4F2EF] transition-colors mb-5"
           >
             <BookOpen size={15} className="text-neutral-500" />
             Review Answers

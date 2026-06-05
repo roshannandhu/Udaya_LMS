@@ -300,7 +300,7 @@ export default function StandardDetailPage() {
   if (loading) {
     return (
       <div>
-        <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
           <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
             <Skeleton className="w-8 h-8" />
             <Skeleton className="h-5 w-32" />
@@ -316,15 +316,15 @@ export default function StandardDetailPage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/subjects')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md">
+          <button onClick={() => navigate('/teacher/subjects')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
           <span className="text-xl">{standard?.emoji || '📚'}</span>
           <div className="flex-1 min-w-0">
             <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Subjects</p>
-            <h1 className="text-base font-semibold truncate">{standard?.name || 'Standard'}</h1>
+            <h1 className="text-lg md:text-xl font-semibold truncate">{standard?.name || 'Standard'}</h1>
           </div>
         </div>
       </div>
@@ -351,10 +351,10 @@ export default function StandardDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 mb-5 -mx-1">
+        <div className="inline-flex items-center gap-1 mb-5 p-1 bg-black/5 rounded-pill">
           {['subjects', 'students'].map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 text-sm rounded-md capitalize transition-colors ${tab === t ? 'bg-white/50 text-neutral-900 font-semibold' : 'text-neutral-500 hover:text-neutral-900 hover:bg-white/40'}`}>
+              className={`px-4 py-1.5 text-sm rounded-pill capitalize transition-colors ${tab === t ? 'bg-white shadow-sm text-neutral-900 font-semibold' : 'text-neutral-500 hover:text-neutral-900'}`}>
               {t === 'students' ? `Students (${students.length})` : `Subjects (${subjects.length})`}
             </button>
           ))}
@@ -372,7 +372,7 @@ export default function StandardDetailPage() {
             </div>
 
             {filteredStudents.length === 0 && students.length === 0 ? (
-              <div className="text-center py-16 glass-panel border-dashed border-white/60 rounded-xl">
+              <div className="text-center py-16 glass-panel border-dashed border-[#D8D6D2] rounded-xl">
                 <Users size={32} className="mx-auto mb-3 text-neutral-400" />
                 <h3 className="font-medium mb-1">No students yet</h3>
                 <p className="text-sm text-neutral-600 mb-5">Add students or share the invite link.</p>
@@ -388,7 +388,7 @@ export default function StandardDetailPage() {
                 {filteredStudents.map((s, i) => {
                   const isBlocked = blockedIds.includes(s.id);
                   return (
-                    <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${i < filteredStudents.length - 1 ? 'border-b border-white/40' : ''} ${isBlocked ? 'opacity-60' : ''} hover:bg-white/70 transition-colors`}>
+                    <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${i < filteredStudents.length - 1 ? 'border-b border-white/40' : ''} ${isBlocked ? 'opacity-60' : ''} hover:bg-[#F4F2EF] transition-colors`}>
                       <Avatar name={s.name} size="sm" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -402,7 +402,7 @@ export default function StandardDetailPage() {
                         <div><p className="text-neutral-400 text-[10px] uppercase tracking-wider">Attendance</p><p className="font-medium">{s.attendance_pct != null ? Math.round(s.attendance_pct) : 0}%</p></div>
                         <div><p className="text-neutral-400 text-[10px] uppercase tracking-wider">Points</p><p className="font-medium">{s.points || 0}</p></div>
                       </div>
-                      <button onClick={() => handleBlock(s.id)} title={isBlocked ? 'Unblock student' : 'Block student'} className={`p-1.5 rounded hover:bg-white/60 ${isBlocked ? 'text-amber-600' : 'text-neutral-400 hover:text-neutral-900'}`}>
+                      <button onClick={() => handleBlock(s.id)} title={isBlocked ? 'Unblock student' : 'Block student'} className={`p-1.5 rounded hover:bg-[#F4F2EF] ${isBlocked ? 'text-amber-600' : 'text-neutral-400 hover:text-neutral-900'}`}>
                         <Lock size={14} />
                       </button>
                     </div>
@@ -435,7 +435,7 @@ export default function StandardDetailPage() {
               ))}
               <button
                 onClick={() => setNewSubjectOpen(true)}
-                className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 transition-all duration-200 border-2 border-dashed border-white/80 hover:border-neutral-300 flex flex-col items-center justify-center min-h-[130px] text-neutral-400 hover:text-neutral-600 gap-2"
+                className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 transition-all duration-200 border-2 border-dashed border-[#D8D6D2] hover:border-neutral-300 flex flex-col items-center justify-center min-h-[130px] text-neutral-400 hover:text-neutral-600 gap-2"
               >
                 <div className="w-10 h-10 rounded-full border-2 border-neutral-300 flex items-center justify-center">
                   <Plus size={18} />

@@ -59,7 +59,7 @@ function SecretInput({ value, onChange, placeholder, inputMode, maxLength }) {
         placeholder={placeholder}
         inputMode={inputMode}
         maxLength={maxLength}
-        className="w-full px-3 py-2 pr-9 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all placeholder:text-neutral-400"
+        className="w-full px-3 py-2 pr-9 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all placeholder:text-neutral-400"
       />
       <button
         type="button"
@@ -194,10 +194,10 @@ export default function SettingsPage() {
   if (!isPrimary) {
     return (
       <div>
-        <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
           <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-            <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md"><ArrowLeft size={16} /></button>
-            <h1 className="text-base font-semibold flex-1">Settings</h1>
+            <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
+            <h1 className="text-lg md:text-xl font-semibold flex-1">Settings</h1>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-neutral-400">
@@ -274,10 +274,10 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/60 rounded-md"><ArrowLeft size={16} /></button>
-          <h1 className="text-base font-semibold flex-1">Settings</h1>
+          <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
+          <h1 className="text-lg md:text-xl font-semibold flex-1">Settings</h1>
         </div>
       </div>
 
@@ -322,13 +322,13 @@ export default function SettingsPage() {
               <p className="text-sm font-semibold flex items-center gap-1.5"><UserPlus size={14} /> Add Teacher</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input value={addForm.name} onChange={e => setAddForm(f => ({...f, name: e.target.value}))} placeholder="Full name *"
-                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                  className="px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
                 <input value={addForm.email} onChange={e => setAddForm(f => ({...f, email: e.target.value}))} placeholder="Email *" type="email"
-                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                  className="px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
                 <input value={addForm.phone} onChange={e => setAddForm(f => ({...f, phone: e.target.value}))} placeholder="Phone (optional)" type="tel"
-                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                  className="px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
                 <input value={addForm.password} onChange={e => setAddForm(f => ({...f, password: e.target.value}))} placeholder="Password * (min 8 chars)" type="password"
-                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
+                  className="px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 outline-none text-sm transition-all placeholder:text-neutral-400" />
               </div>
               {addError  && <p className="text-xs text-red-600">{addError}</p>}
               {addSuccess && <p className="text-xs text-green-700 flex items-center gap-1"><CheckCircle2 size={11} /> {addSuccess}</p>}
@@ -353,7 +353,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => logoInputRef.current?.click()}
-                  className="w-14 h-14 rounded-xl border-2 border-dashed border-white/60 bg-white/30 hover:bg-white/50 flex items-center justify-center overflow-hidden transition-colors flex-shrink-0"
+                  className="w-14 h-14 rounded-xl border-2 border-dashed border-[#D8D6D2] bg-white/30 hover:bg-[#F4F2EF] flex items-center justify-center overflow-hidden transition-colors flex-shrink-0"
                 >
                   {lmsLogo
                     ? <img src={lmsLogo} alt="logo" className="w-full h-full object-cover" />
@@ -383,7 +383,7 @@ export default function SettingsPage() {
                   onChange={e => setNameInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); }}
                   placeholder="e.g. Priya's Academy"
-                  className="flex-1 px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 focus:border-white/80 outline-none text-sm transition-all"
+                  className="flex-1 px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 outline-none text-sm transition-all"
                 />
                 <Btn variant="primary" size="sm" onClick={handleSaveName}>
                   {nameSaved ? 'Saved ✓' : 'Save'}
@@ -437,7 +437,7 @@ export default function SettingsPage() {
                     className={`px-3 py-1.5 rounded-md text-sm capitalize border transition-colors ${
                       thumb.side === side
                         ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'bg-white/40 border-white/60 text-neutral-600 hover:bg-white/70'
+                        : 'bg-white/40 border-white/60 text-neutral-600 hover:bg-[#F4F2EF]'
                     }`}
                   >
                     {side}
@@ -532,7 +532,7 @@ export default function SettingsPage() {
                 <select 
                   value={aiSettings.ai_provider} 
                   onChange={e => setAiSettings({ ...aiSettings, ai_provider: e.target.value })}
-                  className="px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:bg-white/70 outline-none text-sm transition-all"
+                  className="px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 outline-none text-sm transition-all"
                 >
                   <option value="gemini">Google Gemini</option>
                   <option value="openai">OpenAI</option>
@@ -567,7 +567,7 @@ export default function SettingsPage() {
         <div className="mb-6">
           <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Data</p>
           <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden divide-y divide-white/40">
-            <button className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-white/70 transition-colors text-left">
+            <button className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-[#F4F2EF] transition-colors text-left">
               <span>Export all data</span><span className="text-xs text-neutral-400">CSV / JSON</span>
             </button>
             <button className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-red-50/50 transition-colors text-left text-red-600">

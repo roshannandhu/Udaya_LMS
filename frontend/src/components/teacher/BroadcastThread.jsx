@@ -39,7 +39,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [readDetailsTab, setReadDetailsTab] = useState('read');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const readDetailsModalRef = useRef(null);
-  const { refreshStandards } = useAppCache();
+  const { refreshStandards, invalidate } = useAppCache();
   const fileInputRef = useRef(null);
   const wsRef = useRef(null);
   const inputRef = useRef(null);
@@ -53,9 +53,11 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
   const handleEmojiChange = async (emoji) => {
     setShowEmojiPicker(false);
+    if (emoji === std.emoji) return;
     try {
       await apiClient(`/standards/${std.id}`, { method: 'PATCH', body: JSON.stringify({ emoji }) });
-      refreshStandards();
+      invalidate();            // mark cache stale so the refetch actually runs
+      await refreshStandards(); // pull the new emoji into the store -> re-renders header
     } catch (err) {
       console.error('Failed to update class icon:', err);
     }

@@ -12,24 +12,24 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
   const navigate = useNavigate();
   const { user } = useAuthStore();
   // On phones, students reach their profile from a top-left avatar (the bottom
-  // bar holds Home/Subjects/Broadcasts/Tests/Live instead). Desktop uses the sidebar.
+  // bar holds Home/Subjects/Broadcasts/Tests/Live). Desktop uses the TopNav.
   const showStudentProfile = location.pathname.startsWith('/student');
 
   return (
-    <div className="sticky top-0 z-30 glass-nav border-t-0 border-b border-[#EBEAE7]">
-      <div className="px-5 md:px-8 py-4 flex items-center gap-3 max-w-5xl mx-auto">
+    <div className="px-5 md:px-8 pt-6 pb-2 max-w-5xl mx-auto">
+      <div className="flex items-center gap-3">
         {showStudentProfile && (
           <button
             onClick={() => navigate('/student/profile')}
             aria-label="Profile"
-            className="lg:hidden flex-shrink-0 rounded-full ring-2 ring-[#EBEAE7]"
+            className="lg:hidden flex-shrink-0 rounded-full ring-2 ring-[#EFEDEA]"
           >
             <Avatar name={user?.name || 'S'} src={user?.avatar_url} size="sm" />
           </button>
         )}
         <div className="flex-1 min-w-0">
           {breadcrumbs && (
-            <div className="hidden lg:flex items-center gap-1.5 text-xs text-neutral-500 mb-1">
+            <div className="flex items-center gap-1.5 text-xs text-neutral-500 mb-1">
               {breadcrumbs.map((b, i) => (
                 <React.Fragment key={i}>
                   {i > 0 && <span>/</span>}
@@ -38,16 +38,17 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
               ))}
             </div>
           )}
-          <h1 className="text-base font-semibold truncate">{title}</h1>
-          {subtitle && <p className="text-xs text-neutral-500 truncate mt-0.5">{subtitle}</p>}
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{title}</h1>
+          {subtitle && <p className="text-sm text-neutral-500 truncate mt-1">{subtitle}</p>}
         </div>
+        {/* Search + notifications live in the desktop TopNav; show here on mobile only. */}
         {showSearch && (
           <button onClick={() => setSearchOpen(true)}
-            className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F2F1EE] rounded-md">
-            <Search size={16} />
+            className="lg:hidden p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-lg">
+            <Search size={18} />
           </button>
         )}
-        <NotificationBell />
+        <span className="lg:hidden"><NotificationBell /></span>
         {action}
       </div>
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />

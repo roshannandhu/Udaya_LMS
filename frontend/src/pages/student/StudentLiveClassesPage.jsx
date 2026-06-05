@@ -19,6 +19,14 @@ function fmtDateTime(iso) {
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} at ${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+const CARD_COLORS = [
+  { bg: 'bg-[#EAF3EB]', text: 'text-green-950', badge: 'bg-green-100 text-green-800' },
+  { bg: 'bg-[#F8E1FB]', text: 'text-purple-950', badge: 'bg-purple-100 text-purple-800' },
+  { bg: 'bg-[#FFF6D8]', text: 'text-amber-950', badge: 'bg-amber-100 text-amber-800' },
+  { bg: 'bg-[#E5F2FE]', text: 'text-blue-950', badge: 'bg-blue-100 text-blue-800' },
+  { bg: 'bg-[#FFEBE5]', text: 'text-orange-950', badge: 'bg-orange-100 text-orange-800' }
+];
+
 export default function StudentLiveClassesPage() {
   const { user } = useAuthStore();
   const [liveClasses, setLiveClasses] = useState([]);
@@ -53,9 +61,6 @@ export default function StudentLiveClassesPage() {
   }, [standardId]);
 
   // Warm the Zoom SDK in the background so the first "Watch" click is instant.
-  // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —
-  // a detached call (`const r = window.requestIdleCallback; r(fn)`) throws
-  // "Illegal invocation" in Chrome and crashes the page on mount.
   useEffect(() => {
     const ric = window.requestIdleCallback
       ? window.requestIdleCallback.bind(window)
@@ -68,7 +73,6 @@ export default function StudentLiveClassesPage() {
   }, []);
 
   // Refresh list + clock every 15s — list is now fast (DB only, no Zoom calls).
-  // Skip the network fetch while the tab is hidden to avoid background fan-out calls.
   useEffect(() => {
     const id = setInterval(() => {
       setNow(Date.now());
@@ -107,93 +111,106 @@ export default function StudentLiveClassesPage() {
   }
 
   return (
-    <div className="pb-28">
+    <div className="pb-28 min-h-screen bg-[#F4F7F6]">
       <TopBar title="Live Classes" />
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+      <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
         {loading ? (
           <div className="flex justify-center py-24">
             <Loader2 className="animate-spin text-neutral-400" size={24} />
           </div>
         ) : liveClasses.length === 0 ? (
-          <div className="text-center py-24">
+          <div className="text-center py-24 bg-white rounded-[32px] shadow-sm">
             <Video size={32} className="mx-auto mb-3 text-neutral-400" />
             <h3 className="font-medium text-neutral-700 mb-1">No live classes</h3>
             <p className="text-sm text-neutral-500">Live classes from your teachers will appear here.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {liveClasses.map(lc => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {liveClasses.map((lc, idx) => {
               const isLive = lc.status === 'live';
               const isScheduled = lc.status === 'scheduled';
               const isEnded = lc.status === 'ended';
+              const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
-                <div key={lc.id} className="rounded-xl glass-panel border-white/60 shadow-sm overflow-hidden flex flex-col">
-                  <LiveClassThumbnail
-                    thumbnailUrl={lc.thumbnail_url}
-                    textSide={lc.thumbnail_text_side}
-                    subjectName={lc.subject?.name}
-                    standardName={user?.standard_name}
-                    topic={lc.title}
-                    status={lc.status}
-                    scheduledAt={lc.scheduled_at}
-                  />
+                <div key={lc.id} className={`rounded-[32px] ${theme.bg} flex flex-col transition-transform hover:-translate-y-1 hover:shadow-md`}>
+                  <div className="p-2">
+                    <LiveClassThumbnail
+                      thumbnailUrl={lc.thumbnail_url}
+                      textSide={lc.thumbnail_text_side}
+                      subjectName={lc.subject?.name}
+                      standardName={user?.standard_name}
+                      topic={lc.title}
+                      status={lc.status}
+                      scheduledAt={lc.scheduled_at}
+                      className="rounded-[24px]"
+                    />
+                  </div>
 
-                  <div className="p-3 flex flex-col gap-2 flex-1">
-                    <h3 className="text-sm font-semibold text-neutral-900 leading-snug line-clamp-2">{lc.title}</h3>
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-neutral-500">
-                      {lc.subject && <span className="truncate max-w-full">{lc.subject.name}</span>}
-                      <span className="flex items-center gap-1">
-                        <Calendar size={10} />
-                        {fmtDateTime(lc.scheduled_at)}
-                      </span>
-                      {lc.duration_mins > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Clock size={10} />
-                          {lc.duration_mins} min
+                  <div className="px-6 pb-6 pt-2 flex flex-col gap-3 flex-1">
+                    <div>
+                      <h3 className={`text-[19px] font-bold ${theme.text} leading-tight line-clamp-2 mb-2`}>{lc.title}</h3>
+                      <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/40 flex-wrap">
+                        {lc.subject && <span className="bg-white/50 px-2 py-0.5 rounded-full">{lc.subject.name}</span>}
+                        <span className="flex items-center gap-1 bg-white/50 px-2 py-0.5 rounded-full">
+                          <Calendar size={12} />
+                          {fmtDateTime(lc.scheduled_at)}
                         </span>
-                      )}
+                        {lc.duration_mins > 0 && (
+                          <span className="flex items-center gap-1 bg-white/50 px-2 py-0.5 rounded-full">
+                            <Clock size={12} />
+                            {lc.duration_mins} min
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                  {/* Status + actions */}
-                  <div className="mt-auto flex items-center gap-2 flex-wrap pt-1">
-                    {isLive && (
-                      <>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                          Live now
-                        </span>
-                        <Btn size="sm" variant="primary" onClick={() => handleJoin(lc)} disabled={joiningId === lc.id}>
+                    {/* Status + actions */}
+                    <div className="mt-auto flex items-center justify-between pt-2">
+                      <div className="flex items-center gap-2">
+                        {isLive && (
+                          <span className="inline-flex items-center gap-1.5 text-[12px] font-bold px-2.5 py-1 rounded-full bg-white text-green-600 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            Live now
+                          </span>
+                        )}
+                        {isScheduled && (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white/50 text-black/50">
+                            Scheduled
+                          </span>
+                        )}
+                        {isEnded && lc.my_attended === true && (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white text-green-600 shadow-sm">
+                            <CheckCircle size={14} />
+                            Attended
+                          </span>
+                        )}
+                        {isEnded && lc.my_attended === false && (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white/50 text-black/50">
+                            <XCircle size={14} />
+                            Missed
+                          </span>
+                        )}
+                        {isEnded && lc.my_attended == null && (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white/50 text-black/50">
+                            Ended
+                          </span>
+                        )}
+                      </div>
+
+                      {isLive && (
+                        <button 
+                          onClick={() => handleJoin(lc)} 
+                          disabled={joiningId === lc.id}
+                          className="bg-black text-white px-4 py-2 rounded-full text-[13px] font-semibold shadow-md hover:bg-neutral-800 transition-colors flex items-center gap-1.5"
+                        >
                           {joiningId === lc.id
-                            ? <><Loader2 size={13} className="animate-spin" /> Opening…</>
-                            : 'Watch live class'}
-                        </Btn>
-                      </>
-                    )}
-
-                    {isScheduled && (
-                      <span className="text-xs font-medium text-amber-700">
-                        Class has not started yet
-                      </span>
-                    )}
-
-                    {isEnded && lc.my_attended === true && (
-                      <span className="flex items-center gap-1 text-xs font-medium text-green-700">
-                        <CheckCircle size={12} />
-                        You attended ✓
-                      </span>
-                    )}
-                    {isEnded && lc.my_attended === false && (
-                      <span className="flex items-center gap-1 text-xs font-medium text-neutral-500">
-                        <XCircle size={12} />
-                        You missed this class
-                      </span>
-                    )}
-                    {isEnded && lc.my_attended == null && (
-                      <span className="text-xs text-neutral-400">Class ended</span>
-                    )}
-                  </div>
+                            ? <><Loader2 size={14} className="animate-spin" /> Opening…</>
+                            : 'Watch'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

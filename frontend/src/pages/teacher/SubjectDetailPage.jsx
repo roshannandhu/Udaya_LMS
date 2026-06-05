@@ -58,24 +58,24 @@ function ScheduleSubjectLiveModal({ open, onClose, classId, subjectName, onSched
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
           <input type="text" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Chapter 5 — Quadratic Equations"
-            className="w-full px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:outline-none text-sm" />
+            className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Date</label>
             <input type="date" value={date} min={today} onChange={e=>setDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm" />
+              className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
           </div>
           <div>
             <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Time</label>
             <input type="time" value={time} onChange={e=>setTime(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm" />
+              className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
           </div>
         </div>
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Duration</label>
           <select value={duration} onChange={e=>setDuration(Number(e.target.value))}
-            className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm">
+            className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm">
             {[30,45,60,90,120].map(m=><option key={m} value={m}>{m} min</option>)}
           </select>
         </div>
@@ -133,12 +133,12 @@ function NoteFormModal({ open, onClose, classId, note, onSaved }) {
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
           <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Note title"
-            className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm" />
+            className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
         </div>
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Content (optional)</label>
           <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} placeholder="Note content…"
-            className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm resize-none" />
+            className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm resize-none" />
         </div>
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Attachment (PDF / image)</label>
@@ -784,7 +784,7 @@ export default function SubjectDetailPage() {
   if (loading) {
     return (
       <div>
-        <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+        <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
           <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
             <Skeleton className="w-8 h-8" />
             <Skeleton className="h-5 w-32" />
@@ -801,72 +801,56 @@ export default function SubjectDetailPage() {
   }
 
   return (
-    <div className="pb-28">
-      {/* ── Header ── */}
-      <div className="sticky top-0 z-30 glass-nav border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button
-            onClick={() => navigate(`/teacher/subjects/${standardId}`)}
-            className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-white/40 rounded-md"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <span className="text-xl">{subject?.emoji || '📐'}</span>
-          <div className="min-w-0 flex-1">
-            <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">
-              Subjects / {standard?.name}
-            </p>
-            <h1 className="text-base font-semibold truncate">{subject?.name || 'Subject'}</h1>
-            <p className="text-xs text-neutral-500 lg:hidden">{standard?.name}</p>
+    <div className="pb-28 font-sans selection:bg-indigo-100 selection:text-indigo-900">
+      {/* ── MASSIVE PASTEL HERO SECTION ── */}
+      <div className="relative overflow-hidden bg-white border-b border-neutral-100 shadow-sm mb-8">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 translate-x-1/3 -translate-y-1/2 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#fce4ec] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 -translate-x-1/3 translate-y-1/3 pointer-events-none"></div>
+        
+        <div className="max-w-[1200px] mx-auto px-5 md:px-8 py-8 relative z-10 flex flex-col items-center text-center">
+          <div className="w-full flex items-center justify-between mb-8">
+            <button onClick={() => navigate(`/teacher/subjects/${standardId}`)} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 transition-transform">
+              <ArrowLeft size={20} />
+            </button>
+            <div className="flex gap-2">
+              {tab === 'videos' && <Btn variant="primary" icon={Upload} onClick={() => setUploadOpen(true)}>Add video</Btn>}
+              {tab === 'tests' && <Btn variant="primary" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>New test</Btn>}
+              {tab === 'assignments' && <Btn variant="primary" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>New assignment</Btn>}
+              {tab === 'live' && <Btn variant="primary" icon={Radio} onClick={() => setShowScheduleLive(true)}>Schedule class</Btn>}
+              {tab === 'notes' && <Btn variant="primary" icon={Plus} onClick={() => { setEditNote(null); setShowNoteForm(true); }}>New note</Btn>}
+            </div>
           </div>
-          {/* Action button for current tab */}
-          {tab === 'videos' && (
-            <Btn variant="primary" size="sm" icon={Upload} onClick={() => setUploadOpen(true)}>
-              Add video
-            </Btn>
-          )}
-          {tab === 'tests' && (
-            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>
-              New test
-            </Btn>
-          )}
-          {tab === 'assignments' && (
-            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>
-              New assignment
-            </Btn>
-          )}
-          {tab === 'live' && (
-            <Btn variant="primary" size="sm" icon={Radio} onClick={() => setShowScheduleLive(true)}>
-              Schedule
-            </Btn>
-          )}
-          {tab === 'notes' && (
-            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditNote(null); setShowNoteForm(true); }}>
-              New note
-            </Btn>
-          )}
-        </div>
-      </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
-        {/* ── Pill tabs ── */}
-        <div className="flex items-center gap-1 p-1 bg-black/5 rounded-xl mb-6 overflow-x-auto">
+          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-white/60 backdrop-blur-md border-4 border-white shadow-xl flex items-center justify-center text-5xl md:text-6xl mb-6 transform hover:rotate-12 transition-transform duration-500">
+            {subject?.emoji || '📚'}
+          </div>
+
+          <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-2">
+            Standard: {standard?.name}
+          </p>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-neutral-900 tracking-tight leading-none mb-6" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+            {subject?.name || 'Subject Hub'}
+          </h1>
+        </div>
+
+        {/* ── FLOATING PILL NAVIGATION ── */}
+        <div className="max-w-[1200px] mx-auto px-5 md:px-8 pb-6 relative z-10 overflow-x-auto custom-scrollbar flex gap-3">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+              className={`flex-shrink-0 px-6 py-3 rounded-full text-sm font-bold uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${
                 tab === t.id
-                  ? 'bg-white shadow-sm text-neutral-900'
-                  : 'text-neutral-500 hover:text-neutral-800'
+                  ? 'bg-neutral-900 text-white shadow-lg scale-105'
+                  : 'bg-white text-neutral-500 border border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
               }`}
             >
               {t.label}
               {t.count > 0 && (
-                <span className={`text-xs rounded-full px-1.5 py-0.5 leading-none ${
+                <span className={`w-5 h-5 flex items-center justify-center text-[10px] rounded-full shadow-sm ${
                   tab === t.id
-                    ? t.alert ? 'bg-red-500 text-white' : 'bg-neutral-900 text-white'
-                    : t.alert ? 'text-red-500' : 'text-neutral-400'
+                    ? t.alert ? 'bg-red-500 text-white' : 'bg-white/20 text-white'
+                    : t.alert ? 'bg-red-100 text-red-600' : 'bg-neutral-100 text-neutral-600'
                 }`}>
                   {t.count}
                 </span>
@@ -874,11 +858,14 @@ export default function SubjectDetailPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="px-5 md:px-8 max-w-[1200px] mx-auto">
 
         {/* ══ Videos tab ══ */}
         {tab === 'videos' && (
           videos.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
               <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
                 <Video size={28} className="text-neutral-400" />
               </div>
@@ -944,7 +931,7 @@ export default function SubjectDetailPage() {
         {/* ══ Tests tab ══ */}
         {tab === 'tests' && (
           tests.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
               <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
                 <FileQuestion size={28} className="text-neutral-400" />
               </div>
@@ -996,7 +983,7 @@ export default function SubjectDetailPage() {
         {/* ══ Assignments tab ══ */}
         {tab === 'assignments' && (
           assignments.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
               <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
                 <ClipboardList size={28} className="text-neutral-400" />
               </div>
@@ -1112,7 +1099,7 @@ export default function SubjectDetailPage() {
         {/* ══ Live tab ══ */}
         {tab === 'live' && (
           liveClasses.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
               <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
                 <Radio size={28} className="text-neutral-400" />
               </div>
@@ -1197,7 +1184,7 @@ export default function SubjectDetailPage() {
         {/* ══ Notes tab ══ */}
         {tab === 'notes' && (
           notes.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
               <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
                 <StickyNote size={28} className="text-neutral-400" />
               </div>

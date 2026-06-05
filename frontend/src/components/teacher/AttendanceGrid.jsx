@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  ChevronLeft, ChevronRight, CheckCircle2, Save, AlertTriangle,
-  Users, Loader2, Info
+  CheckCircle2, AlertTriangle, Users, Loader2, Calendar as CalendarIcon, Save, ChevronDown
 } from 'lucide-react';
 import { attendanceApi } from '../../lib/api';
 import { Btn, Skeleton, Avatar } from '../ui';
 
-/* ─── Date helpers ───────────────────────────────────────────── */
 export function fmt(date) {
   const d = new Date(date);
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -15,55 +13,37 @@ export function fmt(date) {
 }
 
 export function getMonday(d) {
-  const date = new Date(d);
+  const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : new Date(d);
   const day = date.getDay();
   const diff = date.getDate() - day + (day === 0 ? -6 : 1);
   return new Date(date.setDate(diff));
 }
 
-export function weekDays(start) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+// Helper to add days
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
 }
 
-export function isFutureDate(dateStr) {
-  return dateStr > fmt(new Date());
-}
-
-/* ─── Status config ──────────────────────────────────────────── */
-export const STATUS = {
-  present: { char: 'P', cls: 'bg-green-100 text-green-700 border-green-300', label: 'Present' },
-  absent:  { char: 'A', cls: 'bg-red-100   text-red-600   border-red-300',   label: 'Absent'  },
-  late:    { char: 'L', cls: 'bg-amber-100 text-amber-700 border-amber-300', label: 'Late'    },
-};
-
-const CYCLE = { null: 'present', present: 'absent', absent: 'late', late: null };
-
-/* ─── AttendanceGrid ─────────────────────────────────────────── */
 export default function AttendanceGrid({ subjectId, onNavigate }) {
-  const [weekStart, setWeekStart]   = useState(() => getMonday(new Date()));
   const [activeDate, setActiveDate] = useState(fmt(new Date()));
   const [students, setStudents]     = useState([]);
-  const [changesMap, setChangesMap] = useState({});
+  const [changesMap, setChangesMap] = useState({}); // student_id -> status ('present', 'absent', 'late', null)
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
-  const [savedDate, setSavedDate]   = useState(null);
+  const [saved, setSaved]           = useState(false);
   const [error, setError]           = useState('');
 
-  const today = fmt(new Date());
-  const days  = weekDays(weekStart);
-
-  const loadWeek = useCallback(async (start) => {
+  const loadDate = useCallback(async (dateStr) => {
     setLoading(true);
     setError('');
+    setChangesMap({}); // clear un-saved changes when switching date
     try {
-      const data = await attendanceApi.getSubjectAttendanceWeek(subjectId, fmt(start));
+      const data = await attendanceApi.getSubjectAttendance(subjectId, dateStr);
       setStudents(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError('Could not load attendance data. Check your connection.');
+      setError('Could not load attendance data.');
       console.error(e);
     } finally {
       setLoading(false);
@@ -71,296 +51,284 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
   }, [subjectId]);
 
   useEffect(() => {
-    loadWeek(weekStart);
-  }, [weekStart, subjectId, loadWeek]);
+    loadDate(activeDate);
+  }, [activeDate, loadDate]);
 
-  const prevWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d); };
-  const nextWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d); };
-
-  const toggle = (studentId, currentStatus) => {
-    const next = CYCLE[currentStatus ?? 'null'];
-    setChangesMap(prev => {
-      const dateCopy = { ...(prev[activeDate] || {}) };
-      dateCopy[studentId] = next === null ? '__CLEAR__' : next;
-      return { ...prev, [activeDate]: dateCopy };
-    });
+  const markStudent = (studentId, status) => {
+    setChangesMap(prev => ({ ...prev, [studentId]: status }));
   };
 
   const markAll = (status) => {
-    if (isFutureDate(activeDate)) return;
-    const newDateChanges = {};
-    students.forEach(s => { newDateChanges[s.student_id] = status; });
-    setChangesMap(prev => ({ ...prev, [activeDate]: newDateChanges }));
-  };
-
-  const getStatus = (studentId, dateStr) => {
-    const change = changesMap[dateStr]?.[studentId];
-    if (change === '__CLEAR__') return null;
-    if (change !== undefined) return change;
-    const student = students.find(s => s.student_id === studentId);
-    return student?.days[dateStr] || null;
+    const newChanges = { ...changesMap };
+    students.forEach(s => {
+      newChanges[s.student_id] = status;
+    });
+    setChangesMap(newChanges);
   };
 
   const save = async () => {
-    const dateChanges = changesMap[activeDate] || {};
+    if (Object.keys(changesMap).length === 0) return;
+    
+    // Build records array and toDelete array
     const toSave = [];
     const toDelete = [];
-    Object.entries(dateChanges).forEach(([studentId, status]) => {
-      if (status === '__CLEAR__' || status === null) toDelete.push(studentId);
-      else toSave.push({ student_id: studentId, status });
+    Object.entries(changesMap).forEach(([studentId, status]) => {
+      if (status === null || status === '__CLEAR__') {
+        toDelete.push(studentId);
+      } else {
+        toSave.push({ student_id: studentId, status });
+      }
     });
-    if (toSave.length === 0 && toDelete.length === 0) return;
-    setSaving(true); setError('');
+
+    setSaving(true);
+    setError('');
     try {
       if (toSave.length > 0) {
         await attendanceApi.markSubjectAttendance(subjectId, { date: activeDate, records: toSave });
       }
-      for (const studentId of toDelete) {
-        try { await attendanceApi.clearAttendanceRecord(subjectId, studentId, activeDate); } catch {}
+      for (const sId of toDelete) {
+        try { await attendanceApi.clearAttendanceRecord(subjectId, sId, activeDate); } catch {}
       }
-      setChangesMap(prev => { const u = { ...prev }; delete u[activeDate]; return u; });
-      setSavedDate(activeDate);
-      setTimeout(() => setSavedDate(null), 2500);
-      await loadWeek(weekStart);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      setChangesMap({}); // clear local changes
+      await loadDate(activeDate); // refresh initial state from server
     } catch (e) {
-      setError(e.message || 'Failed to save. Please try again.');
+      setError(e.message || 'Failed to save attendance.');
     } finally {
       setSaving(false);
     }
   };
 
-  const activeDateChanges = changesMap[activeDate] || {};
-  const hasChanges = Object.keys(activeDateChanges).length > 0;
+  const hasChanges = Object.keys(changesMap).length > 0;
 
-  const countStatus = (status) => students.filter(s => getStatus(s.student_id, activeDate) === status).length;
-  const presentCount  = countStatus('present');
-  const absentCount   = countStatus('absent');
-  const lateCount     = countStatus('late');
-  const unmarkedCount = students.length - presentCount - absentCount - lateCount;
-  const pendingDays   = Object.keys(changesMap).filter(d => Object.keys(changesMap[d] || {}).length > 0);
+  // --- Calendar Taskbar Logic ---
+  const activeDateObj = useMemo(() => new Date(activeDate + 'T00:00:00'), [activeDate]);
+  const monday = useMemo(() => getMonday(activeDateObj), [activeDateObj]);
+  const weekDays = useMemo(() => {
+    return Array.from({ length: 7 }).map((_, i) => addDays(monday, i));
+  }, [monday]);
+
+  const monthName = activeDateObj.toLocaleString('default', { month: 'long' });
+  const year = activeDateObj.getFullYear();
+  const todayStr = fmt(new Date());
+
+  const handleDayClick = (d) => {
+    const dateStr = fmt(d);
+    // Optional: Prevent selecting future dates if needed, but standard HTML let them select up to today.
+    // Actually, in original code `max={fmt(new Date())}` was set. 
+    // Let's only allow up to today if we want, or just let them select it. 
+    if (dateStr > todayStr) return; // Disallow future attendance marking
+    setActiveDate(dateStr);
+  };
 
   if (loading) {
     return (
-      <div className="space-y-2 mt-4">
-        {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}
+      <div className="space-y-4 mt-6">
+        {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-20 rounded-[24px]" />)}
       </div>
     );
   }
 
   if (!students.length) {
     return (
-      <div className="mt-6 text-center py-14 glass-panel border-dashed border-white/60 rounded-2xl text-sm text-neutral-500">
+      <div className="mt-6 text-center py-14 bg-white/50 border border-white/60 rounded-[32px] text-sm text-neutral-500 shadow-sm">
         <Users size={28} className="mx-auto mb-2 text-neutral-300" />
         No students enrolled in this subject yet.
       </div>
     );
   }
 
+  // Calculate current effective states for display
+  const getEffectiveStatus = (studentId) => {
+    if (changesMap[studentId] !== undefined) return changesMap[studentId];
+    const s = students.find(s => s.student_id === studentId);
+    return s ? s.status : null;
+  };
+
+  const presentCount = students.filter(s => getEffectiveStatus(s.student_id) === 'present').length;
+  const absentCount = students.filter(s => getEffectiveStatus(s.student_id) === 'absent').length;
+  const lateCount = students.filter(s => getEffectiveStatus(s.student_id) === 'late').length;
+  const totalCount = students.length;
+
   return (
-    <div className="mt-4 space-y-3">
-      {/* ── Control panel ── */}
-      <div className="glass-panel rounded-2xl p-4">
-        {/* Week navigator + save */}
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-          <div className="flex items-center gap-1">
-            <button onClick={prevWeek} className="p-2 hover:bg-white/60 rounded-lg transition-colors">
-              <ChevronLeft size={18} className="text-neutral-600" />
-            </button>
-            <span className="text-sm font-semibold px-1">
-              {days[0].toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-              {' – '}
-              {days[6].toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </span>
-            <button onClick={nextWeek} className="p-2 hover:bg-white/60 rounded-lg transition-colors">
-              <ChevronRight size={18} className="text-neutral-600" />
-            </button>
-          </div>
+    <div className="mt-6 pb-28">
 
-          <div className="flex items-center gap-2">
-            <button onClick={() => markAll('present')} disabled={isFutureDate(activeDate)}
-              className="px-2.5 py-1 text-xs rounded-full bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-              All P
-            </button>
-            <button onClick={() => markAll('absent')} disabled={isFutureDate(activeDate)}
-              className="px-2.5 py-1 text-xs rounded-full bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-              All A
-            </button>
-            <button onClick={() => markAll('late')} disabled={isFutureDate(activeDate)}
-              className="px-2.5 py-1 text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-              All L
-            </button>
-
-            {savedDate === activeDate ? (
-              <span className="flex items-center gap-1 text-xs text-green-600 font-medium px-3 py-1.5 bg-green-50 rounded-full border border-green-200">
-                <CheckCircle2 size={13} /> Saved!
-              </span>
-            ) : (
-              <Btn variant="primary" size="sm" onClick={save}
-                disabled={!hasChanges || saving || isFutureDate(activeDate)}>
-                {saving
-                  ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
-                  : <><Save size={13} /> Save{hasChanges ? ` (${Object.keys(activeDateChanges).length})` : ''}</>
-                }
-              </Btn>
-            )}
+      {/* Calendar Taskbar */}
+      <div className="bg-white rounded-[24px] p-5 shadow-sm border border-neutral-100 mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2 cursor-pointer group">
+            <span className="text-lg font-bold text-neutral-800">{monthName} {year}</span>
+            <ChevronDown size={18} className="text-neutral-500 group-hover:text-neutral-800 transition-colors" />
           </div>
+          <button 
+            onClick={() => setActiveDate(todayStr)}
+            className="px-4 py-1.5 bg-[#e0f7fa] text-[#00acc1] font-bold rounded-xl text-sm hover:bg-[#b2ebf2] transition-colors"
+          >
+            Today
+          </button>
         </div>
 
-        {pendingDays.length > 1 && (
-          <div className="mb-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-2.5">
-            <Info size={13} className="flex-shrink-0" />
-            You have unsaved changes on {pendingDays.length} days. Each day must be saved separately.
-          </div>
-        )}
-
-        {/* Day tabs */}
-        <div className="flex gap-1">
-          {days.map((d, i) => {
-            const ds       = fmt(d);
-            const isActive = ds === activeDate;
-            const isToday  = ds === today;
-            const isFuture = isFutureDate(ds);
-            const hasPending = Object.keys(changesMap[ds] || {}).length > 0;
+        <div className="flex justify-between items-center px-2 md:px-6">
+          {weekDays.map((d, i) => {
+            const dStr = fmt(d);
+            const isSelected = dStr === activeDate;
+            const isToday = dStr === todayStr;
+            const isFuture = dStr > todayStr;
+            const dayName = d.toLocaleString('default', { weekday: 'short' });
+            
             return (
-              <button key={i} onClick={() => setActiveDate(ds)}
-                className={`relative flex-1 flex flex-col items-center py-2 rounded-xl border text-xs font-medium transition-all
-                  ${isActive ? 'bg-neutral-900 text-white border-neutral-900'
-                  : isToday  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                  : isFuture ? 'border-white/40 text-neutral-300 cursor-default'
-                  : 'border-white/60 text-neutral-500 hover:bg-white/40'}`}>
-                <span className="text-[9px] uppercase tracking-wide opacity-70">
-                  {d.toLocaleDateString('en-IN', { weekday: 'narrow' })}
+              <button 
+                key={dStr}
+                onClick={() => handleDayClick(d)}
+                disabled={isFuture}
+                className={`flex flex-col items-center gap-2 group ${isFuture ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <span className={`text-xs font-medium ${isToday ? 'text-[#00acc1]' : 'text-neutral-500'}`}>
+                  {dayName}
                 </span>
-                <span className="font-bold mt-0.5">{d.getDate()}</span>
-                {hasPending && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                <div className={`w-10 h-10 flex items-center justify-center rounded-full text-base font-bold transition-all
+                  ${isSelected 
+                    ? 'bg-[#374151] text-white shadow-md scale-110' 
+                    : isToday 
+                      ? 'text-[#00acc1] group-hover:bg-neutral-50' 
+                      : 'text-neutral-700 group-hover:bg-neutral-50'
+                  }`}
+                >
+                  {d.getDate()}
+                </div>
               </button>
             );
           })}
         </div>
-
-        {isFutureDate(activeDate) && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500 bg-white/30 rounded-xl p-2.5 border border-white/60">
-            <Info size={12} className="flex-shrink-0" /> Cannot mark attendance for future dates.
-          </div>
-        )}
-
-        {!isFutureDate(activeDate) && (
-          <div className="flex gap-4 mt-3 text-xs text-neutral-500 flex-wrap">
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />{presentCount} present</span>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />{absentCount} absent</span>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500" />{lateCount} late</span>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-neutral-300" />{unmarkedCount} unmarked</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5">
-            <AlertTriangle size={13} className="flex-shrink-0" /> {error}
-          </div>
-        )}
       </div>
 
-      {/* ── Student list ── */}
-      <div className="glass-panel rounded-2xl overflow-hidden">
-        <div className="flex items-center px-4 py-2.5 border-b border-white/40 bg-white/20">
-          <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Student</span>
-          <div className="hidden md:flex gap-1.5 mr-3">
-            {days.map((d, i) => {
-              const ds = fmt(d);
-              return (
-                <span key={i} className={`w-8 text-center text-[10px] font-bold transition-colors ${ds === activeDate ? 'text-neutral-900' : 'text-neutral-400'}`}>
-                  {d.toLocaleDateString('en-IN', { weekday: 'narrow' })}
-                </span>
-              );
-            })}
+      {/* Quick Actions & Stats mimicking udaya.jpg UI design */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        
+        {/* Left side: Quick Actions */}
+        <button 
+          onClick={() => markAll('present')}
+          className="w-full md:w-auto px-6 py-3 bg-[#e5f5e8] text-[#2d7a42] rounded-full text-sm font-bold hover:bg-[#d4ecd9] transition-colors flex items-center justify-center gap-2 shadow-sm"
+        >
+          <CheckCircle2 size={18} />
+          Mark All Present
+        </button>
+
+        {/* Right side: The rounded pill stats from the design */}
+        <div className="flex bg-white p-2 rounded-[24px] shadow-sm border border-neutral-100 gap-2 overflow-x-auto scrollbar-hide">
+          <div className="flex flex-col items-center justify-center bg-[#e0f7fa] min-w-[80px] py-3 rounded-[20px]">
+            <span className="text-2xl font-bold text-[#006064] leading-none mb-1">{totalCount}</span>
+            <span className="text-[10px] font-semibold text-[#00838f] uppercase tracking-wider">Total</span>
           </div>
-          <span className="md:hidden text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mr-3">
-            {new Date(activeDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 w-12 text-right">Overall</span>
+          <div className="flex flex-col items-center justify-center bg-[#e8f5e9] min-w-[80px] py-3 rounded-[20px]">
+            <span className="text-2xl font-bold text-[#1b5e20] leading-none mb-1">{presentCount}</span>
+            <span className="text-[10px] font-semibold text-[#2e7d32] uppercase tracking-wider">Present</span>
+          </div>
+          <div className="flex flex-col items-center justify-center bg-[#fce4ec] min-w-[80px] py-3 rounded-[20px]">
+            <span className="text-2xl font-bold text-[#880e4f] leading-none mb-1">{absentCount}</span>
+            <span className="text-[10px] font-semibold text-[#ad1457] uppercase tracking-wider">Absent</span>
+          </div>
         </div>
 
-        {students.map((st, idx) => {
-          const overall  = st.overall_pct ?? 0;
-          const isLow    = overall > 0 && overall < 75;
-          const barColor = overall >= 75 ? 'bg-green-500' : overall >= 50 ? 'bg-amber-500' : 'bg-red-500';
+      </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-2xl flex items-center gap-2 text-sm border border-red-100 shadow-sm">
+          <AlertTriangle size={18} /> {error}
+        </div>
+      )}
+
+      {/* Student List as ultra-rounded floating cards */}
+      <div className="space-y-4">
+        {students.map((student) => {
+          const currentStatus = getEffectiveStatus(student.student_id);
+          
           return (
-            <div key={st.student_id}
-              className={`flex items-center gap-3 px-4 py-3.5 hover:bg-white/25 transition-colors ${idx > 0 ? 'border-t border-white/40' : ''}`}>
-              <button onClick={() => onNavigate?.(st.student_id)}
-                className="flex items-center gap-2 flex-1 min-w-0 text-left group">
-                <Avatar name={st.student_name} size="sm" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate group-hover:text-blue-600 transition-colors">
-                    {isLow && <AlertTriangle size={11} className="inline mr-1 text-amber-500" />}
-                    {st.student_name}
-                  </p>
+            <div 
+              key={student.student_id} 
+              className="bg-white p-4 rounded-[28px] shadow-sm hover:shadow-md transition-shadow border border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-5"
+            >
+              <div 
+                className="flex items-center gap-4 flex-1 cursor-pointer"
+                onClick={() => onNavigate && onNavigate(student.student_id)}
+              >
+                <div className="relative">
+                  <Avatar src={student.avatar_url} name={student.name} size="lg" className="rounded-[20px]" />
+                  {currentStatus === 'present' && <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#4caf50] rounded-full border-2 border-white flex items-center justify-center"><CheckCircle2 size={12} className="text-white"/></div>}
                 </div>
-              </button>
-
-              {/* Desktop: full week dots */}
-              <div className="hidden md:flex gap-1.5 items-center mr-3">
-                {days.map((d, i) => {
-                  const ds = fmt(d);
-                  const isEditing = ds === activeDate && !isFutureDate(ds);
-                  const status    = getStatus(st.student_id, ds);
-                  const cfg       = STATUS[status];
-                  const isPending = changesMap[ds]?.[st.student_id] !== undefined;
-                  return (
-                    <button key={i} disabled={!isEditing}
-                      onClick={() => isEditing && toggle(st.student_id, status)}
-                      title={cfg?.label || 'Unmarked'}
-                      className={`w-8 h-8 rounded-full border text-[10px] font-bold flex items-center justify-center select-none transition-all
-                        ${isEditing ? 'cursor-pointer hover:scale-110 ring-2 ring-offset-1 ring-neutral-200' : 'cursor-default'}
-                        ${isPending ? 'ring-2 ring-amber-300 ring-offset-1' : ''}
-                        ${cfg ? cfg.cls : 'bg-white/30 border-white/60 text-neutral-300'}`}>
-                      {cfg ? cfg.char : '·'}
-                    </button>
-                  );
-                })}
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900">{student.name}</h3>
+                  <p className="text-xs font-medium text-neutral-400 mt-0.5">{student.username}</p>
+                </div>
               </div>
 
-              {/* Mobile: active date dot */}
-              <div className="flex md:hidden mr-2">
-                {(() => {
-                  const status  = getStatus(st.student_id, activeDate);
-                  const cfg     = STATUS[status];
-                  const canEdit = !isFutureDate(activeDate);
-                  return (
-                    <button onClick={() => canEdit && toggle(st.student_id, status)} disabled={!canEdit}
-                      className={`w-10 h-10 rounded-full border text-xs font-bold flex items-center justify-center transition-all
-                        ${canEdit ? 'hover:scale-110 active:scale-95 cursor-pointer' : 'cursor-default opacity-50'}
-                        ${cfg ? cfg.cls : 'bg-white/30 border-white/60 text-neutral-400'}`}>
-                      {cfg ? cfg.char : '?'}
-                    </button>
-                  );
-                })()}
-              </div>
-
-              {/* Overall % */}
-              <div className="flex items-center gap-2 w-14 justify-end">
-                <div className="hidden sm:block w-10 h-1.5 rounded-full bg-white/40 overflow-hidden">
-                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${overall}%` }} />
-                </div>
-                <span className={`text-xs font-bold tabular-nums ${isLow ? 'text-red-600' : 'text-neutral-700'}`}>
-                  {Math.round(overall)}%
-                </span>
+              {/* Segmented Toggles styled as soft pills */}
+              <div className="flex bg-[#f5f7fa] p-1.5 rounded-[20px] w-full md:w-auto">
+                <button
+                  onClick={() => markStudent(student.student_id, 'present')}
+                  className={`flex-1 md:w-[90px] py-2.5 text-xs font-bold rounded-[16px] transition-all ${
+                    currentStatus === 'present' 
+                      ? 'bg-[#e8f5e9] text-[#2e7d32] shadow-sm' 
+                      : 'text-neutral-500 hover:bg-white/60'
+                  }`}
+                >
+                  Present
+                </button>
+                <button
+                  onClick={() => markStudent(student.student_id, 'late')}
+                  className={`flex-1 md:w-[90px] py-2.5 text-xs font-bold rounded-[16px] transition-all ${
+                    currentStatus === 'late' 
+                      ? 'bg-[#fff8e1] text-[#f57f17] shadow-sm' 
+                      : 'text-neutral-500 hover:bg-white/60'
+                  }`}
+                >
+                  Late
+                </button>
+                <button
+                  onClick={() => markStudent(student.student_id, 'absent')}
+                  className={`flex-1 md:w-[90px] py-2.5 text-xs font-bold rounded-[16px] transition-all ${
+                    currentStatus === 'absent' 
+                      ? 'bg-[#fce4ec] text-[#c2185b] shadow-sm' 
+                      : 'text-neutral-500 hover:bg-white/60'
+                  }`}
+                >
+                  Absent
+                </button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex gap-4 px-1 text-xs text-neutral-400 flex-wrap">
-        {Object.entries(STATUS).map(([key, cfg]) => (
-          <span key={key} className="flex items-center gap-1">
-            <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] font-bold ${cfg.cls}`}>{cfg.char}</span>
-            {cfg.label}
-          </span>
-        ))}
-        <span className="italic">Tap cell to cycle • amber dot = unsaved</span>
+      {/* Floating Save Bar styled in UI colors */}
+      <div className={`fixed bottom-6 left-0 right-0 z-50 px-4 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${hasChanges || saved ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-24 opacity-0 scale-95'}`}>
+        <div className="max-w-md mx-auto bg-white text-neutral-800 shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-neutral-100 rounded-full p-2 flex items-center justify-between pl-6">
+          
+          {saved ? (
+             <div className="flex-1 flex items-center justify-center gap-2 text-[#2d7a42] font-bold py-2">
+               <CheckCircle2 size={20} /> Attendance Saved Successfully
+             </div>
+          ) : (
+            <>
+              <div className="flex gap-4 text-sm font-bold">
+                <span className="text-[#2e7d32]">{presentCount} P</span>
+                <span className="text-[#f57f17]">{lateCount} L</span>
+                <span className="text-[#c2185b]">{absentCount} A</span>
+              </div>
+              <button 
+                onClick={save} 
+                disabled={saving}
+                className="bg-[#2d7a42] text-white px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-[#1b5e20] transition-colors disabled:opacity-70 shadow-sm"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <><Save size={16} strokeWidth={2.5} /> Save</>}
+              </button>
+            </>
+          )}
+
+        </div>
       </div>
+      
     </div>
   );
 }

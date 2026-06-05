@@ -2,7 +2,7 @@ import React, { Suspense } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import BottomNav from '../../components/shared/BottomNav';
-import Sidebar from '../../components/shared/Sidebar';
+import TopNav from '../../components/shared/TopNav';
 
 function getActiveTab(path) {
   if (path === '/teacher' || path === '/teacher/') return 'today';
@@ -45,9 +45,9 @@ export default function TeacherLayout() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:pl-[240px]">
-      <Sidebar type="teacher" />
-      <div className="flex-1 flex flex-col">
+    <div className="min-h-screen flex flex-col">
+      <TopNav type="teacher" />
+      <div className="flex-1 flex flex-col pb-28 lg:pb-0">
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
           <Outlet />
         </Suspense>
