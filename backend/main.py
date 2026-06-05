@@ -4273,9 +4273,82 @@ def import_from_question_bank(req: QuestionBankImport, user=Depends(verify_token
 # --- Live Classes ---
 
 @app.get("/api/live-classes")
-async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_token)):
+async def get_live_classes(class_id: Optional[str] = None, standard_id: Optional[str] = None, user=Depends(verify_token)):
+    # ── Fast path: fetch ALL live classes for a standard in one shot ──────────
+    if standard_id:
+        # Access check
+        if user["role"] == "teacher":
+            std_check = await asyncio.to_thread(lambda: service_supabase.table("standards")
+                .select("id, teacher_id").eq("id", standard_id).eq("teacher_id", user["teacher_id"]).single().execute())
+            if not std_check.data:
+                raise HTTPException(status_code=403, detail="Not your standard")
+            owner_id = std_check.data["teacher_id"]
+        else:
+            if user.get("standard_id") != standard_id:
+                raise HTTPException(status_code=403, detail="Not enrolled in this standard")
+            owner_result = await asyncio.to_thread(lambda: service_supabase.table("standards")
+                .select("teacher_id").eq("id", standard_id).single().execute())
+            owner_id = owner_result.data.get("teacher_id") if owner_result.data else None
+
+        # All subjects for the standard — one query
+        subs_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes")
+            .select("id, name").eq("standard_id", standard_id).execute())
+        sub_map = {s["id"]: s for s in (subs_result.data or [])}
+        class_ids = list(sub_map.keys())
+
+        if not class_ids:
+            return []
+
+        # All live classes for all subjects — one query
+        lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes")
+            .select("*").in_("class_id", class_ids).order("scheduled_at", desc=True).execute())
+        classes = lc_result.data or []
+
+        # Branding — one query
+        try:
+            if owner_id:
+                brand = await asyncio.to_thread(lambda: service_supabase.table("teacher_branding")
+                    .select("thumbnail_url, thumbnail_text_side").eq("teacher_id", owner_id).single().execute())
+                if brand.data and brand.data.get("thumbnail_url"):
+                    cur_url  = brand.data["thumbnail_url"]
+                    cur_side = brand.data.get("thumbnail_text_side") or "right"
+                    for lc in classes:
+                        lc["thumbnail_url"]       = cur_url
+                        lc["thumbnail_text_side"] = cur_side
+        except Exception:
+            pass
+
+        # Attendance — one query for all classes
+        att_by_class: dict = {}
+        ids = [lc["id"] for lc in classes]
+        if ids:
+            att_all = await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance")
+                .select("live_class_id, attended, student_id").in_("live_class_id", ids).execute())
+            for a in (att_all.data or []):
+                att_by_class.setdefault(a["live_class_id"], []).append(a)
+
+        enrolled_count = await asyncio.to_thread(lambda: service_supabase.table("students")
+            .select("id", count="exact").eq("standard_id", standard_id).execute())
+        enrolled_count = enrolled_count.count or 0
+
+        for lc in classes:
+            att_data = att_by_class.get(lc["id"], [])
+            lc["attended_count"]   = sum(1 for a in att_data if a["attended"])
+            lc["total_registered"] = enrolled_count
+            lc["class_name"]       = sub_map.get(lc.get("class_id"), {}).get("name", "")
+            lc.pop("zoom_join_url",    None)
+            lc.pop("zoom_start_url",   None)
+            lc.pop("zoom_meeting_id",  None)
+            lc.pop("zoom_passcode",    None)
+            if user["role"] == "student":
+                my_att = next((a for a in att_data if a.get("student_id") == user["user_id"]), None)
+                lc["my_attended"] = my_att["attended"] if my_att else None
+
+        return classes
+
+    # ── Original per-class path (kept for backwards compat) ──────────────────
     if not class_id:
-        raise HTTPException(status_code=400, detail="class_id is required")
+        raise HTTPException(status_code=400, detail="class_id or standard_id is required")
 
     class_result = service_supabase.table("subject_classes") \
         .select("id, standard_id").eq("id", class_id).single().execute()
@@ -4298,9 +4371,6 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
         .order("scheduled_at", desc=True).execute()
     classes = result.data or []
 
-    # Always reflect the teacher's CURRENT universal thumbnail (from settings),
-    # not the value snapshotted onto each class at creation time. This way saving
-    # a new thumbnail in Settings updates every live-class card immediately.
     try:
         owner = service_supabase.table("standards") \
             .select("teacher_id").eq("id", std_id).single().execute()
@@ -4316,13 +4386,11 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
                     lc["thumbnail_url"] = cur_url
                     lc["thumbnail_text_side"] = cur_side
     except Exception:
-        pass  # Fall back to each class's snapshotted thumbnail
+        pass
 
     # Status is updated to "live" by the join-token endpoint when the teacher
     # starts the meeting. No Zoom polling here — keeps the list endpoint fast.
 
-    # Fetch all attendance for these classes in ONE query, then aggregate in Python
-    # (avoids an N+1 query-per-class round-trip).
     att_by_class: dict = {}
     ids = [lc["id"] for lc in classes]
     if ids:
@@ -4331,8 +4399,6 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
         for a in (att_all.data or []):
             att_by_class.setdefault(a["live_class_id"], []).append(a)
 
-    # "Registered" = students enrolled in this standard (a meaningful denominator),
-    # not the number of attendance rows. One count query, reused for every class.
     enrolled_count = service_supabase.table("students") \
         .select("id", count="exact").eq("standard_id", std_id).execute().count or 0
 
@@ -4340,15 +4406,11 @@ async def get_live_classes(class_id: Optional[str] = None, user=Depends(verify_t
         att_data = att_by_class.get(lc["id"], [])
         lc["attended_count"] = sum(1 for a in att_data if a["attended"])
         lc["total_registered"] = enrolled_count
-        # Never expose Zoom credentials in the class list — for ANY role. The
-        # owner hosts from their phone; everyone else is a view-only watcher and
-        # only receives SDK join data (at watch time) via the join-token endpoint.
         lc.pop("zoom_join_url", None)
         lc.pop("zoom_start_url", None)
         lc.pop("zoom_meeting_id", None)
         lc.pop("zoom_passcode", None)
         if user["role"] == "student":
-            # Attach this student's own attendance
             my_att = next((a for a in att_data if a.get("student_id") == user["user_id"]), None)
             lc["my_attended"] = my_att["attended"] if my_att else None
 

@@ -33,18 +33,12 @@ export default function StudentLiveClassesPage() {
     if (!standardId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const subs = await apiClient(`/subjects?standard_id=${standardId}`).catch(() => []);
-      const mySubjects = Array.isArray(subs) ? subs : [];
-
-      const results = await Promise.allSettled(
-        mySubjects.map(s => liveClassApi.getByClass(s.id).then(data => ({ s, data: Array.isArray(data) ? data : [] })))
-      );
-      const all = results.flatMap(r =>
-        r.status === 'fulfilled'
-          ? r.value.data.map(lc => ({ ...lc, subject: r.value.s }))
-          : []
-      );
-      const filtered = all.filter(lc => lc.status !== 'cancelled');
+      // Single call for all live classes in the student's standard
+      const data = await apiClient(`/live-classes?standard_id=${standardId}`).catch(() => []);
+      const all = Array.isArray(data) ? data : [];
+      const filtered = all
+        .filter(lc => lc.status !== 'cancelled')
+        .map(lc => ({ ...lc, subject: { id: lc.class_id, name: lc.class_name || '' } }));
       filtered.sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
       setLiveClasses(filtered);
     } catch (err) {

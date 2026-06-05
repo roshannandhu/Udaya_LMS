@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2, Trash2 } from 'lucide-react';
 import { Modal, Sheet, Btn, Tag, Avatar, Skeleton } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
-import { liveClassApi } from '../../lib/api';
+import { liveClassApi, apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
@@ -259,14 +259,17 @@ export default function TeacherLiveClassesPage() {
   const [attendanceSheetId, setAttendanceSheetId] = useState(null);
 
   const fetchAll = async () => {
+    if (!standards.length) return;
     setLoading(true);
     try {
+      // One call per standard instead of one per subject — much faster
       const results = await Promise.allSettled(
-        subjects.map(s => liveClassApi.getByClass(s.id).then(data => ({ s, data: Array.isArray(data) ? data : [] })))
+        standards.map(std => apiClient(`/live-classes?standard_id=${std.id}`))
       );
+      const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s]));
       const all = results.flatMap(r =>
-        r.status === 'fulfilled'
-          ? r.value.data.map(lc => ({ ...lc, subject: r.value.s }))
+        r.status === 'fulfilled' && Array.isArray(r.value)
+          ? r.value.map(lc => ({ ...lc, subject: subjectMap[lc.class_id] || { id: lc.class_id, name: lc.class_name || '' } }))
           : []
       );
       all.sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
@@ -278,7 +281,7 @@ export default function TeacherLiveClassesPage() {
     }
   };
 
-  useEffect(() => { fetchAll(); }, [subjects]);
+  useEffect(() => { fetchAll(); }, [standards]);
 
   // Warm the Zoom SDK in the background so the first "Watch" click is instant.
   // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —
