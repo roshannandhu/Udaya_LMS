@@ -4250,6 +4250,27 @@ async def websocket_endpoint(websocket: WebSocket, standard_id: str, token: Opti
         await websocket.close(code=4001)
         return
     await manager.connect(websocket, standard_id)
+
+    # DB fallback: if in-memory history is empty for this standard, load from DB
+    in_memory = [b for b in manager.broadcast_history if b.get("standard_id") == standard_id]
+    if not in_memory and service_supabase:
+        try:
+            db_rows = await asyncio.to_thread(
+                lambda: service_supabase.table("broadcasts")
+                    .select("id, message, attachment_url, attachment_type, created_at, edited, deleted, scheduled_for, reply_to, reply_to_text, expires_at, standard_id")
+                    .eq("standard_id", standard_id)
+                    .order("created_at")
+                    .execute()
+            )
+            if db_rows.data:
+                for row in db_rows.data:
+                    if not any(b.get("id") == row["id"] for b in manager.broadcast_history):
+                        manager.broadcast_history.append(row)
+                manager.save_history()
+                await websocket.send_json({"type": "history", "data": db_rows.data})
+        except Exception as e:
+            print(f"WS DB history fallback error: {e}")
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -4356,10 +4377,14 @@ async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_
     if not service_supabase or not req.broadcast_ids:
         return {"marked": 0}
         
-    s_res = service_supabase.table("students").select("id").eq("id", user["user_id"]).single().execute()
-    if not s_res.data:
+    # students.id = auth.users.id by schema design
+    student_id = user["user_id"]
+    try:
+        s_res = service_supabase.table("students").select("id").eq("id", student_id).limit(1).execute()
+        if not s_res.data:
+            return {"marked": 0}
+    except Exception:
         return {"marked": 0}
-    student_id = s_res.data["id"]
 
     try:
         now = datetime.now().isoformat()
