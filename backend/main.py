@@ -195,7 +195,7 @@ async def _ensure_notes_and_broadcast_columns():
         CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);
     """
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.post(
                 f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
             )
@@ -260,12 +260,25 @@ async def _broadcast_cleanup_loop():
             print(f"[broadcast cleanup] error: {e}")
 
 
+async def _deferred_startup_migrations():
+    """Run non-critical migrations in the background so they never delay the
+    server becoming ready to serve logins. In production the notes/reactions
+    tables are created via the Supabase SQL Editor, so the pg-meta attempt here
+    just fails fast and logs — it must not block startup (esp. on Render cold
+    starts, where this delay was added to every wake-up)."""
+    try:
+        await _ensure_notes_and_broadcast_columns()
+        await _ensure_notes_bucket()
+    except Exception as e:
+        print(f"[!] deferred startup migrations error (ignored): {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     await _ensure_plain_password_column()
     await _ensure_live_class_columns()
-    await _ensure_notes_and_broadcast_columns()
-    await _ensure_notes_bucket()
+    # Fire-and-forget: do NOT await — these must not delay login readiness.
+    asyncio.create_task(_deferred_startup_migrations())
     asyncio.create_task(_broadcast_cleanup_loop())
 
 
