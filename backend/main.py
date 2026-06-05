@@ -1411,6 +1411,111 @@ def get_student(student_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Student not found")
     return response.data
 
+@app.get("/api/reports/standard/{standard_id}/analytics")
+def get_standard_analytics(standard_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # 1. Overview & Students
+    students_res = service_supabase.table("students").select(
+        "id, name, avatar_url, attendance_pct, avg_score, points"
+    ).eq("standard_id", standard_id).execute()
+    students = students_res.data or []
+    
+    total_students = len(students)
+    avg_score = sum(s.get("avg_score") or 0 for s in students) / total_students if total_students else 0
+    avg_attendance = sum(s.get("attendance_pct") or 0 for s in students) / total_students if total_students else 0
+    total_points = sum(s.get("points") or 0 for s in students)
+    
+    # 2. Subject-wise performance
+    subjects_res = service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
+    subjects = subjects_res.data or []
+    subject_ids = [sub["id"] for sub in subjects]
+    
+    subject_performance = []
+    recent_tests = []
+    
+    if subject_ids:
+        # Get attendance summary
+        att_res = service_supabase.table("attendance_summary").select("subject_class_id, attendance_pct").in_("subject_class_id", subject_ids).execute()
+        att_data = att_res.data or []
+        
+        subject_att = {}
+        for row in att_data:
+            sid = row["subject_class_id"]
+            if sid not in subject_att:
+                subject_att[sid] = []
+            if row.get("attendance_pct") is not None:
+                subject_att[sid].append(row["attendance_pct"])
+        
+        # Get tests for these subjects
+        tests_res = service_supabase.table("tests").select("id, class_id, title, created_at").in_("class_id", subject_ids).order("created_at", desc=True).execute()
+        tests = tests_res.data or []
+        test_ids = [t["id"] for t in tests]
+        
+        subject_scores = {}
+        test_stats = {} 
+        if test_ids:
+            attempts_res = service_supabase.table("test_attempts").select("test_id, score, tests!inner(class_id, total_marks)").in_("test_id", test_ids).execute()
+            for a in (attempts_res.data or []):
+                t = a.get("tests") or {}
+                cid = t.get("class_id")
+                score = a.get("score")
+                tm = t.get("total_marks")
+                if cid and score is not None and tm:
+                    pct = (score / tm) * 100
+                    if cid not in subject_scores:
+                        subject_scores[cid] = []
+                    subject_scores[cid].append(pct)
+                    
+                    tid = a["test_id"]
+                    if tid not in test_stats:
+                        test_stats[tid] = {"score_sum": 0, "count": 0}
+                    test_stats[tid]["score_sum"] += pct
+                    test_stats[tid]["count"] += 1
+        
+        for sub in subjects:
+            sid = sub["id"]
+            att_list = subject_att.get(sid, [])
+            sc_list = subject_scores.get(sid, [])
+            
+            subject_performance.append({
+                "subject_id": sid,
+                "subject_name": sub["name"],
+                "avg_attendance": round(sum(att_list)/len(att_list)) if att_list else 0,
+                "avg_score": round(sum(sc_list)/len(sc_list)) if sc_list else 0
+            })
+            
+        # 3. Recent Tests
+        for t in tests[:5]:
+            stats = test_stats.get(t["id"], {"score_sum": 0, "count": 0})
+            count = stats["count"]
+            sc_avg = round(stats["score_sum"] / count) if count > 0 else 0
+            participation = round((count / total_students) * 100) if total_students else 0
+            sub_name = next((s["name"] for s in subjects if s["id"] == t["class_id"]), "Unknown")
+            recent_tests.append({
+                "test_id": t["id"],
+                "title": t["title"],
+                "subject_name": sub_name,
+                "avg_score": sc_avg,
+                "participation": participation,
+                "date": t["created_at"]
+            })
+        
+    return {
+        "overview": {
+            "total_students": total_students,
+            "avg_score": round(avg_score),
+            "avg_attendance": round(avg_attendance),
+            "total_points": total_points
+        },
+        "subject_performance": subject_performance,
+        "recent_tests": recent_tests,
+        "students": students
+    }
+
 @app.get("/api/students/{student_id}/report")
 def get_student_report(student_id: str, user = Depends(verify_token)):
     if user["role"] != "teacher":
@@ -1988,6 +2093,101 @@ def get_my_videos(user = Depends(verify_token)):
             "last_watched_at": r.get("last_watched_at"),
         })
     return result
+
+@app.get("/api/student/calendar-events")
+def get_student_calendar_events(start_date: str, end_date: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    standard_id = user.get("standard_id")
+    if not standard_id:
+        return []
+
+    # Get class IDs for the student's standard
+    subjects = service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
+    if not subjects.data:
+        return []
+        
+    class_ids = [s["id"] for s in subjects.data]
+    class_names = {s["id"]: s["name"] for s in subjects.data}
+
+    events = []
+
+    # 1. Fetch Tests
+    tests_res = service_supabase.table("tests") \
+        .select("id, class_id, title, scheduled_for, duration_mins") \
+        .in_("class_id", class_ids) \
+        .neq("status", "draft") \
+        .gte("scheduled_for", start_date) \
+        .lte("scheduled_for", end_date + "T23:59:59Z") \
+        .execute()
+    
+    for t in tests_res.data:
+        events.append({
+            "id": t["id"],
+            "type": "test",
+            "title": t["title"],
+            "date": t["scheduled_for"],
+            "duration": t["duration_mins"],
+            "subject": class_names.get(t["class_id"], "Unknown")
+        })
+
+    # 2. Fetch Live Classes
+    live_res = service_supabase.table("live_classes") \
+        .select("id, class_id, title, scheduled_at, duration_mins, zoom_join_url") \
+        .in_("class_id", class_ids) \
+        .gte("scheduled_at", start_date) \
+        .lte("scheduled_at", end_date + "T23:59:59Z") \
+        .execute()
+
+    for l in live_res.data:
+        events.append({
+            "id": l["id"],
+            "type": "live",
+            "title": l["title"],
+            "date": l["scheduled_at"],
+            "duration": l["duration_mins"],
+            "link": l["zoom_join_url"],
+            "subject": class_names.get(l["class_id"], "Unknown")
+        })
+
+    # 3. Fetch Uploaded Videos
+    vid_res = service_supabase.table("videos") \
+        .select("id, class_id, title, created_at") \
+        .in_("class_id", class_ids) \
+        .gte("created_at", start_date) \
+        .lte("created_at", end_date + "T23:59:59Z") \
+        .execute()
+
+    for v in vid_res.data:
+        events.append({
+            "id": v["id"],
+            "type": "video",
+            "title": v["title"],
+            "date": v["created_at"],
+            "subject": class_names.get(v["class_id"], "Unknown")
+        })
+
+    # 4. Fetch Assignments
+    assign_res = service_supabase.table("assignments") \
+        .select("id, class_id, title, due_date") \
+        .in_("class_id", class_ids) \
+        .gte("due_date", start_date) \
+        .lte("due_date", end_date + "T23:59:59Z") \
+        .execute()
+
+    for a in assign_res.data:
+        events.append({
+            "id": a["id"],
+            "type": "assignment",
+            "title": a["title"],
+            "date": a["due_date"],
+            "subject": class_names.get(a["class_id"], "Unknown")
+        })
+
+    return events
 
 @app.post("/api/students/me/avatar")
 async def upload_student_avatar(file: UploadFile = File(...), user = Depends(verify_token)):
@@ -3114,7 +3314,7 @@ def get_subject_attendance(subject_id: str, date: str = None, user = Depends(ver
     standard_id = subject.data["standard_id"]
 
     # Get all students in standard
-    students = service_supabase.table("students").select("id, name, username").eq("standard_id", standard_id).execute()
+    students = service_supabase.table("students").select("id, name, username, avatar_url").eq("standard_id", standard_id).execute()
     
     # Get attendance records for date
     records = service_supabase.table("attendance_records").select("student_id, status").eq("subject_class_id", subject_id).eq("date", date).execute()
@@ -3128,6 +3328,7 @@ def get_subject_attendance(subject_id: str, date: str = None, user = Depends(ver
                 "student_id": s["id"],
                 "name": s["name"],
                 "username": s["username"],
+                "avatar_url": s.get("avatar_url"),
                 "status": status_map.get(s["id"])
             })
     return result
@@ -4149,17 +4350,43 @@ class BroadcastReadRequest(BaseModel):
     broadcast_ids: List[str]
 
 @app.post("/api/broadcast-reads")
-def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_token)):
+async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_token)):
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Student only")
-    if not service_supabase or not user.get("student_id") or not req.broadcast_ids:
+    if not service_supabase or not req.broadcast_ids:
         return {"marked": 0}
+        
+    s_res = service_supabase.table("students").select("id").eq("supabase_user_id", user["user_id"]).single().execute()
+    if not s_res.data:
+        return {"marked": 0}
+    student_id = s_res.data["id"]
+
     try:
         now = datetime.now().isoformat()
-        rows = [{"broadcast_id": bid, "student_id": user["student_id"], "read_at": now} for bid in req.broadcast_ids]
+        rows = [{"broadcast_id": bid, "student_id": student_id, "read_at": now} for bid in req.broadcast_ids]
         service_supabase.table("broadcast_reads").upsert(rows, on_conflict="broadcast_id,student_id").execute()
+        
+        standard_ids = set()
+        for b in manager.broadcast_history:
+            if b.get("id") in req.broadcast_ids:
+                if b.get("standard_id"):
+                    standard_ids.add(b.get("standard_id"))
+        
+        for std_id in standard_ids:
+            if std_id in manager.active_connections:
+                event = {"type": "read_receipt_update", "broadcast_ids": req.broadcast_ids}
+                disconnected = []
+                for conn in manager.active_connections[std_id]:
+                    try:
+                        await conn.send_json(event)
+                    except Exception:
+                        disconnected.append(conn)
+                for d in disconnected:
+                    manager.disconnect(d, std_id)
+        
         return {"marked": len(rows)}
     except Exception as e:
+        print(f"Error marking broadcasts read: {e}")
         return {"marked": 0}
 
 @app.get("/api/broadcasts/reads")
@@ -4181,6 +4408,53 @@ def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
         return counts
     except Exception:
         return {}
+
+@app.get("/api/broadcasts/{broadcast_id}/reads/details")
+def get_broadcast_read_details(broadcast_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        return {"read_by": [], "not_read_by": []}
+    try:
+        # Get standard_id
+        b_res = service_supabase.table("broadcasts").select("standard_id").eq("id", broadcast_id).limit(1).execute()
+        if not b_res.data:
+            return {"read_by": [], "not_read_by": []}
+        standard_id = b_res.data[0]["standard_id"]
+
+        # Get all students in standard
+        students_res = service_supabase.table("students").select("id, name, avatar_url").eq("standard_id", standard_id).execute()
+        all_students = {s["id"]: s for s in (students_res.data or [])}
+
+        # Get read receipts
+        reads_res = service_supabase.table("broadcast_reads").select("student_id, read_at").eq("broadcast_id", broadcast_id).execute()
+        read_dict = {r["student_id"]: r["read_at"] for r in (reads_res.data or [])}
+
+        read_by = []
+        not_read_by = []
+        
+        for sid, s in all_students.items():
+            stu_data = {
+                "student_id": sid,
+                "name": s.get("name", "Unknown"),
+                "avatar_url": s.get("avatar_url")
+            }
+            if sid in read_dict:
+                stu_data["read_at"] = read_dict[sid]
+                read_by.append(stu_data)
+            else:
+                stu_data["read_at"] = None
+                not_read_by.append(stu_data)
+
+        # Sort by name
+        read_by.sort(key=lambda x: x["name"].lower())
+        not_read_by.sort(key=lambda x: x["name"].lower())
+
+        return {"read_by": read_by, "not_read_by": not_read_by}
+    except Exception as e:
+        print(f"Error fetching read details: {e}")
+        return {"read_by": [], "not_read_by": []}
+
 
 @app.delete("/api/broadcasts/{broadcast_id}")
 async def delete_broadcast(broadcast_id: str, user = Depends(verify_token)):
