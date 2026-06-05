@@ -39,7 +39,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [readDetailsTab, setReadDetailsTab] = useState('read');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const readDetailsModalRef = useRef(null);
-  const { refreshStandards, invalidate } = useAppCache();
+  const { refreshStandards, invalidate, updateStandardLocal } = useAppCache();
   const fileInputRef = useRef(null);
   const wsRef = useRef(null);
   const inputRef = useRef(null);
@@ -54,12 +54,14 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const handleEmojiChange = async (emoji) => {
     setShowEmojiPicker(false);
     if (emoji === std.emoji) return;
+    const prev = std.emoji;
+    updateStandardLocal(std.id, { emoji });   // instant optimistic update
     try {
       await apiClient(`/standards/${std.id}`, { method: 'PATCH', body: JSON.stringify({ emoji }) });
-      invalidate();            // mark cache stale so the refetch actually runs
-      await refreshStandards(); // pull the new emoji into the store -> re-renders header
+      invalidate();                            // mark cache stale for next natural refresh
     } catch (err) {
-      console.error('Failed to update class icon:', err);
+      updateStandardLocal(std.id, { emoji: prev });  // rollback on failure
+      alert(err?.message || 'Could not change the class icon. Please try again.');
     }
   };
 
@@ -421,8 +423,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
               
               const reads = readCounts[b.id] || 0;
               const allRead = studentCount > 0 && reads >= studentCount;
-              const someRead = reads > 0 && !allRead;
-              const hasReads = reads > 0;
               
               // To mimic WhatsApp: outgoing messages on the right
               const isSender = true; // Teacher is always the sender in this view
@@ -513,12 +513,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                             className="flex items-center hover:opacity-70 transition-opacity"
                             title={`${reads}/${studentCount} read`}
                           >
-                            {allRead
-                              ? <CheckCheck size={14} className="text-[#34B7F1]" />
-                              : someRead
-                                ? <CheckCheck size={14} className="text-neutral-400" />
-                                : <Check size={14} className="text-neutral-400" />
-                            }
+                            {/* WhatsApp-group parity: delivered = double grey, all read = double blue */}
+                            <CheckCheck size={14} className={allRead ? 'text-[#34B7F1]' : 'text-neutral-400'} />
                           </button>
                         )}
                       </div>

@@ -136,6 +136,11 @@ export const useAppCache = create(
       getSubjectsFor:  (stdId) => get().subjects.filter(s => String(s.standard_id) === String(stdId)),
       getStudentsFor:  (stdId) => get().students.filter(s => String(s.standard_id) === String(stdId)),
 
+      /* ── Optimistic local patch of a single standard (instant UI update) ── */
+      updateStandardLocal: (id, patch) => set({
+        standards: get().standards.map(s => String(s.id) === String(id) ? { ...s, ...patch } : s),
+      }),
+
       /* ── Invalidate (call after mutations) ── */
       invalidate:         () => set({ standardsTs: null, subjectsTs: null, studentsTs: null }),
       invalidateStudents: () => set({ studentsTs: null }),
