@@ -5,6 +5,7 @@ import {
   Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock,
   Trash2, Users, ClipboardList, Paperclip, Star, CalendarClock,
   Radio, StickyNote, Pin, PinOff, FileText, AlertCircle, Calendar,
+  Youtube, ExternalLink,
 } from 'lucide-react';
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, attendanceApi, videoApi, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
@@ -249,6 +250,33 @@ function VideoAddModal({ open, onClose, classId, onAdded }) {
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
           <strong>Important:</strong> Set your YouTube video to <strong>Unlisted</strong> — not Private.
           Students watch inside this app and never see the URL.
+        </div>
+
+        {/* Quick links to YouTube (open in a new tab) */}
+        <div>
+          <div className="grid grid-cols-2 gap-2">
+            <a
+              href="https://www.youtube.com/upload"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] bg-white hover:bg-[#F4F2EF] text-sm font-medium transition-colors"
+            >
+              <Youtube size={16} className="text-red-600" /> Upload new
+              <ExternalLink size={12} className="text-neutral-400" />
+            </a>
+            <a
+              href="https://studio.youtube.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] bg-white hover:bg-[#F4F2EF] text-sm font-medium transition-colors"
+            >
+              <Youtube size={16} className="text-red-600" /> My videos
+              <ExternalLink size={12} className="text-neutral-400" />
+            </a>
+          </div>
+          <p className="text-[11px] text-neutral-500 mt-1.5 text-center">
+            Upload your video as Unlisted on YouTube, then paste its link below.
+          </p>
         </div>
 
         <div>

@@ -19,21 +19,14 @@ export default function RoadmapTrack({ children, className = '' }) {
       animate="show"
       className={`relative w-full max-w-4xl mx-auto py-8 ${className}`}
     >
-      {/* Dotted spine (left on mobile, center on large screens) */}
-      <div 
-        className="absolute top-12 bottom-12 w-0 border-l-[4px] border-dashed border-neutral-200 z-0" 
-        style={{ left: '24px' }}
-        aria-hidden 
-      />
-      {/* We use a media query trick via CSS or just raw Tailwind. 
-          Actually, let's use tailwind classes for positioning. */}
+      {/* Dotted spine — left on mobile, centered on large screens (via the media query below) */}
       <style>{`
         @media (min-width: 1024px) {
           .spine-line { left: 50% !important; transform: translateX(-50%); }
           .spine-dot { left: 50% !important; transform: translateX(-50%); }
         }
       `}</style>
-      <div className="absolute top-12 bottom-12 w-0 border-l-[4px] border-dashed border-neutral-200/60 z-0 spine-line" style={{ left: '24px' }} aria-hidden />
+      <div className="absolute top-12 bottom-12 w-0 border-l-[4px] border-dashed border-neutral-200 z-0 spine-line" style={{ left: '24px' }} aria-hidden />
 
       <div className="space-y-10 lg:space-y-16">
         {items.map((child, i) => {

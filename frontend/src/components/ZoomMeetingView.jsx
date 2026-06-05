@@ -190,39 +190,74 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
 
       <button
         onClick={handleLeave}
-        className="absolute top-4 left-4 z-[110] pointer-events-auto flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-sm text-white text-sm rounded-full hover:bg-black/80 transition-colors"
+        className="absolute top-6 left-6 z-[110] pointer-events-auto flex items-center gap-2 px-5 py-2.5 bg-white/90 backdrop-blur-md shadow-lg text-neutral-800 text-[14px] font-bold rounded-full hover:bg-white hover:scale-105 hover:shadow-xl transition-all"
       >
-        <ArrowLeft size={14} />
-        Leave
+        <ArrowLeft size={18} />
+        Leave Classroom
       </button>
 
       {(status === 'loading' || status === 'joining') && (
-        <div className="absolute inset-0 bg-black flex flex-col items-center justify-center gap-3 pointer-events-auto">
-          {status === 'loading' ? (
-            <>
-              <Loader size={28} className="text-white/60 animate-spin" />
-              <p className="text-white/60 text-sm">Loading Zoom...</p>
-            </>
-          ) : (
-            <>
-              <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-              <p className="text-white/60 text-sm">Connecting to class...</p>
-              <p className="text-white/40 text-xs">This may take a few seconds</p>
-            </>
-          )}
+        <div className="absolute inset-0 bg-[#F4F7F6] flex items-center justify-center pointer-events-auto z-[105] overflow-hidden">
+          {/* Decorative background blobs */}
+          <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#EAF3EB] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-pulse" style={{ animationDuration: '4s' }}></div>
+          <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-[#F8E1FB] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-pulse" style={{ animationDuration: '5s' }}></div>
+          <div className="absolute bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-[#FFF6D8] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-pulse" style={{ animationDuration: '6s' }}></div>
+
+          <div className="relative w-[90%] max-w-md bg-white p-10 rounded-[48px] shadow-2xl flex flex-col items-center text-center transform scale-100 transition-all">
+            
+            {/* Pulsing avatar/icon area */}
+            <div className="relative w-32 h-32 mb-8">
+              <div className="absolute inset-0 bg-[#EAF3EB] rounded-full animate-ping opacity-60"></div>
+              <div className="absolute inset-2 bg-[#EAF3EB] rounded-full animate-pulse"></div>
+              <div className="absolute inset-4 bg-white rounded-full shadow-lg flex items-center justify-center z-10 border-4 border-[#EAF3EB]">
+                {status === 'loading' ? (
+                  <Video className="w-10 h-10 text-green-600 animate-pulse" />
+                ) : (
+                  <div className="w-10 h-10 border-[4px] border-green-100 border-t-green-600 rounded-full animate-spin" />
+                )}
+              </div>
+              
+              {/* Fake floating student avatars joining */}
+              <div className="absolute -top-2 -right-2 w-10 h-10 rounded-full border-4 border-white bg-[#F8E1FB] flex items-center justify-center shadow-md z-20 animate-bounce" style={{ animationDelay: '100ms' }}>
+                <span className="text-[16px]">👧🏽</span>
+              </div>
+              <div className="absolute bottom-2 -left-4 w-12 h-12 rounded-full border-4 border-white bg-[#FFF6D8] flex items-center justify-center shadow-md z-20 animate-bounce" style={{ animationDelay: '500ms' }}>
+                <span className="text-[20px]">👦🏻</span>
+              </div>
+              <div className="absolute -bottom-4 right-4 w-9 h-9 rounded-full border-[3px] border-white bg-[#E5F2FE] flex items-center justify-center shadow-md z-20 animate-bounce" style={{ animationDelay: '900ms' }}>
+                <span className="text-[14px]">👩🏿</span>
+              </div>
+            </div>
+
+            <h2 className="text-[26px] font-extrabold text-neutral-900 mb-3 tracking-tight leading-tight">
+              {status === 'loading' ? 'Preparing your live class...' : 'Connecting you now...'}
+            </h2>
+            <p className="text-[15px] font-medium text-neutral-500 mb-8 leading-relaxed">
+              {status === 'loading' ? 'Setting up the interactive whiteboard and video streams.' : 'Securing your connection to the live session.'}
+            </p>
+
+            <div className="w-full bg-neutral-100 h-3 rounded-full overflow-hidden shadow-inner">
+              <div className={`h-full bg-green-500 rounded-full transition-all duration-1000 ease-out ${status === 'loading' ? 'w-2/5' : 'w-4/5'}`}></div>
+            </div>
+          </div>
         </div>
       )}
 
       {status === 'error' && (
-        <div className="absolute inset-0 bg-black flex flex-col items-center justify-center gap-4 px-8 text-center pointer-events-auto">
-          <AlertCircle size={36} className="text-red-400" />
-          <p className="text-white text-sm leading-relaxed">{error}</p>
-          <button
-            onClick={onLeave}
-            className="mt-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors"
-          >
-            Go back
-          </button>
+        <div className="absolute inset-0 bg-[#F4F7F6] flex items-center justify-center pointer-events-auto z-[105] overflow-hidden">
+          <div className="relative w-[90%] max-w-md bg-[#FFEBE5] p-10 rounded-[48px] shadow-2xl flex flex-col items-center text-center">
+            <div className="w-24 h-24 bg-white rounded-full shadow-lg flex items-center justify-center mb-6">
+              <AlertCircle size={40} className="text-red-500" />
+            </div>
+            <h2 className="text-[26px] font-extrabold text-red-950 mb-3 tracking-tight">Connection Failed</h2>
+            <p className="text-[15px] font-medium text-red-900/70 mb-8 leading-relaxed px-4">{error}</p>
+            <button
+              onClick={onLeave}
+              className="px-8 py-3.5 bg-black text-white text-[15px] font-bold rounded-full shadow-xl hover:bg-neutral-800 hover:-translate-y-1 transition-all w-full"
+            >
+              Return to Dashboard
+            </button>
+          </div>
         </div>
       )}
     </div>

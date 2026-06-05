@@ -119,7 +119,7 @@ export default function StudentProfilePage() {
     <div className="min-h-screen bg-[#F8F9FA] pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-24 font-sans selection:bg-pink-100 selection:text-pink-900">
       
       {/* Top Navigation Bar */}
-      <div className="sticky top-0 z-30 bg-[#F8F9FA]/80 backdrop-blur-xl border-b border-black/5 mb-8">
+      <div className="sticky top-0 z-30 bg-[#F8F9FA] border-b border-black/5 mb-8">
         <div className="max-w-[1200px] mx-auto px-5 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-500 flex items-center justify-center">

@@ -1,11 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { Video, Calendar, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Video, Calendar, Clock, CheckCircle, XCircle, Loader2, Play } from 'lucide-react';
 import { Btn } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi, apiClient } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
-import LiveClassThumbnail from '../../components/LiveClassThumbnail';
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function formatCountdown(ms) {
+  if (ms <= 0) return null;
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (d > 0) return `${d}d ${h}h ${pad(m)}m`;
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+}
+
+function LiveCountdown({ scheduledAt, isLive, isEnded }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (isLive || isEnded) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isLive, isEnded]);
+
+  if (isLive) return 'Live Now';
+  if (isEnded) return 'Ended';
+
+  const msUntil = scheduledAt ? new Date(scheduledAt).getTime() - now : 0;
+  if (msUntil <= 0) return 'Starting…';
+
+  return formatCountdown(msUntil) + ' to start';
+}
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -134,82 +164,53 @@ export default function StudentLiveClassesPage() {
               const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
-                <div key={lc.id} className={`rounded-[32px] ${theme.bg} flex flex-col transition-transform hover:-translate-y-1 hover:shadow-md`}>
-                  <div className="p-2">
-                    <LiveClassThumbnail
-                      thumbnailUrl={lc.thumbnail_url}
-                      textSide={lc.thumbnail_text_side}
-                      subjectName={lc.subject?.name}
-                      standardName={user?.standard_name}
-                      topic={lc.title}
-                      status={lc.status}
-                      scheduledAt={lc.scheduled_at}
-                      className="rounded-[24px]"
-                    />
+                <div 
+                  key={lc.id} 
+                  onClick={() => isLive ? handleJoin(lc) : null}
+                  className={`relative rounded-[32px] ${theme.bg} p-6 sm:p-8 flex flex-col justify-between min-h-[220px] transition-all hover:-translate-y-1 hover:shadow-lg overflow-hidden ${isLive ? 'cursor-pointer ring-4 ring-white/40 shadow-md' : ''}`}
+                >
+                  {/* Thumbnail Background Logic */}
+                  {lc.thumbnail_url && (
+                    <>
+                      <img src={lc.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover z-0" draggable={false} />
+                      {/* Scrim matching the textSide */}
+                      <div className={`absolute inset-y-0 w-3/4 z-0 ${lc.thumbnail_text_side === 'left' ? 'left-0 bg-gradient-to-r' : 'right-0 bg-gradient-to-l'} from-black/80 via-black/60 to-transparent`} />
+                    </>
+                  )}
+
+                  {/* Big Play Button Circle */}
+                  <div className={`absolute top-6 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'left-6' : 'right-6'} w-[72px] h-[72px] rounded-full bg-white flex items-center justify-center shadow-md z-10 ${isLive ? 'hover:scale-105 transition-transform' : 'opacity-80'}`}>
+                    {joiningId === lc.id ? (
+                      <Loader2 size={28} className="animate-spin text-neutral-400" />
+                    ) : (
+                      <Play fill="currentColor" size={28} className={`${theme.text} ml-1`} />
+                    )}
                   </div>
 
-                  <div className="px-6 pb-6 pt-2 flex flex-col gap-3 flex-1">
-                    <div>
-                      <h3 className={`text-[19px] font-bold ${theme.text} leading-tight line-clamp-2 mb-2`}>{lc.title}</h3>
-                      <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/40 flex-wrap">
-                        {lc.subject && <span className="bg-white/50 px-2 py-0.5 rounded-full">{lc.subject.name}</span>}
-                        <span className="flex items-center gap-1 bg-white/50 px-2 py-0.5 rounded-full">
-                          <Calendar size={12} />
-                          {fmtDateTime(lc.scheduled_at)}
-                        </span>
-                        {lc.duration_mins > 0 && (
-                          <span className="flex items-center gap-1 bg-white/50 px-2 py-0.5 rounded-full">
-                            <Clock size={12} />
-                            {lc.duration_mins} min
-                          </span>
-                        )}
-                      </div>
+                  {/* Text Content */}
+                  <div className={`relative z-10 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'text-right pl-[90px]' : 'text-left pr-[90px]'}`}>
+                    <h3 className={`text-[24px] sm:text-[26px] font-extrabold ${lc.thumbnail_url ? 'text-white drop-shadow-md' : theme.text} leading-[1.1] mb-3`}>{lc.title}</h3>
+                    <p className={`text-[14px] ${lc.thumbnail_url ? 'text-white/90 drop-shadow-md' : theme.text + ' opacity-80'} leading-snug line-clamp-2 max-w-[85%] ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'ml-auto' : ''}`}>
+                      {lc.subject?.name} {lc.duration_mins ? `• ${lc.duration_mins} mins` : ''}
+                    </p>
+                  </div>
+
+                  {/* Bottom Row: Status Pill & Avatars */}
+                  <div className={`flex items-end mt-10 relative z-10 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'flex-row-reverse justify-between' : 'justify-between'}`}>
+                    
+                    {/* Time Pill */}
+                    <div className="bg-white rounded-full px-4 py-2.5 flex items-center gap-2 shadow-sm">
+                      <Clock size={16} className={`${isLive ? 'text-red-500 animate-pulse' : 'text-neutral-700'}`} />
+                      <span className={`text-[13px] sm:text-[14px] font-bold ${isLive ? 'text-red-600' : 'text-neutral-800'}`}>
+                        <LiveCountdown scheduledAt={lc.scheduled_at} isLive={isLive} isEnded={isEnded} />
+                      </span>
                     </div>
 
-                    {/* Status + actions */}
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      <div className="flex items-center gap-2">
-                        {isLive && (
-                          <span className="inline-flex items-center gap-1.5 text-[12px] font-bold px-2.5 py-1 rounded-full bg-white text-green-600 shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                            Live now
-                          </span>
-                        )}
-                        {isScheduled && (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white/50 text-black/50">
-                            Scheduled
-                          </span>
-                        )}
-                        {isEnded && lc.my_attended === true && (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white text-green-600 shadow-sm">
-                            <CheckCircle size={14} />
-                            Attended
-                          </span>
-                        )}
-                        {isEnded && lc.my_attended === false && (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white/50 text-black/50">
-                            <XCircle size={14} />
-                            Missed
-                          </span>
-                        )}
-                        {isEnded && lc.my_attended == null && (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1 rounded-full bg-white/50 text-black/50">
-                            Ended
-                          </span>
-                        )}
-                      </div>
-
-                      {isLive && (
-                        <button 
-                          onClick={() => handleJoin(lc)} 
-                          disabled={joiningId === lc.id}
-                          className="bg-black text-white px-4 py-2 rounded-full text-[13px] font-semibold shadow-md hover:bg-neutral-800 transition-colors flex items-center gap-1.5"
-                        >
-                          {joiningId === lc.id
-                            ? <><Loader2 size={14} className="animate-spin" /> Opening…</>
-                            : 'Watch'}
-                        </button>
-                      )}
+                    {/* Fake Avatars */}
+                    <div className={`flex -space-x-3 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                      <img src={`https://i.pravatar.cc/100?u=${lc.id}1`} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white shadow-sm relative z-[3]" alt="" />
+                      <img src={`https://i.pravatar.cc/100?u=${lc.id}2`} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white shadow-sm relative z-[2]" alt="" />
+                      <img src={`https://i.pravatar.cc/100?u=${lc.id}3`} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white shadow-sm relative z-[1]" alt="" />
                     </div>
                   </div>
                 </div>

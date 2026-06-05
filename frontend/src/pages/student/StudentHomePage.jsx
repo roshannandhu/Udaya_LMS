@@ -113,7 +113,7 @@ export default function StudentHomePage() {
     <div className="pb-24 bg-[#F8F9FA] min-h-screen font-sans selection:bg-pink-100 selection:text-pink-900">
       
       {/* Top Navigation Bar */}
-      <div className="sticky top-0 z-30 bg-[#F8F9FA]/80 backdrop-blur-xl border-b border-black/5">
+      <div className="sticky top-0 z-30 bg-[#F8F9FA] border-b border-black/5">
         <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={() => navigate('/student/profile')} className="flex-shrink-0 rounded-full ring-2 ring-white shadow-sm hover:scale-105 transition-transform">

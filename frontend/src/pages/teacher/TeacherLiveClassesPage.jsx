@@ -1,15 +1,45 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2, Trash2 } from 'lucide-react';
+import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2, Trash2, Play, MoreHorizontal } from 'lucide-react';
 import { Modal, Sheet, Btn, Tag, Avatar, Skeleton } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi, apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
-import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
 
 /* ─── Helpers ──────────────────────────────────────── */
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function formatCountdown(ms) {
+  if (ms <= 0) return null;
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (d > 0) return `${d}d ${h}h ${pad(m)}m`;
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+}
+
+function LiveCountdown({ scheduledAt, isLive, isEnded }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (isLive || isEnded) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isLive, isEnded]);
+
+  if (isLive) return 'Live Now';
+  if (isEnded) return 'Ended';
+
+  const msUntil = scheduledAt ? new Date(scheduledAt).getTime() - now : 0;
+  if (msUntil <= 0) return 'Starting…';
+
+  return formatCountdown(msUntil) + ' to start';
+}
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -54,6 +84,8 @@ function ScheduleLiveClassModal({ open, onClose, subjects, onScheduled }) {
   const [date, setDate]             = useState('');
   const [time, setTime]             = useState('');
   const [duration, setDuration]     = useState(60);
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [thumbnailTextSide, setThumbnailTextSide] = useState('right');
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
 
@@ -64,6 +96,8 @@ function ScheduleLiveClassModal({ open, onClose, subjects, onScheduled }) {
     setDate('');
     setTime('');
     setDuration(60);
+    setThumbnailUrl('');
+    setThumbnailTextSide('right');
     setError('');
     setSaving(false);
   }, [open]);
@@ -73,12 +107,18 @@ function ScheduleLiveClassModal({ open, onClose, subjects, onScheduled }) {
     setSaving(true);
     setError('');
     try {
-      await liveClassApi.create({
+      const payload = {
         class_id: subjectId,
         title: title.trim(),
         scheduled_at: `${date}T${time}:00`,
         duration_mins: duration,
-      });
+      };
+      if (thumbnailUrl.trim()) {
+        payload.thumbnail_url = thumbnailUrl.trim();
+        payload.thumbnail_text_side = thumbnailTextSide;
+      }
+      
+      await liveClassApi.create(payload);
       onScheduled();
       onClose();
     } catch (err) {
@@ -91,85 +131,114 @@ function ScheduleLiveClassModal({ open, onClose, subjects, onScheduled }) {
   const today = new Date().toISOString().split('T')[0];
 
   return (
-    <Modal open={open} onClose={onClose} title="Schedule live class" size="md">
-      <div className="space-y-4">
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Subject</label>
-          <select
-            value={subjectId}
-            onChange={e => setSubjectId(e.target.value)}
-            className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all"
-          >
-            <option value="">Select a subject</option>
-            {subjects.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name} — {s.standard_name || `Standard ${s.standard_id}`}
-              </option>
-            ))}
-          </select>
+    <Modal open={open} onClose={onClose} title="Schedule Live Class" size="md">
+      <div className="flex flex-col gap-4 py-2">
+        
+        {/* Step 1 */}
+        <div className="bg-[#F8E1FB] p-5 sm:p-6 rounded-[32px] shadow-sm">
+          <label className="text-[14px] font-bold text-purple-950 mb-3 block">1. What are you teaching?</label>
+          <div className="space-y-3">
+            <select
+              value={subjectId}
+              onChange={e => setSubjectId(e.target.value)}
+              className="w-full bg-white/70 border-0 rounded-2xl px-4 py-3.5 text-[14px] font-semibold text-neutral-800 focus:bg-white focus:ring-4 focus:ring-white/50 outline-none transition-all shadow-inner"
+            >
+              <option value="">Select a subject...</option>
+              {subjects.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — {s.standard_name || `Standard ${s.standard_id}`}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Chapter 5 — Quadratic Equations"
+              className="w-full bg-white/70 border-0 rounded-2xl px-4 py-3.5 text-[14px] font-semibold text-neutral-800 focus:bg-white focus:ring-4 focus:ring-white/50 outline-none transition-all shadow-inner placeholder:text-neutral-400"
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
-          <input
-            type="text"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="e.g. Chapter 5 — Quadratic Equations"
-            className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all placeholder:text-neutral-400"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Date</label>
+        {/* Step 2 */}
+        <div className="bg-[#EAF3EB] p-5 sm:p-6 rounded-[32px] shadow-sm">
+          <label className="text-[14px] font-bold text-green-950 mb-3 block">2. When is it happening?</label>
+          <div className="grid grid-cols-2 gap-3 mb-3">
             <input
               type="date"
               value={date}
               min={today}
               onChange={e => setDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all"
+              className="w-full bg-white/70 border-0 rounded-2xl px-4 py-3.5 text-[14px] font-semibold text-neutral-800 focus:bg-white focus:ring-4 focus:ring-white/50 outline-none transition-all shadow-inner"
             />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Time</label>
             <input
               type="time"
               value={time}
               onChange={e => setTime(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all"
+              className="w-full bg-white/70 border-0 rounded-2xl px-4 py-3.5 text-[14px] font-semibold text-neutral-800 focus:bg-white focus:ring-4 focus:ring-white/50 outline-none transition-all shadow-inner"
             />
           </div>
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Duration</label>
           <select
             value={duration}
             onChange={e => setDuration(Number(e.target.value))}
-            className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 focus:border-white/80 focus:ring-2 focus:ring-white/50 shadow-inner outline-none text-sm transition-all"
+            className="w-full bg-white/70 border-0 rounded-2xl px-4 py-3.5 text-[14px] font-semibold text-neutral-800 focus:bg-white focus:ring-4 focus:ring-white/50 outline-none transition-all shadow-inner"
           >
             {[30, 45, 60, 90, 120].map(m => (
-              <option key={m} value={m}>{durationLabel(m)}</option>
+              <option key={m} value={m}>{m} minutes</option>
             ))}
           </select>
         </div>
 
+        {/* Step 3 */}
+        <div className="bg-[#FFF6D8] p-5 sm:p-6 rounded-[32px] shadow-sm">
+          <label className="text-[14px] font-bold text-amber-950 mb-3 block flex items-center gap-2">
+            3. Card Appearance <span className="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider">Optional</span>
+          </label>
+          <input
+            type="url"
+            value={thumbnailUrl}
+            onChange={e => setThumbnailUrl(e.target.value)}
+            placeholder="Image URL (e.g., https://example.com/img.png)"
+            className="w-full bg-white/70 border-0 rounded-2xl px-4 py-3.5 text-[14px] font-semibold text-neutral-800 focus:bg-white focus:ring-4 focus:ring-white/50 outline-none transition-all shadow-inner placeholder:text-neutral-400"
+          />
+          {thumbnailUrl && (
+            <div className="mt-4 flex items-center justify-between gap-3 bg-white/40 p-1.5 pl-4 rounded-full">
+              <span className="text-[13px] font-bold text-amber-950">Text layout:</span>
+              <div className="flex bg-white/60 rounded-full p-1 gap-1">
+                <button 
+                  type="button" 
+                  onClick={() => setThumbnailTextSide('left')} 
+                  className={`px-5 py-2 rounded-full text-[12px] font-bold transition-all ${thumbnailTextSide === 'left' ? 'bg-white shadow-md text-amber-950 scale-105' : 'text-amber-900/50 hover:bg-white/40'}`}
+                >
+                  Left
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setThumbnailTextSide('right')} 
+                  className={`px-5 py-2 rounded-full text-[12px] font-bold transition-all ${thumbnailTextSide === 'right' ? 'bg-white shadow-md text-amber-950 scale-105' : 'text-amber-900/50 hover:bg-white/40'}`}
+                >
+                  Right
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-            <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2 p-4 bg-red-50 border-2 border-red-100 rounded-[24px] text-[13px] font-semibold text-red-700">
+            <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
-        <Btn
-          variant="primary"
+        <button
           onClick={handleSubmit}
           disabled={!subjectId || !title.trim() || !date || !time || saving}
-          className="w-full justify-center"
+          className="w-full mt-2 py-4 rounded-[24px] bg-black text-white font-extrabold text-[15px] shadow-xl hover:bg-neutral-800 hover:shadow-2xl transition-all hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-xl flex items-center justify-center gap-2"
         >
-          {saving ? 'Scheduling...' : 'Schedule class'}
-        </Btn>
+          {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+          {saving ? 'Scheduling...' : 'Schedule Live Class'}
+        </button>
       </div>
     </Modal>
   );
@@ -337,86 +406,79 @@ export default function TeacherLiveClassesPage() {
 
               const standardName = standards.find(std => std.id === lc.subject?.standard_id)?.name;
               return (
-                <div key={lc.id} className={`rounded-[32px] ${theme.bg} flex flex-col transition-transform hover:-translate-y-1 hover:shadow-md`}>
-                  <div className="p-2">
-                    <LiveClassThumbnail
-                      thumbnailUrl={lc.thumbnail_url}
-                      textSide={lc.thumbnail_text_side}
-                      subjectName={lc.subject?.name}
-                      standardName={standardName}
-                      topic={lc.title}
-                      status={status}
-                      scheduledAt={lc.scheduled_at}
-                      className="rounded-[24px]"
-                    />
-                  </div>
+                <div key={lc.id} className={`relative rounded-[32px] ${theme.bg} p-6 sm:p-8 flex flex-col justify-between min-h-[220px] transition-all hover:-translate-y-1 hover:shadow-lg overflow-hidden`}>
                   
-                  <div className="px-6 pb-6 pt-2 flex flex-col gap-3 flex-1">
-                    <div>
-                      <div className="flex items-start gap-2 mb-2">
-                        <h3 className={`flex-1 text-[19px] font-bold ${theme.text} leading-tight line-clamp-2`}>{lc.title}</h3>
-                        <Tag color={statusColor(status)} className="rounded-full px-2.5 py-0.5 text-[11px] font-bold border-0 shadow-sm bg-white shrink-0">
-                          {isLive && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block mr-1.5 animate-pulse" />}
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Tag>
+                  {/* Thumbnail Background Logic */}
+                  {lc.thumbnail_url && (
+                    <>
+                      <img src={lc.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover z-0" draggable={false} />
+                      {/* Scrim matching the textSide */}
+                      <div className={`absolute inset-y-0 w-3/4 z-0 ${lc.thumbnail_text_side === 'left' ? 'left-0 bg-gradient-to-r' : 'right-0 bg-gradient-to-l'} from-black/80 via-black/60 to-transparent`} />
+                    </>
+                  )}
+
+                  {/* Big Play Button Circle (Clickable if Live) */}
+                  <div 
+                    onClick={() => isLive ? handleWatchClass(lc) : null}
+                    className={`absolute top-6 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'left-6' : 'right-6'} w-[72px] h-[72px] rounded-full bg-white flex items-center justify-center shadow-md z-10 ${isLive ? 'cursor-pointer hover:scale-105 transition-transform' : 'opacity-80'}`}
+                  >
+                    {joiningId === lc.id ? (
+                      <Loader2 size={28} className="animate-spin text-neutral-400" />
+                    ) : (
+                      <Play fill="currentColor" size={28} className={`${theme.text} ml-1`} />
+                    )}
+                  </div>
+
+                  {/* Text Content */}
+                  <div className={`relative z-10 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'text-right pl-[90px]' : 'text-left pr-[90px]'}`}>
+                    <h3 className={`text-[24px] sm:text-[26px] font-extrabold ${lc.thumbnail_url ? 'text-white drop-shadow-md' : theme.text} leading-[1.1] mb-3`}>{lc.title}</h3>
+                    <p className={`text-[14px] ${lc.thumbnail_url ? 'text-white/90 drop-shadow-md' : theme.text + ' opacity-80'} leading-snug line-clamp-2 max-w-[85%] ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'ml-auto' : ''}`}>
+                      {lc.subject?.name} {lc.duration_mins ? `• ${lc.duration_mins} mins` : ''}
+                    </p>
+                  </div>
+
+                  {/* Bottom Row: Status Pill, Actions & Avatars */}
+                  <div className={`flex flex-col sm:flex-row sm:items-end mt-10 relative z-10 gap-4 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'flex-row-reverse justify-between' : 'justify-between'}`}>
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Time Pill */}
+                      <div className="bg-white rounded-full px-4 py-2.5 flex items-center gap-2 shadow-sm">
+                        <Clock size={16} className={`${isLive ? 'text-red-500 animate-pulse' : 'text-neutral-700'}`} />
+                        <span className={`text-[13px] sm:text-[14px] font-bold ${isLive ? 'text-red-600' : 'text-neutral-800'}`}>
+                          <LiveCountdown scheduledAt={lc.scheduled_at} isLive={isLive} isEnded={isEnded} />
+                        </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-medium text-black/40">
-                        {lc.subject && <span className="bg-white/50 px-2 py-0.5 rounded-full">{lc.subject.name}</span>}
-                        {!isCancelled && (
-                          <span className="flex items-center gap-1 bg-white/50 px-2 py-0.5 rounded-full">
-                            <Calendar size={12} />
-                            {fmtDateTime(lc.scheduled_at)}
-                          </span>
-                        )}
-                        {lc.duration_mins > 0 && (
-                          <span className="flex items-center gap-1 bg-white/50 px-2 py-0.5 rounded-full">
-                            <Clock size={12} />
-                            {durationLabel(lc.duration_mins)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Action buttons pinned to the bottom */}
-                    <div className="mt-auto flex items-center gap-2 flex-wrap pt-3">
+                      {/* Teacher Actions */}
                       {isScheduled && (
-                        <>
-                          <button onClick={() => handleCancelClass(lc)} className="text-[13px] font-semibold text-neutral-500 hover:text-neutral-700 hover:bg-white/40 px-3 py-1.5 rounded-full transition-colors ml-auto">
-                            Cancel
-                          </button>
-                        </>
+                        <button onClick={() => handleCancelClass(lc)} className="bg-white/60 hover:bg-white text-neutral-700 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                          Cancel
+                        </button>
                       )}
                       {isLive && (
-                        <>
-                          <button onClick={() => handleWatchClass(lc)} disabled={joiningId === lc.id} className="bg-black text-white px-4 py-2 rounded-full text-[13px] font-semibold shadow-md hover:bg-neutral-800 transition-colors flex items-center gap-1.5">
-                            {joiningId === lc.id ? <><Loader2 size={14} className="animate-spin" /> Opening…</> : 'Watch'}
-                          </button>
-                          <button onClick={() => setAttendanceSheetId(lc.id)} className="bg-white text-black/70 hover:text-black hover:bg-neutral-50 px-3 py-2 rounded-full text-[13px] font-semibold shadow-sm transition-colors flex items-center gap-1.5">
-                            <Users size={14} /> {lc.attended_count ?? 0}/{lc.total_registered ?? 0}
-                          </button>
-                          <button onClick={() => handleEndClass(lc)} className="ml-auto text-red-600 bg-red-100 hover:bg-red-200 px-3 py-2 rounded-full text-[13px] font-semibold transition-colors">
-                            End
-                          </button>
-                        </>
-                      )}
-                      {isEnded && (
-                        <>
-                          <button onClick={() => setAttendanceSheetId(lc.id)} className="bg-white text-black/70 hover:text-black hover:bg-neutral-50 px-3 py-2 rounded-full text-[13px] font-semibold shadow-sm transition-colors flex items-center gap-1.5">
-                            <Users size={14} /> {lc.attended_count ?? 0}/{lc.total_registered ?? 0}
-                          </button>
-                        </>
+                        <button onClick={() => handleEndClass(lc)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                          End Class
+                        </button>
                       )}
                       {!isLive && (
-                        <button
-                          onClick={() => handleDeleteClass(lc)}
-                          title="Delete class"
-                          className="ml-auto flex items-center gap-1 text-[13px] font-semibold text-red-600/70 hover:text-red-700 hover:bg-red-50/50 px-3 py-1.5 rounded-full transition-colors"
-                        >
-                          <Trash2 size={14} /> Delete
+                        <button onClick={() => handleDeleteClass(lc)} className="bg-white/60 hover:bg-white text-red-600 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                          Delete
                         </button>
                       )}
                     </div>
+
+                    {/* Attendance Avatars Trigger */}
+                    <button 
+                      onClick={() => setAttendanceSheetId(lc.id)} 
+                      className={`flex -space-x-3 hover:scale-105 transition-transform focus:outline-none sm:ml-0 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'flex-row-reverse space-x-reverse mr-auto' : 'ml-auto'}`}
+                      title="View Attendance"
+                    >
+                      <img src={`https://i.pravatar.cc/100?u=${lc.id}1`} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white shadow-sm relative z-[3]" alt="" />
+                      <img src={`https://i.pravatar.cc/100?u=${lc.id}2`} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white shadow-sm relative z-[2]" alt="" />
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white bg-neutral-900 shadow-sm relative z-[1] flex items-center justify-center text-[12px] font-bold text-white">
+                        {lc.attended_count ?? 0}
+                      </div>
+                    </button>
                   </div>
                 </div>
               );

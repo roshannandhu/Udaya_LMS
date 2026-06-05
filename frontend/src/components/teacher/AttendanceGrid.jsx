@@ -122,22 +122,6 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
     setActiveDate(dateStr);
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-4 mt-6">
-        {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-20 rounded-[24px]" />)}
-      </div>
-    );
-  }
-
-  if (!students.length) {
-    return (
-      <div className="mt-6 text-center py-14 bg-white/50 border border-white/60 rounded-[32px] text-sm text-neutral-500 shadow-sm">
-        <Users size={28} className="mx-auto mb-2 text-neutral-300" />
-        No students enrolled in this subject yet.
-      </div>
-    );
-  }
 
   // Calculate current effective states for display
   const getEffectiveStatus = (studentId) => {
@@ -156,11 +140,20 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
 
       {/* Calendar Taskbar */}
       <div className="bg-white rounded-[24px] p-5 shadow-sm border border-neutral-100 mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-2 cursor-pointer group">
+        <div className="flex justify-between items-center mb-4 relative">
+          <label className="flex items-center gap-2 cursor-pointer group relative">
+            <input 
+              type="date"
+              value={activeDate}
+              max={todayStr}
+              onChange={(e) => {
+                if (e.target.value) setActiveDate(e.target.value);
+              }}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
             <span className="text-lg font-bold text-neutral-800">{monthName} {year}</span>
-            <ChevronDown size={18} className="text-neutral-500 group-hover:text-neutral-800 transition-colors" />
-          </div>
+            <CalendarIcon size={18} className="text-neutral-500 group-hover:text-neutral-800 transition-colors" />
+          </label>
           <button 
             onClick={() => setActiveDate(todayStr)}
             className="px-4 py-1.5 bg-[#e0f7fa] text-[#00acc1] font-bold rounded-xl text-sm hover:bg-[#b2ebf2] transition-colors"
@@ -240,6 +233,16 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
       )}
 
       {/* Student List as ultra-rounded floating cards */}
+      {loading ? (
+        <div className="space-y-4">
+          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-20 rounded-[24px]" />)}
+        </div>
+      ) : !students.length ? (
+        <div className="text-center py-14 bg-white/50 border border-white/60 rounded-[32px] text-sm text-neutral-500 shadow-sm mt-6">
+          <Users size={28} className="mx-auto mb-2 text-neutral-300" />
+          No students enrolled in this subject yet.
+        </div>
+      ) : (
       <div className="space-y-4">
         {students.map((student) => {
           const currentStatus = getEffectiveStatus(student.student_id);
@@ -300,6 +303,7 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
           );
         })}
       </div>
+      )}
 
       {/* Floating Save Bar styled in UI colors */}
       <div className={`fixed bottom-6 left-0 right-0 z-50 px-4 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${hasChanges || saved ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-24 opacity-0 scale-95'}`}>
