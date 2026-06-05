@@ -17,7 +17,10 @@ const REFRESH_KEY  = 'tutoria_refresh_token';
 const _cache = new Map();
 const CACHE_TTL = 120_000;
 // These endpoints change too frequently to cache (must always be fresh).
-const NO_CACHE = ['/notifications', '/auth/me', '/live-classes'];
+// '/broadcasts/' covers read-receipt counts, read details, and reactions — all of
+// which update live over WebSocket and must NOT be served from the stale GET cache
+// (otherwise the teacher's read tick won't turn blue until a manual refresh).
+const NO_CACHE = ['/notifications', '/auth/me', '/live-classes', '/broadcasts/'];
 
 // Refresh the access token using the stored refresh token.
 // Uses a shared promise so concurrent 401 responses all wait for the same refresh
