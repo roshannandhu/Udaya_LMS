@@ -281,7 +281,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+      <div className="px-5 md:px-8 py-6 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-6 max-w-5xl mx-auto">
 
         {/* Team Members */}
         <div className="mb-6">

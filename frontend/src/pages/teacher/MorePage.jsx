@@ -56,7 +56,7 @@ export default function MorePage() {
   return (
     <div className="min-h-screen bg-transparent">
       <TopBar title="More" />
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-4">
         <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center text-white text-lg font-medium">

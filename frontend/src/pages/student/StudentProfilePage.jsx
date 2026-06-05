@@ -126,7 +126,7 @@ export default function StudentProfilePage() {
   const attendancePct = student?.attendance_pct ?? null;
 
   return (
-    <div className="min-h-screen bg-transparent pb-24">
+    <div className="min-h-screen bg-transparent pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-8">
       {/* Dark header */}
       <div className="glass-nav bg-neutral-900/90 border-b-0 border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.05)] text-white p-6 pt-12">
         <div className="flex items-center gap-4 max-w-xl mx-auto">
