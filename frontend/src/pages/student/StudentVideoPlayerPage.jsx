@@ -312,6 +312,20 @@ export default function StudentVideoPlayerPage() {
     }
   }
 
+  function toggleControlsVisibility() {
+    setShowControls(prev => {
+      clearTimeout(controlsTimerRef.current);
+      if (prev) {
+        return false;
+      } else {
+        if (ytPlayerRef.current?.getPlayerState?.() === 1) {
+          controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+        }
+        return true;
+      }
+    });
+  }
+
   function seekRelative(secs) {
     const p = ytPlayerRef.current;
     if (!p) return;
@@ -373,7 +387,9 @@ export default function StudentVideoPlayerPage() {
     const zone = pct < 0.3 ? 'left' : pct > 0.7 ? 'right' : 'center';
     const now = Date.now();
     const last = lastTapRef.current;
+    
     clearTimeout(singleTapTimerRef.current);
+    
     if (now - last.time < 300 && last.zone === zone) {
       // Double-tap detected
       lastTapRef.current = { time: 0, zone: null };
@@ -383,15 +399,10 @@ export default function StudentVideoPlayerPage() {
     } else {
       // First tap — wait to see if double-tap follows
       lastTapRef.current = { time: now, zone };
-      showControlsTemporarily();
-      if (zone === 'center') {
-        singleTapTimerRef.current = setTimeout(() => {
-          const p = ytPlayerRef.current;
-          if (!p) return;
-          p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
-          showControlsTemporarily();
-        }, 300);
-      }
+      singleTapTimerRef.current = setTimeout(() => {
+        // Single tap toggles controls visibility instead of pausing
+        toggleControlsVisibility();
+      }, 300);
     }
   }
 
@@ -515,7 +526,6 @@ export default function StudentVideoPlayerPage() {
           tabIndex={0}
           onKeyDown={handleKeyDown}
           onMouseMove={showControlsTemporarily}
-          onTouchStart={showControlsTemporarily}
         >
           {/* Empty div — YT.Player constructor injects controlled iframe here */}
           <div id="yt-player-mount" className="w-full h-full" />

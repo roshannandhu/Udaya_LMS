@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   Video, FileQuestion, FileText, CheckCircle2, Clock, MapPin, Loader2, LayoutGrid, List
 } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO } from 'date-fns';
 import { useAuthStore } from '../../lib/auth';
-import { apiClient } from '../../lib/api';
+import { apiClient, liveClassApi } from '../../lib/api';
+import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -13,6 +15,32 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeJoin, setActiveJoin] = useState(null);
+  const [joiningId, setJoiningId] = useState(null);
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  // Warm Zoom SDK
+  useEffect(() => {
+    const ric = window.requestIdleCallback ? window.requestIdleCallback.bind(window) : (fn) => setTimeout(fn, 1500);
+    const cancel = window.cancelIdleCallback ? window.cancelIdleCallback.bind(window) : clearTimeout;
+    const id = ric(() => preloadZoomSDK());
+    return () => cancel(id);
+  }, []);
+
+  const handleJoinLive = async (lcId) => {
+    if (joiningId) return;
+    setJoiningId(lcId);
+    preloadZoomSDK();
+    try {
+      const res = await liveClassApi.getJoinToken(lcId);
+      setActiveJoin({ ...res });
+    } catch (err) {
+      alert(err?.message || 'Failed to join class.');
+    } finally {
+      setJoiningId(null);
+    }
+  };
 
   // Fetch events for the current month
   useEffect(() => {
@@ -102,6 +130,21 @@ export default function CalendarPage() {
       return <div key={type} className="w-1.5 h-1.5 rounded-full bg-[#ce93d8]"></div>;
     });
   };
+
+  if (activeJoin) {
+    return (
+      <ZoomMeetingView
+        meeting_id={activeJoin.meeting_id}
+        signature={activeJoin.signature}
+        sdk_key={activeJoin.sdk_key}
+        role={activeJoin.role ?? 0}
+        display_name={user?.name || 'Student'}
+        passcode={activeJoin.passcode}
+        zak={activeJoin.zak}
+        onLeave={() => setActiveJoin(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#fafafa] pb-24 md:pb-8">
@@ -318,9 +361,9 @@ export default function CalendarPage() {
                           )}
                         </div>
                         {evt.type === 'live' && evt.link && (
-                          <a href={evt.link} target="_blank" rel="noreferrer" className="mt-3 block text-center w-full bg-[#0288d1] text-white text-xs font-bold py-2 rounded-lg hover:bg-[#0277bd] transition-colors">
-                            Join Zoom Class
-                          </a>
+                          <button onClick={() => handleJoinLive(evt.id)} className="mt-3 block text-center w-full bg-[#0288d1] text-white text-xs font-bold py-2 rounded-lg hover:bg-[#0277bd] transition-colors relative">
+                            {joiningId === evt.id ? <><Loader2 size={14} className="animate-spin inline mr-1 -mt-0.5" /> Joining...</> : 'Join Zoom Class'}
+                          </button>
                         )}
                       </div>
                     </div>

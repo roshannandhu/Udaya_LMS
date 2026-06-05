@@ -57,113 +57,126 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-transparent">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center gap-4 mb-10 justify-center">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[#F4F7F6] relative overflow-hidden">
+      
+      {/* Decorative Background Orbs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#F8E1FB] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 animate-pulse" style={{ animationDuration: '8s' }} />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#EAF3EB] rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-pulse" style={{ animationDuration: '10s' }} />
+      <div className="absolute top-[20%] right-[10%] w-[300px] h-[300px] bg-[#FFF6D8] rounded-full mix-blend-multiply filter blur-[60px] opacity-60 animate-pulse" style={{ animationDuration: '7s' }} />
+
+      <div className="w-full max-w-[420px] relative z-10">
+        
+        {/* Branding */}
+        <div className="flex flex-col items-center gap-5 mb-10 justify-center">
           {lmsLogo
-            ? <img src={lmsLogo} alt="logo" className="w-16 h-16 rounded-2xl object-cover shadow-sm border border-neutral-200" />
-            : <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center shadow-lg ring-4 ring-indigo-50/50">
-                <GraduationCap size={32} className="text-white drop-shadow-md" />
+            ? <img src={lmsLogo} alt="logo" className="w-20 h-20 rounded-[24px] object-cover shadow-md border-[4px] border-white" />
+            : <div className="w-20 h-20 rounded-[24px] bg-white shadow-md border-[4px] border-white flex items-center justify-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#F8E1FB] to-[#EAF3EB] opacity-50" />
+                <GraduationCap size={36} className="text-neutral-800 drop-shadow-sm relative z-10" />
               </div>
           }
           <span 
-            className="font-black text-4xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-500 text-center drop-shadow-sm"
-            style={{ fontFamily: '"Outfit", "Plus Jakarta Sans", "Inter", sans-serif' }}
+            className="font-extrabold text-[40px] tracking-tight text-neutral-900 text-center drop-shadow-sm leading-none"
           >
             {lmsName || 'Udaya'}
           </span>
         </div>
 
-        <div className="glass-panel p-8">
-          <h1 className="text-2xl font-semibold mb-1">Welcome back</h1>
-          <p className="text-sm text-neutral-500 mb-6">Sign in to continue</p>
+        {/* Login Card */}
+        <div className="bg-white/80 backdrop-blur-2xl p-8 sm:p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] border-[3px] border-white">
+          <h1 className="text-[26px] font-extrabold mb-1 text-neutral-900 tracking-tight">Welcome back</h1>
+          <p className="text-[15px] text-neutral-500 mb-8 font-medium">Sign in to continue your journey</p>
 
-          <div className="flex p-1 bg-[#F4F2EF] rounded-pill mb-6 border border-[#EFEDEA]">
+          {/* Role Toggle */}
+          <div className="flex p-1.5 bg-neutral-100/80 rounded-[24px] mb-8 shadow-inner">
             {['teacher', 'student'].map((r) => (
               <button
                 key={r}
                 onClick={() => { setMode(r); setError(''); }}
-                className={`flex-1 py-1.5 rounded-pill text-sm font-medium capitalize transition-all
-                  ${mode === r ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600 hover:text-neutral-900'}`}
+                className={`flex-1 py-3 rounded-[20px] text-[14px] font-bold capitalize transition-all duration-300
+                  ${mode === r ? 'bg-white text-neutral-900 shadow-md scale-100' : 'text-neutral-500 hover:text-neutral-800 scale-95'}`}
               >
                 {r}
               </button>
             ))}
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             {mode === 'student' && (
               <div>
-                <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Email or phone number</label>
+                <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email or phone number</label>
                 <input
                   value={creds.phone}
                   onChange={(e) => setCreds({ ...creds, phone: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="student@email.com or 9876543210"
-                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm"
+                  className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
                 />
               </div>
             )}
 
             {mode === 'teacher' && (
               <div>
-                <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Email</label>
+                <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email</label>
                 <input
                   type="email"
                   value={creds.email}
                   onChange={(e) => setCreds({ ...creds, email: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                  placeholder="priya@academy.com"
-                  className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm"
+                  placeholder="teacher@academy.com"
+                  className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
                 />
               </div>
             )}
 
             <div>
-              <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Password</label>
+              <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Password</label>
               <div className="relative">
                 <input
                   type={showPwd ? 'text' : 'password'}
                   value={creds.pwd}
                   onChange={(e) => setCreds({ ...creds, pwd: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                  placeholder="Enter password"
-                  className="w-full px-3 py-2 pr-9 rounded-xl bg-white border border-[#EFEDEA] focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200 outline-none text-sm"
+                  placeholder="Enter your password"
+                  className="w-full pl-5 pr-12 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 p-1"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-800 p-2 transition-colors bg-white rounded-full shadow-sm"
                 >
-                  {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
             {error && (
-              <div className="text-xs text-red-600 flex items-center gap-1.5">
-                <AlertCircle size={12} /> {error}
+              <div className="flex items-start gap-2 p-4 bg-[#FFEBE5] border-2 border-white rounded-[20px] text-[13px] font-bold text-red-700 shadow-sm animate-in slide-in-from-top-2">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="w-full py-2.5 bg-ink text-white rounded-pill font-medium hover:bg-neutral-800 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full mt-4 py-4 rounded-[24px] bg-neutral-900 text-white font-extrabold text-[16px] shadow-xl hover:bg-black hover:shadow-2xl transition-all hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-xl flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : null}
+              {loading ? <Loader2 size={18} className="animate-spin" /> : null}
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
 
           {mode === 'student' && (
-            <div className="mt-5 p-3 rounded-xl bg-pastel-sky border border-black/5 text-xs text-neutral-700 leading-relaxed">
-              Sign in with your email or phone number and the password your teacher gave you.
+            <div className="mt-6 p-5 rounded-[24px] bg-[#E5F2FE]/50 border-2 border-white text-[13px] font-medium text-blue-900/80 leading-relaxed text-center shadow-sm">
+              Use the login details provided by your teacher to access your dashboard.
             </div>
           )}
         </div>
 
-        <p className="text-center text-xs text-neutral-400 mt-6">{lmsName || 'Udaya'} · A learning platform built for tuition</p>
+        <p className="text-center text-[13px] font-semibold text-neutral-400 mt-8 tracking-wide">
+          {lmsName || 'Udaya'} · Built for modern learning
+        </p>
       </div>
     </div>
   );
