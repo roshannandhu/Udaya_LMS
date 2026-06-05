@@ -1,39 +1,92 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Settings, X, Check } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import TopBar from '../../components/shared/TopBar';
 import BroadcastThread from '../../components/teacher/BroadcastThread';
 import { useStore, useAppCache } from '../../store';
 import { Skeleton } from '../../components/ui';
+import { broadcastApi } from '../../lib/api';
+
+const TTL_OPTIONS = [
+  { label: 'Never', value: null },
+  { label: '24 hours', value: 24 },
+  { label: '3 days', value: 72 },
+  { label: '7 days', value: 168 },
+  { label: '14 days', value: 336 },
+  { label: '30 days', value: 720 },
+];
+
+function TTLPopover({ standardId, onClose }) {
+  const [ttl, setTtl] = useState(undefined);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    broadcastApi.getTTL(standardId)
+      .then(data => setTtl(data?.ttl_hours ?? null))
+      .catch(() => setTtl(null));
+  }, [standardId]);
+
+  const handleSave = async (value) => {
+    setSaving(true);
+    try {
+      await broadcastApi.setTTL(standardId, value);
+      setTtl(value);
+    } catch (err) {
+      alert(err?.message || 'Failed to update auto-delete setting');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="absolute right-0 top-8 z-50 w-56 bg-white/95 backdrop-blur-md border border-white/60 shadow-xl rounded-xl py-1 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-100">
+        <p className="text-xs font-semibold text-neutral-700">Auto-delete after</p>
+        <button onClick={onClose} className="p-0.5 text-neutral-400 hover:text-neutral-700 rounded">
+          <X size={13} />
+        </button>
+      </div>
+      {ttl === undefined ? (
+        <div className="flex justify-center py-4"><div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-700 rounded-full animate-spin" /></div>
+      ) : (
+        TTL_OPTIONS.map(opt => (
+          <button key={String(opt.value)} disabled={saving} onClick={() => handleSave(opt.value)}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${opt.value === ttl ? 'bg-neutral-50 text-neutral-900 font-medium' : 'text-neutral-700 hover:bg-neutral-50'}`}>
+            {opt.value === ttl && <Check size={12} className="text-green-600 flex-shrink-0" />}
+            {opt.value !== ttl && <span className="w-3 flex-shrink-0" />}
+            {opt.label}
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
 
 export default function BroadcastsPage() {
   const { broadcastsByStandard, updateBroadcasts } = useStore();
   const location = useLocation();
 
-  // Use global cache for standards + students
-  const standards       = useAppCache(s => s.standards);
-  const students        = useAppCache(s => s.students);
-  const standardsReady  = useAppCache(s => s.standardsReady);
-  const studentsReady   = useAppCache(s => s.studentsReady);
+  const standards        = useAppCache(s => s.standards);
+  const students         = useAppCache(s => s.students);
+  const standardsReady   = useAppCache(s => s.standardsReady);
+  const studentsReady    = useAppCache(s => s.studentsReady);
   const refreshStandards = useAppCache(s => s.refreshStandards);
   const refreshStudents  = useAppCache(s => s.refreshStudents);
   const loading = !standardsReady || !studentsReady;
 
   const [activeStdId, setActiveStdId] = useState(location.state?.stdId || null);
   const [paneView, setPaneView] = useState(location.state?.stdId ? 'thread' : 'list');
+  const [ttlOpenFor, setTtlOpenFor] = useState(null);
 
-  // Set first standard as active once loaded (unless one was pre-selected via nav state)
   useEffect(() => {
     if (standards.length > 0 && !activeStdId) setActiveStdId(standards[0].id);
   }, [standards]);
 
-  // Background refresh
   useEffect(() => {
     refreshStandards();
     refreshStudents();
   }, []);
 
-  // Build student count map from cached students
   const studentCounts = {};
   students.forEach(s => {
     studentCounts[s.standard_id] = (studentCounts[s.standard_id] || 0) + 1;
@@ -68,12 +121,10 @@ export default function BroadcastsPage() {
   }
 
   return (
-    <div>
+    <div onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
       <TopBar
         title={showThread && std ? std.name : 'Inbox'}
-        subtitle={showThread && std
-          ? `${studentCounts[std.id] || 0} students`
-          : 'Class broadcasts'}
+        subtitle={showThread && std ? `${studentCounts[std.id] || 0} students` : 'Class broadcasts'}
         showSearch={!showThread}
       />
       <div className="max-w-5xl mx-auto">
@@ -86,21 +137,33 @@ export default function BroadcastsPage() {
               const lastMsg = broadcasts[broadcasts.length - 1];
               const isActive = s.id === activeStdId;
               return (
-                <button key={s.id} onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }}
-                  className={`flex items-center gap-3 px-4 py-3.5 border-b border-white/40 hover:bg-white/40 transition-colors text-left ${isActive ? 'bg-white/50' : ''}`}>
-                  <div className="w-11 h-11 rounded-xl bg-white/50 border border-white/60 shadow-sm flex items-center justify-center text-xl flex-shrink-0">
-                    {s.emoji || '📚'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold truncate">{s.name}</p>
-                      {lastMsg && <span className="text-[10px] text-neutral-400 flex-shrink-0">{lastMsg.time}</span>}
+                <div key={s.id} className={`flex items-center gap-3 px-4 py-3.5 border-b border-white/40 hover:bg-white/40 transition-colors ${isActive ? 'bg-white/50' : ''}`}>
+                  <button onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                    <div className="w-11 h-11 rounded-xl bg-white/50 border border-white/60 shadow-sm flex items-center justify-center text-xl flex-shrink-0">
+                      {s.emoji || '📚'}
                     </div>
-                    <p className="text-xs text-neutral-500 truncate">
-                      {lastMsg ? lastMsg.text : `${studentCounts[s.id] || 0} students`}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold truncate">{s.name}</p>
+                        {lastMsg && <span className="text-[10px] text-neutral-400 flex-shrink-0">{lastMsg.time}</span>}
+                      </div>
+                      <p className="text-xs text-neutral-500 truncate">
+                        {lastMsg ? lastMsg.text : `${studentCounts[s.id] || 0} students`}
+                      </p>
+                    </div>
+                  </button>
+                  {/* Auto-delete settings gear */}
+                  <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setTtlOpenFor(ttlOpenFor === s.id ? null : s.id)}
+                      className={`p-1.5 rounded-md transition-colors ${ttlOpenFor === s.id ? 'text-neutral-700 bg-neutral-100' : 'text-neutral-300 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                      title="Auto-delete settings">
+                      <Settings size={14} />
+                    </button>
+                    {ttlOpenFor === s.id && (
+                      <TTLPopover standardId={s.id} onClose={() => setTtlOpenFor(null)} />
+                    )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

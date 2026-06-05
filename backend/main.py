@@ -142,10 +142,131 @@ async def _ensure_live_class_columns():
         print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
 
 
+async def _ensure_notes_and_broadcast_columns():
+    """Auto-add notes table, broadcast_reactions table, and broadcast TTL/reply columns if missing."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
+        return
+    # Probe first — fast path if everything already exists
+    try:
+        service_supabase.table("notes").select("id").limit(1).execute()
+        service_supabase.table("broadcast_reactions").select("broadcast_id").limit(1).execute()
+        service_supabase.table("broadcasts").select("expires_at").limit(1).execute()
+        service_supabase.table("standards").select("broadcast_ttl_hours").limit(1).execute()
+        return
+    except Exception:
+        pass
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+    ddl = """
+        CREATE TABLE IF NOT EXISTS notes (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            class_id    UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
+            title       TEXT NOT NULL,
+            body        TEXT,
+            file_url    TEXT,
+            file_type   TEXT,
+            storage_path TEXT,
+            is_pinned   BOOLEAN DEFAULT false,
+            created_by  UUID NOT NULL,
+            created_at  TIMESTAMPTZ DEFAULT now(),
+            updated_at  TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_notes_class ON notes(class_id);
+        ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "deny_all_notes" ON notes;
+        CREATE POLICY "deny_all_notes" ON notes FOR ALL USING (false);
+        ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+        ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS reply_to UUID REFERENCES broadcasts(id);
+        ALTER TABLE standards  ADD COLUMN IF NOT EXISTS broadcast_ttl_hours INT;
+        CREATE TABLE IF NOT EXISTS broadcast_reactions (
+            broadcast_id UUID NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+            user_id      UUID NOT NULL,
+            emoji        TEXT NOT NULL,
+            created_at   TIMESTAMPTZ DEFAULT now(),
+            PRIMARY KEY (broadcast_id, user_id, emoji)
+        );
+        CREATE INDEX IF NOT EXISTS idx_reactions_broadcast ON broadcast_reactions(broadcast_id);
+        ALTER TABLE broadcast_reactions ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "deny_all_reactions" ON broadcast_reactions;
+        CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
+            )
+            if resp.is_success:
+                print("[*] Auto-migrated: notes table + broadcast reactions/TTL/reply columns")
+            else:
+                raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Could not auto-migrate notes/broadcast columns: {e}")
+        print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
+
+
+async def _ensure_notes_bucket():
+    """Create the public 'notes' storage bucket if it doesn't exist."""
+    if not service_supabase:
+        return
+    try:
+        buckets = await asyncio.to_thread(lambda: service_supabase.storage.list_buckets())
+        names = [b.name if hasattr(b, "name") else b.get("name") for b in (buckets or [])]
+        if "notes" not in names:
+            await asyncio.to_thread(lambda: service_supabase.storage.create_bucket(
+                "notes", options={"public": True}))
+            print("[*] Created 'notes' storage bucket")
+    except Exception as e:
+        print(f"[!] Could not ensure notes bucket (will retry on first upload): {e}")
+
+
+async def _broadcast_cleanup_loop():
+    """Hourly task: delete broadcasts whose expires_at has passed."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            now_iso = datetime.utcnow().isoformat()
+            expired_ids = [
+                b["id"] for b in manager.broadcast_history
+                if b.get("expires_at") and not b.get("deleted")
+                and b["expires_at"] < now_iso
+            ]
+            if expired_ids:
+                for b in manager.broadcast_history:
+                    if b.get("id") in expired_ids:
+                        b["deleted"] = True
+                        b["message"] = ""
+                        b["attachment_url"] = None
+                manager.save_history()
+                if service_supabase:
+                    service_supabase.table("broadcasts").update({"deleted": True}).in_("id", expired_ids).execute()
+                # Notify connected WS clients
+                std_ids = {b.get("standard_id") for b in manager.broadcast_history if b.get("id") in expired_ids}
+                for std_id in std_ids:
+                    if std_id in manager.active_connections:
+                        for bid in expired_ids:
+                            dead = []
+                            for conn in manager.active_connections.get(std_id, []):
+                                try:
+                                    await conn.send_json({"type": "delete_broadcast", "id": bid})
+                                except Exception:
+                                    dead.append(conn)
+                            for d in dead:
+                                manager.disconnect(d, std_id)
+        except Exception as e:
+            print(f"[broadcast cleanup] error: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     await _ensure_plain_password_column()
     await _ensure_live_class_columns()
+    await _ensure_notes_and_broadcast_columns()
+    await _ensure_notes_bucket()
+    asyncio.create_task(_broadcast_cleanup_loop())
 
 
 # Models
@@ -267,6 +388,30 @@ class BroadcastRequest(BaseModel):
     attachment_url: Optional[str] = None
     attachment_type: Optional[str] = None
     scheduled_for: Optional[str] = None
+    reply_to: Optional[str] = None
+
+class NoteCreate(BaseModel):
+    class_id: str
+    title: str
+    body: Optional[str] = None
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None
+    storage_path: Optional[str] = None
+    is_pinned: bool = False
+
+class NoteUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None
+    storage_path: Optional[str] = None
+    is_pinned: Optional[bool] = None
+
+class BroadcastTTLRequest(BaseModel):
+    ttl_hours: Optional[int] = None
+
+class BroadcastReactionRequest(BaseModel):
+    emoji: str
 
 class LiveClassCreate(BaseModel):
     class_id: str
@@ -325,7 +470,6 @@ class ConnectionManager:
         if "created_at" not in message:
             message["created_at"] = datetime.now().isoformat()
         self.broadcast_history.append(message)
-        import asyncio
         def save_and_insert():
             self.save_history()
             if service_supabase:
@@ -337,11 +481,13 @@ class ConnectionManager:
                         "attachment_url": message.get("attachment_url"),
                         "attachment_type": message.get("attachment_type"),
                         "scheduled_for": message.get("scheduled_for"),
+                        "reply_to": message.get("reply_to"),
+                        "expires_at": message.get("expires_at"),
                         "created_at": message["created_at"]
                     }).execute()
                 except Exception as e:
                     print("Supabase broadcast insert failed:", e)
-        
+
         asyncio.create_task(asyncio.to_thread(save_and_insert))
 
         if standard_id in self.active_connections:
@@ -3914,12 +4060,33 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
+    # Compute expires_at from standard's broadcast_ttl_hours if set
+    expires_at = None
+    if service_supabase:
+        try:
+            std_row = await asyncio.to_thread(lambda: service_supabase.table("standards").select("broadcast_ttl_hours").eq("id", req.standard_id).single().execute())
+            ttl = std_row.data.get("broadcast_ttl_hours") if std_row.data else None
+            if ttl:
+                expires_at = (datetime.utcnow() + timedelta(hours=ttl)).isoformat()
+        except Exception:
+            pass
+
+    # Look up reply_to_text for quote preview
+    reply_to_text = None
+    if req.reply_to:
+        ref = next((b for b in manager.broadcast_history if b.get("id") == req.reply_to and not b.get("deleted")), None)
+        if ref:
+            reply_to_text = (ref.get("message") or "")[:120]
+
     payload = {
         "message": req.message,
         "attachment_url": req.attachment_url,
         "attachment_type": req.attachment_type,
         "sender": user["user_id"],
         "scheduled_for": req.scheduled_for,
+        "reply_to": req.reply_to,
+        "reply_to_text": reply_to_text,
+        "expires_at": expires_at,
     }
 
     # For scheduled broadcasts, save to history/DB but do NOT push WS event yet
@@ -3929,7 +4096,6 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
         payload["created_at"] = datetime.now().isoformat()
         payload["standard_id"] = req.standard_id
         manager.broadcast_history.append(payload)
-        import asyncio as _asyncio
         def _save_scheduled():
             manager.save_history()
             if service_supabase:
@@ -3941,11 +4107,13 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
                         "attachment_url": req.attachment_url,
                         "attachment_type": req.attachment_type,
                         "scheduled_for": req.scheduled_for,
+                        "reply_to": req.reply_to,
+                        "expires_at": expires_at,
                         "created_at": payload["created_at"],
                     }).execute()
                 except Exception as e:
                     print("Supabase scheduled broadcast insert failed:", e)
-        _asyncio.create_task(_asyncio.to_thread(_save_scheduled))
+        asyncio.create_task(asyncio.to_thread(_save_scheduled))
     else:
         await manager.broadcast_to_standard(req.standard_id, payload)
 
@@ -3956,6 +4124,9 @@ def get_broadcasts(standard_id: Optional[str] = None, user = Depends(verify_toke
     history = manager.broadcast_history
     if standard_id:
         history = [b for b in history if b.get("standard_id") == standard_id]
+    now_iso = datetime.utcnow().isoformat()
+    # Filter out expired messages
+    history = [b for b in history if not (b.get("expires_at") and b["expires_at"] < now_iso and not b.get("deleted"))]
     # Students never see future-scheduled broadcasts
     if user["role"] == "student":
         now = datetime.utcnow()
@@ -3963,7 +4134,16 @@ def get_broadcasts(standard_id: Optional[str] = None, user = Depends(verify_toke
             b.get("scheduled_for") and
             datetime.fromisoformat(b["scheduled_for"].replace("Z", "+00:00")).replace(tzinfo=None) > now
         )]
-    return history
+    # Enrich with reply_to_text if missing (for older records)
+    id_to_msg = {b["id"]: b.get("message", "") for b in manager.broadcast_history}
+    result = []
+    for b in history:
+        item = dict(b)
+        if item.get("reply_to") and not item.get("reply_to_text"):
+            parent_msg = id_to_msg.get(item["reply_to"], "")
+            item["reply_to_text"] = parent_msg[:120] if parent_msg else None
+        result.append(item)
+    return result
 
 class BroadcastReadRequest(BaseModel):
     broadcast_ids: List[str]
@@ -4071,6 +4251,177 @@ async def edit_broadcast(broadcast_id: str, req: EditBroadcastRequest, user = De
         for d in dead:
             manager.disconnect(d, std_id)
     return {"status": "updated"}
+
+# ── Broadcast TTL (auto-delete) settings ─────────────────────────────────────
+
+@app.get("/api/standards/{standard_id}/broadcast-ttl")
+def get_broadcast_ttl(standard_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        return {"ttl_hours": None}
+    try:
+        row = service_supabase.table("standards").select("broadcast_ttl_hours").eq("id", standard_id).single().execute()
+        return {"ttl_hours": row.data.get("broadcast_ttl_hours") if row.data else None}
+    except Exception:
+        return {"ttl_hours": None}
+
+@app.patch("/api/standards/{standard_id}/broadcast-ttl")
+def set_broadcast_ttl(standard_id: str, req: BroadcastTTLRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    service_supabase.table("standards").update({"broadcast_ttl_hours": req.ttl_hours}).eq("id", standard_id).execute()
+    return {"ttl_hours": req.ttl_hours}
+
+
+# ── Broadcast reactions ────────────────────────────────────────────────────────
+
+@app.get("/api/broadcasts/reactions")
+def get_broadcast_reactions(standard_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        return {}
+    try:
+        broadcast_ids = [b["id"] for b in manager.broadcast_history if b.get("standard_id") == standard_id and not b.get("deleted")]
+        if not broadcast_ids:
+            return {}
+        rows = service_supabase.table("broadcast_reactions").select("broadcast_id, user_id, emoji").in_("broadcast_id", broadcast_ids).execute()
+        result: Dict[str, Dict[str, int]] = {}
+        my_reactions: Dict[str, List[str]] = {}
+        for r in (rows.data or []):
+            bid, emoji = r["broadcast_id"], r["emoji"]
+            result.setdefault(bid, {})
+            result[bid][emoji] = result[bid].get(emoji, 0) + 1
+            if r["user_id"] == user["user_id"]:
+                my_reactions.setdefault(bid, []).append(emoji)
+        return {"counts": result, "mine": my_reactions}
+    except Exception:
+        return {"counts": {}, "mine": {}}
+
+@app.post("/api/broadcasts/{broadcast_id}/reactions")
+async def add_reaction(broadcast_id: str, req: BroadcastReactionRequest, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    b = next((x for x in manager.broadcast_history if x.get("id") == broadcast_id), None)
+    if not b:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    await asyncio.to_thread(lambda: service_supabase.table("broadcast_reactions").upsert(
+        {"broadcast_id": broadcast_id, "user_id": user["user_id"], "emoji": req.emoji},
+        on_conflict="broadcast_id,user_id,emoji"
+    ).execute())
+    # Notify standard via WS
+    std_id = b.get("standard_id")
+    if std_id and std_id in manager.active_connections:
+        dead = []
+        for conn in manager.active_connections[std_id]:
+            try:
+                await conn.send_json({"type": "reaction_update", "broadcast_id": broadcast_id})
+            except Exception:
+                dead.append(conn)
+        for d in dead:
+            manager.disconnect(d, std_id)
+    return {"status": "ok"}
+
+@app.delete("/api/broadcasts/{broadcast_id}/reactions/{emoji}")
+async def remove_reaction(broadcast_id: str, emoji: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    b = next((x for x in manager.broadcast_history if x.get("id") == broadcast_id), None)
+    await asyncio.to_thread(lambda: service_supabase.table("broadcast_reactions").delete()
+        .eq("broadcast_id", broadcast_id).eq("user_id", user["user_id"]).eq("emoji", emoji).execute())
+    std_id = b.get("standard_id") if b else None
+    if std_id and std_id in manager.active_connections:
+        dead = []
+        for conn in manager.active_connections[std_id]:
+            try:
+                await conn.send_json({"type": "reaction_update", "broadcast_id": broadcast_id})
+            except Exception:
+                dead.append(conn)
+        for d in dead:
+            manager.disconnect(d, std_id)
+    return {"status": "ok"}
+
+
+# ── Notes CRUD ────────────────────────────────────────────────────────────────
+
+@app.get("/api/notes")
+async def get_notes(class_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        return []
+    try:
+        rows = await asyncio.to_thread(lambda: service_supabase.table("notes").select("*")
+            .eq("class_id", class_id).order("is_pinned", desc=True).order("created_at", desc=False).execute())
+        return rows.data or []
+    except Exception as e:
+        print(f"get_notes error: {e}")
+        return []
+
+@app.post("/api/notes")
+async def create_note(req: NoteCreate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    row = {
+        "class_id": req.class_id,
+        "title": req.title,
+        "body": req.body,
+        "file_url": req.file_url,
+        "file_type": req.file_type,
+        "storage_path": req.storage_path,
+        "is_pinned": req.is_pinned,
+        "created_by": user["user_id"],
+    }
+    result = await asyncio.to_thread(lambda: service_supabase.table("notes").insert(row).execute())
+    return (result.data or [{}])[0]
+
+@app.patch("/api/notes/{note_id}")
+async def update_note(note_id: str, req: NoteUpdate, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    # exclude_unset: only apply fields the client actually sent (explicit nulls
+    # are kept, so an attachment can be cleared, while a pin-only toggle leaves
+    # the other fields untouched).
+    updates = req.dict(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    updates["updated_at"] = datetime.utcnow().isoformat()
+    result = await asyncio.to_thread(lambda: service_supabase.table("notes").update(updates).eq("id", note_id).execute())
+    return (result.data or [{}])[0]
+
+@app.delete("/api/notes/{note_id}")
+async def delete_note(note_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    # Delete file from Supabase Storage if present
+    try:
+        row = await asyncio.to_thread(lambda: service_supabase.table("notes").select("storage_path").eq("id", note_id).single().execute())
+        path = row.data.get("storage_path") if row.data else None
+        if path:
+            await asyncio.to_thread(lambda: service_supabase.storage.from_("notes").remove([path]))
+    except Exception as e:
+        print(f"Note file delete failed (ignored): {e}")
+    await asyncio.to_thread(lambda: service_supabase.table("notes").delete().eq("id", note_id).execute())
+    return {"status": "deleted"}
+
+@app.post("/api/notes/upload")
+async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(...), user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
+    path = f"{class_id}/{uuid.uuid4()}.{ext}"
+    contents = await file.read()
+    await asyncio.to_thread(lambda: service_supabase.storage.from_("notes").upload(path, contents, {"content-type": file.content_type or "application/octet-stream"}))
+    url = service_supabase.storage.from_("notes").get_public_url(path)
+    return {"url": url, "path": path, "type": file.content_type or "application/octet-stream"}
+
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)):

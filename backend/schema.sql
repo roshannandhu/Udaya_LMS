@@ -607,3 +607,49 @@ CREATE INDEX IF NOT EXISTS idx_assignment_submissions_sid ON assignment_submissi
 ALTER TABLE assignment_submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_anon_assignment_submissions" ON assignment_submissions;
 CREATE POLICY "deny_anon_assignment_submissions" ON assignment_submissions FOR ALL USING (false);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION: Notes feature (per-subject teacher notes visible to students)
+-- ══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS notes (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id    UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    body        TEXT,
+    file_url    TEXT,
+    file_type   TEXT,
+    storage_path TEXT,
+    is_pinned   BOOLEAN DEFAULT false,
+    created_by  UUID NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_class ON notes(class_id);
+
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_notes" ON notes;
+CREATE POLICY "deny_all_notes" ON notes FOR ALL USING (false);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION: Broadcast enhancements (auto-delete TTL + reply-to + reactions)
+-- ══════════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS reply_to UUID REFERENCES broadcasts(id);
+ALTER TABLE standards  ADD COLUMN IF NOT EXISTS broadcast_ttl_hours INT;
+
+CREATE TABLE IF NOT EXISTS broadcast_reactions (
+    broadcast_id UUID NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+    user_id      UUID NOT NULL,
+    emoji        TEXT NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (broadcast_id, user_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reactions_broadcast ON broadcast_reactions(broadcast_id);
+
+ALTER TABLE broadcast_reactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_reactions" ON broadcast_reactions;
+CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);

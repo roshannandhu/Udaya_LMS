@@ -203,6 +203,44 @@ export const broadcastApi = {
     apiClient('/broadcast-reads', { method: 'POST', body: JSON.stringify({ broadcast_ids: broadcastIds }) }),
   getReadCounts: (standardId) =>
     apiClient(`/broadcasts/reads?standard_id=${standardId}`),
+  getTTL: (standardId) =>
+    apiClient(`/standards/${standardId}/broadcast-ttl`),
+  setTTL: (standardId, ttlHours) =>
+    apiClient(`/standards/${standardId}/broadcast-ttl`, { method: 'PATCH', body: JSON.stringify({ ttl_hours: ttlHours }) }),
+  getReactions: (standardId) =>
+    apiClient(`/broadcasts/reactions?standard_id=${standardId}`),
+  addReaction: (broadcastId, emoji) =>
+    apiClient(`/broadcasts/${broadcastId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
+  removeReaction: (broadcastId, emoji) =>
+    apiClient(`/broadcasts/${broadcastId}/reactions/${encodeURIComponent(emoji)}`, { method: 'DELETE' }),
+};
+
+export const notesApi = {
+  getByClass: (classId) =>
+    apiClient(`/notes?class_id=${classId}`),
+  create: (data) =>
+    apiClient('/notes', { method: 'POST', body: JSON.stringify(data) }),
+  update: (noteId, data) =>
+    apiClient(`/notes/${noteId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  remove: (noteId) =>
+    apiClient(`/notes/${noteId}`, { method: 'DELETE' }),
+  uploadFile: async (file, classId) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('class_id', classId);
+    const res = await fetch(`${API_BASE}/notes/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Upload failed');
+    }
+    _cache.clear();
+    return res.json();
+  },
 };
 
 export const notificationApi = {

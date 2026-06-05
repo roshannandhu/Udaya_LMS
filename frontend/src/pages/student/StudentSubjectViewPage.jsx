@@ -1,11 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin } from 'lucide-react';
 import { Tag } from '../../components/ui';
-import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi } from '../../lib/api';
+import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
-const TABS = ['Videos', 'Tests', 'Assignments', 'Leaderboard'];
+import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
+import LiveClassThumbnail from '../../components/LiveClassThumbnail';
+
+function fmtDateTimeLC(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const h = d.getHours(), m = d.getMinutes();
+  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} at ${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+}
+
+const TABS = ['Videos', 'Tests', 'Assignments', 'Live', 'Notes', 'Leaderboard'];
 
 export default function StudentSubjectViewPage() {
   const { classId } = useParams();
@@ -22,6 +34,10 @@ export default function StudentSubjectViewPage() {
   const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
   const [myAttempts, setMyAttempts] = useState({});
   const [loading, setLoading] = useState(true);
+  const [liveClasses, setLiveClasses] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [activeJoin, setActiveJoin] = useState(null);
+  const [joiningLiveId, setJoiningLiveId] = useState(null);
 
   useEffect(() => {
     setLeaderboardLoaded(false);
@@ -29,16 +45,20 @@ export default function StudentSubjectViewPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [vids, tsts, hist, subs, assigns] = await Promise.all([
+        const [vids, tsts, hist, subs, assigns, liveData, notesData] = await Promise.all([
           videoApi.getVideos(classId),
           testApi.getTests(classId),
           testApi.getStudentTestHistory(),
           apiClient('/subjects'),
           assignmentApi.getByClass(classId).catch(() => ({ assignments: [] })),
+          liveClassApi.getByClass(classId).catch(() => []),
+          notesApi.getByClass(classId).catch(() => []),
         ]);
         setVideos(vids || []);
         setTests(tsts || []);
         setAssignments(assigns?.assignments || []);
+        setLiveClasses(Array.isArray(liveData) ? liveData.filter(l => l.status !== 'cancelled') : []);
+        setNotes(Array.isArray(notesData) ? notesData : []);
         const sub = (subs || []).find(s => String(s.id) === String(classId));
         setSubject(sub || null);
         const attemptsMap = {};
@@ -52,6 +72,30 @@ export default function StudentSubjectViewPage() {
     };
     fetchData();
   }, [classId]);
+
+  // Refresh live classes every 30s while Live tab is open
+  useEffect(() => {
+    if (tab !== 'Live') return;
+    const id = setInterval(() => {
+      if (!document.hidden) {
+        liveClassApi.getByClass(classId).catch(() => []).then(d => {
+          setLiveClasses(Array.isArray(d) ? d.filter(l => l.status !== 'cancelled') : []);
+        });
+      }
+    }, 30000);
+    return () => clearInterval(id);
+  }, [tab, classId]);
+
+  const handleJoinLive = async (lc) => {
+    if (joiningLiveId) return;
+    setJoiningLiveId(lc.id);
+    preloadZoomSDK();
+    try {
+      const res = await liveClassApi.getJoinToken(lc.id);
+      setActiveJoin({ ...res, liveClass: lc });
+    } catch (err) { alert(err?.message || 'Failed to join class.'); }
+    finally { setJoiningLiveId(null); }
+  };
 
   // Refresh assignments every time the Assignments tab is opened so grades
   // set by the teacher are immediately visible without a page reload.
@@ -75,6 +119,24 @@ export default function StudentSubjectViewPage() {
   }, [tab, subject?.standard_id, leaderboardLoaded]);
 
   const attempted = new Set(Object.keys(myAttempts));
+
+  if (activeJoin) {
+    return (
+      <ZoomMeetingView
+        meeting_id={activeJoin.meeting_id}
+        signature={activeJoin.signature}
+        sdk_key={activeJoin.sdk_key}
+        role={activeJoin.role ?? 0}
+        display_name={user?.name || 'Student'}
+        passcode={activeJoin.passcode}
+        zak={activeJoin.zak}
+        onLeave={() => {
+          setActiveJoin(null);
+          liveClassApi.getByClass(classId).catch(()=>[]).then(d => setLiveClasses(Array.isArray(d)?d.filter(l=>l.status!=='cancelled'):[]));
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -322,6 +384,88 @@ export default function StudentSubjectViewPage() {
               }}
             />
           </div>
+        )}
+
+        {tab === 'Live' && (
+          liveClasses.length === 0 ? (
+            <div className="text-center py-20">
+              <Radio size={28} className="mx-auto mb-2 text-neutral-300" />
+              <p className="text-sm text-neutral-500">No live classes scheduled yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {liveClasses.map(lc => {
+                const status = lc.status || 'scheduled';
+                const isLive = status === 'live';
+                const isEnded = status === 'ended';
+                return (
+                  <div key={lc.id} className="rounded-xl border border-neutral-200 bg-white overflow-hidden flex flex-col">
+                    <LiveClassThumbnail
+                      thumbnailUrl={lc.thumbnail_url}
+                      textSide={lc.thumbnail_text_side}
+                      subjectName={subject?.name}
+                      topic={lc.title}
+                      status={status}
+                      scheduledAt={lc.scheduled_at}
+                    />
+                    <div className="p-3 flex flex-col gap-2 flex-1">
+                      <div className="flex items-start gap-2">
+                        <h3 className="flex-1 text-sm font-semibold text-neutral-900 leading-snug">{lc.title}</h3>
+                        {isLive && <span className="flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block"/> LIVE
+                        </span>}
+                      </div>
+                      <div className="flex items-center gap-x-3 text-[11px] text-neutral-500 flex-wrap">
+                        {!isEnded && <span className="flex items-center gap-1"><Calendar size={10}/>{fmtDateTimeLC(lc.scheduled_at)}</span>}
+                        {lc.duration_mins > 0 && <span className="flex items-center gap-1"><Clock size={10}/>{lc.duration_mins} min</span>}
+                      </div>
+                      <div className="mt-auto pt-1 flex items-center gap-2">
+                        {isLive && (
+                          <button onClick={() => handleJoinLive(lc)} disabled={joiningLiveId === lc.id}
+                            className="flex-1 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-60 transition-colors">
+                            {joiningLiveId === lc.id ? <span className="flex items-center justify-center gap-1"><Loader2 size={13} className="animate-spin"/> Joining…</span> : 'Join live class'}
+                          </button>
+                        )}
+                        {status === 'scheduled' && <span className="text-xs text-neutral-500">Class hasn't started yet</span>}
+                        {isEnded && lc.my_attended !== null && lc.my_attended !== undefined && (
+                          <span className={`text-xs font-medium px-2 py-1 rounded ${lc.my_attended ? 'text-green-700 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+                            {lc.my_attended ? 'Attended' : 'Missed'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {tab === 'Notes' && (
+          notes.length === 0 ? (
+            <div className="text-center py-20">
+              <StickyNote size={28} className="mx-auto mb-2 text-neutral-300" />
+              <p className="text-sm text-neutral-500">No notes yet. Check back later.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[...notes].sort((a,b) => (b.is_pinned?1:0)-(a.is_pinned?1:0)).map(note => (
+                <div key={note.id} className={`rounded-xl border p-4 ${note.is_pinned ? 'bg-amber-50 border-amber-200' : 'bg-white border-neutral-100'}`}>
+                  <div className="flex items-start gap-2 mb-1">
+                    {note.is_pinned && <Pin size={12} className="text-amber-500 flex-shrink-0 mt-0.5"/>}
+                    <h3 className="text-sm font-semibold text-neutral-900">{note.title}</h3>
+                  </div>
+                  {note.body && <p className="text-sm text-neutral-600 mt-1 whitespace-pre-wrap">{note.body}</p>}
+                  {note.file_url && (
+                    <a href={note.file_url} target="_blank" rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800">
+                      <FileText size={13}/> View attachment
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
         )}
 
         {tab === 'Leaderboard' && (

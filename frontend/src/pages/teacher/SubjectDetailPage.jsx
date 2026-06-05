@@ -4,9 +4,165 @@ import {
   ArrowLeft, Play, Plus, Upload, MoreVertical, Video, FileQuestion,
   Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock,
   Trash2, Users, ClipboardList, Paperclip, Star, CalendarClock,
+  Radio, StickyNote, Pin, PinOff, FileText, AlertCircle, Calendar,
 } from 'lucide-react';
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
-import { apiClient, attendanceApi, videoApi, assignmentApi } from '../../lib/api';
+import { apiClient, attendanceApi, videoApi, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth';
+import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
+import LiveClassThumbnail from '../../components/LiveClassThumbnail';
+import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
+
+/* ─── helpers shared with live-class cards ─────────── */
+function fmtDateTimeLC(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const h = d.getHours(), m = d.getMinutes();
+  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} at ${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+}
+function statusColorLC(s) {
+  return s==='live'?'green':s==='scheduled'?'amber':s==='cancelled'?'red':'gray';
+}
+
+/* ─── ScheduleSubjectLiveModal ──────────────────────── */
+function ScheduleSubjectLiveModal({ open, onClose, classId, subjectName, onScheduled }) {
+  const [title, setTitle]       = useState('');
+  const [date, setDate]         = useState('');
+  const [time, setTime]         = useState('');
+  const [duration, setDuration] = useState(60);
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
+  const today = new Date().toISOString().split('T')[0];
+
+  useEffect(() => {
+    if (!open) { setTitle(''); setDate(''); setTime(''); setDuration(60); setError(''); }
+  }, [open]);
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !date || !time) return;
+    setSaving(true); setError('');
+    try {
+      await liveClassApi.create({ class_id: classId, title: title.trim(), scheduled_at: `${date}T${time}:00`, duration_mins: duration });
+      onScheduled();
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'Failed to schedule. Check Zoom credentials.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Schedule live class — ${subjectName || ''}`} size="md">
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
+          <input type="text" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Chapter 5 — Quadratic Equations"
+            className="w-full px-3 py-2 rounded-md bg-white/40 backdrop-blur-sm border border-white/60 focus:outline-none text-sm" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Date</label>
+            <input type="date" value={date} min={today} onChange={e=>setDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Time</label>
+            <input type="time" value={time} onChange={e=>setTime(e.target.value)}
+              className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Duration</label>
+          <select value={duration} onChange={e=>setDuration(Number(e.target.value))}
+            className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm">
+            {[30,45,60,90,120].map(m=><option key={m} value={m}>{m} min</option>)}
+          </select>
+        </div>
+        {error && <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"><AlertCircle size={14} className="mt-0.5 flex-shrink-0"/>{error}</div>}
+        <Btn variant="primary" onClick={handleSubmit} disabled={!title.trim()||!date||!time||saving} className="w-full justify-center">
+          {saving ? 'Scheduling…' : 'Schedule class'}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+/* ─── NoteFormModal ─────────────────────────────────── */
+function NoteFormModal({ open, onClose, classId, note, onSaved }) {
+  const [title, setTitle]     = useState('');
+  const [body, setBody]       = useState('');
+  const [file, setFile]       = useState(null);
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(note?.title || ''); setBody(note?.body || ''); setFile(null); setError('');
+  }, [open, note]);
+
+  const handleSave = async () => {
+    if (!title.trim()) { setError('Title is required'); return; }
+    setSaving(true); setError('');
+    try {
+      let fileUrl = note?.file_url || null;
+      let fileType = note?.file_type || null;
+      let storagePath = note?.storage_path || null;
+      if (file === 'remove') {
+        // User cleared the existing attachment
+        fileUrl = null; fileType = null; storagePath = null;
+      } else if (file) {
+        const up = await notesApi.uploadFile(file, classId);
+        fileUrl = up.url; fileType = up.type; storagePath = up.path;
+      }
+      const data = { title: title.trim(), body: body.trim() || null, file_url: fileUrl, file_type: fileType, storage_path: storagePath };
+      if (note?.id) {
+        await notesApi.update(note.id, data);
+      } else {
+        await notesApi.create({ ...data, class_id: classId });
+      }
+      onSaved(); onClose();
+    } catch (err) { setError(err?.message || 'Failed to save note'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={note ? 'Edit note' : 'New note'} size="md">
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Note title"
+            className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Content (optional)</label>
+          <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} placeholder="Note content…"
+            className="w-full px-3 py-2 rounded-md bg-white/40 border border-white/60 focus:outline-none text-sm resize-none" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Attachment (PDF / image)</label>
+          {(note?.file_url && !file) ? (
+            <div className="flex items-center gap-2 text-sm text-neutral-600">
+              <FileText size={14}/> <span className="truncate">{note.file_url.split('/').pop()}</span>
+              <button onClick={()=>setFile('remove')} className="text-red-500 hover:text-red-700 text-xs">Remove</button>
+            </div>
+          ) : (
+            <button onClick={()=>fileRef.current?.click()}
+              className="flex items-center gap-2 px-3 py-2 rounded-md border border-dashed border-neutral-300 text-sm text-neutral-500 hover:border-neutral-500 w-full">
+              <Paperclip size={14}/>{file && file !== 'remove' ? file.name : 'Choose file'}
+            </button>
+          )}
+          <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden" onChange={e=>setFile(e.target.files[0]||null)} />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <Btn variant="primary" onClick={handleSave} disabled={saving||!title.trim()} className="w-full justify-center">
+          {saving ? 'Saving…' : note ? 'Save changes' : 'Create note'}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
 import AttendanceGrid from '../../components/teacher/AttendanceGrid';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import NewTestModal from '../../components/teacher/NewTestModal';
@@ -406,6 +562,7 @@ function VideoViewersModal({ video, onClose }) {
 export default function SubjectDetailPage() {
   const { standardId, classId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
 
   const allStandards  = useAppCache(s => s.standards);
   const allSubjects   = useAppCache(s => s.subjects);
@@ -436,6 +593,14 @@ export default function SubjectDetailPage() {
   const [newAssignOpen, setNewAssignOpen]       = useState(false);
   const [editAssignment, setEditAssignment]     = useState(null);
   const [viewSubmissionsFor, setViewSubmissionsFor] = useState(null);
+  const [liveClasses, setLiveClasses]           = useState([]);
+  const [showScheduleLive, setShowScheduleLive] = useState(false);
+  const [joiningLiveId, setJoiningLiveId]       = useState(null);
+  const [activeJoin, setActiveJoin]             = useState(null);
+  const [attendanceSheetId, setAttendanceSheetId] = useState(null);
+  const [notes, setNotes]                       = useState([]);
+  const [showNoteForm, setShowNoteForm]         = useState(false);
+  const [editNote, setEditNote]                 = useState(null);
 
   useEffect(() => {
     if (!videoMenuId) return;
@@ -496,6 +661,54 @@ export default function SubjectDetailPage() {
     } catch(err) { console.error(err); }
   };
 
+  const fetchLiveClasses = async () => {
+    const data = await liveClassApi.getByClass(classId).catch(() => []);
+    setLiveClasses(Array.isArray(data) ? data : []);
+  };
+
+  const fetchNotes = async () => {
+    const data = await notesApi.getByClass(classId).catch(() => []);
+    setNotes(Array.isArray(data) ? data : []);
+  };
+
+  const handleWatchLive = async (lc) => {
+    if (joiningLiveId) return;
+    setJoiningLiveId(lc.id);
+    preloadZoomSDK();
+    try {
+      const res = await liveClassApi.getJoinToken(lc.id);
+      setActiveJoin({ ...res, liveClass: lc });
+    } catch (err) { alert(err?.message || 'Could not open the live class.'); }
+    finally { setJoiningLiveId(null); }
+  };
+
+  const handleEndLive = async (lc) => {
+    if (!window.confirm(`End "${lc.title}"?`)) return;
+    try { await liveClassApi.end(lc.id); await fetchLiveClasses(); } catch (err) { alert(err?.message); }
+  };
+
+  const handleCancelLive = async (lc) => {
+    if (!window.confirm(`Cancel "${lc.title}"?`)) return;
+    try { await liveClassApi.cancel(lc.id); await fetchLiveClasses(); } catch (err) { alert(err?.message); }
+  };
+
+  const handleDeleteLive = async (lc) => {
+    if (!window.confirm(`Delete "${lc.title}" permanently?`)) return;
+    try { await liveClassApi.remove(lc.id); await fetchLiveClasses(); } catch (err) { alert(err?.message); }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if (!window.confirm('Delete this note?')) return;
+    try { await notesApi.remove(noteId); setNotes(prev => prev.filter(n => n.id !== noteId)); } catch (err) { alert(err?.message); }
+  };
+
+  const handleTogglePin = async (note) => {
+    try {
+      await notesApi.update(note.id, { is_pinned: !note.is_pinned });
+      setNotes(prev => prev.map(n => n.id === note.id ? { ...n, is_pinned: !n.is_pinned } : n));
+    } catch (err) { alert(err?.message); }
+  };
+
   async function loadThumbnails(list) {
     const map = {};
     await Promise.all(list.map(async (v) => {
@@ -510,16 +723,20 @@ export default function SubjectDetailPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [videosData, testsData, lowAttData, assignData] = await Promise.all([
+        const [videosData, testsData, lowAttData, assignData, liveData, notesData] = await Promise.all([
           apiClient(`/videos?class_id=${classId}`),
           apiClient(`/tests?class_id=${classId}`),
           attendanceApi.getLowAttendance(standardId).catch(() => ({ flagged_count: 0 })),
           assignmentApi.getByClass(classId).catch(() => ({ assignments: [] })),
+          liveClassApi.getByClass(classId).catch(() => []),
+          notesApi.getByClass(classId).catch(() => []),
         ]);
         setVideos(videosData || []);
         setTests(testsData  || []);
         setAssignments(assignData?.assignments || []);
         setLowAttendanceCount(lowAttData?.flagged_count || lowAttData?.count || 0);
+        setLiveClasses(Array.isArray(liveData) ? liveData : []);
+        setNotes(Array.isArray(notesData) ? notesData : []);
         loadThumbnails(videosData || []);
 
         const [stdData, subjectsData, studentsData] = await Promise.all([
@@ -544,9 +761,25 @@ export default function SubjectDetailPage() {
     { id: 'videos',      label: 'Videos',      count: videos.length },
     { id: 'tests',       label: 'Tests',       count: tests.length },
     { id: 'assignments', label: 'Assignments', count: assignments.length },
+    { id: 'live',        label: 'Live',        count: liveClasses.filter(l => l.status === 'live' || l.status === 'scheduled').length },
+    { id: 'notes',       label: 'Notes',       count: notes.length },
     { id: 'students',    label: 'Students',    count: students.length },
     { id: 'attendance',  label: 'Attendance',  count: lowAttendanceCount, alert: lowAttendanceCount > 0 },
   ];
+
+  if (activeJoin) {
+    return (
+      <ZoomMeetingView
+        meeting_id={activeJoin.meeting_id}
+        signature={activeJoin.signature}
+        sdk_key={activeJoin.sdk_key}
+        role={activeJoin.role ?? 0}
+        display_name={user?.name || 'Teacher'}
+        passcode={activeJoin.passcode}
+        onLeave={() => { setActiveJoin(null); fetchLiveClasses(); }}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -600,6 +833,16 @@ export default function SubjectDetailPage() {
           {tab === 'assignments' && (
             <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>
               New assignment
+            </Btn>
+          )}
+          {tab === 'live' && (
+            <Btn variant="primary" size="sm" icon={Radio} onClick={() => setShowScheduleLive(true)}>
+              Schedule
+            </Btn>
+          )}
+          {tab === 'notes' && (
+            <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditNote(null); setShowNoteForm(true); }}>
+              New note
             </Btn>
           )}
         </div>
@@ -866,6 +1109,141 @@ export default function SubjectDetailPage() {
           </div>
         )}
 
+        {/* ══ Live tab ══ */}
+        {tab === 'live' && (
+          liveClasses.length === 0 ? (
+            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                <Radio size={28} className="text-neutral-400" />
+              </div>
+              <h3 className="font-semibold text-neutral-800 mb-1">No live classes yet</h3>
+              <p className="text-sm text-neutral-500 mb-6">Schedule a Zoom live class for this subject.</p>
+              <Btn variant="primary" icon={Radio} onClick={() => setShowScheduleLive(true)}>Schedule</Btn>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {liveClasses.map(lc => {
+                const status = lc.status || 'scheduled';
+                const isLive = status === 'live';
+                const isScheduled = status === 'scheduled';
+                const isEnded = status === 'ended';
+                const isCancelled = status === 'cancelled';
+                return (
+                  <div key={lc.id} className="rounded-xl glass-panel border-white/60 shadow-sm overflow-hidden flex flex-col">
+                    <LiveClassThumbnail
+                      thumbnailUrl={lc.thumbnail_url}
+                      textSide={lc.thumbnail_text_side}
+                      subjectName={subject?.name}
+                      standardName={standard?.name}
+                      topic={lc.title}
+                      status={status}
+                      scheduledAt={lc.scheduled_at}
+                    />
+                    <div className="p-3 flex flex-col gap-2 flex-1">
+                      <div className="flex items-start gap-2">
+                        <h3 className="flex-1 text-sm font-semibold text-neutral-900 leading-snug line-clamp-2">{lc.title}</h3>
+                        <Tag color={statusColorLC(status)}>
+                          {isLive && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block mr-1 animate-pulse" />}
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </Tag>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-neutral-500">
+                        {!isCancelled && (
+                          <span className="flex items-center gap-1"><Calendar size={10}/>{fmtDateTimeLC(lc.scheduled_at)}</span>
+                        )}
+                        {lc.duration_mins > 0 && (
+                          <span className="flex items-center gap-1"><Clock size={10}/>{lc.duration_mins} min</span>
+                        )}
+                      </div>
+                      <div className="mt-auto flex items-center gap-2 flex-wrap pt-1">
+                        {isScheduled && (
+                          <>
+                            <span className="text-xs text-neutral-500">Start from your Zoom app</span>
+                            <Btn size="sm" variant="ghost" onClick={() => handleCancelLive(lc)}>Cancel</Btn>
+                          </>
+                        )}
+                        {isLive && (
+                          <>
+                            <Btn size="sm" variant="primary" onClick={() => handleWatchLive(lc)} disabled={joiningLiveId === lc.id}>
+                              {joiningLiveId === lc.id ? <><Loader2 size={13} className="animate-spin"/> Opening…</> : 'Watch live'}
+                            </Btn>
+                            <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
+                              {lc.attended_count ?? 0}/{lc.total_registered ?? 0}
+                            </Btn>
+                            <Btn size="sm" variant="dangerSolid" onClick={() => handleEndLive(lc)}>End</Btn>
+                          </>
+                        )}
+                        {isEnded && (
+                          <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
+                            {lc.attended_count ?? 0}/{lc.total_registered ?? 0} attended
+                          </Btn>
+                        )}
+                        {isCancelled && <span className="text-xs text-neutral-400">Cancelled</span>}
+                        {!isLive && (
+                          <button onClick={() => handleDeleteLive(lc)}
+                            className="ml-auto flex items-center gap-1 text-xs font-medium text-red-600 hover:bg-red-50 px-2 py-1.5 rounded-md">
+                            <Trash2 size={13}/> Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {/* ══ Notes tab ══ */}
+        {tab === 'notes' && (
+          notes.length === 0 ? (
+            <div className="text-center py-20 glass-panel border-dashed border-white/60 rounded-2xl">
+              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                <StickyNote size={28} className="text-neutral-400" />
+              </div>
+              <h3 className="font-semibold text-neutral-800 mb-1">No notes yet</h3>
+              <p className="text-sm text-neutral-500 mb-6">Add notes, handouts, or PDF materials for students.</p>
+              <Btn variant="primary" icon={Plus} onClick={() => { setEditNote(null); setShowNoteForm(true); }}>New note</Btn>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[...notes].sort((a,b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map(note => (
+                <div key={note.id} className={`rounded-xl border p-4 transition-shadow hover:shadow-md ${note.is_pinned ? 'bg-amber-50 border-amber-200' : 'bg-white border-neutral-100'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {note.is_pinned && <Pin size={12} className="text-amber-500 flex-shrink-0"/>}
+                        <h3 className="text-sm font-semibold text-neutral-900 truncate">{note.title}</h3>
+                      </div>
+                      {note.body && <p className="text-sm text-neutral-600 line-clamp-3 whitespace-pre-wrap">{note.body}</p>}
+                      {note.file_url && (
+                        <a href={note.file_url} target="_blank" rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800">
+                          <FileText size={13}/> View attachment
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => handleTogglePin(note)} title={note.is_pinned ? 'Unpin' : 'Pin'}
+                        className="p-1.5 rounded-md text-neutral-400 hover:text-amber-500 hover:bg-amber-50 transition-colors">
+                        {note.is_pinned ? <PinOff size={14}/> : <Pin size={14}/>}
+                      </button>
+                      <button onClick={() => { setEditNote(note); setShowNoteForm(true); }}
+                        className="p-1.5 rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors">
+                        <Edit2 size={14}/>
+                      </button>
+                      <button onClick={() => handleDeleteNote(note.id)}
+                        className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <Trash2 size={14}/>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
         {/* ══ Attendance tab ══ */}
         {tab === 'attendance' && (
           <AttendanceGrid subjectId={classId} onNavigate={(id) => navigate(`/teacher/students/${id}`)} />
@@ -929,6 +1307,25 @@ export default function SubjectDetailPage() {
               : a
           ));
         }}
+      />
+
+      <ScheduleSubjectLiveModal
+        open={showScheduleLive}
+        onClose={() => setShowScheduleLive(false)}
+        classId={classId}
+        subjectName={subject?.name}
+        onScheduled={fetchLiveClasses}
+      />
+      <NoteFormModal
+        open={showNoteForm}
+        onClose={() => { setShowNoteForm(false); setEditNote(null); }}
+        classId={classId}
+        note={editNote}
+        onSaved={fetchNotes}
+      />
+      <LiveClassAttendanceSheet
+        liveClassId={attendanceSheetId}
+        onClose={() => setAttendanceSheetId(null)}
       />
 
       {/* Delete confirmation */}
