@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Clock, Reply, Search, SmilePlus, Check, CheckCheck, Mic, Square, Copy } from 'lucide-react';
+import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Clock, Reply, Search, SmilePlus, Check, CheckCheck, Mic, Square, Copy, MoreVertical } from 'lucide-react';
 import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
@@ -533,21 +533,23 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                       </div>
                     )}
 
-                    {/* Hover Actions (Context Menu & Reply) */}
-                    <div className={`absolute top-0 -left-16 bottom-0 w-16 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end px-2 gap-1`}>
-                      <button onClick={() => { setReplyTo(b); inputRef.current?.focus(); }} className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Reply">
-                        <Reply size={14} />
+                    {/* Actions (Context Menu & Reply) - Always visible on mobile, hover on desktop */}
+                    <div className={`absolute top-0 -left-[56px] md:-left-[68px] bottom-0 w-[56px] md:w-[68px] opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end px-1 gap-1`}>
+                      <button onClick={() => { setReplyTo(b); inputRef.current?.focus(); }} className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Reply">
+                        <Reply size={13} className="md:w-[14px] md:h-[14px]" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           if (menuId === b.id) { setMenuId(null); return; }
                           const rect = e.currentTarget.getBoundingClientRect();
-                          setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                          let rightPos = window.innerWidth - rect.right - 10;
+                          if (rightPos < 10) rightPos = 10; // Prevent clipping off the right edge
+                          setMenuPos({ top: rect.bottom + 4, right: rightPos });
                           setMenuId(b.id);
                         }}
-                        className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Menu">
-                        <span className="text-xl leading-none -mt-2">...</span>
+                        className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Menu">
+                        <MoreVertical size={14} className="md:w-[16px] md:h-[16px]" />
                       </button>
                     </div>
 
