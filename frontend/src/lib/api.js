@@ -1,6 +1,14 @@
 const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const port = '8001';
-const API_BASE = import.meta.env.VITE_API_URL || `http://localhost:${port}/api`;
+const envApiUrl = import.meta.env.VITE_API_URL;
+const isBrowser = typeof window !== 'undefined';
+const isLocalhostEnv = envApiUrl && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.test(envApiUrl);
+const isLocalhostPage = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+const API_BASE = (
+  envApiUrl && (!isBrowser || isLocalhostPage || !isLocalhostEnv)
+    ? envApiUrl
+    : `http://${hostname}:${port}/api`
+).replace(/\/$/, '');
 const TOKEN_KEY    = 'tutoria_token';
 const REFRESH_KEY  = 'tutoria_refresh_token';
 
