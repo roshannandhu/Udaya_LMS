@@ -4371,7 +4371,17 @@ async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_
             if b.get("id") in req.broadcast_ids:
                 if b.get("standard_id"):
                     standard_ids.add(b.get("standard_id"))
-        
+
+        # Fallback: if memory was cleared (server restart), query DB for standard_ids
+        if not standard_ids:
+            try:
+                res = service_supabase.table("broadcasts").select("standard_id").in_("id", list(req.broadcast_ids)).execute()
+                for row in (res.data or []):
+                    if row.get("standard_id"):
+                        standard_ids.add(row["standard_id"])
+            except Exception:
+                pass
+
         for std_id in standard_ids:
             if std_id in manager.active_connections:
                 event = {"type": "read_receipt_update", "broadcast_ids": req.broadcast_ids}
@@ -4398,6 +4408,13 @@ def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
     try:
         broadcast_ids = [b["id"] for b in manager.broadcast_history
                          if b.get("standard_id") == standard_id and not b.get("deleted")]
+        # Fallback: query DB if memory was cleared (server restart)
+        if not broadcast_ids:
+            try:
+                res = service_supabase.table("broadcasts").select("id").eq("standard_id", standard_id).execute()
+                broadcast_ids = [r["id"] for r in (res.data or [])]
+            except Exception:
+                pass
         if not broadcast_ids:
             return {}
         reads = service_supabase.table("broadcast_reads").select("broadcast_id").in_("broadcast_id", broadcast_ids).execute()
