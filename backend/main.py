@@ -4356,7 +4356,7 @@ async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_
     if not service_supabase or not req.broadcast_ids:
         return {"marked": 0}
         
-    s_res = service_supabase.table("students").select("id").eq("supabase_user_id", user["user_id"]).single().execute()
+    s_res = service_supabase.table("students").select("id").eq("id", user["user_id"]).single().execute()
     if not s_res.data:
         return {"marked": 0}
     student_id = s_res.data["id"]
