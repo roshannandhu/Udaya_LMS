@@ -173,7 +173,7 @@ export default function StudentSubjectViewPage() {
             {subject?.emoji || '📚'}
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-extrabold text-neutral-900 tracking-tight leading-none mb-4" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-neutral-900 tracking-tight leading-none mb-4" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
             {subject?.name || 'Subject Hub'}
           </h1>
           
