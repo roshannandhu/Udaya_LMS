@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronRight, Users, Upload } from 'lucide-react';
+import { Search, ChevronRight, Users, Upload, Download, CheckCircle2, Loader2 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Tag, Skeleton, Btn } from '../../components/ui';
 import BulkImportModal from '../../components/teacher/BulkImportModal';
-import { useAppCache } from '../../store';
+import { useAppCache, useSettingsStore } from '../../store';
+import { apiClient } from '../../lib/api';
+import { exportStudentsBackup } from '../../lib/studentBackup';
 
 export default function StudentsPage() {
   const navigate = useNavigate();
@@ -12,6 +14,9 @@ export default function StudentsPage() {
   const [stdFilter, setStdFilter] = useState('all');
   const [sortBy, setSortBy]       = useState('name');
   const [importOpen, setImportOpen] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [backedUp, setBackedUp]   = useState(false);
+  const lmsName = useSettingsStore(s => s.lmsName);
 
   // Pull from global cache (instant if prefetched)
   const students        = useAppCache(s => s.students);
@@ -27,6 +32,34 @@ export default function StudentsPage() {
     refreshStudents();
     refreshStandards();
   }, []);
+
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      // Pull a fresh copy so the backup is complete & current; fall back to the
+      // cached list if the network is down — the backup still works offline.
+      let all = students;
+      try {
+        const fresh = await apiClient('/students');
+        if (Array.isArray(fresh) && fresh.length) all = fresh;
+      } catch { /* offline — use cached students */ }
+
+      if (stdFilter !== 'all') {
+        const std = standards.find(s => String(s.id) === String(stdFilter));
+        const only = all.filter(s => String(s.standard_id) === String(stdFilter));
+        await exportStudentsBackup(only, standards, { filenamePrefix: std?.name || lmsName });
+      } else {
+        await exportStudentsBackup(all, standards, { filenamePrefix: lmsName });
+      }
+      setBackedUp(true);
+      setTimeout(() => setBackedUp(false), 2500);
+    } catch (err) {
+      console.error('Student backup failed:', err);
+      alert('Could not create the backup. Please try again.');
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = [...students];
@@ -57,9 +90,21 @@ export default function StudentsPage() {
 
         {/* Filters */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <Btn variant="primary" icon={Upload} onClick={() => setImportOpen(true)} className="md:order-last ml-auto">
-            Bulk Import
-          </Btn>
+          <div className="ml-auto md:order-last flex items-center gap-2">
+            <Btn
+              variant="default"
+              icon={backingUp ? Loader2 : backedUp ? CheckCircle2 : Download}
+              onClick={handleBackup}
+              disabled={backingUp || (studentsReady && students.length === 0)}
+              className={backingUp ? '[&_svg]:animate-spin' : ''}
+              title="Download a spreadsheet backup of all students (one sheet per standard)"
+            >
+              {backingUp ? 'Backing up…' : backedUp ? 'Saved ✓' : 'Backup'}
+            </Btn>
+            <Btn variant="primary" icon={Upload} onClick={() => setImportOpen(true)}>
+              Bulk Import
+            </Btn>
+          </div>
           <div className="flex-1 min-w-[180px] relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}

@@ -3,6 +3,7 @@ import { AlertTriangle, Download, Shield, Loader2, CheckCircle2 } from 'lucide-r
 import { Modal, Btn, Input } from '../ui';
 import { apiClient } from '../../lib/api';
 import { useSettingsStore } from '../../store';
+import { exportStandardBackup } from '../../lib/studentBackup';
 
 export default function TerminateStandardModal({ open, onClose, standard, students, subjects, onSuccess }) {
   const { terminationPin } = useSettingsStore();
@@ -35,52 +36,19 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
     }
   }, [step, studentCount]);
 
-  const safeName = (standard?.name || 'Standard').replace(/\s+/g, '_');
-  const rows = [
-    ['Name', 'Email', 'Phone', 'Standard'],
-    ...(students || []).map(s => [s.name || '', s.email || '', s.phone || '', standard?.name || '']),
-  ];
-
-  // Fallback used when the xlsx module fails to load/write (e.g. flaky network or
-  // a mobile browser quirk). A plain CSV keeps the teacher from getting stuck on
-  // the mandatory-backup step.
-  const downloadCsvFallback = () => {
-    const csv = rows
-      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\r\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${safeName}_Students_Backup.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
+  // Uses the shared backup helper (xlsx with built-in CSV fallback) so the
+  // mandatory termination backup and the Students-page "Backup" button stay in sync.
   const downloadBackup = async () => {
     setDownloading(true);
     setDownloadError('');
     try {
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Students');
-      XLSX.writeFile(wb, `${safeName}_Students_Backup.xlsx`);
+      await exportStandardBackup(standard, students);
       setDownloaded(true);
     } catch (err) {
-      console.error('xlsx backup failed, falling back to CSV:', err);
-      try {
-        downloadCsvFallback();
-        setDownloaded(true);
-      } catch (err2) {
-        console.error('CSV backup also failed:', err2);
-        // Never trap the teacher: surface the problem but let them proceed.
-        setDownloadError('Could not generate the backup file automatically. Please note your student list, then continue.');
-        setDownloaded(true);
-      }
+      console.error('Student backup failed (xlsx + CSV):', err);
+      // Never trap the teacher: surface the problem but let them proceed.
+      setDownloadError('Could not generate the backup file automatically. Please note your student list, then continue.');
+      setDownloaded(true);
     } finally {
       setDownloading(false);
     }
