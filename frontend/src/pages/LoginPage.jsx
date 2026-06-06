@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, enforceSingleDevice } = useAuthStore();
+  const { login } = useAuthStore();
   const { lmsName, lmsLogo, applyBranding } = useSettingsStore();
 
   useEffect(() => { document.title = lmsName || 'Udaya'; }, [lmsName]);
@@ -51,16 +51,9 @@ export default function LoginPage() {
       const result = await login(identifier.trim(), creds.pwd);
 
       if (result.success) {
-        if (result.role === ROLES.STUDENT && !result.requiresPasswordChange) {
-          const { user } = useAuthStore.getState();
-          const deviceCheck = await enforceSingleDevice(user?.id || identifier);
-          if (!deviceCheck.allowed) {
-            setError(deviceCheck.message);
-            setLoading(false);
-            return;
-          }
-        }
-
+        // Single-device enforcement is handled by ProtectedStudentRoute on mount
+        // (and its 30s poll). A separate check here would just be a redundant
+        // round-trip — login() already wrote this device's fingerprint server-side.
         if (result.requiresPasswordChange) {
           navigate('/student/change-password', { replace: true });
         } else {

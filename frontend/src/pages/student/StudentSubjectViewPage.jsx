@@ -229,10 +229,17 @@ export default function StudentSubjectViewPage() {
                     className="group text-left rounded-[2rem] overflow-hidden bg-white border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
                   >
                     <div className="relative overflow-hidden bg-neutral-900 w-full" style={{ aspectRatio: '16/9' }}>
-                      {thumbUrl ? (
-                        <img src={thumbUrl} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 group-hover:opacity-80 transition-all duration-500" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center opacity-90 group-hover:scale-105 transition-transform duration-500" />
+                      {/* Gradient base is always rendered, so it shows through whenever the
+                          thumbnail is missing or fails to load (no broken-image icon). */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 opacity-90 group-hover:scale-105 transition-transform duration-500" />
+                      {thumbUrl && (
+                        <img
+                          src={thumbUrl}
+                          alt={v.title}
+                          loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 group-hover:opacity-80 transition-all duration-500"
+                        />
                       )}
                       
                       {/* Play overlay */}

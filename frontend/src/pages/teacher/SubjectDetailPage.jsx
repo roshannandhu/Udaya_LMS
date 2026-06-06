@@ -8,7 +8,7 @@ import {
   Youtube, ExternalLink,
 } from 'lucide-react';
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
-import { apiClient, attendanceApi, videoApi, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
+import { apiClient, attendanceApi, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassThumbnail from '../../components/LiveClassThumbnail';
@@ -368,6 +368,8 @@ function VideoCard({ video, thumbnail, studentsCount, onView, onMenu }) {
           <img
             src={thumbnail}
             alt={video.title}
+            loading="lazy"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
@@ -737,14 +739,11 @@ export default function SubjectDetailPage() {
     } catch (err) { alert(err?.message); }
   };
 
-  async function loadThumbnails(list) {
+  // Thumbnails ship with the /videos payload — read them directly instead of
+  // firing one getThumbnail() request per video.
+  function loadThumbnails(list) {
     const map = {};
-    await Promise.all(list.map(async (v) => {
-      try {
-        const res = await videoApi.getThumbnail(v.id);
-        if (res?.thumbnail_url) map[v.id] = res.thumbnail_url;
-      } catch {}
-    }));
+    (list || []).forEach((v) => { if (v.thumbnail_url) map[v.id] = v.thumbnail_url; });
     setThumbnailUrls(map);
   }
 

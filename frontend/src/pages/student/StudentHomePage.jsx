@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Calendar, FileText, CheckCircle, MessageSquare, Trophy, Star, ArrowRight, BookOpen, Clock, FileQuestion, Flame, StickyNote, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
-import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi, videoApi } from '../../lib/api';
+import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import { useAppCache } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
@@ -128,22 +128,19 @@ export default function StudentHomePage() {
     return [...inProgress, ...notStarted].slice(0, 5);
   }, [videos]);
 
+  // Thumbnails already arrive on the /videos payload — read them directly instead of
+  // firing a separate getThumbnail() request per hero video (saves up to 5 round-trips).
   useEffect(() => {
     if (heroCandidates.length === 0) return;
-    heroCandidates.forEach(async (v) => {
-      if (videoThumbnails[v.id] !== undefined) return;
-      try {
-        const res = await videoApi.getThumbnail(v.id);
-        if (res?.thumbnail_url) {
-          setVideoThumbnails(prev => ({ ...prev, [v.id]: res.thumbnail_url }));
-        } else {
-          setVideoThumbnails(prev => ({ ...prev, [v.id]: null }));
-        }
-      } catch (e) {
-        setVideoThumbnails(prev => ({ ...prev, [v.id]: null }));
-      }
+    setVideoThumbnails(prev => {
+      let changed = false;
+      const next = { ...prev };
+      heroCandidates.forEach(v => {
+        if (next[v.id] === undefined) { next[v.id] = v.thumbnail_url || null; changed = true; }
+      });
+      return changed ? next : prev;
     });
-  }, [heroCandidates, videoThumbnails]);
+  }, [heroCandidates]);
 
   const heroSlides = React.useMemo(() => {
     const gradients = [
@@ -212,7 +209,10 @@ export default function StudentHomePage() {
           {/* ── 1. WELCOME & STATUS (FULL WIDTH) ── */}
           <div className="flex flex-col gap-6">
             <motion.div variants={fadeUp} className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-4">
+              <div 
+                className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => navigate('/student/profile')}
+              >
                 <Avatar name={user?.name || '?'} src={user?.avatar_url} size="lg" className="ring-4 ring-white shadow-sm" />
                 <div>
                   <p className="text-sm text-neutral-500 font-bold uppercase tracking-widest mb-0.5">{greeting},</p>
@@ -288,9 +288,11 @@ export default function StudentHomePage() {
                       >
                         {/* Background Overlay / Thumbnail */}
                         {heroSlides[currentSlide].thumbnail ? (
-                          <img 
-                            src={heroSlides[currentSlide].thumbnail} 
-                            alt={heroSlides[currentSlide].title} 
+                          <img
+                            src={heroSlides[currentSlide].thumbnail}
+                            alt={heroSlides[currentSlide].title}
+                            loading="lazy"
+                            onError={() => setVideoThumbnails(prev => ({ ...prev, [heroSlides[currentSlide].id]: null }))}
                             className="absolute right-0 top-0 w-full md:w-[70%] h-full object-cover z-0 pointer-events-none"
                           />
                         ) : (

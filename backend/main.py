@@ -2642,7 +2642,12 @@ def get_videos(class_id: Optional[str] = None, limit: Optional[int] = None, user
             v["source_type"] = "youtube"
             v["thumbnail_url"] = f"https://img.youtube.com/vi/{yt_id}/mqdefault.jpg"
             v["cloudflare_video_id"] = None
+        elif cf and not cf.startswith("https://"):
+            # Cloudflare Stream UID → CDN auto-generated thumbnail (1s in, 360p)
+            v["source_type"] = "upload"
+            v["thumbnail_url"] = f"https://videodelivery.net/{cf}/thumbnails/thumbnail.jpg?time=1s&height=360"
         else:
+            # Supabase Storage fallback (full https URL to an mp4) → no stream thumbnail
             v["source_type"] = "upload"
             v["thumbnail_url"] = None
         v.pop("youtube_video_id", None)
@@ -3020,6 +3025,12 @@ async def get_video_thumbnail(video_id: str, user=Depends(verify_token)):
     cf = video.get("cloudflare_video_id") or ""
 
     if not cf.startswith("yt:"):
+        # Cloudflare Stream UID → CDN thumbnail; Supabase fallback (https URL) has none
+        if cf and not cf.startswith("https://"):
+            return {
+                "thumbnail_url": f"https://videodelivery.net/{cf}/thumbnails/thumbnail.jpg?time=1s&height=360",
+                "source_type": "upload",
+            }
         return {"thumbnail_url": None, "source_type": "upload"}
 
     yt_id = cf[3:]
