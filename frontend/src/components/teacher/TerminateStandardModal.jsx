@@ -8,6 +8,8 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
   const { terminationPin } = useSettingsStore();
   const [step, setStep] = useState('warn');
   const [downloaded, setDownloaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
   const [pinEntry, setPinEntry] = useState('');
   const [pinError, setPinError] = useState('');
 
@@ -16,6 +18,8 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
     if (open) {
       setStep('warn');
       setDownloaded(false);
+      setDownloading(false);
+      setDownloadError('');
       setPinEntry('');
       setPinError('');
     }
@@ -31,34 +35,78 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
     }
   }, [step, studentCount]);
 
+  const safeName = (standard?.name || 'Standard').replace(/\s+/g, '_');
+  const rows = [
+    ['Name', 'Email', 'Phone', 'Standard'],
+    ...(students || []).map(s => [s.name || '', s.email || '', s.phone || '', standard?.name || '']),
+  ];
+
+  // Fallback used when the xlsx module fails to load/write (e.g. flaky network or
+  // a mobile browser quirk). A plain CSV keeps the teacher from getting stuck on
+  // the mandatory-backup step.
+  const downloadCsvFallback = () => {
+    const csv = rows
+      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeName}_Students_Backup.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const downloadBackup = async () => {
-    const XLSX = await import('xlsx');
-    const wsData = [
-      ['Name', 'Email', 'Phone', 'Standard'],
-      ...(students || []).map(s => [s.name || '', s.email || '', s.phone || '', standard?.name || '']),
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Students');
-    XLSX.writeFile(wb, `${(standard?.name || 'Standard').replace(/\s+/g, '_')}_Students_Backup.xlsx`);
-    setDownloaded(true);
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Students');
+      XLSX.writeFile(wb, `${safeName}_Students_Backup.xlsx`);
+      setDownloaded(true);
+    } catch (err) {
+      console.error('xlsx backup failed, falling back to CSV:', err);
+      try {
+        downloadCsvFallback();
+        setDownloaded(true);
+      } catch (err2) {
+        console.error('CSV backup also failed:', err2);
+        // Never trap the teacher: surface the problem but let them proceed.
+        setDownloadError('Could not generate the backup file automatically. Please note your student list, then continue.');
+        setDownloaded(true);
+      }
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleConfirmPin = async () => {
-    if (!terminationPin) {
-      setPinError('No PIN set. Go to Settings → Security to set a termination PIN first.');
-      return;
-    }
-    if (pinEntry !== terminationPin) {
-      setPinError('Incorrect PIN. Please try again.');
-      setPinEntry('');
-      return;
+    // When a termination PIN is configured, require it. When none is set, fall
+    // back to typing the standard's exact name so the teacher is never dead-ended
+    // (the backend also skips the PIN check when no PIN is configured server-side).
+    if (terminationPin) {
+      if (pinEntry !== terminationPin) {
+        setPinError('Incorrect PIN. Please try again.');
+        setPinEntry('');
+        return;
+      }
+    } else {
+      if (pinEntry.trim() !== (standard?.name || '').trim()) {
+        setPinError(`Type the standard name exactly to confirm: "${standard?.name}"`);
+        return;
+      }
     }
     setStep('deleting');
     try {
-      // PIN is also verified server-side, so a bypassed client check can't delete.
-      await apiClient(`/standards/${standard.id}?pin=${encodeURIComponent(pinEntry)}`, { method: 'DELETE' });
+      // PIN (when set) is also verified server-side, so a bypassed client check can't delete.
+      const q = terminationPin ? `?pin=${encodeURIComponent(pinEntry)}` : '';
+      await apiClient(`/standards/${standard.id}${q}`, { method: 'DELETE' });
       onSuccess();
     } catch (err) {
       console.error('Terminate failed:', err);
@@ -121,16 +169,22 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
             <p className="text-xs text-neutral-500 mb-4">students in {standard?.name}</p>
             <Btn
               variant={downloaded ? 'default' : 'primary'}
-              icon={downloaded ? CheckCircle2 : Download}
+              icon={downloading ? Loader2 : downloaded ? CheckCircle2 : Download}
               onClick={downloadBackup}
-              className="w-full justify-center"
+              disabled={downloading}
+              className={`w-full justify-center ${downloading ? '[&_svg]:animate-spin' : ''}`}
             >
-              {downloaded ? 'Downloaded ✓ — download again' : 'Download student list (.xlsx)'}
+              {downloading ? 'Preparing…' : downloaded ? 'Downloaded ✓ — download again' : 'Download student list (.xlsx)'}
             </Btn>
             <p className="text-[10px] text-neutral-400 mt-2">Name · Email · Phone · Standard — ready to re-import next year</p>
           </div>
 
-          {downloaded ? (
+          {downloadError ? (
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
+              {downloadError}
+            </div>
+          ) : downloaded ? (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
               <CheckCircle2 size={16} className="text-green-600 flex-shrink-0" />
               Student list downloaded. You may now proceed.
@@ -161,18 +215,14 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
           <div className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-xl">
             <Shield size={18} className="text-neutral-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold mb-0.5">Enter your termination PIN</p>
+              <p className="text-sm font-semibold mb-0.5">{terminationPin ? 'Enter your termination PIN' : 'Confirm termination'}</p>
               <p className="text-xs text-neutral-500">
                 This permanently deletes <strong>{standard?.name}</strong> and all its data. Cannot be undone.
               </p>
             </div>
           </div>
 
-          {!terminationPin ? (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-              No PIN set. Go to <strong>Settings → Security</strong> to set a termination PIN first.
-            </div>
-          ) : (
+          {terminationPin ? (
             <Input
               type="password"
               inputMode="numeric"
@@ -183,6 +233,21 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
               autoFocus
               maxLength={8}
             />
+          ) : (
+            <div className="space-y-1.5">
+              <p className="text-xs text-neutral-600">
+                No termination PIN is set. To confirm, type the standard name <strong>{standard?.name}</strong> below.
+                <span className="block text-[11px] text-neutral-400 mt-0.5">Tip: set a PIN in Settings → Security for faster confirmation next time.</span>
+              </p>
+              <Input
+                type="text"
+                value={pinEntry}
+                onChange={e => { setPinEntry(e.target.value); setPinError(''); }}
+                onKeyDown={e => { if (e.key === 'Enter') handleConfirmPin(); }}
+                placeholder={standard?.name || 'Standard name'}
+                autoFocus
+              />
+            </div>
           )}
 
           {pinError && (
@@ -196,7 +261,7 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
             <Btn
               variant="default"
               onClick={handleConfirmPin}
-              disabled={!terminationPin || !pinEntry}
+              disabled={!pinEntry.trim()}
               className="flex-1 bg-red-600 text-white hover:bg-red-700 border-red-600 disabled:opacity-50"
             >
               Terminate
