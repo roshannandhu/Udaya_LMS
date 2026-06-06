@@ -194,7 +194,7 @@ Shared UI primitives are in `frontend/src/components/ui.jsx`.
 11. **Match the prototype UI.** Replicate component structure from `lms-v3_9.jsx`.
 12. **Use Supabase Row Level Security.** Every table needs RLS policies.
 13. **Sync Supabase Storage calls must use `asyncio.to_thread`.** The supabase-py storage client is synchronous. Calling it directly inside an `async def` FastAPI endpoint blocks the event loop and causes connection resets on Windows. Always wrap: `await asyncio.to_thread(lambda: supabase.storage.from_(...).upload(...))`.
-14. **LMS branding (name + logo) is client-side only.** Stored in Zustand `useSettingsStore` persisted to `tutoria-settings` localStorage key. No database table or API endpoint.
+14. **Teacher settings are backend-backed (`teacher_settings.json` via `/api/teacher/settings`).** Branding (name + logo), default student password, termination PIN, notification/security/report prefs all persist server-side so they sync across devices. Zustand `useSettingsStore` (`tutoria-settings` localStorage) is only an instant cache: every setter writes through to the backend, and `hydrateFromServer()` pulls the truth back after teacher login/boot. The login page reads the public `GET /api/branding` (no auth) to show the logo/name on a fresh device. The termination PIN is also enforced server-side in `DELETE /api/standards/{id}?pin=`.
 
 ---
 

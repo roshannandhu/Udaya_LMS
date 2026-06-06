@@ -3,7 +3,6 @@ import { MessageSquare, Pin, FileText, Loader2, Search, X, Copy } from 'lucide-r
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
 import { broadcastApi, getApiBaseUrl } from '../../lib/api';
-import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -213,8 +212,7 @@ export default function StudentBroadcastsPage() {
         )}
       </div>
 
-      <ScreenshotGuard label={user?.username || user?.name || 'student'}>
-        <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full" onClick={() => setEmojiPickerId(null)}>
+      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full" onClick={() => setEmojiPickerId(null)}>
           {broadcasts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="bg-[#fff9c4] text-[#8a7e00] px-4 py-2 rounded-xl text-xs shadow-sm max-w-[280px]">
@@ -356,7 +354,6 @@ export default function StudentBroadcastsPage() {
             </div>
           )}
         </div>
-      </ScreenshotGuard>
     </div>
   );
 }
