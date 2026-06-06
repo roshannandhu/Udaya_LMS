@@ -17,7 +17,7 @@ export const TEACHER_NAV = [
 export const STUDENT_NAV = [
   { id: 'home',        label: 'Home',         icon: Home,          path: '/student',              primary: true },
   { id: 'subjects',    label: 'Subjects',     icon: BookOpen,      path: '/student/subjects',     primary: true },
-  { id: 'calendar',    label: 'Calendar',     icon: Calendar,      path: '/student/calendar',     primary: true },
+  { id: 'calendar',    label: 'Calendar',     icon: Calendar,      path: '/student/calendar' },
   { id: 'tests',       label: 'Tests',        icon: FileQuestion,  path: '/student/tests',        primary: true },
   { id: 'broadcasts',  label: 'Broadcasts',   icon: MessageSquare, path: '/student/broadcasts',   primary: true },
   { id: 'live',        label: 'Live',         icon: Video,         path: '/student/live-classes' },

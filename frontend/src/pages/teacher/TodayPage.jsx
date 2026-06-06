@@ -104,7 +104,12 @@ export default function TodayPage() {
             <p className="text-xs text-neutral-500">{greeting},</p>
             <h1 className="text-base font-semibold leading-tight">{displayName} 👋</h1>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate('/teacher/attendance')} className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-full transition-colors">
+              <Calendar size={20} />
+            </button>
+            <NotificationBell />
+          </div>
         </div>
       </div>
 
