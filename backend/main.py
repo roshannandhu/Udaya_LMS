@@ -2151,7 +2151,8 @@ def get_student_calendar_events(start_date: str, end_date: str, user = Depends(v
             "title": t["title"],
             "date": t["scheduled_for"],
             "duration": t["duration_mins"],
-            "subject": class_names.get(t["class_id"], "Unknown")
+            "subject": class_names.get(t["class_id"], "Unknown"),
+            "class_id": t["class_id"]
         })
 
     # 2. Fetch Live Classes
@@ -2170,7 +2171,8 @@ def get_student_calendar_events(start_date: str, end_date: str, user = Depends(v
             "date": l["scheduled_at"],
             "duration": l["duration_mins"],
             "link": l["zoom_join_url"],
-            "subject": class_names.get(l["class_id"], "Unknown")
+            "subject": class_names.get(l["class_id"], "Unknown"),
+            "class_id": l["class_id"]
         })
 
     # 3. Fetch Uploaded Videos
@@ -2187,7 +2189,8 @@ def get_student_calendar_events(start_date: str, end_date: str, user = Depends(v
             "type": "video",
             "title": v["title"],
             "date": v["created_at"],
-            "subject": class_names.get(v["class_id"], "Unknown")
+            "subject": class_names.get(v["class_id"], "Unknown"),
+            "class_id": v["class_id"]
         })
 
     # 4. Fetch Assignments
@@ -2204,7 +2207,8 @@ def get_student_calendar_events(start_date: str, end_date: str, user = Depends(v
             "type": "assignment",
             "title": a["title"],
             "date": a["due_date"],
-            "subject": class_names.get(a["class_id"], "Unknown")
+            "subject": class_names.get(a["class_id"], "Unknown"),
+            "class_id": a["class_id"]
         })
 
     return events

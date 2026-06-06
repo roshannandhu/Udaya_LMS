@@ -131,6 +131,19 @@ export default function CalendarPage() {
     });
   };
 
+  const handleEventClick = (evt) => {
+    if (evt.type === 'test') {
+      navigate(`/student/tests/${evt.id}/take`);
+    } else if (evt.type === 'video' && evt.class_id) {
+      navigate(`/student/subjects/${evt.class_id}/video/${evt.id}`);
+    } else if (evt.type === 'assignment' && evt.class_id) {
+      navigate(`/student/subjects/${evt.class_id}`);
+    } else if (evt.type === 'live') {
+      // Zoom class has a dedicated join button, but clicking the card can take them to the live-classes tab
+      navigate('/student/live-classes');
+    }
+  };
+
   if (activeJoin) {
     return (
       <ZoomMeetingView
@@ -341,7 +354,11 @@ export default function CalendarPage() {
                   }
 
                   return (
-                    <div key={`${evt.id}-${idx}`} className="flex gap-4 p-4 rounded-2xl border border-neutral-100 hover:shadow-md transition-shadow bg-white">
+                    <div 
+                      key={`${evt.id}-${idx}`} 
+                      className="flex gap-4 p-4 rounded-2xl border border-neutral-100 hover:shadow-md transition-shadow bg-white cursor-pointer"
+                      onClick={() => handleEventClick(evt)}
+                    >
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${bgColor} ${iconColor}`}>
                         {icon}
                       </div>
@@ -361,7 +378,7 @@ export default function CalendarPage() {
                           )}
                         </div>
                         {evt.type === 'live' && evt.link && (
-                          <button onClick={() => handleJoinLive(evt.id)} className="mt-3 block text-center w-full bg-[#0288d1] text-white text-xs font-bold py-2 rounded-lg hover:bg-[#0277bd] transition-colors relative">
+                          <button onClick={(e) => { e.stopPropagation(); handleJoinLive(evt.id); }} className="mt-3 block text-center w-full bg-[#0288d1] text-white text-xs font-bold py-2 rounded-lg hover:bg-[#0277bd] transition-colors relative">
                             {joiningId === evt.id ? <><Loader2 size={14} className="animate-spin inline mr-1 -mt-0.5" /> Joining...</> : 'Join Zoom Class'}
                           </button>
                         )}
