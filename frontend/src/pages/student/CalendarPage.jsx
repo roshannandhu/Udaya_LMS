@@ -151,7 +151,7 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="bg-white px-6 py-8 md:py-10 shadow-sm border-b border-neutral-100 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <h1 className="text-3xl font-black text-neutral-900 tracking-tight flex items-center gap-3">
                 <CalendarIcon className="text-[#00acc1]" size={32} />
@@ -160,8 +160,8 @@ export default function CalendarPage() {
               <p className="text-neutral-500 mt-1 font-medium">Keep track of your classes, tests, and assignments.</p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="bg-neutral-100 p-1 rounded-xl flex items-center">
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
+              <div className="bg-neutral-100 p-1 rounded-xl flex items-center shrink-0">
                 <button 
                   onClick={() => setViewMode('week')}
                   className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${viewMode === 'week' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
@@ -188,8 +188,8 @@ export default function CalendarPage() {
         <div className="flex-1">
           
           {/* Controls */}
-          <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl shadow-sm border border-neutral-100">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-neutral-100">
+            <div className="flex items-center justify-between w-full sm:w-auto gap-2 sm:gap-4">
               <button onClick={handlePrev} className="p-2 hover:bg-neutral-100 rounded-full transition-colors text-neutral-600">
                 <ChevronLeft size={20} />
               </button>
@@ -202,14 +202,14 @@ export default function CalendarPage() {
             </div>
             <button 
               onClick={handleToday}
-              className="px-4 py-2 bg-[#e0f7fa] text-[#00acc1] font-bold rounded-xl text-sm hover:bg-[#b2ebf2] transition-colors"
+              className="px-4 py-2 bg-[#e0f7fa] text-[#00acc1] font-bold rounded-xl text-sm hover:bg-[#b2ebf2] transition-colors w-full sm:w-auto"
             >
               Today
             </button>
           </div>
 
           {/* Calendar Rendering */}
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 relative min-h-[300px]">
+          <div className="bg-white p-3 md:p-6 rounded-3xl shadow-sm border border-neutral-100 relative min-h-[300px]">
             {loading && (
               <div className="absolute inset-0 z-10 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-3xl">
                 <Loader2 size={32} className="animate-spin text-[#00acc1]" />
@@ -217,7 +217,7 @@ export default function CalendarPage() {
             )}
 
             {viewMode === 'week' && (
-              <div className="flex justify-between items-center">
+              <div className="grid grid-cols-7 gap-1 md:gap-2">
                 {weekDays.map(day => {
                   const isSel = isSameDay(day, selectedDate);
                   const isTod = isToday(day);
@@ -226,12 +226,12 @@ export default function CalendarPage() {
                     <div 
                       key={day.toISOString()}
                       onClick={() => { setSelectedDate(day); setCurrentDate(day); }}
-                      className={`flex flex-col items-center gap-2 p-2 rounded-2xl cursor-pointer group transition-all w-14`}
+                      className={`flex flex-col items-center gap-1 md:gap-2 py-2 md:p-2 rounded-xl md:rounded-2xl cursor-pointer group transition-all`}
                     >
-                      <span className={`text-xs font-bold ${isTod ? 'text-[#00acc1]' : 'text-neutral-400'}`}>
+                      <span className={`text-[10px] md:text-xs font-bold ${isTod ? 'text-[#00acc1]' : 'text-neutral-400'}`}>
                         {format(day, 'EEE')}
                       </span>
-                      <div className={`w-12 h-12 flex items-center justify-center rounded-full text-lg font-bold transition-all
+                      <div className={`w-8 h-8 md:w-12 md:h-12 flex items-center justify-center rounded-full text-sm md:text-lg font-bold transition-all
                         ${isSel 
                           ? 'bg-neutral-800 text-white shadow-md scale-110' 
                           : isTod 
@@ -241,7 +241,7 @@ export default function CalendarPage() {
                       >
                         {format(day, 'd')}
                       </div>
-                      <div className="flex gap-1 mt-1 h-2">
+                      <div className="flex flex-wrap justify-center gap-0.5 md:gap-1 mt-1 h-2 max-w-full px-1">
                         {getEventDots(day)}
                       </div>
                     </div>
@@ -278,10 +278,10 @@ export default function CalendarPage() {
                               : 'text-neutral-700 hover:bg-neutral-50 hover:border-neutral-200'
                           }`}
                       >
-                        <span className={`text-sm md:text-base font-bold ${isSel ? 'text-white' : ''}`}>
+                        <span className={`text-xs md:text-base font-bold ${isSel ? 'text-white' : ''}`}>
                           {format(day, 'd')}
                         </span>
-                        <div className="flex gap-1 mt-1 h-1.5 items-center justify-center w-full">
+                        <div className="flex flex-wrap gap-0.5 md:gap-1 mt-0.5 md:mt-1 h-1.5 md:h-2 items-center justify-center w-full px-0.5 md:px-1">
                           {getEventDots(day)}
                         </div>
                       </div>
