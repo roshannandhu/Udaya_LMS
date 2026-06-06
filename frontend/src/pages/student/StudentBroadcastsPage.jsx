@@ -149,7 +149,7 @@ export default function StudentBroadcastsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#efeae2] pb-24">
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24">
         <TopBar title="Class Updates" showSearch={false} />
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin text-neutral-400" size={24} />
@@ -160,7 +160,7 @@ export default function StudentBroadcastsPage() {
 
   if (!standard) {
     return (
-      <div className="min-h-screen bg-[#efeae2] pb-24">
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24">
         <TopBar title="Class Updates" showSearch={false} />
         <div className="px-5 py-16 text-center">
           <MessageSquare size={32} className="mx-auto mb-3 text-neutral-400" />
@@ -173,7 +173,7 @@ export default function StudentBroadcastsPage() {
   let currentGroup = null;
 
   return (
-    <div className="min-h-screen bg-[#efeae2] flex flex-col pb-20 md:pb-8">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2]">
       {/* Header */}
       <div className="sticky top-0 z-30 bg-white border-b border-neutral-200 shadow-sm shrink-0">
         <div className="px-4 md:px-8 py-3 flex items-center justify-between max-w-5xl mx-auto">
