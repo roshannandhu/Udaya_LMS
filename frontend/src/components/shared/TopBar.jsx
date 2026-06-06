@@ -14,6 +14,7 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
   // On phones, students reach their profile from a top-left avatar (the bottom
   // bar holds Home/Subjects/Broadcasts/Tests/Live). Desktop uses the TopNav.
   const showStudentProfile = location.pathname.startsWith('/student');
+  const isBroadcasts = location.pathname.includes('/broadcasts');
 
   return (
     <div className="px-5 md:px-8 pt-6 pb-2 max-w-5xl mx-auto">
@@ -49,9 +50,11 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
           </button>
         )}
         <div className="flex items-center gap-1 lg:hidden">
-          <Link to={showStudentProfile ? '/student/calendar' : '/teacher/attendance'} className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-full transition-colors">
-            <Calendar size={18} />
-          </Link>
+          {!isBroadcasts && (
+            <Link to={showStudentProfile ? '/student/calendar' : '/teacher/attendance'} className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-full transition-colors">
+              <Calendar size={18} />
+            </Link>
+          )}
           <NotificationBell />
         </div>
         {action}
