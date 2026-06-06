@@ -57,10 +57,12 @@ const CARD_COLORS = [
   { bg: 'bg-[#FFEBE5]', text: 'text-orange-950', badge: 'bg-orange-100 text-orange-800' }
 ];
 
+let liveClassesCache = null;
+
 export default function StudentLiveClassesPage() {
   const { user } = useAuthStore();
-  const [liveClasses, setLiveClasses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [liveClasses, setLiveClasses] = useState(liveClassesCache || []);
+  const [loading, setLoading] = useState(!liveClassesCache);
   const [activeJoin, setActiveJoin] = useState(null);
   const [joiningId, setJoiningId] = useState(null);
   const [now, setNow] = useState(Date.now());
@@ -69,7 +71,7 @@ export default function StudentLiveClassesPage() {
 
   const fetchAll = async () => {
     if (!standardId) { setLoading(false); return; }
-    setLoading(true);
+    if (!liveClassesCache) setLoading(true);
     try {
       // Single call for all live classes in the student's standard
       const data = await apiClient(`/live-classes?standard_id=${standardId}`).catch(() => []);
@@ -79,6 +81,7 @@ export default function StudentLiveClassesPage() {
         .map(lc => ({ ...lc, subject: { id: lc.class_id, name: lc.class_name || '' } }));
       filtered.sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
       setLiveClasses(filtered);
+      liveClassesCache = filtered;
     } catch (err) {
       console.error(err);
     } finally {

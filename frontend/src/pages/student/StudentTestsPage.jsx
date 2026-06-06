@@ -17,36 +17,41 @@ const CARD_COLORS = [
   { bg: 'bg-[#E8F0FE]', text: 'text-[#1A56DB]', badge: 'bg-[#1A56DB]/10 text-[#1A56DB]' },
 ];
 
+let testsPageCache = null;
+
 export default function StudentTestsPage() {
   const navigate = useNavigate();
 
   // ── Tests state ──────────────────────────────────────────────────
-  const [allTests, setAllTests]   = useState([]);
-  const [myAttempts, setMyAttempts] = useState({});
-  const [loading, setLoading]     = useState(true);
+  const [allTests, setAllTests]   = useState(testsPageCache?.allTests || []);
+  const [myAttempts, setMyAttempts] = useState(testsPageCache?.myAttempts || {});
+  const [loading, setLoading]     = useState(!testsPageCache);
   const subjects = useAppCache(s => s.subjects);
 
   // ── Assignments state ─────────────────────────────────────────────
   const [activeTab, setActiveTab]         = useState('tests');
-  const [assignments, setAssignments]     = useState([]);
+  const [assignments, setAssignments]     = useState(testsPageCache?.assignments || []);
   const [assignLoading, setAssignLoading] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
 
   // Fetch tests on mount
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
+      if (!testsPageCache) setLoading(true);
       try {
         const [testsRes, historyRes] = await Promise.all([
           testApi.getTests(),
           testApi.getStudentTestHistory(),
         ]);
-        setAllTests(Array.isArray(testsRes) ? testsRes : []);
+        const testsData = Array.isArray(testsRes) ? testsRes : [];
+        setAllTests(testsData);
         const attemptsMap = {};
         (Array.isArray(historyRes) ? historyRes : []).forEach(a => {
           attemptsMap[a.test_id] = a;
         });
         setMyAttempts(attemptsMap);
+        
+        testsPageCache = { ...testsPageCache, allTests: testsData, myAttempts: attemptsMap };
       } catch (err) {
         console.error(err);
       } finally {
@@ -56,14 +61,24 @@ export default function StudentTestsPage() {
     fetchData();
   }, []);
 
-  // Fetch assignments lazily when Assignments tab is opened (always fresh)
+  // Fetch assignments lazily when Assignments tab is opened
   useEffect(() => {
-    if (activeTab !== 'assignments') return;
-    setAssignLoading(true);
-    assignmentApi.getAllMyAssignments()
-      .then(data => setAssignments(data?.assignments || []))
-      .catch(() => {})
-      .finally(() => setAssignLoading(false));
+    if (activeTab === 'assignments') {
+      const fetchAssignments = async () => {
+        if (!testsPageCache?.assignments) setAssignLoading(true);
+        try {
+          const data = await assignmentApi.getAllMyAssignments();
+          const list = data?.assignments || [];
+          setAssignments(list);
+          testsPageCache = { ...testsPageCache, assignments: list };
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setAssignLoading(false);
+        }
+      };
+      fetchAssignments();
+    }
   }, [activeTab]);
 
   // ── Test helpers ──────────────────────────────────────────────────

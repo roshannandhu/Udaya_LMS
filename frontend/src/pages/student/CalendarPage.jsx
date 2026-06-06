@@ -9,12 +9,17 @@ import { useAuthStore } from '../../lib/auth';
 import { apiClient, liveClassApi } from '../../lib/api';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 
+let calendarCache = {};
+
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  const cacheKey = format(startOfMonth(currentDate), 'yyyy-MM');
+  const [events, setEvents] = useState(calendarCache[cacheKey] || []);
+  const [loading, setLoading] = useState(!calendarCache[cacheKey]);
+  
   const [activeJoin, setActiveJoin] = useState(null);
   const [joiningId, setJoiningId] = useState(null);
   const { user } = useAuthStore();
@@ -46,7 +51,7 @@ export default function CalendarPage() {
   useEffect(() => {
     let isMounted = true;
     const fetchEvents = async () => {
-      setLoading(true);
+      if (!calendarCache[cacheKey]) setLoading(true);
       try {
         const start = startOfMonth(currentDate);
         const end = endOfMonth(currentDate);
@@ -57,6 +62,7 @@ export default function CalendarPage() {
 
         const data = await apiClient(`/student/calendar-events?start_date=${queryStart}&end_date=${queryEnd}`);
         if (isMounted) {
+          calendarCache[cacheKey] = data || [];
           setEvents(data || []);
         }
       } catch (err) {

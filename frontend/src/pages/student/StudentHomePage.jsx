@@ -9,19 +9,21 @@ import { useAppCache } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 
+let homeCache = null;
+
 export default function StudentHomePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  const [loading, setLoading] = useState(true);
-  const [tests, setTests] = useState([]);
-  const [myAttempts, setMyAttempts] = useState({});
-  const [videos, setVideos] = useState([]);
-  const [liveClasses, setLiveClasses] = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [broadcasts, setBroadcasts] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [recentNotes, setRecentNotes] = useState([]);
+  const [loading, setLoading] = useState(!homeCache);
+  const [tests, setTests] = useState(homeCache?.tests || []);
+  const [myAttempts, setMyAttempts] = useState(homeCache?.myAttempts || {});
+  const [videos, setVideos] = useState(homeCache?.videos || []);
+  const [liveClasses, setLiveClasses] = useState(homeCache?.liveClasses || []);
+  const [assignments, setAssignments] = useState(homeCache?.assignments || []);
+  const [broadcasts, setBroadcasts] = useState(homeCache?.broadcasts || []);
+  const [leaderboard, setLeaderboard] = useState(homeCache?.leaderboard || []);
+  const [recentNotes, setRecentNotes] = useState(homeCache?.recentNotes || []);
   const subjectsCache = useAppCache(s => s.subjects);
   const subjects = subjectsCache || [];
 
@@ -32,7 +34,7 @@ export default function StudentHomePage() {
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
+      if (!homeCache) setLoading(true);
       try {
         const standardId = user?.standard_id;
         const [testsData, history, vids, livesData, assignsData, broads, lb] = await Promise.all([
@@ -58,10 +60,23 @@ export default function StudentHomePage() {
         setLeaderboard(lb?.leaderboard || []);
 
         const activeVid = validVids.filter(v => v.progress_secs > 0 && !v.completed).slice(0, 1)[0] || validVids[0];
+        let fetchedNotes = [];
         if (activeVid?.class_id) {
           const notesData = await notesApi.getByClass(activeVid.class_id).catch(() => []);
-          setRecentNotes(Array.isArray(notesData) ? notesData.slice(0, 3) : []);
+          fetchedNotes = Array.isArray(notesData) ? notesData.slice(0, 3) : [];
+          setRecentNotes(fetchedNotes);
         }
+
+        homeCache = {
+          tests: Array.isArray(testsData) ? testsData : [],
+          myAttempts: attemptsMap,
+          videos: validVids,
+          liveClasses: Array.isArray(livesData) ? livesData : [],
+          assignments: Array.isArray(assignsData) ? assignsData : [],
+          broadcasts: (Array.isArray(broads) ? broads : []).filter(b => !b.deleted).reverse(),
+          leaderboard: lb?.leaderboard || [],
+          recentNotes: fetchedNotes
+        };
       } catch (err) {
         console.error(err);
       } finally {

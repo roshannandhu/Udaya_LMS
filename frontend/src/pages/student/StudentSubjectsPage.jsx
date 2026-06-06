@@ -9,15 +9,18 @@ import { Skeleton } from '../../components/ui';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { staggerChildren, fadeUp, springCard } from '../../lib/motion';
 
+let subjectsPageCache = null;
+
 export default function StudentSubjectsPage() {
   const navigate = useNavigate();
-  const [videoCounts, setVideoCounts] = useState({});
-  const [testCounts, setTestCounts] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [videoCounts, setVideoCounts] = useState(subjectsPageCache?.videoCounts || {});
+  const [testCounts, setTestCounts] = useState(subjectsPageCache?.testCounts || {});
+  const [loading, setLoading] = useState(!subjectsPageCache);
   const subjects = useAppCache(s => s.subjects);
 
   useEffect(() => {
     const load = async () => {
+      if (!subjectsPageCache) setLoading(true);
       try {
         const [vids, tests] = await Promise.all([
           apiClient('/videos'),
@@ -39,6 +42,8 @@ export default function StudentSubjectsPage() {
             tc[t.class_id] = (tc[t.class_id] || 0) + 1;
           });
         setTestCounts(tc);
+        
+        subjectsPageCache = { videoCounts: vc, testCounts: tc };
       } catch (err) {
         console.error(err);
       } finally {
