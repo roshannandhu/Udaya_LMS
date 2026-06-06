@@ -6,6 +6,7 @@ import TopNav from '../../components/shared/TopNav';
 
 function getActiveTab(path) {
   if (path === '/student' || path === '/student/') return 'home';
+  if (path.startsWith('/student/calendar'))     return 'calendar';
   if (path.startsWith('/student/subjects'))     return 'subjects';
   if (path.startsWith('/student/live-classes')) return 'live';
   if (path.startsWith('/student/broadcasts'))   return 'broadcasts';
@@ -38,6 +39,7 @@ export default function StudentLayout() {
   const setActive = (tab) => {
     const map = {
       home: '/student',
+      calendar: '/student/calendar',
       subjects: '/student/subjects',
       tests: '/student/tests',
       broadcasts: '/student/broadcasts',
