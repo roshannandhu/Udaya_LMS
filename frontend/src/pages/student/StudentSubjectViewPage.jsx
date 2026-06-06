@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin } from 'lucide-react';
+import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen } from 'lucide-react';
 import { Tag } from '../../components/ui';
 import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
@@ -20,6 +20,14 @@ function fmtDateTimeLC(iso) {
 }
 
 const TABS = ['Videos', 'Tests', 'Assignments', 'Live', 'Notes', 'Leaderboard'];
+
+const CARD_COLORS = [
+  { bg: 'bg-[#F8E1FB]', text: 'text-purple-950', badge: 'bg-white/50 text-purple-900' },
+  { bg: 'bg-[#EAF3EB]', text: 'text-green-950', badge: 'bg-white/50 text-green-900' },
+  { bg: 'bg-[#FFF6D8]', text: 'text-amber-950', badge: 'bg-white/50 text-amber-900' },
+  { bg: 'bg-[#E5F2FE]', text: 'text-blue-950', badge: 'bg-white/50 text-blue-900' },
+  { bg: 'bg-[#FFEBE5]', text: 'text-orange-950', badge: 'bg-white/50 text-orange-900' }
+];
 
 export default function StudentSubjectViewPage() {
   const { classId } = useParams();
@@ -276,62 +284,152 @@ export default function StudentSubjectViewPage() {
           {tab === 'Tests' && (() => {
             const now = new Date();
             const isOpen = (t) => {
-              if (t.status === 'active') return true;
+              if (t.status === 'completed') return false;
+              if (t.expires_at && new Date(t.expires_at) <= now) return false;
               if (t.status === 'scheduled') return !t.scheduled_for || new Date(t.scheduled_for) <= now;
-              return false;
+              return true;
             };
+
+            function fmtDate(d) {
+              if (!d) return 'Active';
+              return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            }
+
+            const available = tests.filter(t => isOpen(t) && !attempted.has(String(t.id)));
+            const upcoming  = tests.filter(t => t.status === 'scheduled' && t.scheduled_for && new Date(t.scheduled_for) > now && !attempted.has(String(t.id)));
+            const completed = tests.filter(t => attempted.has(String(t.id)));
+            const missed    = tests.filter(t => (t.status === 'completed' || (t.expires_at && new Date(t.expires_at) <= now)) && !attempted.has(String(t.id)));
+
+            const TestCard = ({ t, section, idx = 0 }) => {
+              const cls = subject;
+              const attempt = myAttempts[t.id];
+              const scorePct = attempt && t.total_marks
+                ? Math.round((attempt.score / t.total_marks) * 100)
+                : null;
+              const theme = CARD_COLORS[idx % CARD_COLORS.length];
+
+              return (
+                <motion.div variants={fadeUp} className={`rounded-[32px] ${theme.bg} p-5 flex flex-col hover:shadow-md transition-all hover:-translate-y-1`}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <h4 className={`font-bold text-[17px] leading-tight ${theme.text}`}>{t.title}</h4>
+                        {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">−{t.penalty}</span>}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/50 flex-wrap">
+                         <span className="bg-white/50 px-2 py-0.5 rounded-full">{cls?.emoji} {cls?.name || 'Subject'}</span>
+                         <span className="bg-white/50 px-2 py-0.5 rounded-full flex items-center gap-1"><Clock size={12}/>{t.duration_mins}m</span>
+                         <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.total_marks} marks</span>
+                      </div>
+                    </div>
+                    {section === 'available' && <span className="bg-amber-100 text-amber-800 text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0">Open</span>}
+                    {section === 'completed' && scorePct !== null && (
+                      <span className={`text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0 ${scorePct >= 75 ? 'bg-green-100 text-green-800' : scorePct >= 50 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>{scorePct}%</span>
+                    )}
+                    {section === 'missed' && <span className="bg-red-100 text-red-800 text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0">Missed</span>}
+                  </div>
+
+                  {section === 'available' && (
+                    <div className="mt-auto pt-3 flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-black/40 flex items-center gap-1">
+                        {t.expires_at ? `Closes ${fmtDate(t.expires_at)}` : (t.scheduled_for ? fmtDate(t.scheduled_for) : 'Active now')}
+                      </span>
+                      <button
+                        onClick={() => navigate(`/student/tests/${t.id}/take`)}
+                        className="px-5 py-2 bg-black text-white text-[13px] rounded-full font-bold hover:bg-neutral-800 transition-colors shadow-md">
+                        Start
+                      </button>
+                    </div>
+                  )}
+
+                  {section === 'completed' && attempt && (
+                    <div className="mt-auto pt-3">
+                      <div className="flex gap-2 text-[12px] mb-3 flex-wrap bg-white/40 p-2.5 rounded-2xl">
+                        <div className="flex-1 text-center border-r border-black/5 last:border-0"><div className="text-black/50 text-[10px] uppercase font-bold mb-0.5">Score</div><div className="font-bold text-black">{attempt.score}/{t.total_marks}</div></div>
+                        <div className="flex-1 text-center border-r border-black/5 last:border-0"><div className="text-black/50 text-[10px] uppercase font-bold mb-0.5">Correct</div><div className="font-bold text-green-700">{attempt.correct_count}</div></div>
+                        <div className="flex-1 text-center border-r border-black/5 last:border-0"><div className="text-black/50 text-[10px] uppercase font-bold mb-0.5">Wrong</div><div className="font-bold text-red-600">{attempt.wrong_count}</div></div>
+                        <div className="flex-1 text-center"><div className="text-black/50 text-[10px] uppercase font-bold mb-0.5">Pts</div><div className="font-bold text-amber-600 flex items-center justify-center gap-0.5"><Star size={10} fill="currentColor"/>{attempt.points_earned}</div></div>
+                      </div>
+                      <button
+                        onClick={() => navigate('/student/tests/review', {
+                          state: {
+                            source: 'tests-list',
+                            test_id: t.id,
+                            result: {
+                              test_id: t.id,
+                              testTitle: t.title,
+                              score: attempt.score,
+                              total_marks: t.total_marks,
+                              percentage: t.total_marks ? Math.round((attempt.score / t.total_marks) * 100) : 0,
+                              correct_count: attempt.correct_count,
+                              wrong_count: attempt.wrong_count,
+                              marks_deducted: attempt.marks_deducted,
+                              points_earned: attempt.points_earned,
+                              flagged: attempt.flagged,
+                            }
+                          }
+                        })}
+                        className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-full text-[13px] font-bold text-black bg-white shadow-sm hover:bg-neutral-50 transition-colors"
+                      >
+                        <BookOpen size={14} /> Review
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            };
+
+            const Section = ({ title, list, section, emptyMsg }) => (
+              <div className="mb-8 w-full">
+                <h3 className="text-[16px] font-bold text-neutral-800 mb-4">{title} <span className="text-neutral-400 font-semibold ml-1">({list.length})</span></h3>
+                {list.length === 0 ? (
+                  <div className="text-sm text-neutral-500 font-medium text-center py-10 bg-white rounded-[32px] shadow-sm w-full">{emptyMsg}</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                    {list.map((t, idx) => <TestCard key={t.id} t={t} section={section} idx={idx} />)}
+                  </div>
+                )}
+              </div>
+            );
+
             return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {tests.length === 0 && <p className="col-span-full text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm">No tests yet.</p>}
-                {tests.map((t) => {
-                  const done = attempted.has(t.id);
-                  const attempt = myAttempts[t.id];
-                  const scorePct = attempt && t.total_marks > 0 ? ((attempt.score / t.total_marks) * 100).toFixed(0) : '—';
-                  const open = isOpen(t);
-                  const isFutureScheduled = t.status === 'scheduled' && t.scheduled_for && new Date(t.scheduled_for) > now;
-                  return (
-                    <motion.div variants={fadeUp} key={t.id} className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                      <div className="absolute top-0 left-0 w-2 h-full bg-emerald-400 group-hover:bg-emerald-500 transition-colors"></div>
-                      
-                      <div className="pl-4">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
-                            <FileQuestion size={24} />
-                          </div>
-                          
-                          <div className="flex gap-2">
-                            {done && (
-                              <span className={`px-3 py-1 rounded-full text-xs font-extrabold shadow-sm ${Number(scorePct) >= 75 ? 'bg-emerald-100 text-emerald-700' : Number(scorePct) >= 50 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
-                                Score: {scorePct}%
-                              </span>
-                            )}
-                            {isFutureScheduled && !done && <span className="px-3 py-1 bg-neutral-100 text-neutral-500 text-xs font-bold rounded-full">Upcoming</span>}
-                            {t.status === 'completed' && !done && <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">Missed</span>}
-                          </div>
-                        </div>
-
-                        <h3 className="text-lg font-bold text-neutral-900 mb-1">{t.title}</h3>
-                        <p className="text-sm font-medium text-neutral-500 mb-6">
-                          {t.duration_mins} mins {t.negative_marking ? ` · −${t.penalty} penalty` : ''}
-                        </p>
-
-                        <div className="flex items-center justify-between">
-                          {isFutureScheduled ? (
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600">
-                              <CalendarClock size={14} /> Opens {new Date(t.scheduled_for).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          ) : <div />}
-
-                          {open && !done && (
-                            <button onClick={() => navigate(`/student/tests/${t.id}/take`)} className="px-6 py-2.5 bg-neutral-900 text-white text-sm font-bold uppercase tracking-wider rounded-xl hover:bg-neutral-800 transition-colors hover:scale-105 active:scale-95 shadow-md">
-                              Start Test
-                            </button>
-                          )}
+              <div className="flex flex-col w-full">
+                {tests.length === 0 ? (
+                  <div className="text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm w-full">No tests yet.</div>
+                ) : (
+                  <>
+                    <Section title="Available now" list={available} section="available" emptyMsg="No tests available right now." />
+                    
+                    {upcoming.length > 0 && (
+                      <div className="mb-8 w-full">
+                        <h3 className="text-[16px] font-bold text-neutral-800 mb-4">Upcoming <span className="text-neutral-400 font-semibold ml-1">({upcoming.length})</span></h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                          {upcoming.map((t, idx) => {
+                            const cls = subject;
+                            const theme = CARD_COLORS[idx % CARD_COLORS.length];
+                            return (
+                              <motion.div variants={fadeUp} key={t.id} className={`rounded-[32px] ${theme.bg} p-5 opacity-70`}>
+                                <div className="flex items-start justify-between gap-3 mb-2">
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className={`font-bold text-[17px] mb-1.5 ${theme.text}`}>{t.title}</h4>
+                                    <p className="text-[12px] font-medium text-black/50 bg-white/50 px-2 py-0.5 rounded-full inline-block">{cls?.emoji} {cls?.name || 'Subject'} · {t.duration_mins} min · {t.total_marks} marks</p>
+                                  </div>
+                                  <span className="bg-black/10 text-black/60 text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0">Upcoming</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[12px] font-bold text-amber-700 pt-3 border-t border-black/5 mt-3">
+                                  <CalendarClock size={14} /> Opens {fmtDate(t.scheduled_for)}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
                         </div>
                       </div>
-                    </motion.div>
-                  );
-                })}
+                    )}
+                    
+                    <Section title="Completed" list={completed} section="completed" emptyMsg="No tests completed yet." />
+                    <Section title="Missed" list={missed} section="missed" emptyMsg="You haven't missed any tests." />
+                  </>
+                )}
               </div>
             );
           })()}
