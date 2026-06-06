@@ -233,9 +233,22 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     const text = shareReportText(data, period);
     if (!text) return;
     if (navigator.share) {
-      try { await navigator.share({ title: `${data.student?.name || 'Student'} - Report Card`, text }); return; } catch (err) {}
+      try { 
+        await navigator.share({ title: `${data.student?.name || 'Student'} - Report Card`, text }); 
+        return; 
+      } catch (err) { 
+        console.error('Share dialog closed or failed', err); 
+        return; // Do not fallback to clipboard if share was cancelled
+      }
     }
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (err) { console.error('Copy fail', err); }
+    // Fallback if navigator.share is not supported
+    try { 
+      await navigator.clipboard.writeText(text); 
+      setCopied(true); 
+      setTimeout(() => setCopied(false), 2000); 
+    } catch (err) { 
+      console.error('Copy fail', err); 
+    }
   }, [data, period]);
 
   const student = data?.student || {}, subjects = data?.subjects || [], subjectRadar = data?.subject_radar || [];
@@ -348,16 +361,38 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const handleDownloadPDF = useCallback(async () => {
     if (!data) return;
     if (onDownloadPDF) { onDownloadPDF(data); return; }
-    const { default: jsPDF } = await import('jspdf'); await import('jspdf-autotable');
-    const doc = new jsPDF(); const s = student;
-    doc.setFontSize(20); doc.text('Student Report Card', 14, 20); doc.setFontSize(12);
-    doc.text(`Name: ${s.name}  |  Username: @${s.username}`, 14, 30);
-    doc.text(`Period: ${period.charAt(0).toUpperCase() + period.slice(1)}  |  Avg Score: ${s.avg_score || 0}%  |  Attendance: ${s.attendance_pct || 0}%  |  Rank: ${rank ? `${rank}/${totalStudents}` : 'N/A'}`, 14, 38);
-    if (subjectRadar.length > 0) {
-      doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
-      doc.autoTable({ startY: 56, head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']], body: subjectRadar.map(r => [`${r.emoji || ''} ${r.subject}`, r.test_count > 0 ? `${r.test_avg}%` : '—', r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—', r.att_total > 0 ? `${r.attendance_pct}%` : '—']), theme: 'striped', headStyles: { fillColor: [99, 102, 241] } });
+    try {
+      const jsPDFModule = await import('jspdf'); 
+      await import('jspdf-autotable');
+      const JsPDFConstructor = jsPDFModule.default || jsPDFModule.jsPDF;
+      const doc = new JsPDFConstructor(); 
+      const s = student || {};
+      const pText = period ? (period.charAt(0).toUpperCase() + period.slice(1)) : 'Overall';
+      
+      doc.setFontSize(20); doc.text('Student Report Card', 14, 20); doc.setFontSize(12);
+      doc.text(`Name: ${s.name || 'Unknown'}  |  Username: @${s.username || 'unknown'}`, 14, 30);
+      doc.text(`Period: ${pText}  |  Avg Score: ${Math.round(s.avg_score || 0)}%  |  Attendance: ${Math.round(s.attendance_pct || 0)}%  |  Rank: ${rank ? `${rank}/${totalStudents}` : 'N/A'}`, 14, 38);
+      
+      if (subjectRadar && subjectRadar.length > 0) {
+        doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
+        doc.autoTable({ 
+          startY: 56, 
+          head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']], 
+          body: subjectRadar.map(r => [
+            `${r.emoji || ''} ${r.subject}`, 
+            r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—', 
+            r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—', 
+            r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—'
+          ]), 
+          theme: 'striped', 
+          headStyles: { fillColor: [99, 102, 241] } 
+        });
+      }
+      doc.save(`${(s.name || 'Student').replace(/\s+/g, '_')}_Report_${pText}.pdf`);
+    } catch (e) {
+      console.error("Failed to generate PDF", e);
+      alert("Failed to generate PDF. Please ensure you have a stable connection.");
     }
-    doc.save(`${s.name}_Report_${period}.pdf`);
   }, [data, period, rank, totalStudents, subjectRadar, student, onDownloadPDF]);
 
   if (!data) return (
@@ -425,7 +460,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     <p className="text-3xl md:text-3xl font-black text-[#9A3B1C]">{rank ? `${rank}/${totalStudents}` : '—'}</p>
                     <p className="text-[10px] font-black text-[#9A3B1C]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Trophy size={10}/> Rank</p>
                   </div>
-                  <div className="bg-[#F4E8FF] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#DDB4FC]/50 hover:shadow-md transition-shadow">
+                  <div className="col-span-2 md:col-span-1 bg-[#F4E8FF] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#DDB4FC]/50 hover:shadow-md transition-shadow">
                     <p className="text-3xl md:text-3xl font-black text-[#7E22CE]">{liveStats.attendance_pct}%</p>
                     <p className="text-[10px] font-black text-[#7E22CE]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Radio size={10}/> Live Class</p>
                   </div>
@@ -453,7 +488,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                         {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
-                    <div className="flex-1 min-h-[180px] w-full">
+                    <div className="flex-1 min-h-[180px] w-full min-w-0">
                       {lineData.length === 0 ? (
                         <div className="flex items-center justify-center h-full text-xs font-bold text-neutral-400">No test data</div>
                       ) : (

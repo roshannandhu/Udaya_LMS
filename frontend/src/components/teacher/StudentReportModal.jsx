@@ -28,10 +28,12 @@ export default function StudentReportModal({ open, onClose, studentId }) {
 
   const handleDownloadPDF = useCallback(async (reportData) => {
     if (!reportData) return;
-    const { default: jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
-    const doc = new jsPDF();
-    const s = reportData.student;
+    try {
+      const jsPDFModule = await import('jspdf');
+      await import('jspdf-autotable');
+      const JsPDFConstructor = jsPDFModule.default || jsPDFModule.jsPDF;
+      const doc = new JsPDFConstructor();
+      const s = reportData.student || {};
     doc.setFontSize(20); doc.text('Student Report Card', 14, 20);
     doc.setFontSize(12);
     doc.text(`Name: ${s.name}  |  Username: @${s.username}`, 14, 30);
@@ -47,15 +49,20 @@ export default function StudentReportModal({ open, onClose, studentId }) {
         head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
         body: subjectRadar.map(r => [
           `${r.emoji || ''} ${r.subject}`,
-          r.test_count > 0 ? `${r.test_avg}%` : '—',
+          r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—',
           r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
-          r.att_total > 0 ? `${r.attendance_pct}%` : '—',
+          r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—',
         ]),
         theme: 'striped',
         headStyles: { fillColor: [99, 102, 241] },
       });
     }
-    doc.save(`${s.name}_Report_${period}.pdf`);
+    const safeName = (s.name || 'Student').replace(/\s+/g, '_');
+    doc.save(`${safeName}_Report_${period || 'overall'}.pdf`);
+    } catch (e) {
+      console.error("Failed to generate PDF", e);
+      alert("Failed to generate PDF. Please ensure you have a stable connection.");
+    }
   }, [period]);
 
   const [copied, setCopied] = useState(false);
@@ -73,7 +80,8 @@ export default function StudentReportModal({ open, onClose, studentId }) {
         });
         return;
       } catch (err) {
-        // User cancelled or share failed, fallback to copy
+        console.error('Share dialog closed or failed', err);
+        return; // Do not fallback to copy if share was cancelled
       }
     }
     
