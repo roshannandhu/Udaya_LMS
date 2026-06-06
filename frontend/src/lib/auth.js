@@ -12,10 +12,12 @@ const NAME_KEY    = 'tutoria_user_name';
 const generateDeviceFingerprint = () => {
   const stored = localStorage.getItem('tutoria_device_id');
   if (stored) return stored;
-  const fp = `${navigator.userAgent}-${screen.width}x${screen.height}-${new Date().getTimezoneOffset()}`;
-  const hash = btoa(fp).slice(0, 32);
-  localStorage.setItem('tutoria_device_id', hash);
-  return hash;
+  // Unique per browser install — a random token, NOT derived from device specs, so two
+  // identical phones never produce the same id (which would silently defeat single-device
+  // enforcement). Existing installs keep their stored id, so no one is logged out.
+  const id = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  localStorage.setItem('tutoria_device_id', id);
+  return id;
 };
 
 export const ROLES = {
@@ -180,8 +182,11 @@ export const useAuthStore = create((set, get) => ({
       if (!response.ok) return { allowed: true }; // fail open on network error
       const data = await response.json();
       if (!data.allowed) {
+        const message = 'You were logged out because your account was opened on another device.';
+        // Stash a reason so the login screen can explain what happened (cleared after shown).
+        try { localStorage.setItem('tutoria_logout_reason', message); } catch {}
         get().clearAuth();
-        return { allowed: false, message: 'This account is active on another device. You have been logged out.' };
+        return { allowed: false, message };
       }
       return { allowed: true };
     } catch {

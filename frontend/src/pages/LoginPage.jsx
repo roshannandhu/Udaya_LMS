@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [creds, setCreds] = useState({ email: '', phone: '', pwd: '' });
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { login, enforceSingleDevice } = useAuthStore();
@@ -25,6 +26,16 @@ export default function LoginPage() {
       .catch(() => {});
   }, [applyBranding]);
 
+  // If the student was auto-logged-out (account opened on another device), explain why.
+  useEffect(() => {
+    const reason = localStorage.getItem('tutoria_logout_reason');
+    if (reason) {
+      setNotice(reason);
+      setMode('student');
+      localStorage.removeItem('tutoria_logout_reason');
+    }
+  }, []);
+
   const handleSubmit = async () => {
     const identifier = mode === 'teacher' ? creds.email : creds.phone;
     if (!identifier.trim() || !creds.pwd.trim()) {
@@ -33,6 +44,7 @@ export default function LoginPage() {
     }
 
     setError('');
+    setNotice('');
     setLoading(true);
 
     try {
@@ -95,6 +107,13 @@ export default function LoginPage() {
         <div className="bg-white/80 backdrop-blur-2xl p-8 sm:p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] border-[3px] border-white">
           <h1 className="text-[26px] font-extrabold mb-1 text-neutral-900 tracking-tight">Welcome back</h1>
           <p className="text-[15px] text-neutral-500 mb-8 font-medium">Sign in to continue your journey</p>
+
+          {notice && (
+            <div className="flex items-start gap-2 p-4 mb-6 bg-[#E5F2FE]/70 border-2 border-white rounded-[20px] text-[13px] font-bold text-blue-900 shadow-sm animate-in slide-in-from-top-2">
+              <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-blue-600" />
+              <span>{notice}</span>
+            </div>
+          )}
 
           {/* Role Toggle */}
           <div className="flex p-1.5 bg-neutral-100/80 rounded-[24px] mb-8 shadow-inner">

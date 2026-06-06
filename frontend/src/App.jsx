@@ -147,10 +147,27 @@ function ProtectedStudentRoute({ children }) {
   const enforceSingleDevice = useAuthStore(s => s.enforceSingleDevice);
   const location = useLocation();
 
+  // Single-device enforcement (students only): check now, then keep checking so the
+  // OLD device logs itself out automatically once the student signs in elsewhere.
+  // Poll every 30s, and re-check the instant the tab/app regains focus for prompt logout.
+  // enforceSingleDevice() fails open on network errors and calls clearAuth() on mismatch,
+  // which flips `user` to null and the guard below redirects to /login.
   useEffect(() => {
-    if (user?.id && role === ROLES.STUDENT) {
-      enforceSingleDevice(user.id);
-    }
+    if (!(user?.id && role === ROLES.STUDENT)) return;
+
+    const check = () => enforceSingleDevice(user.id);
+    check();
+
+    const interval = setInterval(check, 30000);
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [user?.id, role, enforceSingleDevice]);
 
   if (isLoading) {
