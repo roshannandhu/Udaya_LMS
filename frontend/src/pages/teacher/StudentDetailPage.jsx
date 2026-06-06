@@ -246,6 +246,7 @@ export default function StudentDetailPage() {
             <div className="flex-1 min-w-0">
               <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Students / {standard?.name}</p>
               <h1 className="text-lg md:text-xl font-semibold truncate text-[#1A1A19]">{s.name}</h1>
+              {s.student_code && <p className="text-[11px] font-mono text-neutral-500 leading-none mt-0.5 truncate">{s.student_code}</p>}
             </div>
             {s.blocked && <Tag color="red" className="ml-2">Blocked</Tag>}
           </div>

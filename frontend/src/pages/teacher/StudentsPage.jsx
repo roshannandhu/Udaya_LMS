@@ -155,7 +155,10 @@ export default function StudentsPage() {
                       {std && <Tag color="gray">{std.emoji} {std.name}</Tag>}
                       {s.blocked && <Tag color="red">Blocked</Tag>}
                     </div>
-                    <p className="text-xs text-neutral-500 truncate">@{s.username}</p>
+                    <p className="text-xs text-neutral-500 truncate">
+                      {s.student_code && <><span className="font-mono text-neutral-600">{s.student_code}</span><span className="mx-1.5 text-neutral-300">·</span></>}
+                      @{s.username}
+                    </p>
                     {/* Mobile stats */}
                     <div className="flex md:hidden gap-4 text-xs mt-1 text-neutral-500">
                       <span>Score: {Math.round(s.avg_score || 0)}%</span>

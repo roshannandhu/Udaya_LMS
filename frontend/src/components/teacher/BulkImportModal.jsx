@@ -9,6 +9,9 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [data, setData] = useState(null);
+  // Students returned by the backend after a successful import — carries the
+  // server-generated Student ID (student_code) per student.
+  const [createdStudents, setCreatedStudents] = useState([]);
 
   const [progress, setProgress] = useState({ current: 0, total: 0, successes: 0, skipped: 0, errors: 0 });
 
@@ -118,6 +121,7 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
     
     try {
       const res = await apiClient('/students/bulk', { method: 'POST', body: JSON.stringify(payload) });
+      setCreatedStudents(Array.isArray(res.students) ? res.students : []);
       setProgress({ current: validStudents.length, total: validStudents.length, successes: res.created, skipped: res.skipped || 0, errors: res.errors });
       setStep('done');
     } catch (err) {
@@ -128,32 +132,44 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
   };
 
   const downloadCredentials = async () => {
-    if (!data) return;
     const XLSX = await import('xlsx');
-    const validStudents = data.students.filter(s => s.status !== 'error' && s.matched_standard_id);
-    
+
+    // Prefer the backend response (carries the generated Student ID). Fall back
+    // to the locally parsed rows if the server didn't return them (older backend).
+    const useServer = createdStudents.length > 0;
+    const rows = useServer
+      ? createdStudents.map(s => ({
+          student_code: s.student_code || '',
+          name: s.name || '',
+          username: s.username || '',
+          temp_password: s.temp_password || '',
+          standard: s.standard_name || '',
+          email: s.email || '',
+          phone: s.phone || '',
+        }))
+      : (data?.students || [])
+          .filter(s => s.status !== 'error' && s.matched_standard_id)
+          .map(s => ({
+            student_code: '',
+            name: s.raw_name || '',
+            username: s.generated_username || '',
+            temp_password: s.temp_password || '',
+            standard: s.matched_standard_name || s.raw_standard || '',
+            email: s.raw_email || '',
+            phone: s.raw_phone || '',
+          }));
+
     const wsData = [
-      ['Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Login URL']
+      ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Login URL'],
+      ...rows.map(r => [r.student_code, r.name, r.username, r.temp_password, r.standard, r.email, r.phone, 'https://tutoria.app/login']),
     ];
-    
-    validStudents.forEach(s => {
-      wsData.push([
-        s.raw_name, 
-        s.generated_username, 
-        s.temp_password, 
-        s.matched_standard_name || s.raw_standard, 
-        s.raw_email || '', 
-        s.raw_phone || '', 
-        'https://tutoria.app/login'
-      ]);
-    });
-    
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 25}];
-    
+    ws['!cols'] = [{wch: 16}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 25}];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Credentials");
-    
+
     XLSX.writeFile(wb, `Student_Credentials_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 

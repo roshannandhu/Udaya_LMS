@@ -791,7 +791,7 @@ def verify_token(authorization: Optional[str] = Header(None)):
 
         if role == "student" and service_supabase:
             try:
-                lookup = service_supabase.table("students").select("id, standard_id, name, username, avatar_url, points, avg_score, attendance_pct, phone, must_change_pwd").eq("id", user.id).single().execute()
+                lookup = service_supabase.table("students").select("id, standard_id, name, username, student_code, avatar_url, points, avg_score, attendance_pct, phone, must_change_pwd").eq("id", user.id).single().execute()
                 if lookup.data:
                     result["student_id"] = lookup.data["id"]
                     result["standard_id"] = lookup.data.get("standard_id")
@@ -799,6 +799,7 @@ def verify_token(authorization: Optional[str] = Header(None)):
                         result["name"] = lookup.data["name"]
                     if lookup.data.get("username"):
                         result["username"] = lookup.data["username"]
+                    result["student_code"] = lookup.data.get("student_code")
                     result["points"] = lookup.data.get("points", 0)
                     result["avg_score"] = lookup.data.get("avg_score", 0)
                     result["attendance_pct"] = lookup.data.get("attendance_pct")
@@ -835,9 +836,21 @@ def login(request: LoginRequest):
     email_to_use = identifier
 
     if "@" not in identifier:
-        # Phone number login — look up the student's email by phone
+        # No "@" → either a Student ID (e.g. UDAYA202510001) or a phone number.
         if not service_supabase:
-            raise HTTPException(status_code=503, detail="Phone login unavailable")
+            raise HTTPException(status_code=503, detail="Login unavailable")
+
+        # 1. Try Student ID first (codes start with letters, so pure-digit phone
+        #    inputs never match here). Stored codes are uppercase.
+        try:
+            code_lookup = service_supabase.table("students").select("email").eq("student_code", identifier.upper()).single().execute()
+            if code_lookup.data and code_lookup.data.get("email"):
+                email_to_use = code_lookup.data["email"]
+        except Exception:
+            pass
+
+    if "@" not in email_to_use:
+        # Still unresolved → fall back to phone number lookup
         try:
             digits_only = re.sub(r'\D', '', identifier)
             if len(digits_only) < 7:
@@ -1387,7 +1400,7 @@ def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)
         raise HTTPException(status_code=503, detail="Database not available")
 
     # Safe field list — never include any password column regardless of DB state
-    teacher_fields = "id, name, username, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
+    teacher_fields = "id, name, username, student_code, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
     # Students only see safe fields (no phone/email of other students)
     student_public_fields = "id, name, username, standard_id, points, attendance_pct, avg_score, avatar_url"
 
@@ -1419,7 +1432,7 @@ def get_student(student_id: str, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
     # Explicit safe field list — never include any password column regardless of DB state
-    safe_fields = "id, name, username, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
+    safe_fields = "id, name, username, student_code, email, phone, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, must_change_pwd, created_at"
     if user["role"] == "teacher":
         fields = safe_fields
     elif user.get("user_id") == student_id or user.get("student_id") == student_id:
@@ -1619,11 +1632,18 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
 
     # ── Student profile ──────────────────────────────────────────────
     student_res = service_supabase.table("students").select(
-        "id, name, username, email, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, created_at"
+        "id, name, username, student_code, email, avatar_url, standard_id, points, attendance_pct, avg_score, blocked, created_at"
     ).eq("id", student_id).single().execute()
     if not student_res.data:
         raise HTTPException(status_code=404, detail="Student not found")
     student = student_res.data
+
+    # Fetch last_active_at from student_sessions
+    try:
+        sess_res = service_supabase.table("student_sessions").select("last_active_at").eq("student_id", student_id).single().execute()
+        student["last_active_at"] = sess_res.data.get("last_active_at") if sess_res.data else None
+    except Exception:
+        student["last_active_at"] = None
 
     # ── Get all subjects for this standard ───────────────────────────
     std_id = student.get("standard_id")
@@ -1999,6 +2019,24 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
     except Exception as exc:
         print(f"Per-subject heatmap error (non-fatal): {exc}")
 
+    # ── Live Class Attendance ───────────────────────────────────────────────
+    live_classes_stats = {"total": 0, "attended": 0, "attendance_pct": 0}
+    try:
+        if subjects:
+            class_ids = [s["id"] for s in subjects]
+            lc_res = service_supabase.table("live_classes").select("id").in_("class_id", class_ids).in_("status", ["ended", "live"]).execute()
+            lcs = lc_res.data or []
+            live_classes_stats["total"] = len(lcs)
+            if lcs:
+                lc_ids = [lc["id"] for lc in lcs]
+                lca_res = service_supabase.table("live_class_attendance").select("attended").eq("student_id", student_id).in_("live_class_id", lc_ids).execute()
+                lca_rows = lca_res.data or []
+                attended = sum(1 for r in lca_rows if r.get("attended"))
+                live_classes_stats["attended"] = attended
+                live_classes_stats["attendance_pct"] = round((attended / len(lcs)) * 100, 1)
+    except Exception as exc:
+        print(f"Live class stats error (non-fatal): {exc}")
+
     return {
         "student": student,
         "period": period,
@@ -2019,11 +2057,93 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "total_students": total_students,
         "topic_mastery_pct": topic_mastery_pct,
         "subjects": subjects,
+        "live_classes_stats": live_classes_stats,
     }
 
 
 # /students/me/report removed — use /students/me/report/v2 instead
 # (literal 'me' path would be shadowed by /{student_id}/report in FastAPI's route order)
+
+
+# ─── STUDENT ID (human-readable code) GENERATION ───────────────────────────
+# Format (no separators): {INSTITUTION}{YYYY}{STD}{SEQ}  e.g. UDAYA202510001
+#   INSTITUTION = branding name, A-Z0-9 only, capped 8 chars (default "Udaya")
+#   YYYY        = admission year (year the student is created)
+#   STD         = standard number (zero-padded 2) or first 2 alnum chars
+#   SEQ         = running number per {INSTITUTION}{YYYY}{STD} prefix, 3+ digits
+# Fixed widths keep the glued code decodable; a partial unique index on
+# students.student_code is the hard uniqueness guarantee.
+
+def _institution_prefix() -> str:
+    name = (get_teacher_settings().get("lms_name") or "Udaya")
+    code = re.sub(r'[^A-Za-z0-9]', '', name).upper()
+    return code[:8] or "TUT"
+
+def _std_token(standard: dict) -> str:
+    src = ((standard or {}).get("short") or (standard or {}).get("name") or "")
+    digits = re.sub(r'\D', '', src)
+    if digits:
+        return digits.zfill(2)
+    alpha = re.sub(r'[^A-Za-z0-9]', '', src).upper()
+    return alpha[:2] or "00"
+
+def _max_seq_for_prefix(prefix: str) -> int:
+    try:
+        existing = service_supabase.table("students").select("student_code").ilike("student_code", f"{prefix}%").execute()
+    except Exception:
+        return 0
+    max_seq = 0
+    for row in (existing.data or []):
+        code = row.get("student_code") or ""
+        tail = code[len(prefix):]
+        if tail.isdigit():
+            max_seq = max(max_seq, int(tail))
+    return max_seq
+
+def generate_student_code(standard_id, year=None, seq_cache=None):
+    """Return a unique student code, or None when no standard can be resolved.
+    Pass a shared `seq_cache` dict across a batch (bulk import) to avoid
+    re-querying the max sequence — and to prevent in-batch collisions — for each row."""
+    if not standard_id or not service_supabase:
+        return None
+    try:
+        std = service_supabase.table("standards").select("name, short").eq("id", standard_id).single().execute()
+        standard = std.data or {}
+    except Exception:
+        standard = {}
+    yr = year or datetime.now().year
+    prefix = f"{_institution_prefix()}{yr}{_std_token(standard)}"
+    if seq_cache is not None and prefix in seq_cache:
+        seq = seq_cache[prefix] + 1
+    else:
+        seq = _max_seq_for_prefix(prefix) + 1
+    if seq_cache is not None:
+        seq_cache[prefix] = seq
+    return f"{prefix}{seq:03d}"
+
+def assign_student_code(student_db_id, standard_id, year=None, seq_cache=None):
+    """Generate + persist a student_code as a post-insert UPDATE (mirrors the
+    plain_password pattern). Resilient: if the column is missing or a rare unique
+    collision occurs, it retries with a fresh sequence, then gives up silently so
+    student creation is never blocked. Returns the code written, or None."""
+    if not standard_id or not service_supabase:
+        return None
+    for _ in range(3):
+        code = generate_student_code(standard_id, year=year, seq_cache=seq_cache)
+        if not code:
+            return None
+        try:
+            service_supabase.table("students").update({"student_code": code}).eq("id", student_db_id).execute()
+            return code
+        except Exception as e:
+            # On a unique-violation retry with a bumped sequence; bust the cache
+            # so the next attempt re-reads the true max from the DB.
+            if seq_cache is not None:
+                seq_cache.clear()
+            err = str(e).lower()
+            if not any(k in err for k in ["duplicate", "unique"]):
+                return None
+    return None
 
 
 @app.post("/api/admin/create-student")
@@ -2064,10 +2184,13 @@ def create_student_admin(request: CreateStudentRequest, user = Depends(verify_to
         except Exception:
             pass
 
+        student_code = assign_student_code(response.user.id, request.standard_id)
+
         return {
             "id": response.user.id,
             "email": auth_email,
             "username": request.username,
+            "student_code": student_code,
             "role": "student",
             "password": request.password
         }
@@ -2075,6 +2198,45 @@ def create_student_admin(request: CreateStudentRequest, user = Depends(verify_to
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/admin/backfill-student-codes")
+def backfill_student_codes(user = Depends(verify_token)):
+    """One-time: assign a student_code to every existing student that lacks one.
+    Idempotent — students that already have a code are skipped. Year is each
+    student's admission year (from created_at); sequence is per standard/year."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Limit to this teacher's students (those inside their standards)
+    standards = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
+    standard_ids = [s["id"] for s in (standards.data or [])]
+    if not standard_ids:
+        return {"updated": 0, "skipped": 0}
+
+    rows = service_supabase.table("students").select(
+        "id, standard_id, student_code, created_at"
+    ).in_("standard_id", standard_ids).order("created_at").execute()
+
+    seq_cache = {}
+    updated = skipped = 0
+    for s in (rows.data or []):
+        if s.get("student_code") or not s.get("standard_id"):
+            skipped += 1
+            continue
+        year = None
+        ca = s.get("created_at")
+        if ca:
+            try:
+                year = int(str(ca)[:4])
+            except Exception:
+                year = None
+        if assign_student_code(s["id"], s["standard_id"], year=year, seq_cache=seq_cache):
+            updated += 1
+        else:
+            skipped += 1
+    return {"updated": updated, "skipped": skipped}
 
 @app.patch("/api/students/me")
 def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_token)):
@@ -3112,12 +3274,15 @@ def approve_join_request(request_id: str, user = Depends(verify_token)):
                     "standard_id": invite_link.data["standard_id"],
                 }).execute()
 
+                student_code = assign_student_code(new_user.user.id, invite_link.data["standard_id"])
+
                 # Update request status
                 service_supabase.table("invite_requests").update({"status": "approved"}).eq("id", request_id).execute()
 
                 return {
                     "message": "Student approved",
                     "username": request.data["student_email"] or request.data["student_name"].lower().replace(" ", "."),
+                    "student_code": student_code,
                     "temp_password": temp_password
                 }
         except Exception as e:
@@ -4835,6 +5000,18 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
     success_count = 0
     error_count = 0
     skipped_count = 0
+    created = []                 # successful rows, with their generated student_code
+    seq_cache = {}              # shared per-prefix counter so codes don't collide in-batch
+
+    # Map standard_id → name so the credentials export can show a readable standard
+    std_name_map = {}
+    try:
+        std_ids = list({s.standard_id for s in req.students if s.standard_id})
+        if std_ids:
+            std_rows = service_supabase.table("standards").select("id, name").in_("id", std_ids).execute()
+            std_name_map = {r["id"]: r.get("name") for r in (std_rows.data or [])}
+    except Exception:
+        pass
 
     for s in req.students:
         auth_user_id = None
@@ -4870,6 +5047,18 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 "must_change_pwd": True
             }).execute()
 
+            # 3. Generate + persist the student code (post-insert, like single create)
+            student_code = assign_student_code(auth_user_id, s.standard_id, seq_cache=seq_cache)
+
+            created.append({
+                "name": s.name,
+                "username": s.username,
+                "student_code": student_code,
+                "email": s.email,
+                "phone": s.phone,
+                "standard_name": std_name_map.get(s.standard_id),
+                "temp_password": s.temp_password,
+            })
             success_count += 1
         except Exception as e:
             err_str = str(e).lower()
@@ -4900,7 +5089,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
     except Exception as e:
         print("Failed to insert audit log (table might not exist):", e)
 
-    return {"status": "success", "created": success_count, "skipped": skipped_count, "errors": error_count}
+    return {"status": "success", "created": success_count, "skipped": skipped_count, "errors": error_count, "students": created}
 
 
 # ─── Question Bank ───────────────────────────────────────────────────────────

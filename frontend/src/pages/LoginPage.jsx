@@ -132,12 +132,12 @@ export default function LoginPage() {
           <div className="space-y-5">
             {mode === 'student' && (
               <div>
-                <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email or phone number</label>
+                <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email, phone, or Student ID</label>
                 <input
                   value={creds.phone}
                   onChange={(e) => setCreds({ ...creds, phone: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                  placeholder="student@email.com or 9876543210"
+                  placeholder="Email, phone, or Student ID"
                   className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
                 />
               </div>

@@ -162,11 +162,19 @@ export default function StudentProfilePage() {
               <h1 className="text-2xl font-extrabold text-neutral-900 mb-1 leading-tight" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
                 {name}
               </h1>
-              <p className="text-sm font-bold uppercase tracking-widest text-neutral-400 mb-8">
+              <p className={`text-sm font-bold uppercase tracking-widest text-neutral-400 ${student?.student_code ? 'mb-3' : 'mb-8'}`}>
                 {student?.standard_name || 'Student'}
               </p>
 
-              <button 
+              {student?.student_code && (
+                <div className="mb-8 inline-flex flex-col items-center">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-1">Student ID</span>
+                  <span className="px-4 py-1.5 rounded-full bg-neutral-100 border border-neutral-200 font-mono text-sm font-bold text-neutral-800">{student.student_code}</span>
+                  <span className="text-[10px] text-neutral-400 mt-1.5">Use this to log in</span>
+                </div>
+              )}
+
+              <button
                 onClick={() => setEditOpen(true)}
                 className="w-full py-4 px-6 bg-neutral-50 hover:bg-neutral-100 text-neutral-800 font-bold rounded-2xl transition-colors border border-neutral-200 flex items-center justify-center gap-2"
               >

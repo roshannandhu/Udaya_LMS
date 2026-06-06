@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
     username TEXT UNIQUE NOT NULL,
+    student_code TEXT,            -- human-readable Student ID, e.g. UDAYA202510001 (auto-generated)
     email TEXT,
     phone TEXT,
     avatar_url TEXT,
@@ -42,6 +43,9 @@ CREATE TABLE IF NOT EXISTS students (
     plain_password TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- NOTE: the unique index on student_code lives in the migration block below, AFTER
+-- the ALTER that guarantees the column exists. (On an existing DB the CREATE TABLE
+-- above is a no-op, so the column is only added by that ALTER.)
 
 -- Single device enforcement
 CREATE TABLE IF NOT EXISTS student_sessions (
@@ -260,6 +264,10 @@ ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_url TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_type TEXT;
 ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
+
+-- ── Student ID (human-readable code) Migration ──────────────────────────────
+ALTER TABLE students ADD COLUMN IF NOT EXISTS student_code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_students_student_code ON students(student_code) WHERE student_code IS NOT NULL;
 
 -- ── Broadcast Scheduling Migration ──────────────────────────────────────────
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;

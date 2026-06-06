@@ -297,6 +297,9 @@ export const teacherApi = {
   getSettings: () => apiClient('/teacher/settings'),
   updateSettings: (data) => apiClient('/teacher/settings', { method: 'POST', body: JSON.stringify(data) }),
 
+  // One-time: assign Student IDs to existing students that don't have one yet
+  backfillStudentCodes: () => apiClient('/admin/backfill-student-codes', { method: 'POST' }),
+
   // Universal auto-thumbnail base image (teacher's face + blank space on one side)
   getThumbnail: () => apiClient('/teacher/thumbnail'),
   uploadThumbnail: async ({ file, textSide }) => {

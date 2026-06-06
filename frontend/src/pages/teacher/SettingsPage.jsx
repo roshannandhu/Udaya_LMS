@@ -116,6 +116,7 @@ export default function SettingsPage() {
   const [nameSaved, setNameSaved] = useState(false);
   const [pwdInput, setPwdInput] = useState(defaultStudentPassword || '');
   const [pwdSaved, setPwdSaved] = useState(false);
+  const [backfill, setBackfill] = useState({ loading: false, msg: '' });
   const [pinInput, setPinInput] = useState(terminationPin || '');
   const [pinSaved, setPinSaved] = useState(false);
 
@@ -227,6 +228,22 @@ export default function SettingsPage() {
     setDefaultStudentPassword(pwdInput.trim());
     setPwdSaved(true);
     setTimeout(() => setPwdSaved(false), 1500);
+  };
+
+  const handleBackfillCodes = async () => {
+    setBackfill({ loading: true, msg: '' });
+    try {
+      const res = await teacherApi.backfillStudentCodes();
+      const updated = res?.updated ?? 0;
+      setBackfill({
+        loading: false,
+        msg: updated > 0
+          ? `Generated IDs for ${updated} student${updated !== 1 ? 's' : ''}.`
+          : 'All students already have an ID.',
+      });
+    } catch (e) {
+      setBackfill({ loading: false, msg: e.message || 'Failed to generate IDs.' });
+    }
   };
 
   const handleSavePin = () => {
@@ -518,6 +535,20 @@ export default function SettingsPage() {
                 <CheckCircle2 size={11} /> Password is set — click the eye to reveal it
               </p>
             )}
+
+            {/* Student ID backfill — one-time for students created before this feature */}
+            <div className="mt-5 pt-4 border-t border-white/40">
+              <p className="text-sm font-medium mb-0.5">Student IDs</p>
+              <p className="text-xs text-neutral-500 mb-3">New students get an ID automatically. Run this once to generate IDs for students added earlier.</p>
+              <Btn variant="default" size="sm" onClick={handleBackfillCodes} disabled={backfill.loading}>
+                {backfill.loading ? <><Loader2 size={12} className="animate-spin mr-1" />Generating…</> : 'Generate IDs for existing students'}
+              </Btn>
+              {backfill.msg && (
+                <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
+                  <CheckCircle2 size={11} /> {backfill.msg}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

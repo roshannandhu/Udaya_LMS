@@ -62,11 +62,12 @@ function downloadCsv(header, rows, filename) {
 
 // ── full backup: every student, one sheet per standard ───────────────────────
 
-const FULL_HEADER = ['Name', 'Username', 'Email', 'Phone', 'Standard', 'Points', 'Attendance %', 'Avg Score', 'Joined'];
-const FULL_COLS = [{ wch: 22 }, { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
+const FULL_HEADER = ['Student ID', 'Name', 'Username', 'Email', 'Phone', 'Standard', 'Points', 'Attendance %', 'Avg Score', 'Joined'];
+const FULL_COLS = [{ wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
 
 function fullRow(s, standardName) {
   return [
+    s.student_code || '',
     s.name || '',
     s.username || '',
     s.email || '',
@@ -147,14 +148,14 @@ export async function exportStudentsBackup(students, standards, { filenamePrefix
  */
 export async function exportStandardBackup(standard, students) {
   const safeName = String(standard?.name || 'Standard').replace(/\s+/g, '_');
-  const header = ['Name', 'Email', 'Phone', 'Standard'];
-  const rows = (students || []).map((s) => [s.name || '', s.email || '', s.phone || '', standard?.name || '']);
+  const header = ['Student ID', 'Name', 'Email', 'Phone', 'Standard'];
+  const rows = (students || []).map((s) => [s.student_code || '', s.name || '', s.email || '', s.phone || '', standard?.name || '']);
   const filename = `${safeName}_Students_Backup`;
 
   try {
     const XLSX = await import('xlsx');
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    ws['!cols'] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Students');
     XLSX.writeFile(wb, `${filename}.xlsx`);

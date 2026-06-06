@@ -6,7 +6,7 @@ import {
 import {
   Trophy, TrendingUp, Calendar, Eye, Sparkles, ChevronDown, ChevronUp,
   Download, Target, BookOpen, Video, CheckCircle2, BarChart3,
-  ClipboardList, Star, Share2, Loader2, Play
+  ClipboardList, Star, Share2, Loader2, Play, Clock, AlertTriangle, Radio
 } from 'lucide-react';
 import { Avatar } from '../ui';
 import { aiApi } from '../../lib/api';
@@ -43,6 +43,15 @@ function getCurrentMonthId() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function timeAgo(dateStr) {
+  if (!dateStr) return 'Offline';
+  const diff = (new Date() - new Date(dateStr)) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
 function pct(n) { return `${Math.round(n || 0)}%`; }
 
 function sliceHeatmap(data, periodId) {
@@ -76,33 +85,30 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
   const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="bg-white rounded-[2rem] border border-black/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-5 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-[1rem] bg-neutral-100 flex items-center justify-center">
             <Icon size={18} className="text-neutral-500" />
           </div>
           <div>
-            <p className="text-[11px] font-extrabold text-neutral-400 uppercase tracking-widest">{title}</p>
+            <p className="text-[10px] font-extrabold text-neutral-400 uppercase tracking-widest">{title}</p>
             <p className="text-xl font-black text-neutral-900 leading-tight">{kpiValue}</p>
-            {kpiSub && <p className="text-[11px] font-bold text-neutral-400 mt-0.5">{kpiSub}</p>}
+            {kpiSub && <p className="text-[10px] font-bold text-neutral-400 mt-0.5">{kpiSub}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-xl border border-neutral-100">
-          <Calendar size={14} className="text-neutral-400" />
-          <select value={localPeriod} onChange={(e) => setLocalPeriod(e.target.value)} className="text-[13px] font-bold bg-transparent border-none outline-none cursor-pointer text-neutral-800">
-            {HEATMAP_PERIODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </div>
+        <select value={localPeriod} onChange={(e) => setLocalPeriod(e.target.value)} className="text-[11px] font-bold bg-neutral-50 px-2 py-1 rounded-lg border-none outline-none cursor-pointer text-neutral-600">
+          {HEATMAP_PERIODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
       </div>
       {weeks.length === 0 ? (
-        <div className="text-center py-8 text-sm font-bold text-neutral-400">No data for this period</div>
+        <div className="text-center py-6 text-xs font-bold text-neutral-400">No data for this period</div>
       ) : (
-        <div className="overflow-x-auto pb-1">
-          <div className="flex gap-1.5">
+        <div className="overflow-x-auto pb-1 scrollbar-hide">
+          <div className="flex gap-1.5 min-w-max">
             <div className="flex flex-col gap-1.5 mr-1 text-center">
               {DAY_LABELS.map((d, i) => (
-                <div key={i} className="h-6 w-4 flex items-center justify-center text-[10px] text-neutral-400 font-extrabold">{i % 2 === 1 ? d : ''}</div>
+                <div key={i} className="h-5 w-3 flex items-center justify-center text-[9px] text-neutral-400 font-extrabold">{i % 2 === 1 ? d : ''}</div>
               ))}
             </div>
             {weeks.map((week, wi) => (
@@ -111,7 +117,7 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
                   const entry = dateMap?.[day];
                   const inRange = day.startsWith(localPeriod);
                   return (
-                    <div key={di} title={entry ? labelFn(entry) : day} className={`w-6 h-6 rounded-md transition-all ${inRange && entry ? colorFn(entry) : inRange ? 'bg-neutral-100' : 'opacity-0'}`} />
+                    <div key={di} title={entry ? labelFn(entry) : day} className={`w-5 h-5 rounded-[4px] transition-all ${inRange && entry ? colorFn(entry) : inRange ? 'bg-neutral-100' : 'opacity-0'}`} />
                   );
                 })}
               </div>
@@ -119,11 +125,11 @@ function HeatmapBlock({ title, icon: Icon, kpiValue, kpiSub, data, colorFn, labe
           </div>
         </div>
       )}
-      <div className="border-t border-black/5 pt-4">
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
+      <div className="border-t border-black/5 pt-3">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
           {details.map((d, i) => (
-            <span key={i} className="flex items-center gap-1.5 text-[12px] font-extrabold text-neutral-500">
-              <span className={`w-3 h-3 rounded-full ${d.color}`} />
+            <span key={i} className="flex items-center gap-1.5 text-[11px] font-extrabold text-neutral-500">
+              <span className={`w-2.5 h-2.5 rounded-full ${d.color}`} />
               {d.label}: <strong className="text-neutral-900">{d.value}</strong>
             </span>
           ))}
@@ -148,7 +154,7 @@ function pointsToPath(pts) {
 }
 
 function CustomRadarChart({ data }) {
-  const cx = 135, cy = 135, r = 90, n = data.length || 1, levels = [0.2, 0.4, 0.6, 0.8, 1.0];
+  const cx = 135, cy = 135, r = 85, n = data.length || 1, levels = [0.2, 0.4, 0.6, 0.8, 1.0];
   const axisPoints = data.map((_, i) => {
     const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
     return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
@@ -184,7 +190,7 @@ function CustomRadarChart({ data }) {
           const lx = cx + (r + 18) * Math.cos(angle), ly = cy + (r + 18) * Math.sin(angle);
           const anchor = Math.abs(Math.cos(angle)) < 0.1 ? "middle" : Math.cos(angle) < 0 ? "end" : "start";
           let dy = 4; if (Math.sin(angle) < -0.9) dy = -5; else if (Math.sin(angle) > 0.9) dy = 10;
-          return <text key={i} x={lx} y={ly + dy} textAnchor={anchor} fontSize="11" className="fill-neutral-600 font-extrabold">{d.metric}</text>;
+          return <text key={i} x={lx} y={ly + dy} textAnchor={anchor} fontSize="10" className="fill-neutral-600 font-extrabold">{d.metric}</text>;
         })}
       </svg>
     </div>
@@ -214,6 +220,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const currentMonthId = useMemo(() => getCurrentMonthId(), []);
   const [attPeriod, setAttPeriod] = useState(currentMonthId);
   const [testPeriod, setTestPeriod] = useState(currentMonthId);
+  const [vidPeriod, setVidPeriod] = useState(currentMonthId);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState('');
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -235,8 +242,11 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const testTimeline = data?.test_timeline || [], topicMap = data?.topic_map || [];
   const attHeatmapRaw = data?.attendance_heatmap || [], vidHeatmapRaw = data?.video_heatmap || [], testHeatmapRaw = data?.test_heatmap || [];
   const assignStats = data?.assignment_stats || { total: 0, submitted: 0, graded: 0, avg_marks_pct: 0, total_points_from_assignments: 0 };
+  const assignScores = data?.assignment_scores || [];
+  const liveStats = data?.live_classes_stats || { total: 0, attended: 0, attendance_pct: 0 };
   
   const attData = heatmapSubject === 'all' ? attHeatmapRaw : (data?.attendance_heatmap_by_subject?.[heatmapSubject] || []);
+  const vidData = heatmapSubject === 'all' ? vidHeatmapRaw : (data?.video_heatmap_by_subject?.[heatmapSubject] || []);
   const testData = heatmapSubject === 'all' ? testHeatmapRaw : (data?.test_heatmap_by_subject?.[heatmapSubject] || []);
 
   const totalVids = subjectRadar.reduce((a, s) => a + (s.video_total || 0), 0);
@@ -281,10 +291,24 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     return { lineData: rows.map(r => { const e = { name: r.name }; uniqueSubjs.forEach(s => { e[s] = r._tests[s] ?? null; }); return e; }), subjectLines: uniqueSubjs.map((s, i) => ({ subject: s, color: SUBJECT_COLORS[i % SUBJECT_COLORS.length] })) };
   }, [data, selSubject, testTimeline, subjects]);
 
+  const breakdownRows = useMemo(() => {
+    if (!subjectRadar || subjectRadar.length === 0) return [];
+    return subjectRadar.map(r => ({
+      subject: r.subject, emoji: r.emoji,
+      testCount: r.test_count || 0, avgScore: Math.round(r.test_avg || 0),
+      videosDone: r.video_done || 0, videosTotal: r.video_total || 0,
+      attendance: Math.round(r.attendance_pct || 0),
+      status: r.test_count === 0 ? '—' : r.test_avg >= 75 ? 'Strong' : r.test_avg >= 50 ? 'OK' : 'Weak'
+    }));
+  }, [subjectRadar]);
+
+  const gradedAssignments = useMemo(() => assignScores.filter(s => s.status === 'Graded' || s.marks_obtained != null).map(s => ({ ...s, marks_obtained: Math.round(s.marks_obtained || 0) })), [assignScores]);
+
   const attSliced = sliceHeatmap(attData, attPeriod), attPresent = attSliced.reduce((a, d) => a + (d.present || 0), 0), attAbsent = attSliced.reduce((a, d) => a + (d.absent || 0), 0), attLate = attSliced.reduce((a, d) => a + (d.late || 0), 0), attTotal = attPresent + attAbsent + attLate;
   const attKpi = attTotal > 0 ? Math.round(((attPresent + attLate * 0.5) / attTotal) * 100) : 0;
   const testSliced = sliceHeatmap(testData, testPeriod), testsAttempted = testSliced.reduce((a, d) => a + (d.count || 0), 0), totalTestsAvail = data?.total_tests_in_standard || 0, testsMissed = Math.max(0, totalTestsAvail - testsAttempted);
   const testKpi = totalTestsAvail > 0 ? Math.round((testsAttempted / totalTestsAvail) * 100) : (testsAttempted > 0 ? 100 : 0);
+  const vidSliced = sliceHeatmap(vidData, vidPeriod), vidDays = vidSliced.filter(d => d.minutes > 0).length, vidMins = Math.round(vidSliced.reduce((a, d) => a + (d.minutes || 0), 0));
 
   const renderMarkdown = (text) => {
     if (!text || typeof text !== 'string') return null;
@@ -294,14 +318,14 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
       const trimmed = line.trim();
       if (trimmed === '') return <div key={i} className="h-2">{cursor}</div>;
       if (trimmed.match(/Focus of the Week|What's Going Well|What I Noticed|Recommended Actions|Next Level Goal|AI Mentor Message/i)) {
-        return <h3 key={i} className="font-black text-[#872792] text-[16px] mt-5 mb-2">{trimmed}{cursor}</h3>;
+        return <h3 key={i} className="font-black text-[#872792] text-[15px] mt-4 mb-2">{trimmed}{cursor}</h3>;
       }
       const parts = trimmed.split(/(\*\*.*?\*\*)/g).map((p, j) => p.startsWith('**') && p.endsWith('**') && p.length > 4 ? <strong key={j} className="font-extrabold text-[#872792]">{p.slice(2, -2)}</strong> : p);
       if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
         const innerParts = trimmed.substring(2).split(/(\*\*.*?\*\*)/g).map((p, j) => p.startsWith('**') && p.endsWith('**') && p.length > 4 ? <strong key={j} className="font-extrabold text-[#872792]">{p.slice(2, -2)}</strong> : p);
-        return <li key={i} className="ml-5 list-disc text-[#872792]/80 font-medium mb-1.5 leading-relaxed text-[15px]">{innerParts}{cursor}</li>;
+        return <li key={i} className="ml-5 list-disc text-[#872792]/80 font-medium mb-1.5 leading-relaxed text-[14px]">{innerParts}{cursor}</li>;
       }
-      return <p key={i} className="mb-2 text-[#872792]/80 font-medium leading-relaxed text-[15px]">{parts}{cursor}</p>;
+      return <p key={i} className="mb-2 text-[#872792]/80 font-medium leading-relaxed text-[14px]">{parts}{cursor}</p>;
     });
   };
 
@@ -352,130 +376,98 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           
           {/* HEADER (Dark Bento Style) */}
           {showHeader && (
-            <div className="bg-[#0f1014] text-white px-6 py-6 md:px-8 md:py-8 flex items-center justify-between gap-5 flex-wrap">
-              <div className="flex items-center gap-4">
+            <div className="bg-[#0f1014] text-white px-5 py-6 md:px-8 md:py-8 flex items-center justify-between gap-5 flex-wrap">
+              <div className="flex items-center gap-3 md:gap-4">
                 <Avatar name={student.name || 'S'} src={student.avatar_url} size="lg" />
                 <div>
-                  <h2 className="text-2xl font-black text-white tracking-wide leading-tight mb-1.5">{student.name || 'Student'}</h2>
-                  <div className="flex items-center gap-2">
-                    {student.standard_name && <span className="text-[12px] font-extrabold bg-white/20 text-white px-3 py-1 rounded-full">{student.standard_name}</span>}
-                    <span className="text-[12px] font-bold text-white/50 bg-white/5 px-3 py-1 rounded-full flex items-center gap-1.5"><Calendar size={14}/> {period.charAt(0).toUpperCase() + period.slice(1)} Report</span>
+                  <h2 className="text-xl md:text-2xl font-black text-white tracking-wide leading-tight mb-1">{student.name || 'Student'}</h2>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {student.standard_name && <span className="text-[11px] font-extrabold bg-white/20 text-white px-2.5 py-0.5 rounded-full">{student.standard_name}</span>}
+                    <span className="text-[11px] font-bold text-white/50 bg-white/5 px-2.5 py-0.5 rounded-full flex items-center gap-1"><Calendar size={12}/> {period.charAt(0).toUpperCase() + period.slice(1)} Report</span>
+                    <span className="text-[11px] font-bold text-[#84cc16] bg-[#84cc16]/10 px-2.5 py-0.5 rounded-full flex items-center gap-1"><Clock size={12}/> {timeAgo(student.last_active_at)}</span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <button onClick={handleShare} className="flex items-center gap-2 px-5 py-2.5 text-[14px] font-extrabold bg-white/10 hover:bg-white/20 text-white rounded-full transition-all border border-white/10">
-                  {copied ? <CheckCircle2 size={16} className="text-emerald-400" /> : <Share2 size={16} />}
+              <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto">
+                <button onClick={handleShare} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-extrabold bg-white/10 hover:bg-white/20 text-white rounded-full transition-all border border-white/10">
+                  {copied ? <CheckCircle2 size={15} className="text-emerald-400" /> : <Share2 size={15} />}
                   {copied ? 'Copied' : 'Share'}
                 </button>
-                <button onClick={handleDownloadPDF} className="flex items-center gap-2 px-5 py-2.5 text-[14px] font-extrabold bg-white hover:bg-neutral-100 text-[#0f1014] rounded-full shadow-sm transition-all">
-                  <Download size={16} /> Export PDF
+                <button onClick={handleDownloadPDF} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-extrabold bg-white hover:bg-neutral-100 text-[#0f1014] rounded-full shadow-sm transition-all">
+                  <Download size={15} /> Export PDF
                 </button>
               </div>
             </div>
           )}
 
           {/* GRID LAYOUT */}
-          <div className={`${showHeader ? 'p-5 md:p-8' : 'p-0'} `}>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          <div className={`${showHeader ? 'p-4 md:p-8' : 'p-0'} `}>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-8">
               
               {/* LEFT COLUMN: MAIN PERFORMANCE */}
-              <div className="lg:col-span-8 space-y-6 lg:space-y-8">
+              <div className="xl:col-span-8 space-y-5 md:space-y-8">
                 
                 {/* 1. TOP STATS (Mini Bento Cards) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-[#EAF3EB] rounded-[2rem] p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#C8E4CD]/50 hover:shadow-md transition-shadow">
-                    <p className="text-3xl font-black text-[#1D6A2B]">{pct(student.avg_score)}</p>
-                    <p className="text-[10px] font-black text-[#1D6A2B]/60 uppercase tracking-widest mt-2 flex items-center gap-1"><Target size={10}/> Avg Score</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+                  <div className="bg-[#EAF3EB] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#C8E4CD]/50 hover:shadow-md transition-shadow">
+                    <p className="text-3xl md:text-3xl font-black text-[#1D6A2B]">{pct(student.avg_score)}</p>
+                    <p className="text-[10px] font-black text-[#1D6A2B]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Target size={10}/> Avg Score</p>
                   </div>
-                  <div className="bg-[#E8F0FE] rounded-[2rem] p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#C6D8FB]/50 hover:shadow-md transition-shadow">
-                    <p className="text-3xl font-black text-[#1A56DB]">{pct(student.attendance_pct)}</p>
-                    <p className="text-[10px] font-black text-[#1A56DB]/60 uppercase tracking-widest mt-2 flex items-center gap-1"><Calendar size={10}/> Attendance</p>
+                  <div className="bg-[#E8F0FE] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#C6D8FB]/50 hover:shadow-md transition-shadow">
+                    <p className="text-3xl md:text-3xl font-black text-[#1A56DB]">{pct(student.attendance_pct)}</p>
+                    <p className="text-[10px] font-black text-[#1A56DB]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Calendar size={10}/> Attendance</p>
                   </div>
-                  <div className="bg-[#FFF6D8] rounded-[2rem] p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#FFEAB0]/50 hover:shadow-md transition-shadow">
-                    <p className="text-3xl font-black text-[#966B08]">{videoPct}%</p>
-                    <p className="text-[10px] font-black text-[#966B08]/60 uppercase tracking-widest mt-2 flex items-center gap-1"><Video size={10}/> Videos</p>
+                  <div className="bg-[#FFF6D8] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#FFEAB0]/50 hover:shadow-md transition-shadow">
+                    <p className="text-3xl md:text-3xl font-black text-[#966B08]">{videoPct}%</p>
+                    <p className="text-[10px] font-black text-[#966B08]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Video size={10}/> Videos</p>
                   </div>
-                  <div className="bg-[#FFEBE5] rounded-[2rem] p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#FFD0C2]/50 hover:shadow-md transition-shadow">
-                    <p className="text-3xl font-black text-[#9A3B1C]">{rank ? `${rank}/${totalStudents}` : '—'}</p>
-                    <p className="text-[10px] font-black text-[#9A3B1C]/60 uppercase tracking-widest mt-2 flex items-center gap-1"><Trophy size={10}/> Rank</p>
+                  <div className="bg-[#FFEBE5] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#FFD0C2]/50 hover:shadow-md transition-shadow">
+                    <p className="text-3xl md:text-3xl font-black text-[#9A3B1C]">{rank ? `${rank}/${totalStudents}` : '—'}</p>
+                    <p className="text-[10px] font-black text-[#9A3B1C]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Trophy size={10}/> Rank</p>
+                  </div>
+                  <div className="bg-[#F4E8FF] rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-5 flex flex-col justify-center items-center text-center shadow-sm border border-[#DDB4FC]/50 hover:shadow-md transition-shadow">
+                    <p className="text-3xl md:text-3xl font-black text-[#7E22CE]">{liveStats.attendance_pct}%</p>
+                    <p className="text-[10px] font-black text-[#7E22CE]/60 uppercase tracking-widest mt-1.5 flex items-center gap-1"><Radio size={10}/> Live Class</p>
                   </div>
                 </div>
 
-                {/* 2. AI MENTOR HERO CARD */}
-                <div className="relative bg-[#F8E1FB] rounded-[2.5rem] p-6 sm:p-8 overflow-hidden shadow-sm border border-[#F1C2F7] transition-all hover:shadow-md">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-[22px] sm:text-[26px] font-black text-[#872792] leading-tight flex items-center gap-2 mb-2">
-                        <Sparkles size={24} className="text-[#872792]" /> AI Mentor Analysis
-                      </h3>
-                      <p className="text-[13px] font-bold text-[#872792]/70">Personalized coaching and behavioral insights based on your learning patterns.</p>
-                    </div>
-                    <button onClick={handleAnalyzePerformance} className="flex-shrink-0 w-12 h-12 bg-white rounded-full flex items-center justify-center text-[#872792] shadow-sm hover:scale-105 transition-transform border border-[#F1C2F7]/50">
-                      {showSuggestions ? <ChevronUp size={20} strokeWidth={3} /> : <Play size={20} fill="currentColor" className="ml-1" />}
-                    </button>
-                  </div>
-                  
-                  {showSuggestions && (
-                    <div className="mt-8 pt-6 border-t border-[#872792]/10">
-                      {suggestionsLoading ? (
-                        <div className="flex items-center gap-3 text-[14px] font-extrabold text-[#872792]/60 animate-pulse">
-                          <Loader2 size={18} className="animate-spin" /> Analyzing your metrics...
-                        </div>
-                      ) : suggestionsError ? (
-                        <div className="p-4 bg-white/50 rounded-2xl text-[13px] font-bold text-red-600">
-                          {suggestionsError}
-                        </div>
-                      ) : suggestions ? (
-                        <div className="ai-content text-[#872792]">
-                          {renderMarkdown(suggestions)}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-[14px] font-extrabold text-[#872792]">
-                          <CheckCircle2 size={18} /> Looking sharp! Keep up the good work.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. VISUAL ANALYTICS (Charts) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6">
-                  <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 sm:p-8 flex flex-col items-center text-center">
-                    <h4 className="text-[17px] font-black text-neutral-900 mb-1">Skill Radar</h4>
-                    <p className="text-[11px] font-bold text-neutral-400 mb-6 uppercase tracking-widest">You vs Class Avg</p>
+                {/* 2. VISUAL ANALYTICS (Charts) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="bg-white rounded-[2rem] border border-black/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-5 md:p-6 flex flex-col items-center text-center">
+                    <h4 className="text-[16px] font-black text-neutral-900 mb-0.5">Skill Radar</h4>
+                    <p className="text-[10px] font-bold text-neutral-400 mb-4 uppercase tracking-widest">You vs Class Avg</p>
                     <div className="flex-1 w-full flex items-center justify-center">
                       <CustomRadarChart data={radarData} />
                     </div>
                   </div>
                   
-                  <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 sm:p-8 flex flex-col">
-                    <div className="flex justify-between items-start mb-6 gap-2">
+                  <div className="bg-white rounded-[2rem] border border-black/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-5 md:p-6 flex flex-col">
+                    <div className="flex justify-between items-start mb-4 gap-2">
                       <div>
-                        <h4 className="text-[17px] font-black text-neutral-900 mb-1">Score Trend</h4>
-                        <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">Topic Mastery</p>
+                        <h4 className="text-[16px] font-black text-neutral-900 mb-0.5">Score Trend</h4>
+                        <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Topic Mastery</p>
                       </div>
                       <select value={selSubject} onChange={e => setSelSubject(e.target.value)}
-                        className="text-[11px] font-extrabold bg-neutral-100 px-3 py-1.5 rounded-full border-none outline-none text-neutral-700 cursor-pointer">
+                        className="text-[10px] font-extrabold bg-neutral-100 px-2.5 py-1 rounded-full border-none outline-none text-neutral-700 cursor-pointer">
                         <option value="all">All Subjects</option>
                         {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
-                    <div className="flex-1 min-h-[220px] w-full">
+                    <div className="flex-1 min-h-[180px] w-full">
                       {lineData.length === 0 ? (
-                        <div className="flex items-center justify-center h-full text-sm font-bold text-neutral-400">No test data</div>
+                        <div className="flex items-center justify-center h-full text-xs font-bold text-neutral-400">No test data</div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={lineData} margin={{ top: 8, right: 0, left: -25, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                             <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} />
                             <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dx={-8} />
-                            <Tooltip contentStyle={{ borderRadius: 16, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 11, fontWeight: 'bold' }} formatter={(v, name) => [v != null ? `${v}%` : 'N/A', name]} />
+                            <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 11, fontWeight: 'bold' }} formatter={(v, name) => [v != null ? `${v}%` : 'N/A', name]} labelFormatter={(label, entries) => entries.length > 0 && entries[0].payload.flagged ? `⚠️ Flagged: ${label}` : label} />
                             <ReferenceLine y={60} stroke="#fca5a5" strokeDasharray="4 3" strokeWidth={1} />
                             {selSubject === 'all' ? (
-                              subjectLines.map(sl => <Line key={sl.subject} type="monotone" dataKey={sl.subject} name={sl.subject} stroke={sl.color} strokeWidth={3} connectNulls={false} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5, strokeWidth: 0 }} />)
+                              subjectLines.map(sl => <Line key={sl.subject} type="monotone" dataKey={sl.subject} name={sl.subject} stroke={sl.color} strokeWidth={2.5} connectNulls={false} dot={props => { const { cx, cy, payload } = props; return payload.flagged ? <svg x={cx-6} y={cy-6} width="12" height="12"><path d="M6 1L1 11h10L6 1z" fill="#ef4444"/><circle cx="6" cy="7" r="1" fill="#fff"/><circle cx="6" cy="9" r="0.5" fill="#fff"/></svg> : <circle cx={cx} cy={cy} r={2} strokeWidth={2} fill="#fff" stroke={sl.color}/>; }} activeDot={{ r: 4, strokeWidth: 0 }} />)
                             ) : (
-                              <Line type="monotone" dataKey="score" name="Score %" stroke="#1A56DB" strokeWidth={3} dot={props => { const { cx, cy, payload } = props; return <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={payload?.low ? 5 : 4} fill={payload?.low ? '#ef4444' : '#1A56DB'} stroke="#fff" strokeWidth={2} />; }} activeDot={{ r: 7, strokeWidth: 0 }} />
+                              <Line type="monotone" dataKey="score" name="Score %" stroke="#1A56DB" strokeWidth={3} dot={props => { const { cx, cy, payload } = props; return payload.flagged ? <svg x={cx-7} y={cy-7} width="14" height="14"><path d="M7 1L1 13h12L7 1z" fill="#ef4444"/><circle cx="7" cy="8" r="1.5" fill="#fff"/><circle cx="7" cy="11" r="1" fill="#fff"/></svg> : <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={payload?.low ? 4 : 3} fill={payload?.low ? '#ef4444' : '#1A56DB'} stroke="#fff" strokeWidth={2} />; }} activeDot={{ r: 6, strokeWidth: 0 }} />
                             )}
                           </LineChart>
                         </ResponsiveContainer>
@@ -484,7 +476,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                   </div>
                 </div>
 
-                {/* 4. ACTIVITY CALENDARS (Heatmaps) */}
+                {/* 3. ACTIVITY CALENDARS (Heatmaps - Restored Video) */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-black text-neutral-900 tracking-tight">Activity Calendars</h3>
@@ -496,51 +488,94 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                       </select>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6">
-                    <HeatmapBlock title="Attendance" icon={Calendar} kpiValue={`${attKpi}%`} kpiSub={`${attPresent} present · ${attAbsent} absent`} data={attSliced}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <HeatmapBlock title="Attendance" icon={Calendar} kpiValue={`${attKpi}%`} kpiSub={`${attPresent} present`} data={attSliced}
                       colorFn={d => { if (!d || !d.total || d.total === 0) return 'bg-neutral-100'; const ratio = (d.present + (d.late || 0) * 0.5) / d.total; return ratio >= 0.9 ? 'bg-[#1D6A2B]' : ratio >= 0.5 ? 'bg-amber-400' : 'bg-red-500'; }}
                       labelFn={d => `Present: ${d.present}, Absent: ${d.absent}`}
                       details={[{ label: 'Present', value: attPresent, color: 'bg-[#1D6A2B]' }, { label: 'Absent', value: attAbsent, color: 'bg-red-500' }]}
                       localPeriod={attPeriod} setLocalPeriod={setAttPeriod}
                     />
-                    <HeatmapBlock title="Test Participation" icon={Target} kpiValue={`${testKpi}%`} kpiSub={`${testsAttempted} tests taken`} data={testSliced}
+                    <HeatmapBlock title="Tests" icon={Target} kpiValue={`${testKpi}%`} kpiSub={`${testsAttempted} taken`} data={testSliced}
                       colorFn={d => d && d.count > 0 ? 'bg-[#1A56DB]' : 'bg-neutral-100'} labelFn={d => `${d.count} tests taken`}
-                      details={[{ label: 'Attempted', value: testsAttempted, color: 'bg-[#1A56DB]' }, { label: 'Missed', value: testsMissed, color: 'bg-rose-500' }]}
+                      details={[{ label: 'Attempted', value: testsAttempted, color: 'bg-[#1A56DB]' }]}
                       localPeriod={testPeriod} setLocalPeriod={setTestPeriod}
                     />
+                    <HeatmapBlock title="Videos" icon={Video} kpiValue={`${videoPct}%`} kpiSub={`${vidDays} active days`} data={vidSliced}
+                      colorFn={d => { const m = d?.minutes || 0; if (m === 0) return 'bg-neutral-100'; if (m < 15) return 'bg-indigo-200'; if (m < 30) return 'bg-indigo-400'; return 'bg-indigo-600'; }}
+                      labelFn={d => `${Math.round(d.minutes || 0)} mins`}
+                      details={[{ label: 'Active Days', value: vidDays, color: 'bg-indigo-400' }]}
+                      localPeriod={vidPeriod} setLocalPeriod={setVidPeriod}
+                    />
                   </div>
+                </div>
+
+                {/* 4. AI MENTOR (Moved to Bottom) */}
+                <div className="relative bg-[#F8E1FB] rounded-[2rem] p-5 sm:p-6 overflow-hidden shadow-sm border border-[#F1C2F7] transition-all hover:shadow-md">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-[20px] font-black text-[#872792] leading-tight flex items-center gap-2 mb-1">
+                        <Sparkles size={20} className="text-[#872792]" /> AI Mentor Analysis
+                      </h3>
+                      <p className="text-[12px] font-bold text-[#872792]/70 leading-snug">Personalized coaching and behavioral insights based on your learning patterns.</p>
+                    </div>
+                    <button onClick={handleAnalyzePerformance} className="flex-shrink-0 w-10 h-10 bg-white rounded-full flex items-center justify-center text-[#872792] shadow-sm hover:scale-105 transition-transform border border-[#F1C2F7]/50">
+                      {showSuggestions ? <ChevronUp size={18} strokeWidth={3} /> : <Play size={16} fill="currentColor" className="ml-0.5" />}
+                    </button>
+                  </div>
+                  
+                  {showSuggestions && (
+                    <div className="mt-5 pt-4 border-t border-[#872792]/10">
+                      {suggestionsLoading ? (
+                        <div className="flex items-center gap-2 text-[13px] font-extrabold text-[#872792]/60 animate-pulse">
+                          <Loader2 size={16} className="animate-spin" /> Analyzing your metrics...
+                        </div>
+                      ) : suggestionsError ? (
+                        <div className="p-3 bg-white/50 rounded-xl text-[12px] font-bold text-red-600">
+                          {suggestionsError}
+                        </div>
+                      ) : suggestions ? (
+                        <div className="ai-content text-[#872792]">
+                          {renderMarkdown(suggestions)}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-[13px] font-extrabold text-[#872792]">
+                          <CheckCircle2 size={16} /> Looking sharp! Keep up the good work.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
               </div>
 
 
               {/* RIGHT COLUMN: SIDEBAR (Focus Areas & Assignments) */}
-              <div className="lg:col-span-4 space-y-6 lg:space-y-8">
+              <div className="xl:col-span-4 space-y-6 md:space-y-8">
                 
                 {/* FOCUS AREAS (Weakest Topics rendered as Bento Cards) */}
                 <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600"><Target size={16} strokeWidth={2.5}/></div>
-                    <h3 className="text-[19px] font-black text-neutral-900 tracking-tight">Focus Areas</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600"><Target size={14} strokeWidth={2.5}/></div>
+                    <h3 className="text-[17px] font-black text-neutral-900 tracking-tight">Focus Areas</h3>
                   </div>
                   {weakestTopics.length === 0 ? (
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 p-8 text-center text-neutral-400 font-bold shadow-sm">No weak topics identified yet. Great job!</div>
+                    <div className="bg-white rounded-[2rem] border border-black/5 p-6 text-center text-neutral-400 text-sm font-bold shadow-sm">No weak topics identified yet. Great job!</div>
                   ) : (
-                    <div className="space-y-3 lg:space-y-4">
+                    <div className="space-y-3">
                       {weakestTopics.slice(0, 5).map((topic, i) => {
                         const theme = CARD_COLORS[i % CARD_COLORS.length];
                         return (
-                          <div key={i} className={`${theme.bg} rounded-[2rem] p-5 shadow-sm hover:shadow-md transition-shadow border border-black/5 flex flex-col gap-3`}>
+                          <div key={i} className={`${theme.bg} rounded-[1.5rem] p-4 shadow-sm hover:shadow-md transition-shadow border border-black/5 flex flex-col gap-2`}>
                             <div>
-                              <p className={`text-[10px] font-black uppercase tracking-widest ${theme.text} opacity-60 mb-0.5`}>{topic.subject}</p>
-                              <p className={`text-[15px] font-black leading-tight ${theme.text}`}>{topic.topic}</p>
+                              <p className={`text-[9px] font-black uppercase tracking-widest ${theme.text} opacity-60 mb-0.5`}>{topic.subject}</p>
+                              <p className={`text-[14px] font-black leading-tight ${theme.text}`}>{topic.topic}</p>
                             </div>
-                            <div className="flex items-center gap-2 mt-auto">
-                               <span className={`bg-white/60 px-3 py-1.5 rounded-full text-[11px] font-black shadow-sm ${theme.text}`}>{Math.round(topic.score)}% Score</span>
+                            <div className="flex items-center gap-2 mt-auto pt-1">
+                               <span className={`bg-white/60 px-2.5 py-1 rounded-full text-[10px] font-black shadow-sm ${theme.text}`}>{Math.round(topic.score)}% Score</span>
                                {topic.videoStatus === 'Watched' ? (
-                                 <span className="bg-emerald-100/80 text-emerald-700 px-3 py-1.5 rounded-full text-[11px] font-black shadow-sm">Watched</span>
+                                 <span className="bg-emerald-100/80 text-emerald-700 px-2.5 py-1 rounded-full text-[10px] font-black shadow-sm">Watched</span>
                                ) : (
-                                 <span className="bg-red-100/80 text-red-700 px-3 py-1.5 rounded-full text-[11px] font-black shadow-sm">Not Watched</span>
+                                 <span className="bg-red-100/80 text-red-700 px-2.5 py-1 rounded-full text-[10px] font-black shadow-sm">Not Watched</span>
                                )}
                             </div>
                           </div>
@@ -550,36 +585,57 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                   )}
                 </div>
 
-                {/* ASSIGNMENTS OVERVIEW */}
+                {/* ASSIGNMENTS OVERVIEW (Restored Bar Chart) */}
                 {assignStats.total > 0 && (
                   <div>
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600"><ClipboardList size={16} strokeWidth={2.5}/></div>
-                      <h3 className="text-[19px] font-black text-neutral-900 tracking-tight">Assignments</h3>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><ClipboardList size={14} strokeWidth={2.5}/></div>
+                      <h3 className="text-[17px] font-black text-neutral-900 tracking-tight">Assignments</h3>
                     </div>
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 space-y-6">
+                    <div className="bg-white rounded-[2rem] border border-black/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-5 space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Submitted</p>
-                          <p className="text-2xl font-black text-neutral-900">{assignStats.submitted}<span className="text-xs text-neutral-400">/{assignStats.total}</span></p>
+                          <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Submitted</p>
+                          <p className="text-xl font-black text-neutral-900">{assignStats.submitted}<span className="text-xs text-neutral-400">/{assignStats.total}</span></p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Avg Score</p>
-                          <p className="text-2xl font-black text-neutral-900">{assignStats.avg_marks_pct}%</p>
+                          <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Avg Score</p>
+                          <p className="text-xl font-black text-neutral-900">{assignStats.avg_marks_pct}%</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Points</p>
+                          <p className="text-xl font-black text-[#872792]">+{assignStats.total_points_from_assignments}</p>
                         </div>
                       </div>
                       
+                      {/* Restored Bar Chart */}
+                      {gradedAssignments.length > 0 && (
+                        <div className="pt-3 border-t border-black/5">
+                          <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-3">Scores</p>
+                          <ResponsiveContainer width="100%" height={120}>
+                            <BarChart data={gradedAssignments} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                              <XAxis dataKey="assignment_title" tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} tickFormatter={t => t.length > 8 ? t.slice(0, 8) + '…' : t} axisLine={false} tickLine={false} />
+                              <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold' }} cursor={{fill: '#f3f4f6'}} />
+                              <Bar dataKey="marks_obtained" radius={[3, 3, 0, 0]}>
+                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? '#1A56DB' : '#ef4444'} />)}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+
                       {subjectRadar.filter(s => (s.assignment_total || 0) > 0).length > 0 && (
-                        <div className="space-y-4 pt-4 border-t border-black/5">
+                        <div className="space-y-3 pt-3 border-t border-black/5">
                           {subjectRadar.filter(s => (s.assignment_total || 0) > 0).map(s => {
                             const pct = Math.round(((s.assignment_submitted || 0) / (s.assignment_total || 1)) * 100);
                             return (
                               <div key={s.subject_id}>
-                                <div className="flex justify-between text-[11px] font-black mb-1.5">
+                                <div className="flex justify-between text-[10px] font-black mb-1.5">
                                   <span className="text-neutral-700">{s.emoji} {s.subject}</span>
                                   <span className="text-neutral-400">{s.assignment_submitted}/{s.assignment_total}</span>
                                 </div>
-                                <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                                <div className="h-1 bg-neutral-100 rounded-full overflow-hidden">
                                   <div className="h-full bg-[#1A56DB] rounded-full transition-all" style={{ width: `${pct}%` }} />
                                 </div>
                               </div>
@@ -592,6 +648,60 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                 )}
 
               </div>
+
+              {/* DETAILED SUBJECT BREAKDOWN TABLE (Restored at the bottom) */}
+              {breakdownRows.length > 0 && (
+                <div className="xl:col-span-12 mt-2 md:mt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600"><BookOpen size={14} strokeWidth={2.5}/></div>
+                    <h3 className="text-[17px] font-black text-neutral-900 tracking-tight">Detailed Breakdown</h3>
+                  </div>
+                  <div className="bg-white rounded-[2rem] border border-black/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden">
+                    <div className="overflow-x-auto scrollbar-hide">
+                      <table className="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                          <tr className="bg-neutral-50 border-b border-black/5">
+                            <th className="px-5 py-3.5 text-[10px] font-black text-neutral-400 uppercase tracking-widest">Subject</th>
+                            <th className="px-5 py-3.5 text-[10px] font-black text-neutral-400 uppercase tracking-widest text-center">Tests</th>
+                            <th className="px-5 py-3.5 text-[10px] font-black text-neutral-400 uppercase tracking-widest text-center">Avg Score</th>
+                            <th className="px-5 py-3.5 text-[10px] font-black text-neutral-400 uppercase tracking-widest text-center">Videos</th>
+                            <th className="px-5 py-3.5 text-[10px] font-black text-neutral-400 uppercase tracking-widest text-center">Attendance</th>
+                            <th className="px-5 py-3.5 text-[10px] font-black text-neutral-400 uppercase tracking-widest text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-black/5">
+                          {breakdownRows.map((row, i) => (
+                            <tr key={i} className="hover:bg-neutral-50/50 transition-colors">
+                              <td className="px-5 py-4 text-[13px] font-black text-neutral-800">
+                                <span className="mr-2 text-base">{row.emoji}</span>{row.subject}
+                              </td>
+                              <td className="px-5 py-4 text-[13px] font-bold text-neutral-500 text-center">{row.testCount}</td>
+                              <td className="px-5 py-4 text-center">
+                                <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-black shadow-sm ${row.testCount === 0 ? 'bg-neutral-100 text-neutral-400' : row.avgScore >= 75 ? 'bg-emerald-100/80 text-emerald-700' : row.avgScore >= 50 ? 'bg-amber-100/80 text-amber-700' : 'bg-red-100/80 text-red-700'}`}>
+                                  {row.testCount > 0 ? `${row.avgScore}%` : '—'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-[13px] font-bold text-neutral-500 text-center">
+                                {row.videosTotal > 0 ? `${row.videosDone}/${row.videosTotal}` : '—'}
+                              </td>
+                              <td className="px-5 py-4 text-center">
+                                <span className={`text-[12px] font-black ${row.attendance >= 75 ? 'text-[#1D6A2B]' : row.attendance > 0 ? 'text-red-500' : 'text-neutral-400'}`}>
+                                  {row.attendance > 0 ? `${row.attendance}%` : '—'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-center">
+                                <span className={`text-[10px] font-black uppercase tracking-widest ${row.status === 'Strong' ? 'text-emerald-600' : row.status === 'OK' ? 'text-amber-600' : row.status === '—' ? 'text-neutral-400' : 'text-red-500'}`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             </div>
           </div>
