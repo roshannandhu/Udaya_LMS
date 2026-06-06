@@ -1178,11 +1178,17 @@ def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(ve
     return {"message": "Standard updated"}
 
 @app.delete("/api/standards/{standard_id}")
-async def delete_standard(standard_id: str, user = Depends(verify_token)):
+async def delete_standard(standard_id: str, pin: Optional[str] = None, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
+
+    # Termination PIN gate — when a PIN is configured it must match. This makes the
+    # destructive delete safe even if the client-side check is bypassed.
+    required_pin = (get_teacher_settings().get("termination_pin") or "").strip()
+    if required_pin and (pin or "").strip() != required_pin:
+        raise HTTPException(status_code=403, detail="Incorrect termination PIN")
 
     # Ownership check — also accept standards where teacher_id is NULL (created via DB/migration)
     existing = service_supabase.table("standards").select("teacher_id").eq("id", standard_id).single().execute()
@@ -6072,6 +6078,22 @@ def save_teacher_settings(data: dict):
 class TeacherSettingsInput(BaseModel):
     ai_provider: Optional[str] = None
     ai_api_key: Optional[str] = None
+    # Branding
+    lms_name: Optional[str] = None
+    lms_logo: Optional[str] = None  # base64 data URL or "" to clear
+    # Student defaults
+    default_student_password: Optional[str] = None
+    # Security
+    termination_pin: Optional[str] = None
+    security_single_device: Optional[bool] = None
+    security_auto_logout: Optional[bool] = None
+    # Notifications
+    notif_test_submission: Optional[bool] = None
+    notif_new_student: Optional[bool] = None
+    notif_broadcast_reply: Optional[bool] = None
+    notif_weekly_report: Optional[bool] = None
+    # Student portal
+    students_can_view_report: Optional[bool] = None
 
 @app.get("/api/teacher/settings")
 def get_settings(user: dict = Depends(get_current_user)):
@@ -6084,12 +6106,22 @@ def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Not authorized")
     settings = get_teacher_settings()
-    if data.ai_provider is not None:
-        settings["ai_provider"] = data.ai_provider
-    if data.ai_api_key is not None:
-        settings["ai_api_key"] = data.ai_api_key
+    # Persist only the fields the client actually sent. exclude_unset lets the
+    # caller clear a value by sending "" (omitted fields are left untouched).
+    for key, value in data.model_dump(exclude_unset=True).items():
+        settings[key] = value
     save_teacher_settings(settings)
     return {"success": True}
+
+@app.get("/api/branding")
+def get_branding():
+    """Public — login page reads this so the logo/name show on any device,
+    before the user has authenticated."""
+    settings = get_teacher_settings()
+    return {
+        "lms_name": settings.get("lms_name") or "",
+        "lms_logo": settings.get("lms_logo") or "",
+    }
 
 # ─── AI INSIGHTS GENERATION ──────────────────────────────────────────────
 

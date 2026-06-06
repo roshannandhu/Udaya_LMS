@@ -140,48 +140,61 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
   );
 }
 
-/* ─── Pastel Class Card ──────────────────────────────────────── */
-function PremiumClassCard({ std, subjectsCount, studentsCount, navigate }) {
+/* ─── Bento Class Card ──────────────────────────────────────── */
+function BentoClassCard({ std, subjectsCount, studentsCount, navigate, isLast }) {
   const num = getStdNum(std.name);
   const pastel = PASTEL[pastelFor(std.name)];
 
   return (
-    <motion.div
-      onClick={() => navigate(`/teacher/subjects/${std.id}`)}
-      whileHover={{ y: -4 }} whileTap={{ scale: 0.99 }} transition={springCard}
-      className="group rounded-card p-5 md:p-6 cursor-pointer flex flex-col h-full border border-black/5"
-      style={{ background: pastel.hex }}
-    >
-      <div className="flex items-start justify-between mb-6">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold bg-white/70"
-          style={{ color: pastel.fgHex }}>
-          {num || std.emoji || '📚'}
-        </div>
-        <div className="w-10 h-10 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 group-hover:bg-ink group-hover:text-white transition-colors">
-          <ArrowRight size={18} />
-        </div>
+    <div className="relative flex items-start gap-4 md:gap-6 group">
+      {/* Timeline line (hidden on very small screens, visible on md+) */}
+      <div className="hidden md:flex flex-col items-center self-stretch pt-8">
+        <div className="w-3 h-3 rounded-full border-2 bg-white z-10" style={{ borderColor: pastel.hex }} />
+        {!isLast && <div className="w-0.5 flex-1 border-l-2 border-dashed border-neutral-200 my-2" />}
       </div>
 
-      <div className="flex-1">
-        <h3 className="text-xl font-semibold tracking-tight mb-1" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{std.name}</h3>
-        <p className="text-sm text-neutral-600 mb-5">{std.short || 'Standard details'}</p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white/60 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
-              <BookOpen size={13} /><span className="text-[11px] font-semibold uppercase tracking-wider">Subjects</span>
-            </div>
-            <span className="text-xl font-bold text-neutral-900">{subjectsCount}</span>
+      <motion.div
+        onClick={() => navigate(`/teacher/subjects/${std.id}`)}
+        whileHover={{ y: -4, scale: 1.01 }} whileTap={{ scale: 0.98 }} transition={springCard}
+        className="flex-1 rounded-[2.5rem] p-6 md:p-8 cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
+        style={{ background: pastel.hex }}
+      >
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-3xl font-bold bg-white/60 shadow-sm"
+            style={{ color: pastel.fgHex }}>
+            {num || std.emoji || '📚'}
           </div>
-          <div className="bg-white/60 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
-              <Users size={13} /><span className="text-[11px] font-semibold uppercase tracking-wider">Students</span>
-            </div>
-            <span className="text-xl font-bold text-neutral-900">{studentsCount}</span>
+          <div>
+            <h3 className="text-2xl font-bold tracking-tight text-neutral-900 mb-1" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+              {std.name}
+            </h3>
+            <p className="text-sm font-medium text-neutral-600">
+              {std.short || 'Standard details'}
+            </p>
           </div>
         </div>
-      </div>
-    </motion.div>
+
+        <div className="flex flex-wrap md:flex-nowrap items-center gap-3 w-full md:w-auto">
+          <div className="bg-white/60 rounded-[1.2rem] px-4 py-2.5 flex items-center gap-2 flex-1 md:flex-initial">
+            <BookOpen size={16} className="text-neutral-500" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Subjects</p>
+              <p className="text-lg font-bold text-neutral-900 leading-none">{subjectsCount}</p>
+            </div>
+          </div>
+          <div className="bg-white/60 rounded-[1.2rem] px-4 py-2.5 flex items-center gap-2 flex-1 md:flex-initial">
+            <Users size={16} className="text-neutral-500" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Students</p>
+              <p className="text-lg font-bold text-neutral-900 leading-none">{studentsCount}</p>
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-[1.2rem] bg-neutral-900 text-white flex items-center justify-center flex-shrink-0 group-hover:bg-black transition-colors ml-auto md:ml-2">
+            <ArrowRight size={20} />
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -219,48 +232,123 @@ export default function SubjectsPage() {
   const getStudentsCount = (stdId) => students.filter(s => String(s.standard_id) === String(stdId)).length;
 
   return (
-    <div className="pb-28">
-      <TopBar
-        title="Classes"
-        subtitle={`${standards.length} classes · ${subjects.length} subjects`}
-        action={<Btn variant="primary" size="sm" icon={Plus} onClick={() => setNewStdOpen(true)}>New class</Btn>}
-      />
-      <div className="px-5 md:px-8 py-8 max-w-7xl mx-auto">
-        {/* Search */}
-        <div className="mb-8 relative max-w-md">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search classes..."
-            className="w-full pl-11 pr-4 py-3 rounded-pill bg-white border border-[#EFEDEA] focus:border-neutral-400 outline-none text-sm shadow-soft transition-all font-medium placeholder:text-neutral-400" />
-          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-[#F4F2EF]"><X size={14} /></button>}
-        </div>
+    <div className="pb-28 bg-[#F8F9FA] min-h-screen">
+      {/* Hide the default TopBar since we are building a custom Bento header */}
+      <div className="hidden"><TopBar title="Classes" /></div>
+      
+      <div className="px-5 md:px-8 py-8 max-w-[1400px] mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT COLUMN: Main Content */}
+          <div className="lg:col-span-8 space-y-8">
+            
+            {/* Custom Header Row */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-xl border border-neutral-100">📚</div>
+                <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900">My Classes</h1>
+              </div>
 
-        {/* Content */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1,2,3].map(i => <Skeleton key={i} className="h-72 rounded-card" />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 glass-panel rounded-[32px] border-dashed border-[#D8D6D2]">
-            <div className="w-20 h-20 bg-white/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/60 shadow-sm">
-              <BookOpen size={32} className="text-neutral-300" />
+              {/* Search Bar matching udaya.jpg */}
+              <div className="relative w-full md:w-64">
+                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search classes..."
+                  className="w-full pl-11 pr-4 py-2.5 rounded-full bg-white/80 border border-neutral-200 focus:bg-white focus:border-neutral-400 focus:ring-4 focus:ring-neutral-400/10 outline-none text-sm transition-all font-medium placeholder:text-neutral-400" />
+                {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-neutral-100"><X size={14} /></button>}
+              </div>
             </div>
-            <h3 className="text-lg font-bold text-neutral-900 mb-1">No classes found</h3>
-            <p className="text-sm text-neutral-500 mb-6">Create your first class to get started.</p>
-            <Btn variant="primary" icon={Plus} onClick={() => setNewStdOpen(true)}>Create class</Btn>
+
+            {/* Content List */}
+            <div className="bg-white rounded-[3rem] p-6 md:p-10 shadow-sm border border-neutral-100 min-h-[60vh]">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-bold tracking-tight text-neutral-900">Class Directory</h2>
+                
+                {/* Stats Pills matching udaya.jpg top center */}
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="bg-sky-50 px-4 py-2 rounded-2xl text-center border border-sky-100">
+                    <p className="text-xl font-bold text-sky-700 leading-none mb-1">{standards.length}</p>
+                    <p className="text-[10px] font-bold text-sky-600 uppercase tracking-widest">Total</p>
+                  </div>
+                  <div className="bg-emerald-50 px-4 py-2 rounded-2xl text-center border border-emerald-100">
+                    <p className="text-xl font-bold text-emerald-700 leading-none mb-1">{subjects.length}</p>
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Subjects</p>
+                  </div>
+                  <div className="bg-amber-50 px-4 py-2 rounded-2xl text-center border border-amber-100">
+                    <p className="text-xl font-bold text-amber-700 leading-none mb-1">{students.length}</p>
+                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Students</p>
+                  </div>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="space-y-6">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-32 rounded-[2.5rem]" />)}
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-20 bg-neutral-50 rounded-[2.5rem] border-2 border-dashed border-neutral-200">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-neutral-100 shadow-sm">
+                    <BookOpen size={24} className="text-neutral-400" />
+                  </div>
+                  <h3 className="text-lg font-bold text-neutral-900 mb-1">No classes found</h3>
+                  <p className="text-sm text-neutral-500 mb-6">Create your first class to get started.</p>
+                  <Btn variant="primary" icon={Plus} onClick={() => setNewStdOpen(true)}>Create class</Btn>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {filtered.map((std, idx) => (
+                    <BentoClassCard
+                      key={std.id}
+                      std={std}
+                      subjectsCount={getSubjectsCount(std.id)}
+                      studentsCount={getStudentsCount(std.id)}
+                      navigate={navigate}
+                      isLast={idx === filtered.length - 1}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map(std => (
-              <PremiumClassCard
-                key={std.id}
-                std={std}
-                subjectsCount={getSubjectsCount(std.id)}
-                studentsCount={getStudentsCount(std.id)}
-                navigate={navigate}
-              />
-            ))}
+
+          {/* RIGHT COLUMN: My Events / Quick Actions */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="flex items-center justify-between mb-2 px-2">
+              <h2 className="text-2xl font-extrabold tracking-tight text-neutral-900 flex items-center gap-2">
+                Quick Actions ⚡
+              </h2>
+            </div>
+            
+            <button onClick={() => setNewStdOpen(true)} className="w-full bg-white rounded-[2rem] p-6 shadow-sm border border-neutral-100 hover:border-[#8B5CF6] hover:shadow-md transition-all group text-left">
+              <div className="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <BookPlus size={20} />
+              </div>
+              <h3 className="text-lg font-bold text-neutral-900 mb-1">Create New Class</h3>
+              <p className="text-sm text-neutral-500">Set up a new standard or year group.</p>
+            </button>
+
+            <div className="bg-amber-50/50 rounded-[2rem] p-6 shadow-sm border border-amber-100">
+              <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <BookOpen size={16} /> Directory Overview
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
+                  <span className="text-sm font-medium text-neutral-700">Total Classes</span>
+                  <span className="font-bold text-amber-600">{standards.length}</span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
+                  <span className="text-sm font-medium text-neutral-700">Total Subjects</span>
+                  <span className="font-bold text-amber-600">{subjects.length}</span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
+                  <span className="text-sm font-medium text-neutral-700">Enrolled Students</span>
+                  <span className="font-bold text-amber-600">{students.length}</span>
+                </div>
+              </div>
+            </div>
+            
           </div>
-        )}
+          
+        </div>
       </div>
 
       <NewStandardModal 

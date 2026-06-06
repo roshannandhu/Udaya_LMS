@@ -8,39 +8,104 @@ export function useAppSelector(selector) {
   return useAppCache(useShallow(selector));
 }
 
-/* ─── Teacher settings store (persisted) ───────────────────────── */
+/* ─── Teacher settings store ─────────────────────────────────────
+   localStorage is only an instant cache so the UI doesn't flash defaults
+   on reload. The BACKEND (teacher_settings.json via /teacher/settings) is the
+   source of truth, so settings sync across devices/browsers. Every setter
+   writes through to the backend; hydrateFromServer() pulls the truth back in
+   after login.
+──────────────────────────────────────────────────────────────────── */
+
+// store (camelCase) key → backend (snake_case) key
+const SETTINGS_SERVER_KEYS = {
+  lmsName: 'lms_name',
+  lmsLogo: 'lms_logo',
+  defaultStudentPassword: 'default_student_password',
+  terminationPin: 'termination_pin',
+  notifTestSubmission: 'notif_test_submission',
+  notifNewStudent: 'notif_new_student',
+  notifBroadcastReply: 'notif_broadcast_reply',
+  notifWeeklyReport: 'notif_weekly_report',
+  securitySingleDevice: 'security_single_device',
+  securityAutoLogout: 'security_auto_logout',
+  studentsCanViewReport: 'students_can_view_report',
+};
+const SETTINGS_LOCAL_KEYS = Object.fromEntries(
+  Object.entries(SETTINGS_SERVER_KEYS).map(([local, server]) => [server, local])
+);
+
+// Push a camelCase patch to the backend (fire-and-forget). null → '' so that a
+// value can actually be cleared (e.g. removing the logo). Failures are swallowed:
+// the local cache still updates, and the next successful save reconciles.
+function persistSettings(patch) {
+  const body = {};
+  for (const [k, v] of Object.entries(patch)) {
+    const serverKey = SETTINGS_SERVER_KEYS[k];
+    if (!serverKey) continue;
+    body[serverKey] = v == null ? '' : v;
+  }
+  if (Object.keys(body).length === 0) return;
+  apiClient('/teacher/settings', { method: 'POST', body: JSON.stringify(body) }).catch(() => {});
+}
+
 export const useSettingsStore = create(
   persist(
     (set) => ({
       // Branding
       lmsName: 'Udaya',
-      setLmsName: (name) => set({ lmsName: name }),
+      setLmsName: (name) => { set({ lmsName: name }); persistSettings({ lmsName: name }); },
       lmsLogo: null, // base64 data URL or null
-      setLmsLogo: (logo) => set({ lmsLogo: logo }),
+      setLmsLogo: (logo) => { set({ lmsLogo: logo }); persistSettings({ lmsLogo: logo }); },
 
       // Student defaults
       defaultStudentPassword: '',
-      setDefaultStudentPassword: (pwd) => set({ defaultStudentPassword: pwd }),
+      setDefaultStudentPassword: (pwd) => { set({ defaultStudentPassword: pwd }); persistSettings({ defaultStudentPassword: pwd }); },
 
       // Termination PIN
       terminationPin: '',
-      setTerminationPin: (pin) => set({ terminationPin: pin }),
+      setTerminationPin: (pin) => { set({ terminationPin: pin }); persistSettings({ terminationPin: pin }); },
 
       // Notification preferences
       notifTestSubmission: true,
       notifNewStudent: true,
       notifBroadcastReply: false,
       notifWeeklyReport: true,
-      setNotif: (key, val) => set({ [key]: val }),
+      setNotif: (key, val) => { set({ [key]: val }); persistSettings({ [key]: val }); },
 
       // Security preferences
       securitySingleDevice: true,
       securityAutoLogout: false,
-      setSecurityPref: (key, val) => set({ [key]: val }),
+      setSecurityPref: (key, val) => { set({ [key]: val }); persistSettings({ [key]: val }); },
 
       // Report visibility
       studentsCanViewReport: true,   // teacher toggles this; false = hides report from students
-      setStudentsCanViewReport: (val) => set({ studentsCanViewReport: val }),
+      setStudentsCanViewReport: (val) => { set({ studentsCanViewReport: val }); persistSettings({ studentsCanViewReport: val }); },
+
+      // Pull server-stored settings into the store (call after teacher login / on boot).
+      // Only overwrites keys the server actually has, so first-run defaults survive.
+      hydrateFromServer: async () => {
+        try {
+          const res = await apiClient('/teacher/settings');
+          if (!res || typeof res !== 'object') return;
+          const patch = {};
+          for (const [serverKey, val] of Object.entries(res)) {
+            const localKey = SETTINGS_LOCAL_KEYS[serverKey];
+            if (!localKey || val === undefined) continue;
+            // empty logo string → null so falsy checks + "Remove" UI behave
+            patch[localKey] = (localKey === 'lmsLogo' && val === '') ? null : val;
+          }
+          // never let a blank stored name wipe out the default
+          if (patch.lmsName === '') delete patch.lmsName;
+          if (Object.keys(patch).length) set(patch);
+        } catch { /* offline or not a teacher — keep the local cache */ }
+      },
+
+      // Apply branding fetched from the PUBLIC /branding endpoint (login page).
+      // Does NOT write back to the server — it's a read-only display update.
+      applyBranding: ({ lms_name, lms_logo } = {}) => set((s) => ({
+        lmsName: lms_name || s.lmsName,
+        lmsLogo: lms_logo ? lms_logo : (lms_logo === '' ? null : s.lmsLogo),
+      })),
     }),
     { name: 'tutoria-settings', storage: createJSONStorage(() => localStorage) }
   )

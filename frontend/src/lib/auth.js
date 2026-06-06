@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getApiBaseUrl, apiClient } from './api';
 import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
+import { useSettingsStore } from '../store';
 
 const API_BASE    = getApiBaseUrl();
 const ROLE_KEY    = 'tutoria_user_role';
@@ -67,6 +68,8 @@ export const useAuthStore = create((set, get) => ({
         enableScreenSecurity();
       } else {
         disableScreenSecurity();
+        // Pull server-stored settings (branding, default password, PIN, etc.)
+        useSettingsStore.getState().hydrateFromServer();
       }
 
       const needsPwdChange = data.user.role === 'student' && data.user.must_change_pwd;
@@ -93,6 +96,10 @@ export const useAuthStore = create((set, get) => ({
       localStorage.setItem(ROLE_KEY, user.role || 'student');
       localStorage.setItem(NAME_KEY, user.name || '');
       set({ user, role: user.role || 'student', isLoading: false });
+      // Refresh server-stored settings for teachers on every app boot
+      if ((user.role || 'student') === 'teacher') {
+        useSettingsStore.getState().hydrateFromServer();
+      }
     } catch (error) {
       if (error.message === 'Session expired. Please log in again.') {
         // auth:logout event has already cleared localStorage + state

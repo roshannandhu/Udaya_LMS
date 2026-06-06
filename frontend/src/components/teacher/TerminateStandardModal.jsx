@@ -57,7 +57,8 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
     }
     setStep('deleting');
     try {
-      await apiClient(`/standards/${standard.id}`, { method: 'DELETE' });
+      // PIN is also verified server-side, so a bypassed client check can't delete.
+      await apiClient(`/standards/${standard.id}?pin=${encodeURIComponent(pinEntry)}`, { method: 'DELETE' });
       onSuccess();
     } catch (err) {
       console.error('Terminate failed:', err);

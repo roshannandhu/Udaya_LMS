@@ -829,66 +829,63 @@ export default function SubjectDetailPage() {
   }
 
   return (
-    <div className="pb-28 font-sans selection:bg-indigo-100 selection:text-indigo-900">
-      {/* ── MASSIVE PASTEL HERO SECTION ── */}
-      <div className="relative overflow-hidden bg-white border-b border-neutral-100 shadow-sm mb-8">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 translate-x-1/3 -translate-y-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#fce4ec] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 -translate-x-1/3 translate-y-1/3 pointer-events-none"></div>
-        
-        <div className="max-w-[1200px] mx-auto px-5 md:px-8 py-8 relative z-10 flex flex-col items-center text-center">
-          <div className="w-full flex items-center justify-between mb-8">
-            <button onClick={() => navigate(`/teacher/subjects/${standardId}`)} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 transition-transform">
-              <ArrowLeft size={20} />
-            </button>
-            <div className="flex gap-2">
-              {tab === 'videos' && <Btn variant="primary" icon={Upload} onClick={() => setUploadOpen(true)}>Add video</Btn>}
-              {tab === 'tests' && <Btn variant="primary" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>New test</Btn>}
-              {tab === 'assignments' && <Btn variant="primary" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>New assignment</Btn>}
-              {tab === 'live' && <Btn variant="primary" icon={Radio} onClick={() => setShowScheduleLive(true)}>Schedule class</Btn>}
-              {tab === 'notes' && <Btn variant="primary" icon={Plus} onClick={() => { setEditNote(null); setShowNoteForm(true); }}>New note</Btn>}
+    <div className="pb-28 bg-[#F8F9FA] min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900">
+      <div className="px-5 md:px-8 py-8 max-w-[1400px] mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT COLUMN: Main Learning Plan */}
+          <div className="lg:col-span-8 space-y-8">
+            
+            {/* Custom Bento Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <button onClick={() => navigate(`/teacher/subjects/${standardId}`)} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 hover:border-neutral-300 transition-all">
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-[1rem] bg-white flex items-center justify-center shadow-sm text-2xl border border-neutral-100">
+                    {subject?.emoji || '📚'}
+                  </div>
+                  <div>
+                    <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+                      {subject?.name || 'Subject Hub'}
+                    </h1>
+                    <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">
+                      Standard: {standard?.name}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-white/60 backdrop-blur-md border-4 border-white shadow-xl flex items-center justify-center text-5xl md:text-6xl mb-6 transform hover:rotate-12 transition-transform duration-500">
-            {subject?.emoji || '📚'}
-          </div>
-
-          <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-2">
-            Standard: {standard?.name}
-          </p>
-          <h1 className="text-3xl md:text-5xl font-extrabold text-neutral-900 tracking-tight leading-none mb-6" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-            {subject?.name || 'Subject Hub'}
-          </h1>
-        </div>
-
-        {/* ── FLOATING PILL NAVIGATION ── */}
-        <div className="max-w-[1200px] mx-auto px-5 md:px-8 pb-6 relative z-10 overflow-x-auto custom-scrollbar flex gap-3">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex-shrink-0 px-6 py-3 rounded-full text-sm font-bold uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${
-                tab === t.id
-                  ? 'bg-neutral-900 text-white shadow-lg scale-105'
-                  : 'bg-white text-neutral-500 border border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
-              }`}
-            >
-              {t.label}
-              {t.count > 0 && (
-                <span className={`w-5 h-5 flex items-center justify-center text-[10px] rounded-full shadow-sm ${
-                  tab === t.id
-                    ? t.alert ? 'bg-red-500 text-white' : 'bg-white/20 text-white'
-                    : t.alert ? 'bg-red-100 text-red-600' : 'bg-neutral-100 text-neutral-600'
-                }`}>
-                  {t.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-5 md:px-8 max-w-[1200px] mx-auto">
+            {/* Content Container */}
+            <div className="bg-white rounded-[3rem] p-6 md:p-10 shadow-sm border border-neutral-100 min-h-[60vh] relative">
+              
+              {/* TABS (Floating inside content) */}
+              <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-6 border-b border-neutral-100 mb-8">
+                {TABS.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`flex-shrink-0 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${
+                      tab === t.id
+                        ? 'bg-neutral-900 text-white shadow-md scale-105'
+                        : 'bg-neutral-50 text-neutral-500 border border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900'
+                    }`}
+                  >
+                    {t.label}
+                    {t.count > 0 && (
+                      <span className={`w-5 h-5 flex items-center justify-center text-[10px] rounded-full shadow-sm ${
+                        tab === t.id
+                          ? t.alert ? 'bg-red-500 text-white' : 'bg-white/20 text-white'
+                          : t.alert ? 'bg-red-100 text-red-600' : 'bg-white text-neutral-600'
+                      }`}>
+                        {t.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
 
         {/* ══ Videos tab ══ */}
         {tab === 'videos' && (
@@ -1263,6 +1260,58 @@ export default function SubjectDetailPage() {
         {tab === 'attendance' && (
           <AttendanceGrid subjectId={classId} onNavigate={(id) => navigate(`/teacher/students/${id}`)} />
         )}
+            </div>
+          </div>
+          
+          {/* RIGHT COLUMN: My Events / Quick Actions */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-neutral-100 mb-6">
+              <h3 className="text-lg font-extrabold text-neutral-900 mb-4">Quick Add</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => setUploadOpen(true)} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors group">
+                  <Upload size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
+                  <span className="text-xs font-bold">Video</span>
+                </button>
+                <button onClick={() => { setEditTestId(null); setNewTestOpen(true); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors group">
+                  <FileQuestion size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
+                  <span className="text-xs font-bold">Test</span>
+                </button>
+                <button onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors group">
+                  <ClipboardList size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
+                  <span className="text-xs font-bold">Task</span>
+                </button>
+                <button onClick={() => setShowScheduleLive(true)} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors group">
+                  <Radio size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
+                  <span className="text-xs font-bold">Live</span>
+                </button>
+                <button onClick={() => { setEditNote(null); setShowNoteForm(true); }} className="col-span-2 flex flex-col items-center justify-center p-4 rounded-2xl bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors group">
+                  <StickyNote size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
+                  <span className="text-xs font-bold">Note</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-[2.5rem] p-6 shadow-sm border border-amber-100">
+              <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <ListChecks size={16} /> Overview
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
+                  <span className="text-sm font-medium text-neutral-700">Enrolled Students</span>
+                  <span className="font-bold text-amber-600">{students.length}</span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
+                  <span className="text-sm font-medium text-neutral-700">Total Videos</span>
+                  <span className="font-bold text-amber-600">{videos.length}</span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
+                  <span className="text-sm font-medium text-neutral-700">Assignments</span>
+                  <span className="font-bold text-amber-600">{assignments.length}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Modals ── */}

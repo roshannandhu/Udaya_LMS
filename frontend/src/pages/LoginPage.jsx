@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthStore, ROLES } from '../lib/auth';
 import { useSettingsStore } from '../store';
+import { apiClient } from '../lib/api';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('teacher');
@@ -12,9 +13,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { login, enforceSingleDevice } = useAuthStore();
-  const { lmsName, lmsLogo } = useSettingsStore();
+  const { lmsName, lmsLogo, applyBranding } = useSettingsStore();
 
   useEffect(() => { document.title = lmsName || 'Udaya'; }, [lmsName]);
+
+  // Pull branding from the public endpoint so the logo/name appear on any device
+  // (localStorage may be empty on a fresh browser).
+  useEffect(() => {
+    apiClient('/branding')
+      .then(applyBranding)
+      .catch(() => {});
+  }, [applyBranding]);
 
   const handleSubmit = async () => {
     const identifier = mode === 'teacher' ? creds.email : creds.phone;
