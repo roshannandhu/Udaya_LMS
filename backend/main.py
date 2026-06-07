@@ -1126,12 +1126,30 @@ def get_dashboard_activity(user = Depends(verify_token)):
     return {"activities": activities[:20]}
 
 # Standards CRUD
+def _claim_orphan_standards(teacher_id):
+    """Assign any orphaned (teacher_id IS NULL) standards to this teacher.
+    Such standards come from DB/migration seeds; without an owner they are
+    invisible to the teacher in the list AND unmanageable (create_subject etc.
+    reject them), yet enrolled students still see their subjects — which looks
+    like "students see subjects the teacher can't". This is a single-primary-
+    teacher app, so claiming is safe and self-healing, mirroring the claim-on-
+    write already done in standard update/delete. Idempotent + best-effort."""
+    if not service_supabase or not teacher_id:
+        return
+    try:
+        orphans = service_supabase.table("standards").select("id").is_("teacher_id", "null").execute()
+        if orphans.data:
+            service_supabase.table("standards").update({"teacher_id": teacher_id}).is_("teacher_id", "null").execute()
+    except Exception:
+        pass
+
 @app.get("/api/standards")
 def get_standards(user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
     if user["role"] == "teacher":
+        _claim_orphan_standards(user["teacher_id"])
         response = service_supabase.table("standards").select("*").eq("teacher_id", user["teacher_id"]).order("created_at", desc=True).execute()
     else:
         response = service_supabase.table("standards").select("*").execute()
@@ -1330,7 +1348,10 @@ def get_subjects(standard_id: Optional[str] = None, user = Depends(verify_token)
         response = service_supabase.table("subject_classes").select("*").eq("standard_id", student.data["standard_id"]).execute()
         return response.data or []
     else:
-        # Teacher: return all subjects for their standards
+        # Teacher: return all subjects for their standards. Claim any orphaned
+        # (teacher_id IS NULL) standards first so seeded/migrated standards — whose
+        # subjects students can already see — become visible & manageable here too.
+        _claim_orphan_standards(user["teacher_id"])
         stds = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
         if not stds.data:
             return []
