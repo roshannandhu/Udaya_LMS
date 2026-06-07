@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Avatar } from '../ui';
 import { aiApi } from '../../lib/api';
+import SubjectIcon from './SubjectIcon';
 
 const CARD_COLORS = [
   { bg: 'bg-[#F8E1FB]', text: 'text-[#872792]', badge: 'bg-[#872792]/10 text-[#872792]' },
@@ -202,14 +203,14 @@ export function shareReportText(data, period) {
   const s = data.student || {};
   const pText = period ? (period.charAt(0).toUpperCase() + period.slice(1)) : 'Overall';
   const subjects = data.subject_radar || [];
-  let text = `📚 *Student Report Card - ${s.name}*\n*Period:* ${pText}\n*Average Score:* ${Math.round(s.avg_score || 0)}%\n*Attendance:* ${Math.round(s.attendance_pct || 0)}%\n`;
+  let text = `*Student Report Card - ${s.name}*\n*Period:* ${pText}\n*Average Score:* ${Math.round(s.avg_score || 0)}%\n*Attendance:* ${Math.round(s.attendance_pct || 0)}%\n`;
   if (data.rank) text += `*Class Rank:* ${data.rank}/${data.total_students}\n`;
   if (subjects.length > 0) {
     text += `\n*Subject Details:*\n`;
     subjects.forEach(sub => {
       const avg = sub.test_count > 0 ? `${Math.round(sub.test_avg)}%` : '—';
       const att = sub.att_total > 0 ? `${Math.round(sub.attendance_pct)}%` : '—';
-      text += `• ${sub.emoji || ''} ${sub.subject}: Avg ${avg} | Att. ${att}\n`;
+      text += `• ${sub.subject}: Avg ${avg} | Att. ${att}\n`;
     });
   }
   return text + `\nGenerated via Udaya LMS.`;
@@ -379,7 +380,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           startY: 56, 
           head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']], 
           body: subjectRadar.map(r => [
-            `${r.emoji || ''} ${r.subject}`, 
+            r.subject,
             r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—', 
             r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—', 
             r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—'
@@ -497,7 +498,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                             <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} />
                             <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dx={-8} />
-                            <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 11, fontWeight: 'bold' }} formatter={(v, name) => [v != null ? `${v}%` : 'N/A', name]} labelFormatter={(label, entries) => entries.length > 0 && entries[0].payload.flagged ? `⚠️ Flagged: ${label}` : label} />
+                            <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 11, fontWeight: 'bold' }} formatter={(v, name) => [v != null ? `${v}%` : 'N/A', name]} labelFormatter={(label, entries) => entries.length > 0 && entries[0].payload.flagged ? `Flagged: ${label}` : label} />
                             <ReferenceLine y={60} stroke="#fca5a5" strokeDasharray="4 3" strokeWidth={1} />
                             {selSubject === 'all' ? (
                               subjectLines.map(sl => <Line key={sl.subject} type="monotone" dataKey={sl.subject} name={sl.subject} stroke={sl.color} strokeWidth={2.5} connectNulls={false} dot={props => { const { cx, cy, payload } = props; return payload.flagged ? <svg x={cx-6} y={cy-6} width="12" height="12"><path d="M6 1L1 11h10L6 1z" fill="#ef4444"/><circle cx="6" cy="7" r="1" fill="#fff"/><circle cx="6" cy="9" r="0.5" fill="#fff"/></svg> : <circle cx={cx} cy={cy} r={2} strokeWidth={2} fill="#fff" stroke={sl.color}/>; }} activeDot={{ r: 4, strokeWidth: 0 }} />)
@@ -667,7 +668,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                             return (
                               <div key={s.subject_id}>
                                 <div className="flex justify-between text-[10px] font-black mb-1.5">
-                                  <span className="text-neutral-700">{s.emoji} {s.subject}</span>
+                                  <span className="text-neutral-700 inline-flex items-center gap-1.5"><SubjectIcon value={s.emoji} size={12} />{s.subject}</span>
                                   <span className="text-neutral-400">{s.assignment_submitted}/{s.assignment_total}</span>
                                 </div>
                                 <div className="h-1 bg-neutral-100 rounded-full overflow-hidden">
@@ -708,7 +709,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                           {breakdownRows.map((row, i) => (
                             <tr key={i} className="hover:bg-neutral-50/50 transition-colors">
                               <td className="px-5 py-4 text-[13px] font-black text-neutral-800">
-                                <span className="mr-2 text-base">{row.emoji}</span>{row.subject}
+                                <span className="inline-flex items-center gap-2"><SubjectIcon value={row.emoji} size={15} />{row.subject}</span>
                               </td>
                               <td className="px-5 py-4 text-[13px] font-bold text-neutral-500 text-center">{row.testCount}</td>
                               <td className="px-5 py-4 text-center">

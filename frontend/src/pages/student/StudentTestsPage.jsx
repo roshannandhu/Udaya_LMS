@@ -9,6 +9,7 @@ import { Tag, Skeleton } from '../../components/ui';
 import { testApi, assignmentApi } from '../../lib/api';
 import { useAppCache } from '../../store';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 const CARD_COLORS = [
   { bg: 'bg-[#F8E1FB]', text: 'text-[#872792]', badge: 'bg-[#872792]/10 text-[#872792]' },
@@ -126,7 +127,7 @@ export default function StudentTestsPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span className={`bg-white/70 ${theme.text} px-3.5 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 shadow-sm`}>
-                {cls?.emoji} {cls?.name || 'Subject'}
+                <SubjectIcon value={cls?.emoji} size={13} /> {cls?.name || 'Subject'}
               </span>
               {t.negative_marking && <span className="bg-red-100/90 text-red-700 text-[11px] font-extrabold px-3 py-1.5 rounded-full shrink-0 shadow-sm uppercase tracking-wider">−{t.penalty} Penalty</span>}
             </div>
@@ -231,7 +232,7 @@ export default function StudentTestsPage() {
         <div className="flex items-start gap-3 flex-1 mb-4">
           <div className="flex-1 min-w-0">
             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-widest bg-white/60 ${theme.text} mb-3 shadow-sm`}>
-              {a.subject_emoji} {a.subject_name}
+              <SubjectIcon value={a.subject_emoji} size={12} /> {a.subject_name}
             </span>
             <p className={`text-[22px] sm:text-[24px] font-extrabold leading-[1.15] text-neutral-900 mb-3 line-clamp-2`}>{a.title}</p>
             {a.description && (
@@ -356,7 +357,7 @@ export default function StudentTestsPage() {
                           <div className="flex items-start justify-between gap-3 mb-4">
                             <div className="min-w-0 flex-1">
                               <h4 className={`font-extrabold text-[22px] sm:text-[24px] leading-[1.15] text-neutral-900 mb-3`}>{t.title}</h4>
-                              <p className="text-[12px] font-extrabold text-black/50 bg-white/60 px-3 py-1.5 rounded-full inline-flex items-center gap-1 shadow-sm uppercase tracking-wider">{cls?.emoji} {cls?.name || 'Subject'} · {t.duration_mins}m</p>
+                              <p className="text-[12px] font-extrabold text-black/50 bg-white/60 px-3 py-1.5 rounded-full inline-flex items-center gap-1 shadow-sm uppercase tracking-wider"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'} · {t.duration_mins}m</p>
                             </div>
                             <span className="bg-black/10 text-black/60 text-[11px] font-extrabold px-3 py-1.5 rounded-full shrink-0 uppercase tracking-widest">Upcoming</span>
                           </div>

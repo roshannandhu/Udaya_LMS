@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Btn, Skeleton, Avatar } from '../../components/ui';
 import { useAppCache } from '../../store';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 import AttendanceGrid, { getMonday, fmt } from '../../components/teacher/AttendanceGrid';
 
 /* ─── Main Attendance Page ──────────────────────────────────────── */
@@ -69,7 +70,7 @@ export default function AttendancePage() {
               <div>
                 <h1 className="text-lg md:text-xl font-semibold leading-tight">Attendance</h1>
                 {activeSubject && (
-                  <p className="text-xs text-neutral-500 leading-tight">{activeSubject.emoji} {activeSubject.name}</p>
+                  <p className="text-xs text-neutral-500 leading-tight inline-flex items-center gap-1"><SubjectIcon value={activeSubject.emoji} size={13} />{activeSubject.name}</p>
                 )}
               </div>
             </div>
@@ -113,7 +114,7 @@ export default function AttendancePage() {
                       ${String(activeStdId) === String(std.id)
                         ? 'bg-neutral-900 text-white border-neutral-900'
                         : 'glass-panel border-white/60 text-neutral-600 hover:bg-[#F4F2EF]'}`}>
-                    <span>{std.emoji}</span> {std.name}
+                    <SubjectIcon value={std.emoji} size={14} fallback="graduation" /> {std.name}
                   </button>
                 ))}
               </div>
@@ -133,7 +134,7 @@ export default function AttendancePage() {
                         ${String(activeSubjectId) === String(sub.id)
                           ? 'bg-neutral-900 border-neutral-900 text-white shadow-md'
                           : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50 shadow-sm'}`}>
-                      <span className="text-base">{sub.emoji || '📚'}</span>
+                      <SubjectIcon value={sub.emoji} size={16} />
                       {sub.name}
                     </button>
                   ))}

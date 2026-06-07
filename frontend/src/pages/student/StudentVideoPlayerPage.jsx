@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
 import { Btn, Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import {
@@ -846,7 +847,7 @@ export default function StudentVideoPlayerPage() {
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <h2 className="font-semibold text-lg mb-1">{video.title}</h2>
-              <p className="text-sm text-neutral-500">{subject?.emoji} {subject?.name || 'Subject'}</p>
+              <p className="text-sm text-neutral-500 inline-flex items-center gap-1.5"><SubjectIcon value={subject?.emoji} size={14} />{subject?.name || 'Subject'}</p>
             </div>
 
             <div className="flex gap-2 flex-shrink-0">

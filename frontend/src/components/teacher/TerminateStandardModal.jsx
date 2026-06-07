@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Download, Shield, Loader2, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Download, Shield, Loader2, CheckCircle2, Users, BookOpen, FileText, Radio } from 'lucide-react';
 import { Modal, Btn, Input } from '../ui';
 import { apiClient } from '../../lib/api';
 import { useSettingsStore } from '../../store';
@@ -100,13 +100,13 @@ export default function TerminateStandardModal({ open, onClose, standard, studen
           </div>
           <ul className="space-y-2 text-sm">
             {[
-              [`${studentCount} student${studentCount !== 1 ? 's' : ''} and their login accounts`, '👥'],
-              [`${subjectCount} subject${subjectCount !== 1 ? 's' : ''} and all videos`, '📚'],
-              ['All tests, scores, and attempts', '📝'],
-              ['All broadcasts and attendance records', '📡'],
-            ].map(([label, icon]) => (
+              [`${studentCount} student${studentCount !== 1 ? 's' : ''} and their login accounts`, Users],
+              [`${subjectCount} subject${subjectCount !== 1 ? 's' : ''} and all videos`, BookOpen],
+              ['All tests, scores, and attempts', FileText],
+              ['All broadcasts and attendance records', Radio],
+            ].map(([label, Icon]) => (
               <li key={label} className="flex items-center gap-2 text-neutral-700">
-                <span>{icon}</span> {label}
+                <Icon size={16} className="text-neutral-400 flex-shrink-0" /> {label}
               </li>
             ))}
           </ul>

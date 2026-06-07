@@ -8,6 +8,7 @@ import { useAppCache } from '../../store';
 import { Skeleton } from '../../components/ui';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { staggerChildren, fadeUp, springCard } from '../../lib/motion';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 let subjectsPageCache = null;
 
@@ -79,8 +80,8 @@ export default function StudentSubjectsPage() {
                   className="group rounded-card p-5 cursor-pointer border border-black/5 flex flex-col"
                   style={{ background: pastel.hex }}>
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center text-2xl flex-shrink-0">
-                      {c.emoji || '📚'}
+                    <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center text-neutral-700 flex-shrink-0">
+                      <SubjectIcon value={c.emoji} size={26} />
                     </div>
                     <div className="w-9 h-9 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 group-hover:bg-ink group-hover:text-white transition-colors">
                       <ArrowRight size={16} />

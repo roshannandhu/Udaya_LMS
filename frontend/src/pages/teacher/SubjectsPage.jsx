@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, X, Loader2, ArrowRight,
-  Users, BookOpen, UserPlus, BookPlus
+  Users, BookOpen, UserPlus, BookPlus, Zap
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import TopBar from '../../components/shared/TopBar';
@@ -11,6 +11,7 @@ import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { springCard } from '../../lib/motion';
 import { apiClient } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
+import SubjectIcon, { IconPicker } from '../../components/shared/SubjectIcon';
 
 /* ─── Badge colour helpers ─────────────────────────────────────── */
 function getStdNum(name) { const m = name.match(/\d+/); return m ? m[0] : ''; }
@@ -19,7 +20,7 @@ function getStdNum(name) { const m = name.match(/\d+/); return m ? m[0] : ''; }
 function NewStandardModal({ open, onClose, onSuccess }) {
   const [name, setName] = useState('');
   const [short, setShort] = useState('');
-  const [emoji, setEmoji] = useState('📚');
+  const [emoji, setEmoji] = useState('graduation');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { invalidate, refreshStandards } = useAppCache();
@@ -29,7 +30,7 @@ function NewStandardModal({ open, onClose, onSuccess }) {
     setLoading(true); setError('');
     try {
       const created = await apiClient('/standards', { method: 'POST', body: JSON.stringify({ name, short, emoji }) });
-      setName(''); setShort(''); setEmoji('📚');
+      setName(''); setShort(''); setEmoji('graduation');
       invalidate(); await refreshStandards();
       onClose(); if (onSuccess) onSuccess(created);
     } catch (err) { setError(err.message); } finally { setLoading(false); }
@@ -42,13 +43,8 @@ function NewStandardModal({ open, onClose, onSuccess }) {
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Class 10" />
         <Input label="Short name (optional)" value={short} onChange={(e) => setShort(e.target.value)} placeholder="e.g. 10th" />
         <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Emoji</label>
-          <div className="flex gap-2 flex-wrap">
-            {['📚', '📖', '🎓', '✨', '💡', '🔢', '🧪', '📐'].map(e => (
-              <button key={e} onClick={() => setEmoji(e)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-all ${emoji === e ? 'border-neutral-900 bg-white shadow-sm scale-110' : 'border-white/60 hover:bg-[#F4F2EF]'}`}>{e}</button>
-            ))}
-          </div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
+          <IconPicker value={emoji} onChange={setEmoji} fallback="graduation" />
         </div>
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading ? <Loader2 size={14} className="animate-spin" /> : null} Create Class
@@ -60,7 +56,7 @@ function NewStandardModal({ open, onClose, onSuccess }) {
 
 function NewSubjectModal({ open, onClose, standardId, standardName }) {
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('📐');
+  const [emoji, setEmoji] = useState('book');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { invalidate, refreshSubjects } = useAppCache();
@@ -70,7 +66,7 @@ function NewSubjectModal({ open, onClose, standardId, standardName }) {
     setLoading(true); setError('');
     try {
       await apiClient('/subjects', { method: 'POST', body: JSON.stringify({ standard_id: standardId, name, emoji }) });
-      setName(''); setEmoji('📐');
+      setName(''); setEmoji('book');
       invalidate(); await refreshSubjects();
       onClose();
     } catch (err) { setError(err.message); } finally { setLoading(false); }
@@ -82,13 +78,8 @@ function NewSubjectModal({ open, onClose, standardId, standardName }) {
         {error && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-100">{error}</div>}
         <Input label="Subject name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
         <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Emoji</label>
-          <div className="flex gap-2 flex-wrap">
-            {['📐', '🧮', '🔬', '🌍', '📝', '💻', '🎨', '📕'].map(e => (
-              <button key={e} onClick={() => setEmoji(e)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-all ${emoji === e ? 'border-neutral-900 bg-white shadow-sm scale-110' : 'border-white/60 hover:bg-[#F4F2EF]'}`}>{e}</button>
-            ))}
-          </div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
+          <IconPicker value={emoji} onChange={setEmoji} />
         </div>
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading ? <Loader2 size={14} className="animate-spin" /> : null} Create Subject
@@ -162,7 +153,7 @@ function BentoClassCard({ std, subjectsCount, studentsCount, navigate, isLast })
         <div className="flex items-center gap-5">
           <div className="w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-3xl font-bold bg-white/60 shadow-sm"
             style={{ color: pastel.fgHex }}>
-            {num || std.emoji || '📚'}
+            {num || <SubjectIcon value={std.emoji} size={30} fallback="graduation" />}
           </div>
           <div>
             <h3 className="text-2xl font-bold tracking-tight text-neutral-900 mb-1" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
@@ -245,7 +236,7 @@ export default function SubjectsPage() {
             {/* Custom Header Row */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-xl border border-neutral-100">📚</div>
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm border border-neutral-100 text-neutral-700"><SubjectIcon value="graduation" size={20} /></div>
                 <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900">My Classes</h1>
               </div>
 
@@ -314,7 +305,7 @@ export default function SubjectsPage() {
           <div className="lg:col-span-4 space-y-6">
             <div className="flex items-center justify-between mb-2 px-2">
               <h2 className="text-2xl font-extrabold tracking-tight text-neutral-900 flex items-center gap-2">
-                Quick Actions ⚡
+                Quick Actions <Zap size={20} className="text-amber-500" fill="currentColor" />
               </h2>
             </div>
             

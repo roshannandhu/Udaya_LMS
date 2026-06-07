@@ -210,7 +210,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
                 >
                   <option value="">— select a subject —</option>
                   {subjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.emoji ? `${s.emoji} ` : ''}{s.name}</option>
+                    <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               </div>

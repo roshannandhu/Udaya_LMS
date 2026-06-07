@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Trophy, CheckCircle2, XCircle, MinusCircle, AlertTriangle, Star, BookOpen } from 'lucide-react';
+import { Trophy, CheckCircle2, XCircle, MinusCircle, AlertTriangle, Star, BookOpen, PartyPopper, ThumbsUp, Flame } from 'lucide-react';
 import { Btn } from '../../components/ui';
 
 export default function StudentTestResultPage() {
@@ -35,10 +35,10 @@ export default function StudentTestResultPage() {
   const scorePct = percentage ?? (total_marks ? Math.round((score / total_marks) * 100) : 0);
 
   const grade =
-    scorePct >= 90 ? { label: 'Excellent! 🎉', color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200' } :
-    scorePct >= 75 ? { label: 'Great job! 🙌',  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200'  } :
-    scorePct >= 50 ? { label: 'Good effort! 💪', color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' } :
-                     { label: 'Keep trying! 📚', color: 'text-red-700',    bg: 'bg-red-50',    border: 'border-red-200'   };
+    scorePct >= 90 ? { label: 'Excellent!',   Icon: PartyPopper, color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200' } :
+    scorePct >= 75 ? { label: 'Great job!',    Icon: ThumbsUp,    color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200'  } :
+    scorePct >= 50 ? { label: 'Good effort!',  Icon: Flame,       color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' } :
+                     { label: 'Keep trying!',  Icon: BookOpen,    color: 'text-red-700',    bg: 'bg-red-50',    border: 'border-red-200'   };
 
   const skipped = (total || 0) - (correct_count || 0) - (wrong_count || 0);
 

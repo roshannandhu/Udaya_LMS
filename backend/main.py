@@ -292,7 +292,7 @@ class SubTeacherRequest(BaseModel):
 class Standard(BaseModel):
     name: str
     short: Optional[str] = None
-    emoji: Optional[str] = '📚'
+    emoji: Optional[str] = 'graduation'  # lucide icon key (legacy rows may hold an emoji char)
 
 class StandardUpdate(BaseModel):
     name: Optional[str] = None
@@ -304,7 +304,7 @@ class StandardUpdate(BaseModel):
 class SubjectClass(BaseModel):
     standard_id: str
     name: str
-    emoji: Optional[str] = '📐'
+    emoji: Optional[str] = 'book'  # lucide icon key (legacy rows may hold an emoji char)
     end_date: Optional[str] = None
 
 class SubjectUpdate(BaseModel):
@@ -1706,7 +1706,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
             "test_id": t.get("id"),
             "subject_id": class_id,
             "subject": sub.get("name", ""),
-            "emoji": sub.get("emoji", "📐"),
+            "emoji": sub.get("emoji", "book"),
             "score_pct": score_pct,
             "flagged": a.get("flagged", False),
         })
@@ -1776,7 +1776,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         subject_radar.append({
             "subject_id": sid,
             "subject": s["name"],
-            "emoji": s.get("emoji", "📐"),
+            "emoji": s.get("emoji", "book"),
             "test_avg": test_avg,
             "video_pct": video_pct,
             "attendance_pct": att_pct,
@@ -1927,7 +1927,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                     "assignment_title": a["title"],
                     "class_id": a["class_id"],
                     "subject_name": subj.get("name", ""),
-                    "emoji": subj.get("emoji", "📐"),
+                    "emoji": subj.get("emoji", "book"),
                     "submitted_at": sub.get("submitted_at") if sub else None,
                     "marks_obtained": sub.get("marks_obtained") if sub else None,
                     "points_earned": sub.get("points_earned") if sub else None,
@@ -6297,7 +6297,7 @@ async def get_all_student_assignments(user = Depends(verify_token)):
     for a in assignments:
         cls_info = sub_map.get(a["class_id"], {})
         a["subject_name"]  = cls_info.get("name", "")
-        a["subject_emoji"] = cls_info.get("emoji", "📐")
+        a["subject_emoji"] = cls_info.get("emoji", "book")
         a["my_submission"] = sub_by_assign.get(a["id"])
 
     return {"assignments": assignments}

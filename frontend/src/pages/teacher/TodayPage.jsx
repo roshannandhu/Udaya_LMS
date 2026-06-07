@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FileQuestion, Calendar, AlertCircle, Upload, MessageSquare, UserPlus, Activity } from 'lucide-react';
+import { Users, BookOpen, FileQuestion, Calendar, AlertCircle, Upload, MessageSquare, UserPlus, Activity, GraduationCap } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
 import RoadmapNode from '../../components/cards/RoadmapNode';
@@ -102,7 +102,7 @@ export default function TodayPage() {
         <div className="px-5 py-3 flex items-center gap-3">
           <div className="flex-1">
             <p className="text-xs text-neutral-500">{greeting},</p>
-            <h1 className="text-base font-semibold leading-tight">{displayName} 👋</h1>
+            <h1 className="text-base font-semibold leading-tight">{displayName}</h1>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => navigate('/teacher/attendance')} className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-full transition-colors">
@@ -118,10 +118,10 @@ export default function TodayPage() {
         {/* ── Left: class journey ── */}
         <div className="lg:col-span-2">
           <motion.div variants={fadeUp} initial="hidden" animate="show" className="mb-5">
-            <p className="hidden lg:block text-sm text-neutral-500">{greeting}, {displayName} 👋</p>
+            <p className="hidden lg:block text-sm text-neutral-500">{greeting}, {displayName}</p>
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2"
               style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-              My Classes <span>🎓</span>
+              My Classes <GraduationCap size={24} className="text-neutral-700" />
             </h1>
           </motion.div>
 
@@ -144,7 +144,6 @@ export default function TodayPage() {
                 return (
                   <RoadmapNode
                     key={s.id}
-                    emoji={s.emoji || '📚'}
                     title={s.name}
                     description={s.short || 'Manage subjects, students and content.'}
                     status={i === 0 ? 'active' : 'upcoming'}

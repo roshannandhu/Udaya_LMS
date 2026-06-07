@@ -4,6 +4,7 @@ import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
 import { broadcastApi, getApiBaseUrl } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -35,7 +36,7 @@ export default function StudentBroadcastsPage() {
 
   useEffect(() => {
     const standardId = user?.standard_id;
-    if (standardId) setStandard({ id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || '📚' });
+    if (standardId) setStandard({ id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || 'graduation' });
     setLoading(false);
   }, [user?.standard_id, user?.standard_name, user?.standard_emoji]);
 
@@ -178,8 +179,8 @@ export default function StudentBroadcastsPage() {
       <div className="sticky top-0 z-30 bg-white border-b border-neutral-200 shadow-sm shrink-0">
         <div className="px-4 md:px-8 py-3 flex items-center justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center flex-shrink-0 text-xl">
-              {standard.emoji || '📚'}
+            <div className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center flex-shrink-0 text-neutral-700">
+              <SubjectIcon value={standard.emoji} size={20} fallback="graduation" />
             </div>
             <div>
               <h1 className="text-lg md:text-xl font-semibold text-neutral-900 leading-tight">{standard.name}</h1>

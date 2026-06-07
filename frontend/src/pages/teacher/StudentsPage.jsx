@@ -7,6 +7,7 @@ import BulkImportModal from '../../components/teacher/BulkImportModal';
 import { useAppCache, useSettingsStore } from '../../store';
 import { apiClient } from '../../lib/api';
 import { exportStudentsBackup } from '../../lib/studentBackup';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 export default function StudentsPage() {
   const navigate = useNavigate();
@@ -114,7 +115,7 @@ export default function StudentsPage() {
           <select value={stdFilter} onChange={e => setStdFilter(e.target.value)}
             className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] outline-none text-sm shadow-sm">
             <option value="all">All standards</option>
-            {standards.map(s => <option key={s.id} value={s.id}>{s.emoji} {s.name}</option>)}
+            {standards.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] outline-none text-sm shadow-sm">
@@ -152,7 +153,7 @@ export default function StudentsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium truncate">{s.name}</p>
-                      {std && <Tag color="gray">{std.emoji} {std.name}</Tag>}
+                      {std && <Tag color="gray"><span className="inline-flex items-center gap-1"><SubjectIcon value={std.emoji} size={12} fallback="graduation" />{std.name}</span></Tag>}
                       {s.blocked && <Tag color="red">Blocked</Tag>}
                     </div>
                     <p className="text-xs text-neutral-500 truncate">

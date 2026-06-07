@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, FileQuestion, Clock, Loader2, ListChecks, Edit2, Trash2 } from 'lucide-react';
 import { Btn, Tag, Skeleton } from '../../components/ui';
 import NewTestModal from '../../components/teacher/NewTestModal';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import { testApi } from '../../lib/api';
 import { useAppCache } from '../../store';
@@ -139,8 +140,8 @@ export default function TestsPage() {
                         {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">−{t.penalty}</span>}
                       </div>
                       <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/50 flex-wrap">
-                        <span className="bg-white/50 px-2 py-0.5 rounded-full">{std?.emoji} {std?.name}</span>
-                        {sub?.name && <span className="bg-white/50 px-2 py-0.5 rounded-full">{sub.emoji} {sub.name}</span>}
+                        <span className="bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={std?.emoji} size={12} fallback="graduation" />{std?.name}</span>
+                        {sub?.name && <span className="bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={sub.emoji} size={12} />{sub.name}</span>}
                         <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.duration_mins}m</span>
                         <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.total_marks} marks</span>
                       </div>

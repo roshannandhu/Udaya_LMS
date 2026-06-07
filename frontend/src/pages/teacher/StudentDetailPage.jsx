@@ -53,7 +53,7 @@ export default function StudentDetailPage() {
         startY: 56,
         head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
         body: subjectRadar.map(r => [
-          `${r.emoji} ${r.subject}`,
+          r.subject,
           r.test_count > 0 ? `${r.test_avg}%` : '—',
           r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
           r.att_total > 0 ? `${r.attendance_pct}%` : '—',

@@ -203,7 +203,7 @@ export default function StudentProfilePage() {
             </div>
 
             <div className="relative z-10 w-32 h-32 md:w-48 md:h-48 rounded-full bg-white/40 backdrop-blur-sm border-8 border-white/60 shadow-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
-              <span className="text-6xl md:text-8xl filter drop-shadow-md">🥇</span>
+              <Trophy className="w-16 h-16 md:w-24 md:h-24 text-amber-400 drop-shadow-md" fill="currentColor" />
             </div>
           </motion.div>
 

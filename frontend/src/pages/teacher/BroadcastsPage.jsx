@@ -7,6 +7,7 @@ import { useStore, useAppCache } from '../../store';
 import { Skeleton } from '../../components/ui';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { broadcastApi } from '../../lib/api';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 const TTL_OPTIONS = [
   { label: 'Never', value: null },
@@ -140,9 +141,9 @@ export default function BroadcastsPage() {
               return (
                 <div key={s.id} className={`flex items-center gap-3 px-4 py-3.5 border-b border-[#F1EFEC] hover:bg-[#F4F2EF] transition-colors ${isActive ? 'bg-pastel-sky/50' : ''}`}>
                   <button onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0"
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 text-neutral-700"
                       style={{ background: PASTEL[pastelFor(s.name)].hex }}>
-                      {s.emoji || '📚'}
+                      <SubjectIcon value={s.emoji} size={22} fallback="graduation" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">

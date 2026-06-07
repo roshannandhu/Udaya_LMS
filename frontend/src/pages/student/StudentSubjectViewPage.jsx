@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen } from 'lucide-react';
+import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen, Medal } from 'lucide-react';
 import { Tag } from '../../components/ui';
 import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
@@ -9,6 +9,7 @@ import StudentAssignmentSheet from '../../components/student/StudentAssignmentSh
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 import { fadeUp, staggerChildren } from '../../lib/motion';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 function fmtDateTimeLC(iso) {
   if (!iso) return '';
@@ -177,8 +178,8 @@ export default function StudentSubjectViewPage() {
             <div className="w-10 h-10"></div> {/* Spacer for balance */}
           </div>
 
-          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-white/60 backdrop-blur-md border-4 border-white shadow-xl flex items-center justify-center text-5xl md:text-6xl mb-6 transform hover:rotate-12 transition-transform duration-500">
-            {subject?.emoji || '📚'}
+          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-white/60 backdrop-blur-md border-4 border-white shadow-xl flex items-center justify-center text-neutral-700 mb-6 transform hover:rotate-12 transition-transform duration-500">
+            <SubjectIcon value={subject?.emoji} size={52} />
           </div>
 
           <h1 className="text-3xl md:text-5xl font-extrabold text-neutral-900 tracking-tight leading-none mb-4" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
@@ -324,7 +325,7 @@ export default function StudentSubjectViewPage() {
                         {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">−{t.penalty}</span>}
                       </div>
                       <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/50 flex-wrap">
-                         <span className="bg-white/50 px-2 py-0.5 rounded-full">{cls?.emoji} {cls?.name || 'Subject'}</span>
+                         <span className="bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'}</span>
                          <span className="bg-white/50 px-2 py-0.5 rounded-full flex items-center gap-1"><Clock size={12}/>{t.duration_mins}m</span>
                          <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.total_marks} marks</span>
                       </div>
@@ -419,7 +420,7 @@ export default function StudentSubjectViewPage() {
                                 <div className="flex items-start justify-between gap-3 mb-2">
                                   <div className="min-w-0 flex-1">
                                     <h4 className={`font-bold text-[17px] mb-1.5 ${theme.text}`}>{t.title}</h4>
-                                    <p className="text-[12px] font-medium text-black/50 bg-white/50 px-2 py-0.5 rounded-full inline-block">{cls?.emoji} {cls?.name || 'Subject'} · {t.duration_mins} min · {t.total_marks} marks</p>
+                                    <p className="text-[12px] font-medium text-black/50 bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'} · {t.duration_mins} min · {t.total_marks} marks</p>
                                   </div>
                                   <span className="bg-black/10 text-black/60 text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0">Upcoming</span>
                                 </div>
@@ -612,7 +613,7 @@ export default function StudentSubjectViewPage() {
                     return (
                       <div key={row.id ?? i} className={`flex items-center gap-4 px-6 py-5 transition-colors ${isMe ? 'bg-[#FFF4E5]' : 'hover:bg-neutral-50'}`}>
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm ${i === 0 ? 'bg-amber-100' : i === 1 ? 'bg-neutral-200' : i === 2 ? 'bg-orange-100' : 'bg-white border border-neutral-100'}`}>
-                          {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-base font-black text-neutral-400">{i + 1}</span>}
+                          {i === 0 ? <Trophy size={22} className="text-amber-400" fill="currentColor" /> : i === 1 ? <Medal size={22} className="text-neutral-400" /> : i === 2 ? <Medal size={22} className="text-amber-700" /> : <span className="text-base font-black text-neutral-400">{i + 1}</span>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-base font-bold text-neutral-900 truncate">

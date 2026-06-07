@@ -48,7 +48,7 @@ export default function StudentReportModal({ open, onClose, studentId }) {
         startY: 56,
         head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
         body: subjectRadar.map(r => [
-          `${r.emoji || ''} ${r.subject}`,
+          r.subject,
           r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—',
           r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
           r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—',

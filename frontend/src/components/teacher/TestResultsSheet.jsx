@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save } from 'lucide-react';
+import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal } from 'lucide-react';
 import { Sheet, Avatar, Tag, Btn, Skeleton, Input } from '../ui';
 import { testApi, apiClient } from '../../lib/api';
 
@@ -256,8 +256,8 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                       const scorePct = a.score != null ? ((a.score / totalM) * 100).toFixed(1) : 0;
                       return (
                         <div key={a.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-md bg-white border ${a.flagged ? 'border-red-200' : 'border-white/60'}`}>
-                          <span className={`text-xs font-semibold w-5 tabular-nums ${i < 3 ? 'text-amber-600' : 'text-neutral-500'}`}>
-                            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                          <span className={`text-xs font-semibold w-5 flex justify-center tabular-nums ${i < 3 ? 'text-amber-600' : 'text-neutral-500'}`}>
+                            {i === 0 ? <Medal size={15} className="text-amber-400" /> : i === 1 ? <Medal size={15} className="text-neutral-400" /> : i === 2 ? <Medal size={15} className="text-amber-700" /> : i + 1}
                           </span>
                           <Avatar name={student.name} size="sm" />
                           <div className="flex-1 min-w-0">

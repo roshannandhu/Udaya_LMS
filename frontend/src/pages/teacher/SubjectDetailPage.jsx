@@ -10,6 +10,7 @@ import {
 import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, attendanceApi, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassThumbnail from '../../components/LiveClassThumbnail';
 import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
@@ -842,8 +843,8 @@ export default function SubjectDetailPage() {
                   <ArrowLeft size={18} />
                 </button>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-[1rem] bg-white flex items-center justify-center shadow-sm text-2xl border border-neutral-100">
-                    {subject?.emoji || '📚'}
+                  <div className="w-12 h-12 rounded-[1rem] bg-white flex items-center justify-center shadow-sm border border-neutral-100">
+                    <SubjectIcon value={subject?.emoji} size={24} className="text-neutral-700" />
                   </div>
                   <div>
                     <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>

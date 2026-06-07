@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Upload, Plus, Shield, QrCode, Check, FileText, Layers, Minus, Loader2, Clock, X, Database, Search, Link } from 'lucide-react';
+import { IconPicker } from '../shared/SubjectIcon';
 
 function extractYouTubeId(url) {
   const patterns = [
@@ -21,22 +22,14 @@ import { useAppCache } from '../../store';
 
 export function NewStandardModal({ open, onClose }) {
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('📚');
-  const emojis = ['📚', '📐', '⚗️', '🔬', '📖', '🎓', '✏️', '🧪', '🌍', '🎨'];
+  const [emoji, setEmoji] = useState('graduation');
   return (
     <Modal open={open} onClose={onClose} title="New standard">
       <p className="text-sm text-neutral-600 mb-5">Create a new standard. You can add subjects to it afterwards.</p>
       <div className="space-y-4">
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
-          <div className="flex flex-wrap gap-1.5">
-            {emojis.map((e) => (
-              <button key={e} onClick={() => setEmoji(e)}
-                className={`w-9 h-9 rounded-md flex items-center justify-center text-lg transition-all ${emoji === e ? 'bg-neutral-900 ring-2 ring-neutral-300' : 'bg-white/30 hover:bg-white/60'}`}>
-                {e}
-              </button>
-            ))}
-          </div>
+          <IconPicker value={emoji} onChange={setEmoji} fallback="graduation" />
         </div>
         <Input label="Name" placeholder="10th Standard" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <div className="flex gap-2 justify-end pt-2">
@@ -52,21 +45,13 @@ export function NewSubjectModal({ open, onClose, standardId }) {
   const standards = useAppCache(s => s.standards);
   const std = standards.find((s) => s.id === standardId);
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('📐');
-  const emojis = ['📐', '⚗️', '🔬', '📖', '🌍', '🎨', '🎵', '💻', '🧬', '📊'];
+  const [emoji, setEmoji] = useState('book');
   return (
     <Modal open={open} onClose={onClose} title={`New subject${std ? ` in ${std.name}` : ''}`}>
       <div className="space-y-4">
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
-          <div className="flex flex-wrap gap-1.5">
-            {emojis.map((e) => (
-              <button key={e} onClick={() => setEmoji(e)}
-                className={`w-9 h-9 rounded-md flex items-center justify-center text-lg transition-all ${emoji === e ? 'bg-neutral-900 ring-2 ring-neutral-300' : 'bg-white/30 hover:bg-white/60'}`}>
-                {e}
-              </button>
-            ))}
-          </div>
+          <IconPicker value={emoji} onChange={setEmoji} />
         </div>
         <Input label="Subject name" placeholder="Mathematics" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <div className="grid grid-cols-2 gap-3">
@@ -272,7 +257,7 @@ export function NewTestModal({ open, onClose, defaultClassId, onSuccess }) {
             {standards.map((std) => (
               <optgroup key={std.id} label={std.name}>
                 {subjects.filter((c) => String(c.standard_id) === String(std.id)).map((c) => (
-                  <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.name}</option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </optgroup>
             ))}

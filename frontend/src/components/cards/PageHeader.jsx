@@ -1,12 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { fadeUp } from '../../lib/motion';
+import SubjectIcon from '../shared/SubjectIcon';
 
 /**
- * Large serif page title with optional emoji, subtitle and trailing action.
+ * Large serif page title with optional subject/standard icon, subtitle and trailing action.
+ * `icon` is a stored icon value (lucide key or legacy emoji char) resolved via SubjectIcon.
  * Used inside pages (the global chrome now lives in TopNav).
  */
-export default function PageHeader({ title, emoji, subtitle, action, className = '' }) {
+export default function PageHeader({ title, icon, subtitle, action, className = '' }) {
   return (
     <motion.div
       variants={fadeUp} initial="hidden" animate="show"
@@ -16,7 +18,7 @@ export default function PageHeader({ title, emoji, subtitle, action, className =
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2"
           style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
           <span className="truncate">{title}</span>
-          {emoji && <span className="flex-shrink-0">{emoji}</span>}
+          {icon && <SubjectIcon value={icon} size={24} className="flex-shrink-0 text-neutral-700" />}
         </h1>
         {subtitle && <p className="text-sm text-neutral-500 mt-1">{subtitle}</p>}
       </div>

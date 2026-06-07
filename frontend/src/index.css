@@ -74,6 +74,16 @@ h1, h2, h3 {
   border-left: 2px dashed #CBE3D8;
 }
 
+/* Hide scrollbars on horizontal rails (Hotstar-style video rows, subject rail).
+   Class name matches existing usages (HeroCarousel) which were previously no-ops. */
+.scrollbar-hide {
+  -ms-overflow-style: none;   /* IE / old Edge */
+  scrollbar-width: none;      /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;              /* Chrome / Safari / Edge */
+}
+
 /* ── Neutralize blur everywhere (covers all inline backdrop-blur-* utils) ── */
 *, *::before, *::after {
   backdrop-filter: none !important;

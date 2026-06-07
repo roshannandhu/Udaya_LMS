@@ -6,6 +6,7 @@ import { Avatar, Btn, Skeleton } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
 import { apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
+import SubjectIcon from '../../components/shared/SubjectIcon';
 
 export default function ReportsPage() {
   const navigate = useNavigate();
@@ -136,7 +137,7 @@ export default function ReportsPage() {
                     ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
                     : 'text-neutral-600 border-white/60 glass-panel hover:bg-[#F4F2EF]'
                 }`}>
-                {s.emoji} {s.name}
+                <span className="inline-flex items-center gap-1.5"><SubjectIcon value={s.emoji} size={14} fallback="graduation" />{s.name}</span>
               </button>
             ))}
           </div>

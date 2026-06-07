@@ -184,7 +184,7 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
           gap: 8, fontSize: 14, fontWeight: 600, pointerEvents: 'none', whiteSpace: 'nowrap',
           boxShadow: '0 8px 32px rgba(220,38,38,0.45)',
         }}>
-          ⚠ Screenshot attempt detected
+          <AlertCircle size={16} /> Screenshot attempt detected
         </div>
       )}
 

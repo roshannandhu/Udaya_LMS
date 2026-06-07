@@ -9,21 +9,21 @@ export const fmtDate = (d) =>
   d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
 export const mockStandards = [
-  { id: 1, name: '10th Standard', short: '10', emoji: '📐' },
-  { id: 2, name: '11th Standard', short: '11', emoji: '⚗️' },
-  { id: 3, name: '12th Standard', short: '12', emoji: '🎓' },
-  { id: 4, name: '9th Standard',  short: '9',  emoji: '📚' },
+  { id: 1, name: '10th Standard', short: '10', emoji: 'calculator' },
+  { id: 2, name: '11th Standard', short: '11', emoji: 'flask' },
+  { id: 3, name: '12th Standard', short: '12', emoji: 'graduation' },
+  { id: 4, name: '9th Standard',  short: '9',  emoji: 'book' },
 ];
 
 export const mockSubjectClasses = [
-  { id: 1, standardId: 1, name: 'Mathematics', emoji: '📐', videoCount: 24, endDate: '2026-12-15' },
-  { id: 2, standardId: 1, name: 'Physics',     emoji: '⚛️', videoCount: 18, endDate: '2026-12-15' },
-  { id: 3, standardId: 1, name: 'Chemistry',   emoji: '⚗️', videoCount: 22, endDate: '2026-12-15' },
-  { id: 4, standardId: 2, name: 'Mathematics', emoji: '📐', videoCount: 18, endDate: '2026-12-20' },
-  { id: 5, standardId: 2, name: 'Physics',     emoji: '⚛️', videoCount: 15, endDate: '2026-12-20' },
-  { id: 6, standardId: 3, name: 'Physics',     emoji: '⚛️', videoCount: 31, endDate: '2027-03-01' },
-  { id: 7, standardId: 3, name: 'Mathematics', emoji: '📐', videoCount: 28, endDate: '2027-03-01' },
-  { id: 8, standardId: 4, name: 'English',     emoji: '📖', videoCount: 12, endDate: '2027-01-31' },
+  { id: 1, standardId: 1, name: 'Mathematics', emoji: 'calculator', videoCount: 24, endDate: '2026-12-15' },
+  { id: 2, standardId: 1, name: 'Physics',     emoji: 'atom', videoCount: 18, endDate: '2026-12-15' },
+  { id: 3, standardId: 1, name: 'Chemistry',   emoji: 'flask', videoCount: 22, endDate: '2026-12-15' },
+  { id: 4, standardId: 2, name: 'Mathematics', emoji: 'calculator', videoCount: 18, endDate: '2026-12-20' },
+  { id: 5, standardId: 2, name: 'Physics',     emoji: 'atom', videoCount: 15, endDate: '2026-12-20' },
+  { id: 6, standardId: 3, name: 'Physics',     emoji: 'atom', videoCount: 31, endDate: '2027-03-01' },
+  { id: 7, standardId: 3, name: 'Mathematics', emoji: 'calculator', videoCount: 28, endDate: '2027-03-01' },
+  { id: 8, standardId: 4, name: 'English',     emoji: 'book', videoCount: 12, endDate: '2027-01-31' },
 ];
 
 export const mockStudents = [

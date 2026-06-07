@@ -6,10 +6,11 @@ import { apiClient } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
 import BulkImportModal from '../../components/teacher/BulkImportModal';
 import TerminateStandardModal from '../../components/teacher/TerminateStandardModal';
+import SubjectIcon, { IconPicker } from '../../components/shared/SubjectIcon';
 
 function NewSubjectModal({ open, onClose, standardId, onSuccess }) {
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('📐');
+  const [emoji, setEmoji] = useState('book');
   const [loading, setLoading] = useState(false);
   const { invalidate, refreshSubjects } = useAppCache();
 
@@ -38,14 +39,7 @@ function NewSubjectModal({ open, onClose, standardId, onSuccess }) {
         <Input label="Subject name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
-          <div className="flex gap-2 flex-wrap">
-            {['📐', '🧮', '🔬', '🌍', '📝', '💻', '🎨', '📕'].map(e => (
-              <button key={e} onClick={() => setEmoji(e)}
-                className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl border ${emoji === e ? 'border-neutral-900 bg-white/50' : 'border-white/60'}`}>
-                {e}
-              </button>
-            ))}
-          </div>
+          <IconPicker value={emoji} onChange={setEmoji} />
         </div>
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading && <Loader2 size={14} className="animate-spin" />}
@@ -321,7 +315,7 @@ export default function StandardDetailPage() {
           <button onClick={() => navigate('/teacher/subjects')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
-          <span className="text-xl">{standard?.emoji || '📚'}</span>
+          <SubjectIcon value={standard?.emoji} size={22} fallback="graduation" className="text-neutral-700 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Subjects</p>
             <h1 className="text-lg md:text-xl font-semibold truncate">{standard?.name || 'Standard'}</h1>
@@ -425,7 +419,7 @@ export default function StandardDetailPage() {
                   onClick={() => navigate(`/teacher/subjects/${standardId}/${c.id}`)}
                   className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col min-h-[130px]"
                 >
-                  <span className="text-3xl mb-3 block">{c.emoji || '📐'}</span>
+                  <SubjectIcon value={c.emoji} size={30} className="text-neutral-700 mb-3" />
                   <p className="text-sm font-semibold text-neutral-900 mb-0.5 truncate">{c.name}</p>
                   <p className="text-xs text-neutral-400">{c.end_date ? `Ends ${c.end_date}` : 'Active'}</p>
                   <div className="mt-auto pt-3 flex items-center justify-end">

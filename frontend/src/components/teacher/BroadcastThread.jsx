@@ -3,9 +3,9 @@ import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, C
 import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
+import SubjectIcon, { IconPicker } from '../shared/SubjectIcon';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-const CLASS_EMOJIS = ['📚', '📖', '🎓', '✨', '💡', '🔢', '🧪', '📐', '🏫', '📝', '📊', '🔬', '🎨', '🎵', '🏆', '⚡', '🌟', '💎', '🌈', '🐣'];
 
 function formatChatDate(dateString) {
   if (!dateString) return 'Unknown Date';
@@ -326,20 +326,13 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
           </button>
           <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
-              className="w-9 h-9 rounded-full bg-pastel-sky flex items-center justify-center text-lg hover:ring-2 hover:ring-neutral-300 transition-all">
-              {std.emoji}
+              className="w-9 h-9 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
+              <SubjectIcon value={std.emoji} size={18} fallback="graduation" />
             </button>
             {showEmojiPicker && (
-              <div className="absolute top-11 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-56">
+              <div className="absolute top-11 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
                 <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
-                <div className="grid grid-cols-5 gap-1">
-                  {CLASS_EMOJIS.map(e => (
-                    <button key={e} onClick={() => handleEmojiChange(e)}
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-xl transition-colors hover:bg-neutral-100 ${e === std.emoji ? 'bg-neutral-100 ring-2 ring-neutral-400' : ''}`}>
-                      {e}
-                    </button>
-                  ))}
-                </div>
+                <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
               </div>
             )}
           </div>
@@ -355,20 +348,13 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         <div className="hidden md:flex items-center gap-3 px-5 py-3 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
           <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
-              className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center text-xl hover:ring-2 hover:ring-neutral-300 transition-all">
-              {std.emoji}
+              className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
+              <SubjectIcon value={std.emoji} size={20} fallback="graduation" />
             </button>
             {showEmojiPicker && (
-              <div className="absolute top-12 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-56">
+              <div className="absolute top-12 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
                 <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
-                <div className="grid grid-cols-5 gap-1">
-                  {CLASS_EMOJIS.map(e => (
-                    <button key={e} onClick={() => handleEmojiChange(e)}
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-xl transition-colors hover:bg-neutral-100 ${e === std.emoji ? 'bg-neutral-100 ring-2 ring-neutral-400' : ''}`}>
-                      {e}
-                    </button>
-                  ))}
-                </div>
+                <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
               </div>
             )}
           </div>

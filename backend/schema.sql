@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS standards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     short TEXT,
-    emoji TEXT DEFAULT '📚',
+    emoji TEXT DEFAULT 'graduation',  -- lucide icon key (legacy rows may hold an emoji char)
     teacher_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     start_date DATE,
     end_date DATE,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS subject_classes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     standard_id UUID REFERENCES standards(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    emoji TEXT DEFAULT '📐',
+    emoji TEXT DEFAULT 'book',  -- lucide icon key (legacy rows may hold an emoji char)
     end_date DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
