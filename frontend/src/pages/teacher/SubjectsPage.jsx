@@ -11,7 +11,7 @@ import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { springCard } from '../../lib/motion';
 import { apiClient } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
-import SubjectIcon, { IconPicker } from '../../components/shared/SubjectIcon';
+import SubjectIcon, { IconPicker, suggestIconForSubject } from '../../components/shared/SubjectIcon';
 
 /* ─── Badge colour helpers ─────────────────────────────────────── */
 function getStdNum(name) { const m = name.match(/\d+/); return m ? m[0] : ''; }
@@ -61,6 +61,14 @@ function NewSubjectModal({ open, onClose, standardId, standardName }) {
   const [error, setError] = useState('');
   const { invalidate, refreshSubjects } = useAppCache();
 
+  const handleNameChange = (val) => {
+    setName(val);
+    if (val.length > 2) {
+      const suggested = suggestIconForSubject(val);
+      if (suggested) setEmoji(suggested);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) { setError('Please enter a subject name'); return; }
     setLoading(true); setError('');
@@ -76,7 +84,7 @@ function NewSubjectModal({ open, onClose, standardId, standardName }) {
     <Modal open={open} onClose={onClose} title={`New Subject for ${standardName || 'Class'}`} size="sm">
       <div className="space-y-4">
         {error && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-100">{error}</div>}
-        <Input label="Subject name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
+        <Input label="Subject name" value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Mathematics" />
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
           <IconPicker value={emoji} onChange={setEmoji} />
@@ -145,7 +153,7 @@ function BentoClassCard({ std, subjectsCount, studentsCount, navigate, isLast })
       </div>
 
       <motion.div
-        onClick={() => navigate(`/teacher/subjects/${std.id}`)}
+        onClick={() => navigate(`/teacher/standards/${std.id}`)}
         whileHover={{ y: -4, scale: 1.01 }} whileTap={{ scale: 0.98 }} transition={springCard}
         className="flex-1 rounded-[2.5rem] p-6 md:p-8 cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
         style={{ background: pastel.hex }}

@@ -12,7 +12,7 @@ import { apiClient, attendanceApi, assignmentApi, liveClassApi, notesApi } from 
 import { useAuthStore } from '../../lib/auth';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
-import LiveClassThumbnail from '../../components/LiveClassThumbnail';
+import LiveClassCard from '../../components/cards/LiveClassCard';
 import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
 
 /* ─── helpers shared with live-class cards ─────────── */
@@ -839,7 +839,7 @@ export default function SubjectDetailPage() {
             {/* Custom Bento Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <button onClick={() => navigate(`/teacher/subjects/${standardId}`)} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 hover:border-neutral-300 transition-all">
+                <button onClick={() => navigate(`/teacher/standards/${standardId}`)} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 hover:border-neutral-300 transition-all">
                   <ArrowLeft size={18} />
                 </button>
                 <div className="flex items-center gap-3">
@@ -1134,71 +1134,51 @@ export default function SubjectDetailPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {liveClasses.map(lc => {
+              {liveClasses.map((lc, idx) => {
                 const status = lc.status || 'scheduled';
                 const isLive = status === 'live';
                 const isScheduled = status === 'scheduled';
                 const isEnded = status === 'ended';
                 const isCancelled = status === 'cancelled';
                 return (
-                  <div key={lc.id} className="rounded-xl glass-panel border-white/60 shadow-sm overflow-hidden flex flex-col">
-                    <LiveClassThumbnail
-                      thumbnailUrl={lc.thumbnail_url}
-                      textSide={lc.thumbnail_text_side}
-                      subjectName={subject?.name}
-                      standardName={standard?.name}
-                      topic={lc.title}
-                      status={status}
-                      scheduledAt={lc.scheduled_at}
+                  <div key={lc.id} className="h-full">
+                    <LiveClassCard
+                      lc={lc}
+                      themeIndex={idx}
+                      onClick={handleWatchLive}
+                      joiningId={joiningLiveId}
+                      compact={true}
+                      actions={
+                        <>
+                          {isScheduled && (
+                            <>
+                              <button onClick={() => handleCancelLive(lc)} className="bg-white/60 hover:bg-white text-neutral-700 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all hover:-translate-y-0.5">Cancel</button>
+                            </>
+                          )}
+                          {isLive && (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); handleWatchLive(lc); }} disabled={joiningLiveId === lc.id} className="bg-blue-600 text-white px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all hover:-translate-y-0.5 flex items-center gap-1">
+                                {joiningLiveId === lc.id ? <><Loader2 size={13} className="animate-spin"/> Opening…</> : 'Watch live'}
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setAttendanceSheetId(lc.id); }} className="bg-white/80 hover:bg-white text-neutral-700 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm flex items-center gap-1">
+                                <Users size={12}/> {lc.attended_count ?? 0}/{lc.total_registered ?? 0}
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); handleEndLive(lc); }} className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all">End</button>
+                            </>
+                          )}
+                          {isEnded && (
+                            <button onClick={(e) => { e.stopPropagation(); setAttendanceSheetId(lc.id); }} className="bg-white/80 hover:bg-white text-neutral-700 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm flex items-center gap-1">
+                              <Users size={12}/> {lc.attended_count ?? 0}/{lc.total_registered ?? 0} attended
+                            </button>
+                          )}
+                          {!isLive && (
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteLive(lc); }} className="bg-white/60 hover:bg-white text-red-600 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all flex items-center gap-1 ml-auto">
+                              <Trash2 size={12}/> Delete
+                            </button>
+                          )}
+                        </>
+                      }
                     />
-                    <div className="p-3 flex flex-col gap-2 flex-1">
-                      <div className="flex items-start gap-2">
-                        <h3 className="flex-1 text-sm font-semibold text-neutral-900 leading-snug line-clamp-2">{lc.title}</h3>
-                        <Tag color={statusColorLC(status)}>
-                          {isLive && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block mr-1 animate-pulse" />}
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Tag>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-neutral-500">
-                        {!isCancelled && (
-                          <span className="flex items-center gap-1"><Calendar size={10}/>{fmtDateTimeLC(lc.scheduled_at)}</span>
-                        )}
-                        {lc.duration_mins > 0 && (
-                          <span className="flex items-center gap-1"><Clock size={10}/>{lc.duration_mins} min</span>
-                        )}
-                      </div>
-                      <div className="mt-auto flex items-center gap-2 flex-wrap pt-1">
-                        {isScheduled && (
-                          <>
-                            <span className="text-xs text-neutral-500">Start from your Zoom app</span>
-                            <Btn size="sm" variant="ghost" onClick={() => handleCancelLive(lc)}>Cancel</Btn>
-                          </>
-                        )}
-                        {isLive && (
-                          <>
-                            <Btn size="sm" variant="primary" onClick={() => handleWatchLive(lc)} disabled={joiningLiveId === lc.id}>
-                              {joiningLiveId === lc.id ? <><Loader2 size={13} className="animate-spin"/> Opening…</> : 'Watch live'}
-                            </Btn>
-                            <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
-                              {lc.attended_count ?? 0}/{lc.total_registered ?? 0}
-                            </Btn>
-                            <Btn size="sm" variant="dangerSolid" onClick={() => handleEndLive(lc)}>End</Btn>
-                          </>
-                        )}
-                        {isEnded && (
-                          <Btn size="sm" variant="ghost" icon={Users} onClick={() => setAttendanceSheetId(lc.id)}>
-                            {lc.attended_count ?? 0}/{lc.total_registered ?? 0} attended
-                          </Btn>
-                        )}
-                        {isCancelled && <span className="text-xs text-neutral-400">Cancelled</span>}
-                        {!isLive && (
-                          <button onClick={() => handleDeleteLive(lc)}
-                            className="ml-auto flex items-center gap-1 text-xs font-medium text-red-600 hover:bg-red-50 px-2 py-1.5 rounded-md">
-                            <Trash2 size={13}/> Delete
-                          </button>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 );
               })}

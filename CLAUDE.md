@@ -239,3 +239,9 @@ VITE_API_URL=http://localhost:8001/api
 *Last updated: May 2026*
 *UI prototype: lms-v3_9.jsx · Build guide: BUILD_STEPS.md*
 *Stack: React + Vite · FastAPI · Supabase · Cloudflare Stream (Module 4+)*
+
+---
+
+## Skills
+- **graphify** (`.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.

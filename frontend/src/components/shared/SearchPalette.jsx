@@ -27,12 +27,12 @@ export default function SearchPalette({ open, onClose }) {
           .map((c) => ({
             type: 'Subject', label: c.name,
             sub: standards.find((s) => s.id === c.standard_id)?.name,
-            go: () => navigate(`/teacher/subjects/${c.standard_id}/${c.id}`)
+            go: () => navigate(`/teacher/standards/${c.standard_id}/subjects/${c.id}`)
           })),
       ]
     : [
         { type: 'Quick action', label: 'Create new test',  icon: FileQuestion, go: () => navigate('/teacher/tests') },
-        { type: 'Quick action', label: 'Upload video',     icon: Upload,       go: () => navigate('/teacher/subjects') },
+        { type: 'Quick action', label: 'Upload video',     icon: Upload,       go: () => navigate('/teacher/standards') },
         { type: 'Quick action', label: 'Send broadcast',   icon: MessageSquare,go: () => navigate('/teacher/broadcasts') },
         { type: 'Quick action', label: 'Add student',      icon: UserPlus,     go: () => navigate('/teacher/students') },
       ];

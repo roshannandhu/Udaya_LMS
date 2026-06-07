@@ -211,9 +211,9 @@ export default function App() {
           </ProtectedTeacherRoute>
         }>
           <Route index element={<TodayPage />} />
-          <Route path="subjects" element={<SubjectsPage />} />
-          <Route path="subjects/:standardId" element={<StandardDetailPage />} />
-          <Route path="subjects/:standardId/:classId" element={<SubjectDetailPage />} />
+          <Route path="standards" element={<SubjectsPage />} />
+          <Route path="standards/:standardId" element={<StandardDetailPage />} />
+          <Route path="standards/:standardId/subjects/:classId" element={<SubjectDetailPage />} />
           <Route path="live-classes" element={<TeacherLiveClassesPage />} />
           <Route path="students" element={<StudentsPage />} />
           <Route path="students/:studentId" element={<StudentDetailPage />} />

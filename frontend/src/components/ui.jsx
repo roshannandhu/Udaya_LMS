@@ -75,10 +75,8 @@ export const Avatar = ({ name, src, size = 'md' }) => {
       className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-[#EFEDEA]`} />;
   }
   return (
-    <div className={`${sizes[size]} rounded-full flex items-center justify-center font-semibold flex-shrink-0`}
-      style={{ background: PASTELS[idx].bg, color: PASTELS[idx].text }}>
-      {initials}
-    </div>
+    <img src="/default-avatar.png" alt="Default Avatar"
+      className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-[#EFEDEA] shadow-sm`} />
   );
 };
 

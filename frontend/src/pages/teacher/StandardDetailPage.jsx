@@ -6,26 +6,54 @@ import { apiClient } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
 import BulkImportModal from '../../components/teacher/BulkImportModal';
 import TerminateStandardModal from '../../components/teacher/TerminateStandardModal';
-import SubjectIcon, { IconPicker } from '../../components/shared/SubjectIcon';
+import SubjectIcon, { IconPicker, suggestIconForSubject } from '../../components/shared/SubjectIcon';
 
-function NewSubjectModal({ open, onClose, standardId, onSuccess }) {
+function NewSubjectModal({ open, onClose, standardId, onSuccess, editSubject }) {
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('book');
   const [loading, setLoading] = useState(false);
   const { invalidate, refreshSubjects } = useAppCache();
 
+  useEffect(() => {
+    if (open) {
+      if (editSubject) {
+        setName(editSubject.name);
+        setEmoji(editSubject.emoji);
+      } else {
+        setName('');
+        setEmoji('book');
+      }
+    }
+  }, [open, editSubject]);
+
+  const handleNameChange = (val) => {
+    setName(val);
+    if (!editSubject && val.length > 2) {
+      const suggested = suggestIconForSubject(val);
+      if (suggested) setEmoji(suggested);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      const created = await apiClient('/subjects', {
-        method: 'POST',
-        body: JSON.stringify({ standard_id: standardId, name, emoji })
-      });
+      let result;
+      if (editSubject) {
+        result = await apiClient(`/subjects/${editSubject.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name, emoji })
+        });
+      } else {
+        result = await apiClient('/subjects', {
+          method: 'POST',
+          body: JSON.stringify({ standard_id: standardId, name, emoji })
+        });
+      }
       invalidate();
       await refreshSubjects();
       onClose();
-      if (onSuccess) onSuccess(created);
+      if (onSuccess) onSuccess(result);
     } catch (err) {
       console.error(err);
     } finally {
@@ -34,16 +62,16 @@ function NewSubjectModal({ open, onClose, standardId, onSuccess }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Subject" size="sm">
+    <Modal open={open} onClose={onClose} title={editSubject ? "Edit Subject" : "Add Subject"} size="sm">
       <div className="space-y-4">
-        <Input label="Subject name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
+        <Input label="Subject name" value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Mathematics" />
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
           <IconPicker value={emoji} onChange={setEmoji} />
         </div>
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading && <Loader2 size={14} className="animate-spin" />}
-          Create Subject
+          {editSubject ? "Save Changes" : "Create Subject"}
         </Btn>
       </div>
     </Modal>
@@ -223,6 +251,7 @@ export default function StandardDetailPage() {
   const allStudents        = useAppCache(s => s.students);
   const invalidate         = useAppCache(s => s.invalidate);
   const invalidateStudents = useAppCache(s => s.invalidateStudents);
+  const refreshSubjects    = useAppCache(s => s.refreshSubjects);
   const cachedStandard = allStandards.find(s => String(s.id) === String(standardId));
   const cachedSubjects = allSubjects.filter(s => String(s.standard_id) === String(standardId));
   const cachedStudents = allStudents.filter(s => String(s.standard_id) === String(standardId));
@@ -239,6 +268,9 @@ export default function StandardDetailPage() {
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [newSubjectOpen, setNewSubjectOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(null);
+  const [confirmDeleteSubject, setConfirmDeleteSubject] = useState(null);
+  const [editSubject, setEditSubject] = useState(null);
+  const [deletingSubject, setDeletingSubject] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [terminateOpen, setTerminateOpen] = useState(false);
 
@@ -270,6 +302,24 @@ export default function StandardDetailPage() {
     s.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
     s.username?.toLowerCase().includes(studentSearch.toLowerCase())
   );
+
+  const handleDeleteSubject = async () => {
+    const subj = confirmDeleteSubject;
+    if (!subj) return;
+    setDeletingSubject(true);
+    try {
+      await apiClient(`/subjects/${subj.id}`, { method: 'DELETE' });
+      setSubjects(prev => prev.filter(s => s.id !== subj.id));
+      invalidate();
+      if (refreshSubjects) await refreshSubjects();
+      setConfirmDeleteSubject(null);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Could not delete subject');
+    } finally {
+      setDeletingSubject(false);
+    }
+  };
 
   const handleBlock = async (studentId) => {
     const willBlock = !blockedIds.includes(studentId);
@@ -312,7 +362,7 @@ export default function StandardDetailPage() {
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-          <button onClick={() => navigate('/teacher/subjects')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
+          <button onClick={() => navigate('/teacher/standards')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
           <SubjectIcon value={standard?.emoji} size={22} fallback="graduation" className="text-neutral-700 flex-shrink-0" />
@@ -414,21 +464,40 @@ export default function StandardDetailPage() {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {subjects.map((c) => (
-                <button
+                <div
                   key={c.id}
-                  onClick={() => navigate(`/teacher/subjects/${standardId}/${c.id}`)}
-                  className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col min-h-[130px]"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/teacher/standards/${standardId}/subjects/${c.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/teacher/standards/${standardId}/subjects/${c.id}`); }}
+                  className="relative glass-panel rounded-2xl p-5 text-left hover:bg-white/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col min-h-[130px] cursor-pointer"
                 >
+                  <div className="absolute top-2.5 right-2.5 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditSubject(c); setNewSubjectOpen(true); }}
+                      title="Edit subject"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-300 hover:bg-neutral-100 hover:text-neutral-600 transition-all"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteSubject(c); }}
+                      title="Delete subject"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-300 hover:bg-red-50 hover:text-red-600 transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                   <SubjectIcon value={c.emoji} size={30} className="text-neutral-700 mb-3" />
-                  <p className="text-sm font-semibold text-neutral-900 mb-0.5 truncate">{c.name}</p>
+                  <p className="text-sm font-semibold text-neutral-900 mb-0.5 truncate pr-7">{c.name}</p>
                   <p className="text-xs text-neutral-400">{c.end_date ? `Ends ${c.end_date}` : 'Active'}</p>
                   <div className="mt-auto pt-3 flex items-center justify-end">
                     <ChevronRight size={14} className="text-neutral-300 group-hover:text-neutral-500 group-hover:translate-x-0.5 transition-all" />
                   </div>
-                </button>
+                </div>
               ))}
               <button
-                onClick={() => setNewSubjectOpen(true)}
+                onClick={() => { setEditSubject(null); setNewSubjectOpen(true); }}
                 className="glass-panel rounded-2xl p-5 text-left hover:bg-white/80 transition-all duration-200 border-2 border-dashed border-[#D8D6D2] hover:border-neutral-300 flex flex-col items-center justify-center min-h-[130px] text-neutral-400 hover:text-neutral-600 gap-2"
               >
                 <div className="w-10 h-10 rounded-full border-2 border-neutral-300 flex items-center justify-center">
@@ -467,8 +536,13 @@ export default function StandardDetailPage() {
         open={newSubjectOpen}
         onClose={() => setNewSubjectOpen(false)}
         standardId={standardId}
-        onSuccess={(created) => {
-          if (created) setSubjects(prev => [...prev, created]);
+        editSubject={editSubject}
+        onSuccess={(updated) => {
+          if (editSubject) {
+            setSubjects(s => s.map(sub => sub.id === updated.id ? updated : sub));
+          } else {
+            if (updated) setSubjects(s => [...s, updated]);
+          }
         }}
       />
 
@@ -481,6 +555,18 @@ export default function StandardDetailPage() {
         </div>
       </Modal>
 
+      <Modal open={!!confirmDeleteSubject} onClose={() => !deletingSubject && setConfirmDeleteSubject(null)} title="Delete subject?" size="sm">
+        <p className="text-sm text-neutral-600 mb-2">Delete <strong>{confirmDeleteSubject?.name}</strong>?</p>
+        <p className="text-sm text-neutral-600 mb-5">This permanently removes the subject along with all its videos, tests, assignments and notes for every student. This cannot be undone.</p>
+        <div className="flex gap-2 justify-end">
+          <Btn variant="ghost" onClick={() => setConfirmDeleteSubject(null)} disabled={deletingSubject}>Cancel</Btn>
+          <Btn variant="dangerSolid" onClick={handleDeleteSubject} disabled={deletingSubject}>
+            {deletingSubject && <Loader2 size={14} className="animate-spin" />}
+            Delete
+          </Btn>
+        </div>
+      </Modal>
+
       <TerminateStandardModal
         open={terminateOpen}
         onClose={() => setTerminateOpen(false)}
@@ -488,8 +574,7 @@ export default function StandardDetailPage() {
         students={students}
         subjects={subjects}
         onSuccess={() => {
-          invalidate();
-          navigate('/teacher/subjects');
+          navigate('/teacher/standards');
         }}
       />
     </div>

@@ -98,7 +98,7 @@ export default function AttendancePage() {
             <BookOpen size={36} className="mx-auto mb-3 text-neutral-300" />
             <p className="font-semibold text-neutral-600 mb-1">No standards yet</p>
             <p className="text-sm text-neutral-400 mb-5">Create a standard and enrol students first.</p>
-            <button onClick={() => navigate('/teacher/subjects')}
+            <button onClick={() => navigate('/teacher/standards')}
               className="px-5 py-2.5 bg-ink text-white rounded-pill text-sm font-medium hover:bg-neutral-800 transition-colors">
               Go to Subjects
             </button>

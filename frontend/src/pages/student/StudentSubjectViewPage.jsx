@@ -7,7 +7,7 @@ import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassA
 import { useAuthStore } from '../../lib/auth';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
-import LiveClassThumbnail from '../../components/LiveClassThumbnail';
+import LiveClassCard from '../../components/cards/LiveClassCard';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 
@@ -525,42 +525,33 @@ export default function StudentSubjectViewPage() {
                   <p className="text-sm font-bold text-neutral-500">No live classes scheduled yet.</p>
                 </div>
               )}
-              {liveClasses.map(lc => {
+              {liveClasses.map((lc, idx) => {
                 const status = lc.status || 'scheduled';
                 const isLive = status === 'live';
                 const isEnded = status === 'ended';
                 return (
-                  <motion.div variants={fadeUp} key={lc.id} className="rounded-[2rem] border border-neutral-100 bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col group">
-                    <LiveClassThumbnail thumbnailUrl={lc.thumbnail_url} textSide={lc.thumbnail_text_side} subjectName={subject?.name} topic={lc.title} status={status} scheduledAt={lc.scheduled_at} />
-                    <div className="p-6 flex flex-col gap-4 flex-1">
-                      <div className="flex items-start gap-3">
-                        <h3 className="flex-1 text-base font-bold text-neutral-900 leading-snug line-clamp-2">{lc.title}</h3>
-                        {isLive && (
-                          <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-white bg-red-600 px-3 py-1.5 rounded-full shadow-md animate-pulse">
-                            <span className="w-2 h-2 rounded-full bg-white"/> LIVE
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-neutral-500">
-                        {!isEnded && <span className="flex items-center gap-1.5 bg-neutral-50 px-2 py-1 rounded-md border border-neutral-100"><Calendar size={14}/>{fmtDateTimeLC(lc.scheduled_at)}</span>}
-                        {lc.duration_mins > 0 && <span className="flex items-center gap-1.5 bg-neutral-50 px-2 py-1 rounded-md border border-neutral-100"><Clock size={14}/>{lc.duration_mins} min</span>}
-                      </div>
-
-                      <div className="mt-auto pt-4 flex items-center gap-2">
-                        {isLive && (
-                          <button onClick={() => handleJoinLive(lc)} disabled={joiningLiveId === lc.id} className="flex-1 py-3 bg-red-600 text-white text-sm font-bold uppercase tracking-wider rounded-xl hover:bg-red-700 disabled:opacity-60 transition-colors shadow-lg hover:shadow-red-500/30">
-                            {joiningLiveId === lc.id ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin"/> Joining…</span> : 'Join Live Class'}
-                          </button>
-                        )}
-                        {status === 'scheduled' && <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Starts soon</span>}
-                        {isEnded && lc.my_attended !== null && lc.my_attended !== undefined && (
-                          <span className={`text-[10px] font-extrabold uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm ${lc.my_attended ? 'text-emerald-700 bg-emerald-100' : 'text-red-700 bg-red-100'}`}>
-                            {lc.my_attended ? 'Attended' : 'Missed'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                  <motion.div variants={fadeUp} key={lc.id} className="h-full">
+                    <LiveClassCard
+                      lc={lc}
+                      themeIndex={idx}
+                      onClick={handleJoinLive}
+                      joiningId={joiningLiveId}
+                      compact={true}
+                      actions={
+                        <>
+                          {isLive && (
+                            <button onClick={(e) => { e.stopPropagation(); handleJoinLive(lc); }} disabled={joiningLiveId === lc.id} className="bg-red-600 text-white px-5 py-2.5 text-sm font-bold uppercase tracking-wider rounded-full hover:bg-red-700 disabled:opacity-60 transition-colors shadow-lg hover:shadow-red-500/30 flex items-center gap-2">
+                              {joiningLiveId === lc.id ? <><Loader2 size={16} className="animate-spin"/> Joining…</> : 'Join Live Class'}
+                            </button>
+                          )}
+                          {isEnded && lc.my_attended !== null && lc.my_attended !== undefined && (
+                            <span className={`text-[11px] font-extrabold uppercase tracking-widest px-4 py-2 rounded-full shadow-sm ${lc.my_attended ? 'text-emerald-700 bg-emerald-100' : 'text-red-700 bg-red-100'}`}>
+                              {lc.my_attended ? 'Attended' : 'Missed'}
+                            </span>
+                          )}
+                        </>
+                      }
+                    />
                   </motion.div>
                 );
               })}

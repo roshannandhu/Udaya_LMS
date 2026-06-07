@@ -112,7 +112,7 @@ export default function TeacherProfilePage() {
             </div>
             <div className="flex items-center gap-2">
               <Btn variant="primary" size="sm" icon={saved ? CheckCircle2 : Save} onClick={handleSave} disabled={saving || !name.trim() || name === user?.name}>
-                {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+                {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
               </Btn>
             </div>
           </div>

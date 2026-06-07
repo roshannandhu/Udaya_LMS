@@ -1025,7 +1025,7 @@ def change_password(request: ChangePasswordRequest, user = Depends(verify_token)
 
 # Dashboard Stats
 @app.get("/api/dashboard/stats")
-def get_dashboard_stats(user = Depends(verify_token)):
+async def get_dashboard_stats(user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
@@ -1033,39 +1033,42 @@ def get_dashboard_stats(user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     teacher_id = user["teacher_id"]
-    standards = service_supabase.table("standards").select("id").eq("teacher_id", teacher_id).execute()
+    standards = await asyncio.to_thread(lambda: service_supabase.table("standards").select("id").eq("teacher_id", teacher_id).execute())
     standard_ids = [s["id"] for s in standards.data] if standards.data else []
 
-    students_count = 0
-    if standard_ids:
-        students_result = service_supabase.table("students").select("id", count="exact").in_("standard_id", standard_ids).execute()
-        students_count = students_result.count or 0
+    if not standard_ids:
+        return {
+            "students_count": 0,
+            "subjects_count": 0,
+            "scheduled_tests_count": 0,
+            "broadcasts_count": 0,
+            "standards_count": 0
+        }
 
-    subject_classes_count = 0
-    if standard_ids:
-        subjects_result = service_supabase.table("subject_classes").select("id", count="exact").in_("standard_id", standard_ids).execute()
-        subject_classes_count = subjects_result.count or 0
+    # Parallelize counts
+    def fetch_students(): return service_supabase.table("students").select("id", count="exact").in_("standard_id", standard_ids).execute()
+    def fetch_subjects(): return service_supabase.table("subject_classes").select("id", count="exact").in_("standard_id", standard_ids).execute()
+    def fetch_broadcasts(): return service_supabase.table("broadcasts").select("id", count="exact").in_("standard_id", standard_ids).eq("deleted", False).execute()
+    def fetch_class_ids(): return service_supabase.table("subject_classes").select("id").in_("standard_id", standard_ids).execute()
 
-    if standard_ids:
-        class_ids_result = service_supabase.table("subject_classes").select("id").in_("standard_id", standard_ids).execute()
-        class_ids = [c["id"] for c in class_ids_result.data] if class_ids_result.data else []
-        scheduled_tests_count = 0
-        if class_ids:
-            tests_result = service_supabase.table("tests").select("id", count="exact").in_("class_id", class_ids).eq("status", "scheduled").execute()
-            scheduled_tests_count = tests_result.count or 0
-    else:
-        scheduled_tests_count = 0
+    students_res, subjects_res, broadcasts_res, classes_res = await asyncio.gather(
+        asyncio.to_thread(fetch_students),
+        asyncio.to_thread(fetch_subjects),
+        asyncio.to_thread(fetch_broadcasts),
+        asyncio.to_thread(fetch_class_ids)
+    )
 
-    broadcasts_count = 0
-    if standard_ids:
-        broadcasts_result = service_supabase.table("broadcasts").select("id", count="exact").in_("standard_id", standard_ids).eq("deleted", False).execute()
-        broadcasts_count = broadcasts_result.count or 0
+    class_ids = [c["id"] for c in classes_res.data] if classes_res.data else []
+    scheduled_tests_count = 0
+    if class_ids:
+        tests_res = await asyncio.to_thread(lambda: service_supabase.table("tests").select("id", count="exact").in_("class_id", class_ids).eq("status", "scheduled").execute())
+        scheduled_tests_count = tests_res.count or 0
 
     return {
-        "students_count": students_count,
-        "subjects_count": subject_classes_count,
+        "students_count": students_res.count or 0,
+        "subjects_count": subjects_res.count or 0,
         "scheduled_tests_count": scheduled_tests_count,
-        "broadcasts_count": broadcasts_count,
+        "broadcasts_count": broadcasts_res.count or 0,
         "standards_count": len(standard_ids)
     }
 
@@ -1124,6 +1127,189 @@ def get_dashboard_activity(user = Depends(verify_token)):
     activities.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 
     return {"activities": activities[:20]}
+
+@app.get("/api/dashboard/overview")
+async def get_dashboard_overview(user = Depends(verify_token)):
+    """Single aggregate feed for the teacher home dashboard: overview counts,
+    class performance, top students, and the 'needs attention' queues (ungraded
+    submissions, pending join requests, today's live classes, upcoming tests,
+    low-attendance students). One bounded pass — no client-side N+1."""
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    teacher_id = user["teacher_id"]
+
+    empty = {
+        "counts": {"students": 0, "subjects": 0, "standards": 0, "scheduled_tests": 0},
+        "performance": {"avg_score": 0.0, "avg_attendance": 0.0, "total_points": 0},
+        "top_students": [],
+        "grading_queue": {"count": 0, "items": []},
+        "join_requests": {"count": 0, "items": []},
+        "today_live": [],
+        "upcoming_tests": [],
+        "low_attendance": {"count": 0, "items": []},
+    }
+
+    # ── Scope: standards → subjects → students ────────────────────────────────
+    stds_res = await asyncio.to_thread(lambda: service_supabase.table("standards").select(
+        "id, name, attendance_threshold"
+    ).eq("teacher_id", teacher_id).execute())
+    standards = stds_res.data or []
+    if not standards:
+        return empty
+    standard_ids = [s["id"] for s in standards]
+    std_name = {s["id"]: s.get("name", "") for s in standards}
+
+    def fetch_subs(): return service_supabase.table("subject_classes").select("id, name, standard_id").in_("standard_id", standard_ids).execute()
+    def fetch_studs(): return service_supabase.table("students").select("id, name, username, points, avg_score, attendance_pct, avatar_url").in_("standard_id", standard_ids).execute()
+    def fetch_links(): return service_supabase.table("invite_links").select("code, standard_id").eq("created_by", teacher_id).execute()
+
+    subs_res, studs_res, links_res = await asyncio.gather(
+        asyncio.to_thread(fetch_subs),
+        asyncio.to_thread(fetch_studs),
+        asyncio.to_thread(fetch_links)
+    )
+
+    subjects = subs_res.data or []
+    class_ids = [c["id"] for c in subjects]
+    subject_name = {c["id"]: c.get("name", "") for c in subjects}
+
+    students = studs_res.data or []
+    links = links_res.data or []
+
+    # ── Counts ────────────────────────────────────────────────────────────────
+    scheduled_tests = 0
+    if class_ids:
+        def fetch_tests_cnt(): return service_supabase.table("tests").select("id", count="exact").in_("class_id", class_ids).eq("status", "scheduled").execute()
+        def fetch_asg(): return service_supabase.table("assignments").select("id, title, class_id").in_("class_id", class_ids).execute()
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        def fetch_lc(): return service_supabase.table("live_classes").select("id, title, class_id, scheduled_at, status").in_("class_id", class_ids).in_("status", ["scheduled", "live"]).gte("scheduled_at", today_start).order("scheduled_at").execute()
+        def fetch_upc_tests(): return service_supabase.table("tests").select("id, title, class_id, scheduled_for, expires_at, status").in_("class_id", class_ids).in_("status", ["scheduled", "active"]).order("scheduled_for", nullsfirst=False).execute()
+        
+        st_res, asg_res, lc_res, tst_res = await asyncio.gather(
+            asyncio.to_thread(fetch_tests_cnt),
+            asyncio.to_thread(fetch_asg),
+            asyncio.to_thread(fetch_lc),
+            asyncio.to_thread(fetch_upc_tests)
+        )
+        scheduled_tests = st_res.count or 0
+        assignments = asg_res.data or []
+        today_live_data = lc_res.data or []
+        upcoming_tests_data = tst_res.data or []
+    else:
+        assignments = []
+        today_live_data = []
+        upcoming_tests_data = []
+
+    counts = {
+        "students": len(students),
+        "subjects": len(subjects),
+        "standards": len(standards),
+        "scheduled_tests": scheduled_tests,
+    }
+
+    # ── Performance + top students ────────────────────────────────────────────
+    scores = [float(s["avg_score"]) for s in students if s.get("avg_score") is not None]
+    atts = [float(s["attendance_pct"]) for s in students if s.get("attendance_pct") is not None]
+    performance = {
+        "avg_score": round(sum(scores) / len(scores), 1) if scores else 0.0,
+        "avg_attendance": round(sum(atts) / len(atts), 1) if atts else 0.0,
+        "total_points": sum(int(s.get("points") or 0) for s in students),
+    }
+    top_students = [
+        {"id": s["id"], "name": s.get("name"), "username": s.get("username"),
+         "points": int(s.get("points") or 0), "avatar_url": s.get("avatar_url")}
+        for s in sorted(students, key=lambda s: int(s.get("points") or 0), reverse=True)[:5]
+        if int(s.get("points") or 0) > 0
+    ]
+
+    # ── Grading queue: ungraded submissions across the teacher's classes ──────
+    grading_items = []
+    grading_count = 0
+    if class_ids:
+        asg_map = {a["id"]: a for a in assignments}
+        if assignments:
+            subs2 = await asyncio.to_thread(lambda: service_supabase.table("assignment_submissions").select(
+                "id, assignment_id, submitted_at, graded_at, students(name)"
+            ).in_("assignment_id", list(asg_map.keys())).is_("graded_at", "null").execute())
+            ungraded = subs2.data or []
+            grading_count = len(ungraded)
+            ungraded.sort(key=lambda x: x.get("submitted_at") or "", reverse=True)
+            for sub in ungraded[:6]:
+                a = asg_map.get(sub["assignment_id"], {})
+                stu = sub.get("students") or {}
+                grading_items.append({
+                    "submission_id": sub["id"],
+                    "assignment_id": sub["assignment_id"],
+                    "assignment_title": a.get("title", "Assignment"),
+                    "subject": subject_name.get(a.get("class_id"), ""),
+                    "class_id": a.get("class_id"),
+                    "student_name": stu.get("name", "Student"),
+                    "submitted_at": sub.get("submitted_at"),
+                })
+
+    # ── Pending join requests across the teacher's invite links ───────────────
+    join_items = []
+    join_count = 0
+    if links:
+        code_std = {l["code"]: l.get("standard_id") for l in links}
+        reqs = await asyncio.to_thread(lambda: service_supabase.table("invite_requests").select("*").in_(
+            "invite_code", list(code_std.keys())).eq("status", "pending").execute())
+        pending = reqs.data or []
+        join_count = len(pending)
+        pending.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        for r in pending[:6]:
+            join_items.append({
+                "id": r["id"],
+                "student_name": r.get("student_name", "Student"),
+                "student_email": r.get("student_email"),
+                "standard_name": std_name.get(code_std.get(r.get("invite_code")), ""),
+                "invite_code": r.get("invite_code"),
+                "created_at": r.get("created_at"),
+            })
+
+    # ── Today's live classes (today + upcoming, scheduled/live) ───────────────
+    today_live = []
+    upcoming_tests = []
+    if class_ids:
+        for lc in today_live_data[:6]:
+            today_live.append({
+                "id": lc["id"], "title": lc.get("title"), "class_id": lc.get("class_id"),
+                "subject": subject_name.get(lc.get("class_id"), ""),
+                "scheduled_at": lc.get("scheduled_at"), "status": lc.get("status"),
+            })
+
+        for t in upcoming_tests_data[:6]:
+            upcoming_tests.append({
+                "id": t["id"], "title": t.get("title"), "class_id": t.get("class_id"),
+                "subject": subject_name.get(t.get("class_id"), ""),
+                "scheduled_for": t.get("scheduled_for"), "expires_at": t.get("expires_at"),
+                "status": t.get("status"),
+            })
+
+    # ── Low attendance students ───────────────────────────────────────────────
+    # Use the lowest configured standard threshold (fallback 75).
+    thresholds = [s.get("attendance_threshold") for s in standards if s.get("attendance_threshold")]
+    threshold = min(thresholds) if thresholds else 75
+    low = [s for s in students if s.get("attendance_pct") is not None and float(s["attendance_pct"]) < threshold]
+    low.sort(key=lambda s: float(s.get("attendance_pct") or 0))
+    low_items = [
+        {"student_id": s["id"], "name": s.get("name"), "attendance_pct": round(float(s["attendance_pct"]), 1)}
+        for s in low[:6]
+    ]
+
+    return {
+        "counts": counts,
+        "performance": performance,
+        "top_students": top_students,
+        "grading_queue": {"count": grading_count, "items": grading_items},
+        "join_requests": {"count": join_count, "items": join_items},
+        "today_live": today_live,
+        "upcoming_tests": upcoming_tests,
+        "low_attendance": {"count": len(low), "items": low_items},
+    }
 
 # Standards CRUD
 def _claim_orphan_standards(teacher_id):
@@ -2459,16 +2645,17 @@ async def get_teacher_thumbnail(user=Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Teacher only")
     try:
         row = service_supabase.table("teacher_branding") \
-            .select("thumbnail_url, thumbnail_text_side") \
+            .select("thumbnail_url, thumbnail_text_side, profile_photo_url") \
             .eq("teacher_id", user["teacher_id"]).single().execute()
         if row.data:
             return {
                 "thumbnail_url": row.data.get("thumbnail_url"),
                 "thumbnail_text_side": row.data.get("thumbnail_text_side") or "right",
+                "profile_photo_url": row.data.get("profile_photo_url"),
             }
     except Exception:
         pass
-    return {"thumbnail_url": None, "thumbnail_text_side": "right"}
+    return {"thumbnail_url": None, "thumbnail_text_side": "right", "profile_photo_url": None}
 
 
 @app.post("/api/teacher/thumbnail")
@@ -2516,6 +2703,52 @@ async def upload_teacher_thumbnail(
     payload = {"teacher_id": user["teacher_id"], "thumbnail_text_side": side}
     if public_url is not None:
         payload["thumbnail_url"] = str(public_url)
+    await asyncio.to_thread(
+        lambda: service_supabase.table("teacher_branding").upsert(payload, on_conflict="teacher_id").execute()
+    )
+    return await get_teacher_thumbnail(user)
+
+
+@app.post("/api/teacher/profile-photo")
+async def upload_teacher_profile_photo(
+    file: UploadFile = File(...),
+    user=Depends(verify_token),
+):
+    """Upload the teacher's profile photo."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    public_url = None
+    if file is not None:
+        file_bytes = await file.read()
+        file_ext = os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg"
+        file_name = f"profile-photos/{user['teacher_id']}{file_ext}"
+        try:
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("profile-photos"))
+            except Exception:
+                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("profile-photos", options={"public": True}))
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.from_("profile-photos").remove([file_name]))
+            except Exception:
+                pass
+            await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("profile-photos").upload(
+                    file_name, file_bytes, {"content-type": file.content_type or "image/jpeg"}
+                )
+            )
+            public_url = await asyncio.to_thread(
+                lambda: service_supabase.storage.from_("profile-photos").get_public_url(file_name)
+            )
+        except Exception as e:
+            print("Profile photo upload error:", e)
+            raise HTTPException(status_code=500, detail="Upload failed")
+
+    payload = {"teacher_id": user["teacher_id"]}
+    if public_url is not None:
+        payload["profile_photo_url"] = str(public_url)
     await asyncio.to_thread(
         lambda: service_supabase.table("teacher_branding").upsert(payload, on_conflict="teacher_id").execute()
     )
@@ -5237,48 +5470,56 @@ async def get_live_classes(class_id: Optional[str] = None, standard_id: Optional
                 .select("teacher_id").eq("id", standard_id).single().execute())
             owner_id = owner_result.data.get("teacher_id") if owner_result.data else None
 
-        # All subjects for the standard — one query
-        subs_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes")
-            .select("id, name").eq("standard_id", standard_id).execute())
+        # Parallelize independent queries: subjects, branding, and enrolled_count
+        def fetch_subs():
+            return service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
+        def fetch_brand():
+            if not owner_id: return None
+            return service_supabase.table("teacher_branding").select("thumbnail_url, thumbnail_text_side, profile_photo_url").eq("teacher_id", owner_id).single().execute()
+        def fetch_enroll():
+            return service_supabase.table("students").select("id", count="exact").eq("standard_id", standard_id).execute()
+
+        subs_result, brand_result, enrolled_result = await asyncio.gather(
+            asyncio.to_thread(fetch_subs),
+            asyncio.to_thread(fetch_brand),
+            asyncio.to_thread(fetch_enroll)
+        )
+
         sub_map = {s["id"]: s for s in (subs_result.data or [])}
         class_ids = list(sub_map.keys())
+        enrolled_count = enrolled_result.count or 0
 
         if not class_ids:
             return []
 
-        # All live classes for all subjects — one query
-        lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes")
-            .select("*").in_("class_id", class_ids).order("scheduled_at", desc=True).execute())
+        # Now fetch classes and attendance in parallel
+        def fetch_classes():
+            return service_supabase.table("live_classes").select("*").in_("class_id", class_ids).order("scheduled_at", desc=True).execute()
+
+        lc_result = await asyncio.to_thread(fetch_classes)
         classes = lc_result.data or []
-
-        # Branding — one query
-        try:
-            if owner_id:
-                brand = await asyncio.to_thread(lambda: service_supabase.table("teacher_branding")
-                    .select("thumbnail_url, thumbnail_text_side").eq("teacher_id", owner_id).single().execute())
-                if brand.data and brand.data.get("thumbnail_url"):
-                    cur_url  = brand.data["thumbnail_url"]
-                    cur_side = brand.data.get("thumbnail_text_side") or "right"
-                    for lc in classes:
-                        lc["thumbnail_url"]       = cur_url
-                        lc["thumbnail_text_side"] = cur_side
-        except Exception:
-            pass
-
-        # Attendance — one query for all classes
-        att_by_class: dict = {}
         ids = [lc["id"] for lc in classes]
+
+        att_by_class: dict = {}
         if ids:
-            att_all = await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance")
-                .select("live_class_id, attended, student_id").in_("live_class_id", ids).execute())
+            def fetch_att():
+                return service_supabase.table("live_class_attendance").select("live_class_id, attended, student_id").in_("live_class_id", ids).execute()
+            att_all = await asyncio.to_thread(fetch_att)
             for a in (att_all.data or []):
                 att_by_class.setdefault(a["live_class_id"], []).append(a)
 
-        enrolled_count = await asyncio.to_thread(lambda: service_supabase.table("students")
-            .select("id", count="exact").eq("standard_id", standard_id).execute())
-        enrolled_count = enrolled_count.count or 0
+        cur_url = cur_side = cur_photo = None
+        if brand_result and brand_result.data:
+            cur_url = brand_result.data.get("thumbnail_url")
+            cur_side = brand_result.data.get("thumbnail_text_side") or "right"
+            cur_photo = brand_result.data.get("profile_photo_url")
 
         for lc in classes:
+            if cur_url or cur_photo:
+                lc["thumbnail_url"]       = cur_url
+                lc["thumbnail_text_side"] = cur_side
+                lc["teacher_photo_url"]   = cur_photo
+            
             att_data = att_by_class.get(lc["id"], [])
             lc["attended_count"]   = sum(1 for a in att_data if a["attended"])
             lc["total_registered"] = enrolled_count

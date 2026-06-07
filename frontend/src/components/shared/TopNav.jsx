@@ -1,6 +1,6 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, Search } from 'lucide-react';
+import { MdKeyboardArrowDown, MdLogout, MdSearch } from 'react-icons/md';
 import { useSettingsStore } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import { Avatar } from '../ui';
@@ -60,7 +60,7 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
                 className={`flex items-center justify-center w-[42px] h-[42px] rounded-full transition-colors flex-shrink-0 ${
                   isActive ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'
                 }`}>
-                <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <item.icon className="w-5 h-5" />
               </Link>
             );
           })}
@@ -70,7 +70,7 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
         <div className="flex items-center justify-end gap-3 w-48 flex-shrink-0">
           <button onClick={() => setSearchOpen(true)}
             className="p-1.5 text-neutral-400 hover:text-white transition-colors">
-            <Search size={18} />
+            <MdSearch className="w-5 h-5" />
           </button>
           <NotificationBell dark />
           <div className="relative" ref={menuRef}>
@@ -79,11 +79,9 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
               {user?.avatar_url ? (
                 <img src={user.avatar_url} alt="Profile" className="w-8 h-8 rounded-full object-cover" />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 flex items-center justify-center text-xs font-bold shrink-0">
-                  {user?.name ? user.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'AT'}
-                </div>
+                <img src="/default-avatar.png" alt="Profile" className="w-8 h-8 rounded-full object-cover shadow-sm border border-white/20" />
               )}
-              <ChevronDown size={14} className="text-neutral-400 flex-shrink-0" />
+              <MdKeyboardArrowDown className="w-4 h-4 text-neutral-400 flex-shrink-0" />
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-full mt-2 w-44 bg-white rounded-2xl shadow-lift border border-[#EFEDEA] overflow-hidden py-1">
@@ -91,7 +89,7 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
                   className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-[#F4F2EF]">Profile</Link>
                 <button onClick={signOut}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left">
-                  <LogOut size={14} /> Sign out
+                  <MdLogout className="w-4 h-4" /> Sign out
                 </button>
               </div>
             )}

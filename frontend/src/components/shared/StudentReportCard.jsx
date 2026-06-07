@@ -163,8 +163,8 @@ function CustomRadarChart({ data }) {
   const studentPts = radarPath(data, cx, cy, r, "value"), avgPts = radarPath(data, cx, cy, r, "classAvg");
 
   return (
-    <div className="w-full flex justify-center py-2">
-      <svg width="270" height="270" style={{ overflow: "visible" }} className="mx-auto select-none">
+    <div className="w-full flex justify-center py-2 min-w-0 overflow-hidden">
+      <svg width="100%" height="100%" viewBox="-50 -30 370 330" style={{ maxWidth: '350px' }} className="mx-auto select-none">
         <defs>
           <radialGradient id="youGlowSvg" cx="50%" cy="50%" r="80%">
             <stop offset="0%" stopColor="#1A56DB" stopOpacity={0.4} />
@@ -441,7 +441,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-8">
               
               {/* LEFT COLUMN: MAIN PERFORMANCE */}
-              <div className="xl:col-span-8 space-y-5 md:space-y-8">
+              <div className="xl:col-span-8 space-y-5 md:space-y-8 min-w-0">
                 
                 {/* 1. TOP STATS (Mini Bento Cards) */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
@@ -586,7 +586,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
 
               {/* RIGHT COLUMN: SIDEBAR (Focus Areas & Assignments) */}
-              <div className="xl:col-span-4 space-y-6 md:space-y-8">
+              <div className="xl:col-span-4 space-y-6 md:space-y-8 min-w-0">
                 
                 {/* FOCUS AREAS (Weakest Topics rendered as Bento Cards) */}
                 <div>

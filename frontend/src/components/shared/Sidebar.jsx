@@ -1,38 +1,19 @@
 import React, { memo } from 'react';
-import { Home, BookOpen, Users, MessageSquare, MoreHorizontal, FileQuestion, Trophy, Calendar, BarChart3, Settings, User, Video } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { useSettingsStore } from '../../store';
 
-const TEACHER_ITEMS = [
-  { id: 'today',      label: 'Home',        icon: Home,           path: '/teacher' },
-  { id: 'subjects',   label: 'Classes',     icon: BookOpen,       path: '/teacher/subjects' },
-  { id: 'students',   label: 'Students',    icon: Users,          path: '/teacher/students' },
-  { id: 'broadcasts', label: 'Broadcasts',  icon: MessageSquare,  path: '/teacher/broadcasts' },
-  { id: 'attendance', label: 'Attendance',  icon: Calendar,       path: '/teacher/attendance' },
-  { id: 'live',       label: 'Live Classes',icon: Video,          path: '/teacher/live-classes' },
-  { id: 'reports',    label: 'Reports',     icon: BarChart3,      path: '/teacher/reports' },
-  { id: 'more',       label: 'Profile',     icon: User,           path: '/teacher/more' },
-];
-
-const STUDENT_ITEMS = [
-  { id: 'home',        label: 'Home',        icon: Home,          path: '/student' },
-  { id: 'subjects',    label: 'Subjects',    icon: BookOpen,      path: '/student/subjects' },
-  { id: 'tests',       label: 'Tests & Assignments', icon: FileQuestion,  path: '/student/tests' },
-  { id: 'broadcasts',  label: 'Broadcasts',  icon: MessageSquare, path: '/student/broadcasts' },
-  { id: 'live',        label: 'Live Classes',icon: Video,         path: '/student/live-classes' },
-  { id: 'leaderboard', label: 'Ranking',     icon: Trophy,        path: '/student/leaderboard' },
-  { id: 'profile',     label: 'Profile',     icon: Users,         path: '/student/profile' },
-];
+import { TEACHER_NAV, STUDENT_NAV } from './nav-items';
 
 const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
   const location = useLocation();
-  const items = type === 'teacher' ? TEACHER_ITEMS : STUDENT_ITEMS;
+  const items = type === 'teacher' ? TEACHER_NAV : STUDENT_NAV;
   const { lmsName, lmsLogo } = useSettingsStore();
   
   const getActiveTab = (path) => {
     if (type === 'teacher') {
       if (path === '/teacher' || path === '/teacher/') return 'today';
-      if (path.startsWith('/teacher/subjects'))     return 'subjects';
+      if (path.startsWith('/teacher/standards'))     return 'subjects';
       if (path.startsWith('/teacher/students'))     return 'students';
       if (path.startsWith('/teacher/attendance'))   return 'attendance';
       if (path.startsWith('/teacher/broadcasts'))   return 'broadcasts';
@@ -81,7 +62,7 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
                     ? 'bg-[#F2F1EE] border border-[#EBEAE7] text-neutral-900'
                     : 'text-neutral-600 hover:bg-[#F2F1EE] border border-transparent'
                 }`}>
-                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-neutral-900' : 'text-neutral-500'} />
+                <item.icon className={`w-5 h-5 ${isActive ? 'text-neutral-900' : 'text-neutral-500'}`} />
                 {item.label}
               </Link>
             );

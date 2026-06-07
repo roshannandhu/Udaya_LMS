@@ -150,7 +150,7 @@ export default function StudentProfilePage() {
                   {student?.avatar_url ? (
                     <img src={student.avatar_url} alt={name} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-5xl font-black text-pink-500">{name.charAt(0).toUpperCase()}</span>
+                    <img src="/default-avatar.png" alt="Default Avatar" className="w-full h-full object-cover" />
                   )}
                 </div>
                 

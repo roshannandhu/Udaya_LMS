@@ -322,6 +322,39 @@ export const teacherApi = {
     _cache.clear();
     return res.json();
   },
+  uploadProfilePhoto: async (file) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const formData = new FormData();
+    if (file) formData.append('file', file);
+    const res = await fetch(`${API_BASE}/teacher/profile-photo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Failed to upload profile photo');
+    }
+    return res.json();
+  },
+};
+
+export const dashboardApi = {
+  getStats:    () => apiClient('/dashboard/stats'),
+  getActivity: () => apiClient('/dashboard/activity'),
+  getOverview: () => apiClient('/dashboard/overview'),
+};
+
+export const joinRequestApi = {
+  approve: (id) => apiClient(`/join-requests/${id}/approve`, { method: 'PATCH' }),
+  reject:  (id) => apiClient(`/join-requests/${id}/reject`,  { method: 'PATCH' }),
+};
+
+export const reminderApi = {
+  list:   ()      => apiClient('/reminders'),
+  create: (data)  => apiClient('/reminders', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, d) => apiClient(`/reminders/${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
+  remove: (id)    => apiClient(`/reminders/${id}`, { method: 'DELETE' }),
 };
 
 export const reportApi = {

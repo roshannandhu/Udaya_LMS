@@ -7,6 +7,7 @@ import { useAppCache } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
+import LiveClassCard from '../../components/cards/LiveClassCard';
 
 /* ─── Helpers ──────────────────────────────────────── */
 
@@ -406,50 +407,14 @@ export default function TeacherLiveClassesPage() {
 
               const standardName = standards.find(std => std.id === lc.subject?.standard_id)?.name;
               return (
-                <div key={lc.id} className={`relative rounded-[32px] ${theme.bg} p-6 sm:p-8 flex flex-col justify-between min-h-[220px] transition-all hover:-translate-y-1 hover:shadow-lg overflow-hidden`}>
-                  
-                  {/* Thumbnail Background Logic */}
-                  {lc.thumbnail_url && (
+                <LiveClassCard
+                  key={lc.id}
+                  lc={lc}
+                  onClick={handleWatchClass}
+                  joiningId={joiningId}
+                  themeIndex={idx}
+                  actions={
                     <>
-                      <img src={lc.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover z-0" draggable={false} />
-                      {/* Scrim matching the textSide */}
-                      <div className={`absolute inset-y-0 w-3/4 z-0 ${lc.thumbnail_text_side === 'left' ? 'left-0 bg-gradient-to-r' : 'right-0 bg-gradient-to-l'} from-black/80 via-black/60 to-transparent`} />
-                    </>
-                  )}
-
-                  {/* Big Play Button Circle (Clickable if Live) */}
-                  <div 
-                    onClick={() => isLive ? handleWatchClass(lc) : null}
-                    className={`absolute top-6 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'left-6' : 'right-6'} w-[72px] h-[72px] rounded-full bg-white flex items-center justify-center shadow-md z-10 ${isLive ? 'cursor-pointer hover:scale-105 transition-transform' : 'opacity-80'}`}
-                  >
-                    {joiningId === lc.id ? (
-                      <Loader2 size={28} className="animate-spin text-neutral-400" />
-                    ) : (
-                      <Play fill="currentColor" size={28} className={`${theme.text} ml-1`} />
-                    )}
-                  </div>
-
-                  {/* Text Content */}
-                  <div className={`relative z-10 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'text-right pl-[90px]' : 'text-left pr-[90px]'}`}>
-                    <h3 className={`text-[24px] sm:text-[26px] font-extrabold ${lc.thumbnail_url ? 'text-white drop-shadow-md' : theme.text} leading-[1.1] mb-3`}>{lc.title}</h3>
-                    <p className={`text-[14px] ${lc.thumbnail_url ? 'text-white/90 drop-shadow-md' : theme.text + ' opacity-80'} leading-snug line-clamp-2 max-w-[85%] ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'ml-auto' : ''}`}>
-                      {lc.subject?.name} {lc.duration_mins ? `• ${lc.duration_mins} mins` : ''}
-                    </p>
-                  </div>
-
-                  {/* Bottom Row: Status Pill, Actions & Avatars */}
-                  <div className={`flex flex-col sm:flex-row sm:items-end mt-10 relative z-10 gap-4 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'flex-row-reverse justify-between' : 'justify-between'}`}>
-                    
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Time Pill */}
-                      <div className="bg-white rounded-full px-4 py-2.5 flex items-center gap-2 shadow-sm">
-                        <Clock size={16} className={`${isLive ? 'text-red-500 animate-pulse' : 'text-neutral-700'}`} />
-                        <span className={`text-[13px] sm:text-[14px] font-bold ${isLive ? 'text-red-600' : 'text-neutral-800'}`}>
-                          <LiveCountdown scheduledAt={lc.scheduled_at} isLive={isLive} isEnded={isEnded} />
-                        </span>
-                      </div>
-
-                      {/* Teacher Actions */}
                       {isScheduled && (
                         <button onClick={() => handleCancelClass(lc)} className="bg-white/60 hover:bg-white text-neutral-700 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
                           Cancel
@@ -465,12 +430,12 @@ export default function TeacherLiveClassesPage() {
                           Delete
                         </button>
                       )}
-                    </div>
-
-                    {/* Attendance Avatars Trigger */}
+                    </>
+                  }
+                  avatars={
                     <button 
-                      onClick={() => setAttendanceSheetId(lc.id)} 
-                      className={`flex -space-x-3 hover:scale-105 transition-transform focus:outline-none sm:ml-0 ${lc.thumbnail_url && lc.thumbnail_text_side === 'right' ? 'flex-row-reverse space-x-reverse mr-auto' : 'ml-auto'}`}
+                      onClick={(e) => { e.stopPropagation(); setAttendanceSheetId(lc.id); }} 
+                      className={`flex -space-x-3 hover:scale-105 transition-transform focus:outline-none`}
                       title="View Attendance"
                     >
                       <img src={`https://i.pravatar.cc/100?u=${lc.id}1`} className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-[3px] border-white shadow-sm relative z-[3]" alt="" />
@@ -479,8 +444,8 @@ export default function TeacherLiveClassesPage() {
                         {lc.attended_count ?? 0}
                       </div>
                     </button>
-                  </div>
-                </div>
+                  }
+                />
               );
             })}
           </div>

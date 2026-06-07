@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
-import { FileQuestion, BarChart3, Bell, Settings, ChevronRight, Edit2, LogOut, MessageSquare, Calendar, Loader2, Users, User, Database } from 'lucide-react';
+import { MdPerson, MdLibraryBooks, MdPeople, MdChatBubble, MdEvent, MdBarChart, MdNotifications, MdSettings, MdHelp, MdChevronRight, MdEdit, MdLogout, MdLoop } from 'react-icons/md';
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Modal } from '../../components/ui';
 import { Btn, Input } from '../../components/ui';
@@ -20,15 +20,15 @@ export default function MorePage() {
   const [editSaving, setEditSaving] = useState(false);
 
   const items = [
-    { icon: User,          label: 'My Profile',    sub: 'Edit name & view stats',     color: 'lavender', onClick: () => navigate('/teacher/profile') },
-    { icon: Database,      label: 'Question Bank', sub: 'Reusable questions',          color: 'sky',      onClick: () => navigate('/teacher/question-bank') },
-    { icon: Users,         label: 'Students',      sub: 'Manage class students',      color: 'mint',     onClick: () => navigate('/teacher/students') },
-    { icon: MessageSquare, label: 'Broadcasts',    sub: 'Send messages to students',  color: 'pink',     onClick: () => navigate('/teacher/broadcasts') },
-    { icon: Calendar,      label: 'Attendance',    sub: 'Mark & view attendance',      color: 'cream',    onClick: () => navigate('/teacher/attendance') },
-    { icon: BarChart3,     label: 'Reports',       sub: 'Analytics & low attendance', color: 'peach',    onClick: () => navigate('/teacher/reports') },
-    { icon: Bell,          label: 'Notifications', sub: 'Reminders & alerts',         color: 'lavender', onClick: () => navigate('/teacher/reminders') },
-    { icon: Settings,      label: 'Settings',      sub: 'App preferences',            color: 'sky',      onClick: () => navigate('/teacher/settings') },
-    { icon: FileQuestion,  label: 'Help & Support',sub: 'FAQs and contact',           color: 'mint',     onClick: () => {} },
+    { icon: MdPerson,          label: 'My Profile',    sub: 'Edit name & view stats',     onClick: () => navigate('/teacher/profile') },
+    { icon: MdLibraryBooks,    label: 'Question Bank', sub: 'Reusable questions',         onClick: () => navigate('/teacher/question-bank') },
+    { icon: MdPeople,          label: 'Students',      sub: 'Manage class students',      onClick: () => navigate('/teacher/students') },
+    { icon: MdChatBubble,      label: 'Broadcasts',    sub: 'Send messages to students',  onClick: () => navigate('/teacher/broadcasts') },
+    { icon: MdEvent,           label: 'Attendance',    sub: 'Mark & view attendance',     onClick: () => navigate('/teacher/attendance') },
+    { icon: MdBarChart,        label: 'Reports',       sub: 'Analytics & low attendance', onClick: () => navigate('/teacher/reports') },
+    { icon: MdNotifications,   label: 'Notifications', sub: 'Reminders & alerts',         onClick: () => navigate('/teacher/reminders') },
+    { icon: MdSettings,        label: 'Settings',      sub: 'App preferences',            onClick: () => navigate('/teacher/settings') },
+    { icon: MdHelp,            label: 'Help & Support',sub: 'FAQs and contact',           onClick: () => {} },
   ];
 
   const handleSave = async () => {
@@ -60,15 +60,13 @@ export default function MorePage() {
       <div className="p-4 space-y-4 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-4">
         <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center text-white text-lg font-medium">
-              {profile.name?.charAt(0) || 'T'}
-            </div>
+            <img src="/default-avatar.png" alt="Profile" className="w-14 h-14 rounded-full object-cover shadow-sm border border-neutral-200" />
             <div className="flex-1">
               <p className="font-medium">{profile.name}</p>
               <p className="text-sm text-neutral-500">{profile.email}</p>
             </div>
             <button onClick={() => setProfileEdit(true)} className="p-2 hover:bg-[#F4F2EF] rounded-lg">
-              <Edit2 size={18} className="text-neutral-500" />
+              <MdEdit className="w-4 h-4 text-neutral-500" />
             </button>
           </div>
         </div>
@@ -76,21 +74,20 @@ export default function MorePage() {
         <div className="glass-panel divide-y divide-[#F1EFEC]">
           {items.map((item, i) => (
             <button key={i} onClick={item.onClick} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#F4F2EF] transition-colors text-left">
-              <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{ background: PASTEL[item.color]?.hex }}>
-                <item.icon size={18} style={{ color: PASTEL[item.color]?.fgHex }} />
+              <div className="w-8 flex items-center justify-center flex-shrink-0 mr-1">
+                <item.icon className="w-5 h-5 text-neutral-600" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm">{item.label}</p>
                 {item.sub && <p className="text-xs text-neutral-500">{item.sub}</p>}
               </div>
-              <ChevronRight size={16} className="text-neutral-400 flex-shrink-0" />
+              <MdChevronRight className="w-4 h-4 text-neutral-400 flex-shrink-0" />
             </button>
           ))}
         </div>
 
         <button onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-red-600 glass-panel border-white/60 shadow-sm rounded-xl hover:bg-[#F4F2EF] transition-colors">
-          <LogOut size={20} />
+          <MdLogout className="w-5 h-5" />
           <span className="font-medium">Sign out</span>
         </button>
       </div>
@@ -100,7 +97,7 @@ export default function MorePage() {
           <Input label="Name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
           <p className="text-xs text-neutral-400">Email cannot be changed here.</p>
           <Btn onClick={handleSave} disabled={editSaving} className="w-full" variant="primary">
-            {editSaving ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+            {editSaving ? <MdLoop className="w-4 h-4 animate-spin mr-1" /> : null}
             Save
           </Btn>
         </div>

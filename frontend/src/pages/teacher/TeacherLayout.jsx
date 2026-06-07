@@ -6,7 +6,7 @@ import TopNav from '../../components/shared/TopNav';
 
 function getActiveTab(path) {
   if (path === '/teacher' || path === '/teacher/') return 'today';
-  if (path.startsWith('/teacher/subjects'))     return 'subjects';
+  if (path.startsWith('/teacher/standards'))     return 'subjects';
   if (path.startsWith('/teacher/live-classes')) return 'live';
   if (path.startsWith('/teacher/attendance'))   return 'attendance';
   if (path.startsWith('/teacher/broadcasts'))   return 'broadcasts';
@@ -35,7 +35,7 @@ export default function TeacherLayout() {
   const setActive = (tab) => {
     const routes = {
       today:      '/teacher',
-      subjects:   '/teacher/subjects',
+      subjects:   '/teacher/standards',
       live:       '/teacher/live-classes',
       attendance: '/teacher/attendance',
       broadcasts: '/teacher/broadcasts',

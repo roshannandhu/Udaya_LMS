@@ -438,9 +438,11 @@ CREATE INDEX IF NOT EXISTS idx_live_classes_scheduled  ON live_classes(scheduled
 -- ── teacher_branding: one universal auto-thumbnail base image per teacher ─────
 CREATE TABLE IF NOT EXISTS teacher_branding (
   teacher_id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  thumbnail_url       TEXT,
-  thumbnail_text_side TEXT DEFAULT 'right',
-  updated_at          TIMESTAMPTZ DEFAULT now()
+  thumbnail_url       TEXT,                    -- snapshot of teacher's auto-thumbnail base image
+  thumbnail_text_side TEXT DEFAULT 'right',    -- 'left' or 'right'
+  profile_photo_url   TEXT,                    -- teacher's profile photo
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── Migration 3: Create live_class_attendance table ───────────────────────────

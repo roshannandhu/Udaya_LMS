@@ -17,7 +17,7 @@ const BottomNav = memo(function BottomNav({ active, setActive, type = 'teacher' 
               className={`flex items-center justify-center w-[42px] h-[42px] rounded-full transition-colors flex-shrink-0 ${
                 isActive ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'
               }`}>
-              <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+              <item.icon className="w-6 h-6" />
             </button>
           );
         })}

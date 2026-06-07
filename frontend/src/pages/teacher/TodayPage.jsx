@@ -1,99 +1,218 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FileQuestion, Calendar, AlertCircle, Upload, MessageSquare, UserPlus, Activity, GraduationCap } from 'lucide-react';
-import { Avatar, Skeleton } from '../../components/ui';
+import {
+  Users, BookOpen, FileQuestion, Calendar, AlertCircle, MessageSquare,
+  UserPlus, Activity, Sparkles, Video, ClipboardCheck, Check, Plus,
+  ChevronRight, Trophy, Target, TrendingUp, X, Loader2
+} from 'lucide-react';
+import { Avatar, Skeleton, Btn } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
-import RoadmapNode from '../../components/cards/RoadmapNode';
-import RoadmapTrack from '../../components/cards/RoadmapTrack';
-import EventCard from '../../components/cards/EventCard';
 import Card from '../../components/cards/Card';
-import { apiClient, attendanceApi } from '../../lib/api';
+import EventCard from '../../components/cards/EventCard';
+import { dashboardApi, joinRequestApi, reminderApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import { useAppCache } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
+import SubjectIcon from '../../components/shared/SubjectIcon';
+import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 
-function getCachedStats() {
-  try { return JSON.parse(sessionStorage.getItem('tutoria_dash_stats') || 'null'); } catch { return null; }
+// ── sessionStorage warm-cache (instant re-render, no skeleton flash) ──────────
+const readCache = (k) => { try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch { return null; } };
+const writeCache = (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+// ── Action Center row ─────────────────────────────────────────────────────────
+const ATTN = {
+  join:     { icon: UserPlus,       tile: 'bg-sky-50 text-sky-600' },
+  grade:    { icon: ClipboardCheck, tile: 'bg-violet-50 text-violet-600' },
+  attend:   { icon: AlertCircle,    tile: 'bg-orange-50 text-orange-600' },
+};
+
+function ActionRow({ kind, eyebrow, title, meta, onClick, children }) {
+  const k = ATTN[kind] || ATTN.grade;
+  const Icon = k.icon;
+  const Wrapper = onClick ? 'button' : 'div';
+  return (
+    <Wrapper
+      {...(onClick ? { onClick } : {})}
+      className={`w-full flex items-center gap-4 p-4 text-left border-b border-black/5 last:border-0 transition-colors group ${onClick ? 'hover:bg-neutral-50' : ''}`}
+    >
+      <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${k.tile}`}>
+        <Icon size={18} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-extrabold uppercase tracking-widest mb-0.5 text-neutral-400">{eyebrow}</p>
+        <h4 className="font-bold text-neutral-900 leading-snug truncate">{title}</h4>
+        {meta && <p className="text-xs text-neutral-500 mt-0.5 truncate">{meta}</p>}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {children || (onClick && <ChevronRight size={18} className="text-neutral-300 group-hover:text-neutral-500 transition-colors" />)}
+      </div>
+    </Wrapper>
+  );
 }
-function setCachedStats(data) {
-  try { sessionStorage.setItem('tutoria_dash_stats', JSON.stringify(data)); } catch {}
-}
-function getCachedActivity() {
-  try { return JSON.parse(sessionStorage.getItem('tutoria_dash_activity') || 'null'); } catch { return null; }
-}
-function setCachedActivity(data) {
-  try { sessionStorage.setItem('tutoria_dash_activity', JSON.stringify(data)); } catch {}
+
+function Bar({ label, value, suffix = '%', color = '#2383E2' }) {
+  const pct = Math.max(0, Math.min(100, value || 0));
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-semibold text-neutral-600">{label}</span>
+        <span className="text-xs font-extrabold text-neutral-900">{Math.round(value || 0)}{suffix}</span>
+      </div>
+      <div className="h-2 rounded-full bg-neutral-100 overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  );
 }
 
 export default function TodayPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const standards       = useAppCache(s => s.standards);
-  const subjects        = useAppCache(s => s.subjects);
-  const students        = useAppCache(s => s.students);
+  const standards        = useAppCache(s => s.standards);
+  const subjects         = useAppCache(s => s.subjects);
+  const students         = useAppCache(s => s.students);
   const refreshStandards = useAppCache(s => s.refreshStandards);
   const refreshSubjects  = useAppCache(s => s.refreshSubjects);
   const refreshStudents  = useAppCache(s => s.refreshStudents);
 
-  const [stats, setStats]       = useState(() => getCachedStats());
-  const [activities, setActivities] = useState(() => getCachedActivity() || []);
-  const [statsLoading, setStatsLoading] = useState(!getCachedStats());
-  const [lowAttendanceCount, setLowAttendanceCount] = useState(0);
+  const [overview, setOverview]   = useState(() => readCache('tutoria_dash_overview'));
+  const [activities, setActivities] = useState(() => readCache('tutoria_dash_activity') || []);
+  const [reminders, setReminders] = useState(() => readCache('tutoria_dash_reminders') || []);
+  const [loading, setLoading]     = useState(!readCache('tutoria_dash_overview'));
+  const [busyJoin, setBusyJoin]   = useState({});      // {requestId: true}
+  const [newReminder, setNewReminder] = useState('');
+  const [addingReminder, setAddingReminder] = useState(false);
 
   const now = new Date();
   const displayName = user?.name?.split(' ')[0] || 'Teacher';
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
   useEffect(() => {
-    refreshStandards();
+    refreshStandards?.();
     refreshSubjects?.();
     refreshStudents?.();
-    const fetchData = async () => {
+    (async () => {
       try {
-        const [statsData, activityData, lowAttData] = await Promise.all([
-          apiClient('/dashboard/stats'),
-          apiClient('/dashboard/activity'),
-          attendanceApi.getLowAttendance('all', 75).catch(() => ({ count: 0 }))
+        const [ov, act, rem] = await Promise.all([
+          dashboardApi.getOverview(),
+          dashboardApi.getActivity().catch(() => ({ activities: [] })),
+          reminderApi.list().catch(() => []),
         ]);
-        setStats(statsData);
-        setCachedStats(statsData);
-        setLowAttendanceCount(lowAttData?.count || 0);
-        const acts = activityData.activities || [];
-        setActivities(acts);
-        setCachedActivity(acts);
+        setOverview(ov);             writeCache('tutoria_dash_overview', ov);
+        const acts = act?.activities || [];
+        setActivities(acts);         writeCache('tutoria_dash_activity', acts);
+        const rems = Array.isArray(rem) ? rem : [];
+        setReminders(rems);          writeCache('tutoria_dash_reminders', rems);
       } catch (err) {
         console.error('Dashboard error:', err);
       } finally {
-        setStatsLoading(false);
+        setLoading(false);
       }
-    };
-    fetchData();
+    })();
   }, []);
 
-  // Needs-attention events (reuse existing signals).
-  const todayEvents = [];
-  if (stats) {
-    if (stats.scheduled_tests_count > 0)
-      todayEvents.push({ color: 'cream', icon: Calendar, kicker: 'Tests scheduled', title: `${stats.scheduled_tests_count} test${stats.scheduled_tests_count > 1 ? 's' : ''} coming up`, to: '/teacher/tests' });
-    if (lowAttendanceCount > 0)
-      todayEvents.push({ color: 'peach', icon: AlertCircle, kicker: 'Attention', title: `${lowAttendanceCount} students below attendance threshold`, to: '/teacher/reports' });
-    if (stats.students_count === 0)
-      todayEvents.push({ color: 'sky', icon: UserPlus, kicker: 'Get started', title: 'Add your first student', to: '/teacher/students' });
-  }
+  const standardIdForClass = (classId) => subjects.find(s => s.id === classId)?.standard_id;
+
+  // ── Inline actions ──────────────────────────────────────────────────────────
+  const handleJoin = async (req, action) => {
+    setBusyJoin(prev => ({ ...prev, [req.id]: true }));
+    try {
+      await joinRequestApi[action](req.id);
+      setOverview(prev => {
+        if (!prev) return prev;
+        const items = prev.join_requests.items.filter(r => r.id !== req.id);
+        const next = { ...prev, join_requests: { count: Math.max(0, prev.join_requests.count - 1), items } };
+        writeCache('tutoria_dash_overview', next);
+        return next;
+      });
+      if (action === 'approve') refreshStudents?.();
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Action failed');
+    } finally {
+      setBusyJoin(prev => { const n = { ...prev }; delete n[req.id]; return n; });
+    }
+  };
+
+  const addReminder = async () => {
+    const title = newReminder.trim();
+    if (!title) return;
+    setAddingReminder(true);
+    try {
+      const created = await reminderApi.create({ title });
+      setReminders(prev => { const n = [created, ...prev]; writeCache('tutoria_dash_reminders', n); return n; });
+      setNewReminder('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAddingReminder(false);
+    }
+  };
+
+  const toggleReminder = async (r) => {
+    const done = !r.done;
+    setReminders(prev => { const n = prev.map(x => x.id === r.id ? { ...x, done } : x); writeCache('tutoria_dash_reminders', n); return n; });
+    try {
+      await reminderApi.update(r.id, { done });
+    } catch (err) {
+      console.error(err);
+      setReminders(prev => prev.map(x => x.id === r.id ? { ...x, done: !done } : x)); // revert
+    }
+  };
+
+  const removeReminder = async (r) => {
+    setReminders(prev => { const n = prev.filter(x => x.id !== r.id); writeCache('tutoria_dash_reminders', n); return n; });
+    try { await reminderApi.remove(r.id); } catch (err) { console.error(err); }
+  };
+
+  // ── Derived ─────────────────────────────────────────────────────────────────
+  const counts = overview?.counts || {};
+  const perf = overview?.performance || {};
+  const joinReqs = overview?.join_requests || { count: 0, items: [] };
+  const grading = overview?.grading_queue || { count: 0, items: [] };
+  const lowAtt = overview?.low_attendance || { count: 0, items: [] };
+  const todayLive = overview?.today_live || [];
+  const upcomingTests = overview?.upcoming_tests || [];
+  const topStudents = overview?.top_students || [];
+
+  const hasAttention = joinReqs.count > 0 || grading.count > 0 || lowAtt.count > 0;
+  const countFor = (sid) => ({
+    subjects: subjects.filter(s => s.standard_id === sid).length,
+    students: students.filter(s => s.standard_id === sid).length,
+  });
+
+  const fmtWhen = (d) => {
+    if (!d) return '';
+    const date = new Date(d);
+    const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
+    const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
+    if (date.toDateString() === tmr.toDateString()) return `Tomorrow, ${time}`;
+    return `${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
+  };
 
   const quickActions = [
-    { label: 'Upload video',   icon: Upload,        to: '/teacher/subjects',   color: 'mint' },
-    { label: 'Create test',    icon: FileQuestion,  to: '/teacher/tests',      color: 'lavender' },
-    { label: 'Send broadcast', icon: MessageSquare, to: '/teacher/broadcasts', color: 'sky' },
-    { label: 'Add student',    icon: UserPlus,      to: '/teacher/students',   color: 'peach' },
+    { label: 'Create test',    icon: FileQuestion,  to: '/teacher/tests',         color: 'lavender' },
+    { label: 'Send broadcast', icon: MessageSquare, to: '/teacher/broadcasts',    color: 'sky' },
+    { label: 'Add student',    icon: UserPlus,      to: '/teacher/students',      color: 'peach' },
+    { label: 'Schedule live',  icon: Video,         to: '/teacher/live-classes',  color: 'mint' },
+    { label: 'Mark attendance',icon: Calendar,      to: '/teacher/attendance',    color: 'cream' },
+    { label: 'View reports',   icon: TrendingUp,    to: '/teacher/reports',       color: 'pink' },
   ];
 
-  const countFor = (standardId) => ({
-    subjects: subjects.filter(s => s.standard_id === standardId).length,
-    students: students.filter(s => s.standard_id === standardId).length,
-  });
+  if (loading && !overview) {
+    return (
+      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto space-y-6">
+        <Skeleton className="h-12 w-64 rounded-card" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-card" />)}</div>
+        <Skeleton className="h-56 w-full rounded-card" />
+        <div className="grid lg:grid-cols-3 gap-6"><Skeleton className="lg:col-span-2 h-72 rounded-card" /><Skeleton className="h-72 rounded-card" /></div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -114,116 +233,284 @@ export default function TodayPage() {
       </div>
 
       <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ── Left: class journey ── */}
-        <div className="lg:col-span-2">
-          <motion.div variants={fadeUp} initial="hidden" animate="show" className="mb-5">
-            <p className="hidden lg:block text-sm text-neutral-500">{greeting}, {displayName}</p>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2"
-              style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-              My Classes <GraduationCap size={24} className="text-neutral-700" />
-            </h1>
-          </motion.div>
+        <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-6">
 
-          <motion.div variants={staggerChildren} initial="hidden" animate="show" className="grid grid-cols-3 gap-3 mb-6">
-            {statsLoading && !stats ? (
-              <>{[1,2,3].map(i => <Skeleton key={i} className="h-24 rounded-card" />)}</>
-            ) : (
-              <>
-                <StatCard value={stats?.students_count ?? 0} label="Students" icon={Users} color="mint" emphasis />
-                <StatCard value={stats?.subjects_count ?? 0} label="Subjects" icon={BookOpen} color="lavender" />
-                <StatCard value={stats?.scheduled_tests_count ?? 0} label="Tests scheduled" icon={FileQuestion} color="cream" />
-              </>
-            )}
-          </motion.div>
-
-          {standards.length > 0 ? (
-            <RoadmapTrack>
-              {standards.map((s, i) => {
-                const c = countFor(s.id);
-                return (
-                  <RoadmapNode
-                    key={s.id}
-                    title={s.name}
-                    description={s.short || 'Manage subjects, students and content.'}
-                    status={i === 0 ? 'active' : 'upcoming'}
-                    meta={[
-                      { icon: Users, label: `${c.students} students` },
-                      { icon: BookOpen, label: `${c.subjects} subjects` },
-                    ]}
-                    onClick={() => navigate(`/teacher/subjects/${s.id}`)}
-                  />
-                );
-              })}
-            </RoadmapTrack>
-          ) : (
-            <div className="glass-panel p-8 text-center">
-              <p className="text-sm text-neutral-500 mb-4">No classes yet. Create your first class to get started.</p>
-              <button onClick={() => navigate('/teacher/subjects')} className="px-4 py-2 bg-ink text-white rounded-pill text-sm font-medium">
-                Create class
-              </button>
+          {/* ── Header (desktop) ── */}
+          <motion.div variants={fadeUp} className="hidden lg:flex items-end justify-between">
+            <div>
+              <p className="text-sm text-neutral-500">{greeting}, {displayName}</p>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+                Here's your day
+              </h1>
             </div>
-          )}
-        </div>
-
-        {/* ── Right: Today ── */}
-        <motion.div variants={staggerChildren} initial="hidden" animate="show" className="space-y-3">
-          <motion.h2 variants={fadeUp} className="text-xl font-semibold tracking-tight flex items-center gap-2 mb-1"
-            style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-            Today <span>🗓️</span>
-          </motion.h2>
-          <motion.p variants={fadeUp} className="text-xs text-neutral-500 mb-1">
-            {now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </motion.p>
-
-          {todayEvents.map((e, i) => (
-            <EventCard key={i} color={e.color} icon={e.icon} kicker={e.kicker} title={e.title} onClick={() => navigate(e.to)} />
-          ))}
-
-          {/* Quick actions */}
-          <motion.div variants={fadeUp} className="grid grid-cols-2 gap-3 pt-1">
-            {quickActions.map((a, i) => (
-              <Card key={i} as="button" color={a.color} interactive padded={false}
-                onClick={() => navigate(a.to)} className="p-4 flex flex-col items-start gap-2">
-                <a.icon size={18} />
-                <span className="text-xs font-semibold">{a.label}</span>
-              </Card>
-            ))}
+            <p className="text-sm text-neutral-500">{now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           </motion.div>
 
-          {/* Recent activity */}
+          {/* ── 1. STAT ROW ── */}
+          <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard value={counts.students ?? 0} label="Students" icon={Users} color="mint" emphasis />
+            <StatCard value={counts.subjects ?? 0} label="Subjects" icon={BookOpen} color="lavender" />
+            <StatCard value={counts.scheduled_tests ?? 0} label="Tests scheduled" icon={FileQuestion} color="cream" />
+            <StatCard value={perf.avg_score != null ? `${Math.round(perf.avg_score)}%` : '—'} label="Class avg score" icon={Target} color="sky" />
+          </motion.div>
+
+          {/* ── 2. ACTION CENTER ── */}
           <motion.div variants={fadeUp}>
-            <Card padded={false} className="overflow-hidden">
-              <div className="px-4 py-3 border-b border-[#EFEDEA] flex items-center gap-2">
-                <Activity size={14} className="text-neutral-500" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Recent activity</span>
-              </div>
-              {statsLoading && activities.length === 0 ? (
-                <div className="p-4 space-y-3">
-                  {[1,2,3].map(i => (
-                    <div key={i} className="flex items-center gap-3">
-                      <Skeleton className="w-8 h-8 rounded-full" />
-                      <div className="flex-1"><Skeleton className="h-4 w-40 mb-1" /><Skeleton className="h-3 w-20" /></div>
+            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
+              <Sparkles size={15} /> Needs attention
+            </h2>
+            <div className="bg-white rounded-card shadow-soft border border-[#EFEDEA] overflow-hidden">
+              {!hasAttention ? (
+                <div className="flex flex-col items-center justify-center text-center py-14 px-6">
+                  <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-4">
+                    <Check size={26} />
+                  </div>
+                  <p className="font-bold text-neutral-900">You're all caught up 🎉</p>
+                  <p className="text-sm text-neutral-500 mt-1">No approvals, grading or alerts right now.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Join requests — inline approve/reject */}
+                  {joinReqs.items.map(req => (
+                    <ActionRow
+                      key={`jr-${req.id}`}
+                      kind="join"
+                      eyebrow="Join request"
+                      title={req.student_name}
+                      meta={[req.standard_name, req.student_email].filter(Boolean).join(' · ')}
+                    >
+                      <button
+                        disabled={busyJoin[req.id]}
+                        onClick={() => handleJoin(req, 'reject')}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+                        title="Reject"
+                      >
+                        <X size={16} />
+                      </button>
+                      <button
+                        disabled={busyJoin[req.id]}
+                        onClick={() => handleJoin(req, 'approve')}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        {busyJoin[req.id] ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                        Approve
+                      </button>
+                    </ActionRow>
+                  ))}
+                  {joinReqs.count > joinReqs.items.length && (
+                    <button onClick={() => navigate('/teacher/students')} className="w-full text-center py-2 text-xs font-bold text-neutral-500 hover:text-neutral-900 border-b border-black/5">
+                      +{joinReqs.count - joinReqs.items.length} more requests
+                    </button>
+                  )}
+
+                  {/* Grading queue */}
+                  {grading.count > 0 && (
+                    <ActionRow
+                      kind="grade"
+                      eyebrow="Grading queue"
+                      title={`${grading.count} submission${grading.count > 1 ? 's' : ''} to grade`}
+                      meta={grading.items.slice(0, 2).map(g => `${g.student_name} · ${g.assignment_title}`).join('  •  ')}
+                      onClick={() => {
+                        const g = grading.items[0];
+                        const sid = g && standardIdForClass(g.class_id);
+                        navigate(sid && g ? `/teacher/standards/${sid}/subjects/${g.class_id}` : '/teacher/standards');
+                      }}
+                    />
+                  )}
+
+                  {/* Low attendance */}
+                  {lowAtt.count > 0 && (
+                    <ActionRow
+                      kind="attend"
+                      eyebrow="Attendance alert"
+                      title={`${lowAtt.count} student${lowAtt.count > 1 ? 's' : ''} below threshold`}
+                      meta={lowAtt.items.slice(0, 3).map(s => `${s.name} (${Math.round(s.attendance_pct)}%)`).join(', ')}
+                      onClick={() => navigate('/teacher/reports')}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          </motion.div>
+
+          {/* ── 3. TWO-COLUMN GRID ── */}
+          <div className="grid lg:grid-cols-3 gap-6">
+
+            {/* ── LEFT ── */}
+            <div className="lg:col-span-2 flex flex-col gap-6">
+
+              {/* Today's schedule */}
+              <motion.div variants={fadeUp}>
+                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
+                  <Calendar size={15} /> Today &amp; upcoming
+                </h2>
+                {(todayLive.length > 0 || upcomingTests.length > 0) ? (
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {todayLive.map(l => (
+                      <EventCard
+                        key={`live-${l.id}`}
+                        color="peach"
+                        icon={Video}
+                        kicker={l.status === 'live' ? 'Live now' : 'Live class'}
+                        date={fmtWhen(l.scheduled_at)}
+                        title={l.title}
+                        body={l.subject}
+                        onClick={() => navigate('/teacher/live-classes')}
+                      />
+                    ))}
+                    {upcomingTests.map(t => (
+                      <EventCard
+                        key={`test-${t.id}`}
+                        color="cream"
+                        icon={FileQuestion}
+                        kicker={t.status === 'active' ? 'Test live' : 'Test scheduled'}
+                        date={t.scheduled_for ? fmtWhen(t.scheduled_for) : ''}
+                        title={t.title}
+                        body={t.subject}
+                        onClick={() => navigate('/teacher/tests')}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="py-10 text-center text-sm text-neutral-500">Nothing scheduled. Create a test or schedule a live class.</Card>
+                )}
+              </motion.div>
+
+              {/* Recent activity */}
+              <motion.div variants={fadeUp}>
+                <Card padded={false} className="overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#EFEDEA] flex items-center gap-2">
+                    <Activity size={14} className="text-neutral-500" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Recent activity</span>
+                  </div>
+                  {activities.length > 0 ? activities.slice(0, 6).map((a, i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-[#F2F1EE] last:border-0">
+                      <Avatar name={a.student} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate"><span className="font-medium">{a.student}</span><span className="text-neutral-500"> {a.detail}</span></p>
+                        <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{a.video_title || a.test_title || 'Activity'}</p>
+                      </div>
                     </div>
+                  )) : (
+                    <div className="p-6 text-center text-sm text-neutral-500">No recent activity yet.</div>
+                  )}
+                </Card>
+              </motion.div>
+            </div>
+
+            {/* ── RIGHT SIDEBAR ── */}
+            <div className="flex flex-col gap-6">
+
+              {/* Quick actions */}
+              <motion.div variants={fadeUp}>
+                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">Quick actions</h2>
+                <div className="grid grid-cols-2 gap-3">
+                  {quickActions.map((a, i) => (
+                    <Card key={i} as="button" color={a.color} interactive padded={false}
+                      onClick={() => navigate(a.to)} className="p-4 flex flex-col items-start gap-2">
+                      <a.icon size={18} style={{ color: PASTEL[a.color]?.fgHex }} />
+                      <span className="text-xs font-semibold">{a.label}</span>
+                    </Card>
                   ))}
                 </div>
-              ) : activities.length > 0 ? (
-                activities.slice(0, 5).map((a, i) => (
-                  <div key={i} className={`flex items-center gap-3 px-4 py-3 ${i < Math.min(activities.length, 5) - 1 ? 'border-b border-[#F2F1EE]' : ''}`}>
-                    <Avatar name={a.student} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate"><span className="font-medium">{a.student}</span><span className="text-neutral-500"> {a.detail}</span></p>
-                      <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{a.video_title || a.test_title || 'Activity'}</p>
-                    </div>
+              </motion.div>
+
+              {/* To-dos / reminders */}
+              <motion.div variants={fadeUp}>
+                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">To-do list</h2>
+                <Card padded={false} className="overflow-hidden">
+                  <div className="flex items-center gap-2 p-3 border-b border-[#EFEDEA]">
+                    <input
+                      value={newReminder}
+                      onChange={(e) => setNewReminder(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') addReminder(); }}
+                      placeholder="Add a reminder…"
+                      className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-neutral-400"
+                    />
+                    <button onClick={addReminder} disabled={addingReminder || !newReminder.trim()}
+                      className="w-7 h-7 rounded-full bg-ink text-white flex items-center justify-center disabled:opacity-30 flex-shrink-0">
+                      {addingReminder ? <Loader2 size={14} className="animate-spin" /> : <Plus size={15} />}
+                    </button>
                   </div>
-                ))
-              ) : (
-                <div className="p-6 text-center text-sm text-neutral-500">No recent activity yet.</div>
+                  {reminders.length > 0 ? reminders.slice(0, 6).map(r => (
+                    <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-[#F2F1EE] last:border-0 group">
+                      <button onClick={() => toggleReminder(r)}
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${r.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-neutral-300 hover:border-neutral-400'}`}>
+                        {r.done && <Check size={13} />}
+                      </button>
+                      <span className={`flex-1 text-sm truncate ${r.done ? 'line-through text-neutral-400' : 'text-neutral-800'}`}>{r.title}</span>
+                      <button onClick={() => removeReminder(r)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all flex-shrink-0">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )) : (
+                    <div className="p-5 text-center text-sm text-neutral-400">No reminders yet.</div>
+                  )}
+                </Card>
+              </motion.div>
+
+              {/* Analytics snapshot */}
+              <motion.div variants={fadeUp}>
+                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
+                  <TrendingUp size={15} /> Class pulse
+                </h2>
+                <Card className="flex flex-col gap-4">
+                  <Bar label="Average score" value={perf.avg_score} color="#2383E2" />
+                  <Bar label="Average attendance" value={perf.avg_attendance} color="#0F7B6C" />
+                  {topStudents.length > 0 && (
+                    <div className="pt-1">
+                      <p className="text-[10px] font-extrabold uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-1.5">
+                        <Trophy size={12} /> Top students
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {topStudents.map((s, i) => (
+                          <div key={s.id} className="flex items-center gap-3">
+                            <span className="w-5 text-xs font-extrabold text-neutral-400 text-center">{i + 1}</span>
+                            <Avatar name={s.name} src={s.avatar_url} size="xs" />
+                            <span className="flex-1 text-sm font-medium text-neutral-800 truncate">{s.name}</span>
+                            <span className="text-xs font-bold text-neutral-500">{s.points} pts</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              </motion.div>
+
+              {/* Your classes */}
+              {standards.length > 0 && (
+                <motion.div variants={fadeUp}>
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500">Your classes</h2>
+                    <button onClick={() => navigate('/teacher/standards')} className="flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-neutral-900 transition-colors">
+                      All <ChevronRight size={13} />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    {standards.slice(0, 5).map(s => {
+                      const c = countFor(s.id);
+                      const pastel = PASTEL[pastelFor(s.name)] || PASTEL.sky;
+                      return (
+                        <button key={s.id} onClick={() => navigate(`/teacher/standards/${s.id}`)}
+                          className="flex items-center gap-3 p-3 rounded-card border border-black/5 hover:shadow-soft hover:-translate-y-0.5 transition-all text-left"
+                          style={{ background: pastel.hex }}>
+                          <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: pastel.fgHex }}>
+                            <SubjectIcon value={s.emoji} size={20} fallback="graduation" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm text-neutral-900 truncate">{s.name}</p>
+                            <p className="text-[11px] font-semibold" style={{ color: pastel.fgHex }}>{c.students} students · {c.subjects} subjects</p>
+                          </div>
+                          <ChevronRight size={16} className="text-neutral-400 flex-shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
               )}
-            </Card>
-          </motion.div>
+            </div>
+          </div>
         </motion.div>
-      </div>
       </div>
     </div>
   );

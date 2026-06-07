@@ -24,7 +24,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [attachments, setAttachments] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [menuId, setMenuId] = useState(null);
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const [menuPos, setMenuPos] = useState({ top: 0, bottom: 'auto', right: 0 });
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduledFor, setScheduledFor] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -318,55 +318,56 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
-      {/* Header */}
-      {showBackBtn ? (
-        <div className="md:hidden flex items-center gap-2 px-4 py-2 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
+      {/* Header (Mobile) */}
+      <div className="md:hidden flex items-center gap-2 px-4 py-2 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
+        {showBackBtn && (
           <button onClick={onBack} className="p-1.5 -ml-1.5 text-neutral-500 hover:text-neutral-900 rounded-full hover:bg-neutral-100">
             <ArrowLeft size={18} />
           </button>
-          <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
-              className="w-9 h-9 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
-              <SubjectIcon value={std.emoji} size={18} fallback="graduation" />
-            </button>
-            {showEmojiPicker && (
-              <div className="absolute top-11 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
-                <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
-                <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
-              </div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0 ml-1">
-            <p className="text-[15px] font-semibold text-neutral-900 truncate leading-tight">{std.name}</p>
-            <p className="text-[11px] text-neutral-500">{studentCount} students</p>
-          </div>
-          <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${showSearch ? 'text-neutral-900' : 'text-neutral-500'}`}>
-            <Search size={18} />
+        )}
+        <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
+            className="w-9 h-9 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
+            <SubjectIcon value={std.emoji} size={18} fallback="graduation" />
           </button>
+          {showEmojiPicker && (
+            <div className="absolute top-11 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
+              <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
+              <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="hidden md:flex items-center gap-3 px-5 py-3 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
-          <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
-              className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
-              <SubjectIcon value={std.emoji} size={20} fallback="graduation" />
-            </button>
-            {showEmojiPicker && (
-              <div className="absolute top-12 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
-                <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
-                <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
-              </div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-semibold text-neutral-900 truncate leading-tight">{std.name}</p>
-            <p className="text-xs text-neutral-500">{studentCount} students</p>
-          </div>
-          <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${showSearch ? 'text-neutral-900' : 'text-neutral-500'}`}>
-            <Search size={18} />
+        <div className="flex-1 min-w-0 ml-1">
+          <p className="text-[15px] font-semibold text-neutral-900 truncate leading-tight">{std.name}</p>
+          <p className="text-[11px] text-neutral-500">{studentCount} students</p>
+        </div>
+        <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${showSearch ? 'text-neutral-900' : 'text-neutral-500'}`}>
+          <Search size={18} />
+        </button>
+      </div>
+
+      {/* Header (Desktop) */}
+      <div className="hidden md:flex items-center gap-3 px-5 py-3 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
+        <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
+            className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
+            <SubjectIcon value={std.emoji} size={20} fallback="graduation" />
           </button>
+          {showEmojiPicker && (
+            <div className="absolute top-12 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
+              <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
+              <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
+            </div>
+          )}
         </div>
-      )}
+        <div className="flex-1 min-w-0">
+          <p className="text-[15px] font-semibold text-neutral-900 truncate leading-tight">{std.name}</p>
+          <p className="text-xs text-neutral-500">{studentCount} students</p>
+        </div>
+        <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${showSearch ? 'text-neutral-900' : 'text-neutral-500'}`}>
+          <Search size={18} />
+        </button>
+      </div>
 
       {/* Search bar */}
       {showSearch && (
@@ -531,7 +532,17 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                           const rect = e.currentTarget.getBoundingClientRect();
                           let rightPos = window.innerWidth - rect.right - 10;
                           if (rightPos < 10) rightPos = 10; // Prevent clipping off the right edge
-                          setMenuPos({ top: rect.bottom + 4, right: rightPos });
+                          
+                          let topPos = rect.bottom + 4;
+                          let bottomPos = 'auto';
+                          const menuHeight = 280; // Estimated max menu height
+                          
+                          if (topPos + menuHeight > window.innerHeight) {
+                            topPos = 'auto';
+                            bottomPos = window.innerHeight - rect.top + 4;
+                          }
+                          
+                          setMenuPos({ top: topPos, bottom: bottomPos, right: rightPos });
                           setMenuId(b.id);
                         }}
                         className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Menu">
@@ -551,10 +562,10 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       {/* Context menu overlay */}
       {menuId && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+          <div className="fixed inset-0 z-[9998]" onClick={() => setMenuId(null)} />
           <div
-            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
-            className="w-48 py-1 z-50 rounded-xl bg-white border border-neutral-200 shadow-xl"
+            style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}
+            className="w-48 py-1 z-[9999] rounded-xl bg-white border border-neutral-200 shadow-2xl"
           >
             {(() => {
               const b = broadcasts.find(x => x.id === menuId);
