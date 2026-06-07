@@ -1,28 +1,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MessageSquare, FileBarChart, Clock, LayoutTemplate, History, Settings as SettingsIcon, Send } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, FileBarChart, Clock, LayoutTemplate, Inbox, History, Settings as SettingsIcon, Send } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Input, Skeleton } from '../../components/ui';
 import { whatsappApi } from '../../lib/api';
 
+import OverviewTab from '../../components/teacher/whatsapp/OverviewTab';
 import RecipientPicker from '../../components/teacher/whatsapp/RecipientPicker';
 import Composer from '../../components/teacher/whatsapp/Composer';
 import CostEstimate from '../../components/teacher/whatsapp/CostEstimate';
 import CriteriaBuilder from '../../components/teacher/whatsapp/CriteriaBuilder';
 import TemplatesTab from '../../components/teacher/whatsapp/TemplatesTab';
+import InboxTab from '../../components/teacher/whatsapp/InboxTab';
 import HistoryTab from '../../components/teacher/whatsapp/HistoryTab';
 import AutomationTab from '../../components/teacher/whatsapp/AutomationTab';
 
 const TABS = [
+  { id: 'overview',   label: 'Overview',   icon: LayoutDashboard },
   { id: 'compose',    label: 'Compose',    icon: MessageSquare },
   { id: 'reports',    label: 'Reports',    icon: FileBarChart },
   { id: 'automation', label: 'Automation', icon: Clock },
   { id: 'templates',  label: 'Templates',  icon: LayoutTemplate },
+  { id: 'inbox',      label: 'Inbox',      icon: Inbox },
   { id: 'history',    label: 'History',    icon: History },
   { id: 'settings',   label: 'Settings',   icon: SettingsIcon },
 ];
 
 export default function WhatsAppMessageControllerPage() {
-  const [tab, setTab] = useState('compose');
+  const [tab, setTab] = useState('overview');
   const [config, setConfig] = useState(null);
   const [groups, setGroups] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -58,7 +62,7 @@ export default function WhatsAppMessageControllerPage() {
   return (
     <div className="min-h-screen bg-transparent">
       <TopBar title="WhatsApp" />
-      <div className="max-w-3xl mx-auto p-4 pb-[calc(7rem_+_env(safe-area-inset-bottom))] lg:pb-8">
+      <div className="max-w-5xl mx-auto p-4 pb-[calc(7rem_+_env(safe-area-inset-bottom))] lg:pb-8">
         {!config?.configured && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             WhatsApp is not configured yet. Add your provider API key in the <button
@@ -83,6 +87,7 @@ export default function WhatsAppMessageControllerPage() {
           <div className="space-y-3">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
         ) : (
           <>
+            {tab === 'overview' && <OverviewTab onNavigate={setTab} currency={currency} />}
             {tab === 'compose' && (
               <ComposeTab groups={groups} selected={selected} setSelected={setSelected}
                 templates={templates} estimateFor={estimateFor} currency={currency}
@@ -95,6 +100,7 @@ export default function WhatsAppMessageControllerPage() {
             )}
             {tab === 'automation' && <AutomationTab templates={templates} groups={groups} />}
             {tab === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} />}
+            {tab === 'inbox' && <InboxTab />}
             {tab === 'history' && <HistoryTab />}
             {tab === 'settings' && <SettingsTab config={config} reload={loadConfig} />}
           </>

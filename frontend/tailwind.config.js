@@ -19,6 +19,11 @@ export default {
           sky:         '#E3EFFB', 'sky-fg':      '#2383E2',
           peach:       '#FCE6DD', 'peach-fg':    '#C2410C',
         },
+        // WhatsApp accent — used for KPI icons, primary actions, donut.
+        whatsapp: {
+          green:        '#25D366', 'green-fg':   '#0B6E3E',
+          'green-light':'#E7FDDE',
+        },
       },
       borderRadius: {
         card: '1.5rem',

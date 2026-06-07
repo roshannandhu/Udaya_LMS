@@ -504,6 +504,13 @@ export const whatsappApi = {
   getMessages: (limit = 100, status) =>
     apiClient(`/teacher/whatsapp/messages?limit=${limit}${status ? `&status=${status}` : ''}`),
 
+  // Dashboard stats (KPIs, donut, month spend, recent, scheduled)
+  getStats: () => apiClient('/teacher/whatsapp/stats'),
+
+  // Read-only inbox (parent replies, grouped by parent)
+  getInbox:      ()     => apiClient('/teacher/whatsapp/inbox'),
+  markInboxRead: (data) => apiClient('/teacher/whatsapp/inbox/mark-read', { method: 'POST', body: JSON.stringify(data || {}) }),
+
   // Templates
   listTemplates:   ()       => apiClient('/teacher/whatsapp/templates'),
   createTemplate:  (data)   => apiClient('/teacher/whatsapp/templates', { method: 'POST', body: JSON.stringify(data) }),

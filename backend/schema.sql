@@ -756,3 +756,27 @@ CREATE POLICY "deny_all_wa_jobs" ON whatsapp_scheduled_jobs FOR ALL USING (false
 -- Per-parent opt-out (respect-the-parent / DLT compliance). Excluded from every
 -- recipient resolver + cost estimate.
 ALTER TABLE students ADD COLUMN IF NOT EXISTS whatsapp_opt_out BOOLEAN DEFAULT false;
+
+-- Inbound parent replies (read-only inbox). Captured by the delivery webhook when
+-- a parent messages back; matched to a student/teacher by phone number.
+CREATE TABLE IF NOT EXISTS whatsapp_inbox (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id          UUID NOT NULL,
+    from_phone          TEXT NOT NULL,
+    student_id          UUID,
+    student_name        TEXT,
+    standard_id         UUID,
+    standard_name       TEXT,
+    body                TEXT,
+    media_url           TEXT,
+    media_type          TEXT,
+    provider_message_id TEXT,
+    read_by_teacher     BOOLEAN DEFAULT false,
+    received_at         TIMESTAMPTZ DEFAULT NOW(),
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wa_inbox_teacher ON whatsapp_inbox(teacher_id, received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wa_inbox_phone   ON whatsapp_inbox(from_phone);
+ALTER TABLE whatsapp_inbox ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_wa_inbox" ON whatsapp_inbox;
+CREATE POLICY "deny_all_wa_inbox" ON whatsapp_inbox FOR ALL USING (false);

@@ -7,9 +7,11 @@ export const PASTEL = {
   cream:    { bg: 'bg-pastel-cream',    fg: 'text-pastel-cream-fg',    hex: '#FBF1D9', fgHex: '#B7791F' },
   sky:      { bg: 'bg-pastel-sky',      fg: 'text-pastel-sky-fg',      hex: '#E3EFFB', fgHex: '#2383E2' },
   peach:    { bg: 'bg-pastel-peach',    fg: 'text-pastel-peach-fg',    hex: '#FCE6DD', fgHex: '#C2410C' },
+  whatsapp: { bg: 'bg-whatsapp-green-light', fg: 'text-whatsapp-green-fg', hex: '#E7FDDE', fgHex: '#0B6E3E' },
 };
 
-export const PASTEL_NAMES = Object.keys(PASTEL);
+// WhatsApp green is an accent, not a rotation colour — keep it out of pastelFor().
+export const PASTEL_NAMES = Object.keys(PASTEL).filter((n) => n !== 'whatsapp');
 
 // Deterministic pastel from a string (e.g. subject name) so colours are stable.
 export function pastelFor(key = '') {

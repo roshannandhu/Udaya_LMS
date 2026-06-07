@@ -7174,6 +7174,34 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
 
 
 # ── History + spend total ─────────────────────────────────────────────────────
+def _wa_enrich_messages(rows):
+    """Add `student_name` + `standard_name` to message rows (for the History /
+    Recent tables). Best-effort: a failed lookup just leaves the field None."""
+    if not rows:
+        return rows
+    sid_ids = list({r["student_id"] for r in rows if r.get("student_id")})
+    std_ids = list({r["standard_id"] for r in rows if r.get("standard_id")})
+    names, stds = {}, {}
+    if sid_ids:
+        try:
+            for s in (service_supabase.table("students").select("id, name").in_(
+                    "id", sid_ids).execute().data or []):
+                names[s["id"]] = s.get("name")
+        except Exception:
+            pass
+    if std_ids:
+        try:
+            for s in (service_supabase.table("standards").select("id, name").in_(
+                    "id", std_ids).execute().data or []):
+                stds[s["id"]] = s.get("name")
+        except Exception:
+            pass
+    for r in rows:
+        r["student_name"] = names.get(r.get("student_id"))
+        r["standard_name"] = stds.get(r.get("standard_id"))
+    return rows
+
+
 @app.get("/api/teacher/whatsapp/messages")
 def wa_messages(limit: int = 100, status: Optional[str] = None, user = Depends(verify_token)):
     _wa_require_teacher(user)
@@ -7183,12 +7211,83 @@ def wa_messages(limit: int = 100, status: Optional[str] = None, user = Depends(v
         if status:
             q = q.eq("status", status)
         rows = q.execute().data or []
+        _wa_enrich_messages(rows)
         spend = service_supabase.table("whatsapp_messages").select("cost_amount").eq(
             "teacher_id", user["teacher_id"]).execute().data or []
         total = round(sum(float(r.get("cost_amount") or 0) for r in spend), 2)
     except Exception:
         return {"messages": [], "spend_total": 0, "count": 0}
     return {"messages": rows, "spend_total": total, "count": len(rows)}
+
+
+# ── Dashboard stats (KPIs + donut + month spend + recent + scheduled) ──────────
+@app.get("/api/teacher/whatsapp/stats")
+def wa_stats(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    tid = user["teacher_id"]
+    currency = wa.get_wa_config().get("currency", wa.DEFAULT_CURRENCY)
+
+    counts = {"queued": 0, "sent": 0, "delivered": 0, "read": 0, "failed": 0}
+    total_spend = month_spend = 0.0
+    now = datetime.now(timezone.utc)
+    try:
+        agg = service_supabase.table("whatsapp_messages").select(
+            "status, cost_amount, created_at").eq("teacher_id", tid).execute().data or []
+    except Exception:
+        agg = []
+    for r in agg:
+        st = r.get("status") or "queued"
+        if st == "not_configured":
+            st = "queued"
+        counts[st] = counts.get(st, 0) + 1
+        c = float(r.get("cost_amount") or 0)
+        total_spend += c
+        ts = r.get("created_at")
+        if ts:
+            try:
+                d = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                if (d.year, d.month) == (now.year, now.month):
+                    month_spend += c
+            except Exception:
+                pass
+
+    total = sum(counts.values())
+    # Recent (enriched) for the dashboard table.
+    try:
+        recent = service_supabase.table("whatsapp_messages").select(
+            "id, to_phone, student_id, standard_id, template_name, body_text, "
+            "media_type, category, status, cost_amount, created_at"
+        ).eq("teacher_id", tid).order("created_at", desc=True).limit(10).execute().data or []
+        _wa_enrich_messages(recent)
+    except Exception:
+        recent = []
+    # Scheduled jobs summary.
+    try:
+        jobs = service_supabase.table("whatsapp_scheduled_jobs").select(
+            "id, name, active, next_run_at, target_type, target_ids, trigger_type, trigger_config, mode"
+        ).eq("teacher_id", tid).order("next_run_at", desc=False).execute().data or []
+    except Exception:
+        jobs = []
+
+    return {
+        "counts": counts,
+        "totals": {
+            "total": total,
+            "delivered": counts.get("delivered", 0) + counts.get("read", 0),
+            "read": counts.get("read", 0),
+            "failed": counts.get("failed", 0),
+        },
+        "spend": {"month": round(month_spend, 2), "total": round(total_spend, 2), "currency": currency},
+        "performance": [
+            {"status": "delivered", "count": counts.get("delivered", 0)},
+            {"status": "read", "count": counts.get("read", 0)},
+            {"status": "sent", "count": counts.get("sent", 0)},
+            {"status": "failed", "count": counts.get("failed", 0)},
+            {"status": "queued", "count": counts.get("queued", 0)},
+        ],
+        "recent": recent,
+        "jobs": jobs,
+    }
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────
@@ -7389,21 +7488,163 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
 
 
-# ── Delivery-status webhook (no auth — provider-signed callbacks) ──────────────
+class WhatsAppInboxReadInput(BaseModel):
+    from_phone: Optional[str] = None
+    message_ids: Optional[List[str]] = None
+
+
+def _wa_phone_variants(phone: str):
+    """Generate plausible stored-phone variants for an inbound sender number so we
+    can match it to `students.phone` despite +/country-code formatting differences."""
+    phone = (phone or "").strip()
+    digits = "".join(c for c in phone if c.isdigit())
+    variants = set()
+    if phone:
+        variants.add(phone)
+    if digits:
+        variants.add(digits)
+        variants.add("+" + digits)
+        last10 = digits[-10:]
+        if len(digits) >= 10:
+            variants.add(last10)
+            variants.add("91" + last10)
+            variants.add("+91" + last10)
+    return [v for v in variants if v]
+
+
+def _wa_match_inbound(from_phone: str):
+    """Resolve an inbound sender phone to {teacher_id, student_id, name, standard}."""
+    variants = _wa_phone_variants(from_phone)
+    if not variants:
+        return None
+    try:
+        srows = service_supabase.table("students").select(
+            "id, name, standard_id").in_("phone", variants).execute().data or []
+    except Exception:
+        srows = []
+    if not srows:
+        return None
+    s = srows[0]
+    std = None
+    if s.get("standard_id"):
+        try:
+            std = (service_supabase.table("standards").select("id, name, teacher_id").eq(
+                "id", s["standard_id"]).limit(1).execute().data or [None])[0]
+        except Exception:
+            std = None
+    if not std or not std.get("teacher_id"):
+        return None
+    return {
+        "teacher_id": std.get("teacher_id"),
+        "student_id": s["id"],
+        "student_name": s.get("name"),
+        "standard_id": std.get("id"),
+        "standard_name": std.get("name"),
+    }
+
+
+# ── Webhook (no auth — provider-signed callbacks). Handles BOTH outbound delivery
+#    status updates AND inbound parent replies (read-only inbox). ───────────────
 @app.post("/api/teacher/whatsapp/webhook")
 async def wa_webhook(request: Request):
     try:
         body = await request.json()
     except Exception:
         return {"ok": True}
+    if not service_supabase:
+        return {"ok": True}
+
     pid = body.get("id") or body.get("message_id")
     status = body.get("status")
-    if pid and status and service_supabase:
+
+    # 1) Delivery-status update for a message we sent.
+    if pid and status:
         try:
             service_supabase.table("whatsapp_messages").update(
                 {"status": status}).eq("provider_message_id", pid).execute()
         except Exception as e:
-            print(f"[wa] webhook update failed: {e}")
+            print(f"[wa] webhook status update failed: {e}")
+
+    # 2) Inbound parent reply → inbox.
+    from_phone = (body.get("from") or body.get("sender") or body.get("wa_id")
+                  or body.get("phone") or "")
+    text = body.get("text")
+    if isinstance(text, dict):
+        text = text.get("body")
+    msg_body = text or body.get("body") or body.get("message")
+    if isinstance(msg_body, dict):
+        msg_body = msg_body.get("body") or msg_body.get("text")
+    media_url = body.get("media_url") or body.get("media")
+    direction = str(body.get("direction") or body.get("type") or "").lower()
+    is_inbound = bool(from_phone) and (bool(msg_body) or bool(media_url)) and not status
+    if direction in ("inbound", "incoming", "message", "reply"):
+        is_inbound = bool(from_phone)
+    if is_inbound:
+        match = _wa_match_inbound(from_phone)
+        if match:
+            try:
+                service_supabase.table("whatsapp_inbox").insert({
+                    "teacher_id": match["teacher_id"],
+                    "from_phone": from_phone,
+                    "student_id": match.get("student_id"),
+                    "student_name": match.get("student_name"),
+                    "standard_id": match.get("standard_id"),
+                    "standard_name": match.get("standard_name"),
+                    "body": msg_body or "",
+                    "media_url": media_url,
+                    "media_type": body.get("media_type"),
+                    "provider_message_id": pid,
+                }).execute()
+            except Exception as e:
+                print(f"[wa] inbox insert failed: {e}")
+    return {"ok": True}
+
+
+# ── Inbox (read-only parent replies, grouped by parent) ────────────────────────
+@app.get("/api/teacher/whatsapp/inbox")
+def wa_inbox(limit: int = 200, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        rows = service_supabase.table("whatsapp_inbox").select("*").eq(
+            "teacher_id", user["teacher_id"]).order("received_at", desc=True).limit(limit).execute().data or []
+    except Exception:
+        return {"threads": [], "unread": 0, "count": 0}
+    threads: Dict[str, dict] = {}
+    unread = 0
+    for r in rows:
+        is_unread = not r.get("read_by_teacher")
+        if is_unread:
+            unread += 1
+        key = r.get("from_phone") or "?"
+        t = threads.get(key)
+        if not t:
+            t = {"from_phone": key, "student_id": r.get("student_id"),
+                 "student_name": r.get("student_name"), "standard_name": r.get("standard_name"),
+                 "last_at": r.get("received_at"), "unread": 0, "messages": []}
+            threads[key] = t
+        t["messages"].append({
+            "id": r["id"], "body": r.get("body"), "media_url": r.get("media_url"),
+            "media_type": r.get("media_type"), "received_at": r.get("received_at"),
+            "read": bool(r.get("read_by_teacher")),
+        })
+        if is_unread:
+            t["unread"] += 1
+    return {"threads": list(threads.values()), "unread": unread, "count": len(rows)}
+
+
+@app.post("/api/teacher/whatsapp/inbox/mark-read")
+def wa_inbox_mark_read(data: WhatsAppInboxReadInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        q = service_supabase.table("whatsapp_inbox").update(
+            {"read_by_teacher": True}).eq("teacher_id", user["teacher_id"])
+        if data.from_phone:
+            q = q.eq("from_phone", data.from_phone)
+        if data.message_ids:
+            q = q.in_("id", data.message_ids)
+        q.execute()
+    except Exception as e:
+        print(f"[wa] inbox mark-read failed: {e}")
     return {"ok": True}
 
 
