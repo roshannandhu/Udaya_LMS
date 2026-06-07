@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import { Plus, Send, Trash2, RefreshCw } from 'lucide-react';
 import { Btn, Input, Textarea, Tag, Modal, SectionHeader } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
+import WhatsAppPreview from './WhatsAppPreview';
+import { fillTemplate } from './previewText';
+
+const HEADER_MEDIA = {
+  document: { mediaType: 'application/pdf', mediaName: 'report.pdf' },
+  image:    { mediaType: 'image/png' },
+  audio:    { mediaType: 'audio/mpeg' },
+};
 
 const STATUS_COLOR = { approved: 'green', pending: 'amber', rejected: 'red', draft: 'gray' };
 
@@ -105,6 +113,15 @@ export default function TemplatesTab({ templates, reload }) {
           <Input label="Variable labels (comma-separated, optional)"
             value={(form.variables || []).join(', ')}
             onChange={(e) => setForm({ ...form, variables: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
+
+          {/* Live preview of how parents will see this template */}
+          <div>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">What parents will see</label>
+            <WhatsAppPreview
+              messages={[{ text: fillTemplate(form.body_text, [], form.variables), ...(HEADER_MEDIA[form.header_type] || {}) }]}
+              footnote="Blanks show your variable labels — real values fill in when you send." />
+          </div>
+
           <div className="flex gap-2 justify-end pt-2">
             <Btn onClick={() => create(false)} disabled={busy}>Save draft</Btn>
             <Btn variant="primary" onClick={() => create(true)} disabled={busy}>Save &amp; submit</Btn>

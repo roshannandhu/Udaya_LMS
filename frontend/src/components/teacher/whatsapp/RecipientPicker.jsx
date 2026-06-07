@@ -33,15 +33,16 @@ export default function RecipientPicker({ groups = [], selected, onChange }) {
 
   const allSelectableIds = groups.flatMap(g => g.students.filter(eligible).map(s => s.id));
   const allSelected = allSelectableIds.length > 0 && allSelectableIds.every(id => selected.has(id));
+  const selectedTotal = allSelectableIds.filter(id => selected.has(id)).length;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Recipients (parents)
+        <span className="text-xs text-neutral-500">
+          {selectedTotal} of {allSelectableIds.length} parents selected
         </span>
         <button
-          className="text-xs font-medium text-neutral-700 hover:underline"
+          className="text-xs font-medium text-whatsapp-green-fg hover:underline"
           onClick={() => onChange(allSelected ? new Set() : new Set(allSelectableIds))}>
           {allSelected ? 'Clear all' : 'Select all classes'}
         </button>

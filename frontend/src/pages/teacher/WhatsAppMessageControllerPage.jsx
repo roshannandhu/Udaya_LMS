@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LayoutDashboard, MessageSquare, FileBarChart, Clock, LayoutTemplate, Inbox, History, Settings as SettingsIcon, Send } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, FileBarChart, Clock, LayoutTemplate, Inbox, History, Settings as SettingsIcon, Send, Eye } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Input, Skeleton } from '../../components/ui';
 import { whatsappApi } from '../../lib/api';
@@ -13,6 +13,8 @@ import TemplatesTab from '../../components/teacher/whatsapp/TemplatesTab';
 import InboxTab from '../../components/teacher/whatsapp/InboxTab';
 import HistoryTab from '../../components/teacher/whatsapp/HistoryTab';
 import AutomationTab from '../../components/teacher/whatsapp/AutomationTab';
+import WhatsAppPreview from '../../components/teacher/whatsapp/WhatsAppPreview';
+import { fillTemplate } from '../../components/teacher/whatsapp/previewText';
 
 const TABS = [
   { id: 'overview',   label: 'Overview',   icon: LayoutDashboard },
@@ -110,6 +112,40 @@ export default function WhatsAppMessageControllerPage() {
   );
 }
 
+// ── Shared layout helpers ───────────────────────────────────────────────────
+function Step({ n, title, hint, children }) {
+  return (
+    <div className="glass-panel border border-[#EBEAE7] rounded-card p-4">
+      <div className="flex items-start gap-2.5 mb-3">
+        <span className="w-6 h-6 rounded-full bg-whatsapp-green-light text-whatsapp-green-fg text-xs font-bold flex items-center justify-center flex-shrink-0">{n}</span>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-800 leading-tight">{title}</h3>
+          {hint && <p className="text-[11px] text-neutral-400 mt-0.5">{hint}</p>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Sticky on desktop; collapsible "what parents see" panel on mobile.
+function PreviewPanel({ children }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="lg:sticky lg:top-4">
+      <button onClick={() => setOpen(o => !o)}
+        className="lg:hidden w-full flex items-center justify-between mb-2 px-3 py-2 rounded-xl bg-white border border-[#EBEAE7] text-sm font-medium text-neutral-700">
+        <span className="flex items-center gap-1.5"><Eye size={15} /> What parents will see</span>
+        <span className="text-xs text-neutral-400">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      <p className="hidden lg:flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2 px-1">
+        <Eye size={13} /> What parents will see
+      </p>
+      <div className={open ? 'block' : 'hidden lg:block'}>{children}</div>
+    </div>
+  );
+}
+
 // ── Compose ───────────────────────────────────────────────────────────────────
 function ComposeTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount }) {
   const [msg, setMsg] = useState({ mode: 'template', category: 'utility', variables: [], body_text: '' });
@@ -119,6 +155,19 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
   const selectedStudents = useMemo(
     () => groups.flatMap(g => g.students).filter(s => selected.has(s.id)), [groups, selected]);
   const freeformAllowed = selectedStudents.length > 0 && selectedStudents.every(s => s.session_open);
+  const classCount = useMemo(
+    () => new Set(selectedStudents.map(s => s.standard_id)).size, [selectedStudents]);
+
+  // Live preview text: filled template (sample = first selected student's name) or free-form body.
+  const sampleName = selectedStudents[0]?.name || 'your child';
+  const tpl = templates.find(t => t.name === msg.template_name && t.status === 'approved');
+  const previewText = msg.mode === 'template'
+    ? (tpl ? fillTemplate(tpl.body_text, msg.variables, tpl.variables) : '')
+    : (msg.body_text || '');
+  const previewMessages = [{
+    text: previewText.replace(/\{your child\}/gi, sampleName),
+    mediaType: msg.media_type, mediaUrl: msg.media_url, mediaName: msg.media_name,
+  }];
 
   const buildPayload = () => ({
     included_student_ids: Array.from(selected),
@@ -147,18 +196,34 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
   };
 
   return (
-    <div className="space-y-5">
-      <RecipientPicker groups={groups} selected={selected} onChange={setSelected} />
-      <Composer value={msg} onChange={setMsg} templates={templates} freeformAllowed={freeformAllowed} />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
+      {/* Left: guided steps */}
+      <div className="space-y-4">
+        <Step n="1" title="Who gets it?"
+          hint={selectedCount > 0 ? `${selectedCount} parent${selectedCount > 1 ? 's' : ''} across ${classCount} class${classCount > 1 ? 'es' : ''}` : 'Pick the classes or students to message'}>
+          <RecipientPicker groups={groups} selected={selected} onChange={setSelected} />
+        </Step>
 
-      <div className="flex items-end gap-2">
-        <div className="flex-1"><Input label="Test to a number first (optional)" placeholder="+91…"
-          value={testPhone} onChange={(e) => setTestPhone(e.target.value)} /></div>
-        <Btn icon={Send} onClick={sendTest} disabled={sending || !testPhone.trim()}>Test</Btn>
+        <Step n="2" title="Your message" hint="Type it, attach a file, or pick a template">
+          <Composer value={msg} onChange={setMsg} templates={templates} freeformAllowed={freeformAllowed} />
+        </Step>
+
+        <Step n="3" title="Review & send" hint="Send a test to yourself first if you like">
+          <div className="flex items-end gap-2 mb-3">
+            <div className="flex-1"><Input label="Test to my number first (optional)" placeholder="+91…"
+              value={testPhone} onChange={(e) => setTestPhone(e.target.value)} /></div>
+            <Btn icon={Send} onClick={sendTest} disabled={sending || !testPhone.trim()}>Test</Btn>
+          </div>
+          <CostEstimate count={selectedCount} estimate={estimateFor(msg.category)} currency={currency}
+            onSend={send} sending={sending} configured={configured} />
+        </Step>
       </div>
 
-      <CostEstimate count={selectedCount} estimate={estimateFor(msg.category)} currency={currency}
-        onSend={send} sending={sending} configured={configured} />
+      {/* Right: live WhatsApp preview */}
+      <PreviewPanel>
+        <WhatsAppPreview messages={previewMessages}
+          footnote="Live preview — variable blanks show example values until you fill them." />
+      </PreviewPanel>
     </div>
   );
 }
@@ -194,58 +259,90 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
     } catch (e) { alert(e.message); } finally { setSending(false); }
   };
 
+  // Sample name + report attachment chip per chosen format.
+  const sampleName = useMemo(() => {
+    const s = groups.flatMap(g => g.students).find(x => selected.has(x.id));
+    return s?.name || 'Aarav';
+  }, [groups, selected]);
+  const reportMedia = (name) => {
+    if (format === 'pdf') return { mediaType: 'application/pdf', mediaName: `${name.replace(/\s+/g, '_')}_Report.pdf` };
+    if (format === 'image') return { mediaType: 'image/png' };
+    return {}; // text summary → no attachment, summary is in the body
+  };
+  // One sample bubble per band (or the default message when no bands).
+  const previewMessages = (criteria.length ? criteria : [{ message: defaultMsg, attach_report: true }]).map((b) => {
+    const text = (b.message || defaultMsg || 'Please find your child’s report attached.');
+    const attach = b.attach_report !== false;
+    return { text, ...(attach ? reportMedia(sampleName) : {}) };
+  });
+
   return (
-    <div className="space-y-5">
-      <RecipientPicker groups={groups} selected={selected} onChange={setSelected} />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
+      <div className="space-y-4">
+        <Step n="1" title="Who gets a report?" hint="Pick the classes or students">
+          <RecipientPicker groups={groups} selected={selected} onChange={setSelected} />
+        </Step>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Report format</label>
-          <select value={format} onChange={(e) => setFormat(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
-            <option value="pdf">PDF attachment</option>
-            <option value="image">Image card</option>
-            <option value="text">Text summary</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Score period (for banding)</label>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
-            <option value="overall">Overall average</option>
-            <option value="monthly">Last month</option>
-            <option value="weekly">Last week</option>
-          </select>
-        </div>
-      </div>
-
-      <Input label="Default message (when no band matches)" value={defaultMsg}
-        onChange={(e) => setDefaultMsg(e.target.value)} />
-
-      <CriteriaBuilder value={criteria} onChange={setCriteria} templates={templates} />
-
-      <div>
-        <Btn onClick={runPreview}>Preview criteria</Btn>
-        {preview && (
-          <div className="mt-3 glass-panel border border-[#EBEAE7] rounded-xl overflow-hidden">
-            <div className="px-3 py-2 text-xs font-semibold text-neutral-500 border-b border-[#F1EFEC]">
-              Preview · {preview.preview.length} students{preview.skipped_no_band ? ` · ${preview.skipped_no_band} skipped (no band)` : ''}
+        <Step n="2" title="Report & message" hint="Choose the format, then vary the message by score">
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Report format</label>
+              <select value={format} onChange={(e) => setFormat(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
+                <option value="pdf">PDF attachment</option>
+                <option value="image">Image card</option>
+                <option value="text">Text summary</option>
+              </select>
             </div>
-            <div className="max-h-64 overflow-y-auto divide-y divide-[#F4F2EF]">
-              {preview.preview.map(p => (
-                <div key={p.student_id} className="px-3 py-2 text-sm flex items-center gap-2">
-                  <span className="flex-1 truncate">{p.name}</span>
-                  <span className="text-neutral-500 w-12 text-right">{p.score ?? '—'}%</span>
-                  <span className="flex-1 text-xs text-neutral-500 truncate">{p.message || '—'}</span>
-                </div>
-              ))}
+            <div>
+              <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Score period (for banding)</label>
+              <select value={period} onChange={(e) => setPeriod(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
+                <option value="overall">Overall average</option>
+                <option value="monthly">Last month</option>
+                <option value="weekly">Last week</option>
+              </select>
             </div>
           </div>
-        )}
+
+          <div className="mb-3">
+            <Input label="Default message (when no band matches)" value={defaultMsg}
+              onChange={(e) => setDefaultMsg(e.target.value)} />
+          </div>
+
+          <CriteriaBuilder value={criteria} onChange={setCriteria} templates={templates} />
+
+          <div className="mt-3">
+            <Btn onClick={runPreview}>Check who matches</Btn>
+            {preview && (
+              <div className="mt-3 glass-panel border border-[#EBEAE7] rounded-xl overflow-hidden">
+                <div className="px-3 py-2 text-xs font-semibold text-neutral-500 border-b border-[#F1EFEC]">
+                  {preview.preview.length} students{preview.skipped_no_band ? ` · ${preview.skipped_no_band} skipped (no band)` : ''}
+                </div>
+                <div className="max-h-64 overflow-y-auto divide-y divide-[#F4F2EF]">
+                  {preview.preview.map(p => (
+                    <div key={p.student_id} className="px-3 py-2 text-sm flex items-center gap-2">
+                      <span className="flex-1 truncate">{p.name}</span>
+                      <span className="text-neutral-500 w-12 text-right">{p.score ?? '—'}%</span>
+                      <span className="flex-1 text-xs text-neutral-500 truncate">{p.message || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Step>
+
+        <Step n="3" title="Send" hint="Each parent gets the report for their child">
+          <CostEstimate count={selectedCount} estimate={estimateFor(category)} currency={currency}
+            onSend={send} sending={sending} configured={configured} sendLabel="Send reports" />
+        </Step>
       </div>
 
-      <CostEstimate count={selectedCount} estimate={estimateFor(category)} currency={currency}
-        onSend={send} sending={sending} configured={configured} sendLabel="Send reports" />
+      <PreviewPanel>
+        <WhatsAppPreview messages={previewMessages}
+          footnote={criteria.length ? 'One sample shown per score band — actual report is each child’s own.' : 'Sample shown — actual report is each child’s own.'} />
+      </PreviewPanel>
     </div>
   );
 }

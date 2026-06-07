@@ -21,21 +21,21 @@ export default function CriteriaBuilder({ value = [], onChange, templates = [] }
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Criteria bands (by score %)
+          Different message by score
         </span>
         <div className="flex gap-2">
           {value.length === 0 && (
-            <button className="text-xs font-medium text-neutral-700 hover:underline"
+            <button className="text-xs font-medium text-whatsapp-green-fg hover:underline"
               onClick={() => onChange(PRESET)}>Use preset</button>
           )}
-          <button className="text-xs font-medium text-neutral-700 hover:underline flex items-center gap-1"
+          <button className="text-xs font-medium text-whatsapp-green-fg hover:underline flex items-center gap-1"
             onClick={add}><Plus size={13} /> Add band</button>
         </div>
       </div>
 
       {value.length === 0 && (
         <p className="text-sm text-neutral-400 px-1">
-          No bands — every selected student gets the same message. Add bands to vary by score.
+          Optional — every selected student gets the same message. Add bands (e.g. below 20%, 20–50%, above 50%) to send different wording by score.
         </p>
       )}
 
