@@ -377,10 +377,15 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
           <div className="flex flex-wrap gap-2 mb-3">
             <Btn onClick={runPreview}>Preview</Btn>
           </div>
+          {reportType === 'exam' && (
+            <p className="text-[11px] text-neutral-400 mb-2">Only students who took this exam will receive results.</p>
+          )}
           {preview && (
             <div className="mb-3 glass-panel border border-[#EBEAE7] rounded-xl overflow-hidden">
               <div className="px-3 py-2 text-xs font-semibold text-neutral-500 border-b border-[#F1EFEC]">
-                {preview.preview.length} students{preview.skipped_no_band ? ` · ${preview.skipped_no_band} skipped` : ''}
+                {preview.preview.length} will receive
+                {preview.skipped_no_exam ? ` · ${preview.skipped_no_exam} didn’t take the exam` : ''}
+                {preview.skipped_no_band ? ` · ${preview.skipped_no_band} no band` : ''}
               </div>
               <div className="max-h-56 overflow-y-auto divide-y divide-[#F4F2EF]">
                 {preview.preview.map(p => (
@@ -393,9 +398,16 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
               </div>
             </div>
           )}
-          <CostEstimate count={selectedCount} estimate={estimateFor(category)} currency={currency}
-            onSend={send} sending={sending} configured={configured}
-            sendLabel={`Send to ${selectedCount} parent${selectedCount === 1 ? '' : 's'}`} />
+          {(() => {
+            // Exam mode: once previewed, count only the students who took the exam.
+            const eff = (reportType === 'exam' && preview) ? preview.preview.length : selectedCount;
+            const { rate } = estimateFor(category);
+            return (
+              <CostEstimate count={eff} estimate={{ rate, amount: eff * rate }} currency={currency}
+                onSend={send} sending={sending} configured={configured}
+                sendLabel={`Send to ${eff} parent${eff === 1 ? '' : 's'}`} />
+            );
+          })()}
 
           {/* Advanced settings — most teachers never open this */}
           <details className="mt-4 group">

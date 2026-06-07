@@ -7459,7 +7459,12 @@ def wa_preview_criteria(data: WhatsAppReportSendInput, user = Depends(verify_tok
                                  data.test_id, data.period, data.criteria)
     preview = []
     skipped = 0
+    skipped_no_exam = 0
     for r in rows:
+        # Exam mode: only students who actually took THIS exam get a result.
+        if data.test_id and r["score"] is None:
+            skipped_no_exam += 1
+            continue
         band = r["band"] or {}
         if data.criteria and not r["band"]:
             skipped += 1
@@ -7472,7 +7477,7 @@ def wa_preview_criteria(data: WhatsAppReportSendInput, user = Depends(verify_tok
             "has_phone": bool(r["phone"]),
         })
     count = len([p for p in preview if p["has_phone"] and (not data.criteria or p["band"])])
-    return {"preview": preview, "skipped_no_band": skipped,
+    return {"preview": preview, "skipped_no_band": skipped, "skipped_no_exam": skipped_no_exam,
             "estimate": wa.estimate_cost(count, data.category)}
 
 
@@ -7487,6 +7492,9 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     results = []
     for r in rows:
         if not r["phone"]:
+            continue
+        # Exam mode: only students who actually took THIS exam get a result.
+        if data.test_id and r["score"] is None:
             continue
         band = r["band"] or {}
         if data.criteria and not r["band"]:
