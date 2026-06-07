@@ -2360,7 +2360,7 @@ def assign_student_code(student_db_id, standard_id, year=None, seq_cache=None):
 
 
 @app.post("/api/admin/create-student")
-def create_student_admin(request: CreateStudentRequest, user = Depends(verify_token)):
+def create_student_admin(request: CreateStudentRequest, background_tasks: BackgroundTasks, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
@@ -2398,6 +2398,9 @@ def create_student_admin(request: CreateStudentRequest, user = Depends(verify_to
             pass
 
         student_code = assign_student_code(response.user.id, request.standard_id)
+
+        # Fire auto-welcome (credentials) if enabled — guarded, never blocks creation.
+        background_tasks.add_task(_wa_auto_welcome, response.user.id)
 
         return {
             "id": response.user.id,
@@ -3516,7 +3519,7 @@ def get_join_requests(invite_code: str, user = Depends(verify_token)):
     return response.data or []
 
 @app.patch("/api/join-requests/{request_id}/approve")
-def approve_join_request(request_id: str, user = Depends(verify_token)):
+def approve_join_request(request_id: str, background_tasks: BackgroundTasks, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
@@ -3557,12 +3560,24 @@ def approve_join_request(request_id: str, user = Depends(verify_token)):
                     "email": auth_email,
                     "username": request.data["student_email"] or request.data["student_name"].lower().replace(" ", "."),
                     "standard_id": invite_link.data["standard_id"],
+                    "must_change_pwd": True,
                 }).execute()
+
+                # Persist the generated temp password so it can be resent to
+                # parents later (guarded — like single create / bulk import).
+                try:
+                    service_supabase.table("students").update(
+                        {"plain_password": temp_password}).eq("id", new_user.user.id).execute()
+                except Exception:
+                    pass
 
                 student_code = assign_student_code(new_user.user.id, invite_link.data["standard_id"])
 
                 # Update request status
                 service_supabase.table("invite_requests").update({"status": "approved"}).eq("id", request_id).execute()
+
+                # Fire auto-welcome (credentials) if enabled — guarded, never blocks approval.
+                background_tasks.add_task(_wa_auto_welcome, new_user.user.id)
 
                 return {
                     "message": "Student approved",
@@ -5332,6 +5347,15 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 "must_change_pwd": True
             }).execute()
 
+            # Persist the plaintext temp password (post-insert, like single create)
+            # so it can be resent to parents later. Guarded — a missing column
+            # must never block student creation.
+            try:
+                service_supabase.table("students").update(
+                    {"plain_password": s.temp_password}).eq("id", auth_user_id).execute()
+            except Exception:
+                pass
+
             # 3. Generate + persist the student code (post-insert, like single create)
             student_code = assign_student_code(auth_user_id, s.standard_id, seq_cache=seq_cache)
 
@@ -6898,6 +6922,7 @@ class WhatsAppWelcomeInput(BaseModel):
     template_name: Optional[str] = None
     message: Optional[str] = None
     category: str = "utility"
+    include_credentials: bool = True        # include Student ID + password + login URL
 
 class WhatsAppJobInput(BaseModel):
     name: str
@@ -6927,6 +6952,43 @@ def _wa_branding_name() -> str:
         return (get_teacher_settings().get("lms_name") or "").strip()
     except Exception:
         return ""
+
+
+def _wa_login_url() -> str:
+    try:
+        return (get_teacher_settings().get("login_url") or "").strip()
+    except Exception:
+        return ""
+
+
+def _wa_fetch_credentials(student_ids: List[str]) -> dict:
+    """Map student_id → {student_code, plain_password, must_change_pwd}. Sensitive —
+    only used by the credentials/welcome send path. Graceful-degrades."""
+    if not student_ids:
+        return {}
+    try:
+        rows = service_supabase.table("students").select(
+            "id, student_code, plain_password, must_change_pwd").in_(
+            "id", student_ids).execute().data or []
+    except Exception:
+        rows = []
+    return {r["id"]: r for r in rows}
+
+
+def _wa_credentials_body(name: str, student_code: str, password: str, lms: str) -> str:
+    """Friendly login-details message. `password` may be '' → a safe fallback line."""
+    inst = lms or "our institution"
+    lines = [f"Welcome to {inst}! Login details for {name or 'your child'}:"]
+    if student_code:
+        lines.append(f"Student ID: {student_code}")
+    if password:
+        lines.append(f"Password: {password}")
+    else:
+        lines.append("Password: please use ‘Forgot password’ on the login page or contact the teacher.")
+    url = _wa_login_url()
+    if url:
+        lines.append(f"Login here: {url}")
+    return "\n".join(lines)
 
 
 def _wa_fetch_students(standard_ids: List[str]) -> list:
@@ -7474,11 +7536,23 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     lms = _wa_branding_name()
     cfg = wa.get_wa_config()
     template_name = data.template_name or cfg.get("welcome_template")
+    default_pwd = ""
+    try:
+        default_pwd = (get_teacher_settings().get("default_student_password") or "").strip()
+    except Exception:
+        pass
+    creds = _wa_fetch_credentials([r["id"] for r in recips if r.get("id")]) if data.include_credentials else {}
     results = []
     for r in recips:
-        body = data.message or (
-            f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
-            f"Student ID: {r['student_code']}.")
+        if data.message:
+            body = data.message
+        elif data.include_credentials:
+            c = creds.get(r["id"], {})
+            pwd = (c.get("plain_password") or "").strip() or default_pwd
+            body = _wa_credentials_body(r["name"], c.get("student_code") or r.get("student_code"), pwd, lms)
+        else:
+            body = (f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
+                    f"Student ID: {r['student_code']}.")
         mode = "template" if template_name else "freeform"
         results.append(await _wa_send_and_log(
             provider, teacher_id, r, mode=mode, template_name=template_name,
@@ -7486,6 +7560,43 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
     return {"results": results, "sent": sent,
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
+
+
+async def _wa_auto_welcome(student_id: str):
+    """Fire a credentials welcome to a single new student's parent — only when the
+    teacher enabled auto_welcome and a phone exists. Fully guarded: never raises
+    into the student-creation flow (runs as a FastAPI background task)."""
+    try:
+        cfg = wa.get_wa_config()
+        if not cfg.get("auto_welcome"):
+            return
+        rows = service_supabase.table("students").select(
+            "id, name, phone, standard_id, student_code, plain_password, whatsapp_opt_out").eq(
+            "id", student_id).limit(1).execute().data or []
+        if not rows:
+            return
+        s = rows[0]
+        phone = (s.get("phone") or "").strip()
+        if not phone or s.get("whatsapp_opt_out"):
+            return
+        std = (service_supabase.table("standards").select("id, name, teacher_id").eq(
+            "id", s.get("standard_id")).limit(1).execute().data or [None])[0]
+        if not std or not std.get("teacher_id"):
+            return
+        default_pwd = (get_teacher_settings().get("default_student_password") or "").strip()
+        pwd = (s.get("plain_password") or "").strip() or default_pwd
+        lms = _wa_branding_name()
+        template_name = cfg.get("welcome_template")
+        recip = {"id": s["id"], "name": s.get("name") or "", "phone": phone,
+                 "student_code": s.get("student_code") or "", "standard_id": std["id"]}
+        provider = wa.get_provider()
+        await _wa_send_and_log(
+            provider, std["teacher_id"], recip,
+            mode="template" if template_name else "freeform", template_name=template_name,
+            body_text=_wa_credentials_body(recip["name"], recip["student_code"], pwd, lms),
+            category="utility", standard_id=std["id"])
+    except Exception as e:
+        print(f"[wa] auto-welcome skipped: {e}")
 
 
 class WhatsAppInboxReadInput(BaseModel):

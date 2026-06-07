@@ -1,12 +1,13 @@
 import React from 'react';
-import { Send, FileBarChart, LayoutTemplate, Clock, Inbox } from 'lucide-react';
+import { Send, FileBarChart, KeyRound, LayoutTemplate, Clock, Inbox } from 'lucide-react';
 
 const ACTIONS = [
-  { id: 'compose',    label: 'New Broadcast', icon: Send,           color: '#0B6E3E', bg: '#E7FDDE' },
-  { id: 'reports',    label: 'Send Report',   icon: FileBarChart,   color: '#2383E2', bg: '#E3EFFB' },
-  { id: 'templates',  label: 'Templates',     icon: LayoutTemplate, color: '#6940A5', bg: '#EAE4F2' },
-  { id: 'automation', label: 'Automation',    icon: Clock,          color: '#B7791F', bg: '#FBF1D9' },
-  { id: 'inbox',      label: 'Inbox',         icon: Inbox,          color: '#AD1A72', bg: '#F7E3F0' },
+  { id: 'compose',     label: 'Send Message',    icon: Send,           color: '#0B6E3E', bg: '#E7FDDE' },
+  { id: 'reports',     label: 'Progress Report', icon: FileBarChart,   color: '#2383E2', bg: '#E3EFFB' },
+  { id: 'credentials', label: 'Login Details',   icon: KeyRound,       color: '#0F7B6C', bg: '#DFF5EC' },
+  { id: 'templates',   label: 'Templates',       icon: LayoutTemplate, color: '#6940A5', bg: '#EAE4F2' },
+  { id: 'automation',  label: 'Automation',      icon: Clock,          color: '#B7791F', bg: '#FBF1D9' },
+  { id: 'inbox',       label: 'Inbox',           icon: Inbox,          color: '#AD1A72', bg: '#F7E3F0' },
 ];
 
 export default function QuickActions({ onAction }) {

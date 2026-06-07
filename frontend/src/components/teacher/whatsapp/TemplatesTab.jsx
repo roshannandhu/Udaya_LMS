@@ -14,14 +14,26 @@ const HEADER_MEDIA = {
 const STATUS_COLOR = { approved: 'green', pending: 'amber', rejected: 'red', draft: 'gray' };
 
 const PRESETS = [
-  { name: 'welcome_credentials', category: 'utility', header_type: 'none',
-    body_text: 'Welcome to {{1}}! Your child {{2}} is enrolled. Student ID: {{3}}.', variables: ['Institution', 'Student name', 'Student ID'] },
-  { name: 'exam_report', category: 'utility', header_type: 'document',
-    body_text: 'Hello, here is the exam report for {{1}}. Score: {{2}}%. {{3}}', variables: ['Student name', 'Score', 'Note'] },
-  { name: 'weekly_digest', category: 'utility', header_type: 'none',
-    body_text: 'Weekly update for {{1}}: attendance {{2}}%, average score {{3}}%.', variables: ['Student name', 'Attendance', 'Average'] },
+  { name: 'student_credentials', category: 'utility', header_type: 'none',
+    body_text: 'Welcome to {{1}}! Login details for {{2}}:\nStudent ID: {{3}}\nPassword: {{4}}\nLogin: {{5}}', variables: ['Institution', 'Student name', 'Student ID', 'Password', 'Login URL'] },
+  { name: 'exam_result', category: 'utility', header_type: 'document',
+    body_text: 'Dear Parent, {{1}} scored {{2}}% in {{3}}. {{4}}', variables: ['Student name', 'Score', 'Exam', 'Note'] },
+  { name: 'exam_schedule', category: 'utility', header_type: 'none',
+    body_text: 'Exam schedule for {{1}}: {{2}} on {{3}}. Please ensure {{4}} is prepared.', variables: ['Class', 'Exam', 'Date', 'Student name'] },
+  { name: 'weekly_progress', category: 'utility', header_type: 'document',
+    body_text: 'Weekly progress for {{1}}: attendance {{2}}%, average score {{3}}%. {{4}}', variables: ['Student name', 'Attendance', 'Average', 'Note'] },
+  { name: 'monthly_progress', category: 'utility', header_type: 'document',
+    body_text: 'Monthly report for {{1}}: attendance {{2}}%, average score {{3}}%. {{4}}', variables: ['Student name', 'Attendance', 'Average', 'Note'] },
   { name: 'low_attendance', category: 'utility', header_type: 'none',
     body_text: 'Attendance alert: {{1}} is at {{2}}% this period. Please ensure regular attendance.', variables: ['Student name', 'Attendance'] },
+  { name: 'fee_reminder', category: 'utility', header_type: 'none',
+    body_text: 'Dear Parent, the fee for {{1}} of ₹{{2}} is due on {{3}}. Kindly pay before the due date.', variables: ['Student name', 'Amount', 'Due date'] },
+  { name: 'pta_meeting', category: 'utility', header_type: 'none',
+    body_text: 'Dear Parent, a PTA meeting is scheduled on {{1}} at {{2}}. Your presence regarding {{3}} is requested.', variables: ['Date', 'Time', 'Student name'] },
+  { name: 'holiday_notice', category: 'utility', header_type: 'none',
+    body_text: 'Dear Parent, {{1}} will remain closed on {{2}} for {{3}}. Classes resume on {{4}}.', variables: ['Institution', 'Date', 'Occasion', 'Resume date'] },
+  { name: 'emergency_notice', category: 'utility', header_type: 'none',
+    body_text: 'Important notice from {{1}}: {{2}}', variables: ['Institution', 'Message'] },
 ];
 
 export default function TemplatesTab({ templates, reload }) {

@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Phone, BellOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, Phone, BellOff, Pencil, Plus, Check, X } from 'lucide-react';
 import { Toggle, Tag } from '../../ui';
+import { apiClient } from '../../../lib/api';
 
 // Class accordions with per-student include toggles. Controlled: parent owns the
 // `selected` Set of student ids. Students without a phone, or opted-out parents,
-// can't be selected.
-export default function RecipientPicker({ groups = [], selected, onChange }) {
+// can't be selected — but a phone can now be added/edited inline (writes
+// students.phone via PATCH /students/{id}). `onStudentUpdated` lets the page
+// refetch recipients so the new number appears.
+export default function RecipientPicker({ groups = [], selected, onChange, onStudentUpdated }) {
   const [open, setOpen] = useState(() => new Set(groups.map(g => g.standard_id)));
+  const [editId, setEditId] = useState(null);
+  const [editVal, setEditVal] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const toggleOpen = (id) => {
     const next = new Set(open);
@@ -29,6 +35,21 @@ export default function RecipientPicker({ groups = [], selected, onChange }) {
       on ? next.add(s.id) : next.delete(s.id);
     });
     onChange(next);
+  };
+
+  const startEdit = (s) => { setEditId(s.id); setEditVal(s.phone || ''); };
+  const cancelEdit = () => { setEditId(null); setEditVal(''); };
+  const saveEdit = async (s) => {
+    const phone = editVal.trim();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await apiClient(`/students/${s.id}`, { method: 'PATCH', body: JSON.stringify({ phone }) });
+      cancelEdit();
+      onStudentUpdated?.();   // page refetches recipients (cache is cleared by the PATCH)
+    } catch (e) {
+      alert(e.message || 'Could not save number');
+    } finally { setSaving(false); }
   };
 
   const allSelectableIds = groups.flatMap(g => g.students.filter(eligible).map(s => s.id));
@@ -75,15 +96,31 @@ export default function RecipientPicker({ groups = [], selected, onChange }) {
               <div className="border-t border-[#F1EFEC] divide-y divide-[#F4F2EF]">
                 {g.students.map((s) => {
                   const ok = eligible(s);
+                  const editing = editId === s.id;
                   return (
                     <div key={s.id} className="flex items-center gap-3 px-3 py-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{s.name}</p>
-                        <p className="text-xs text-neutral-500 flex items-center gap-1">
-                          <Phone size={11} />
-                          {s.phone || 'No number'}
-                          {s.opted_out && <span className="inline-flex items-center gap-0.5 text-amber-600 ml-1"><BellOff size={11} /> opted out</span>}
-                        </p>
+                        {editing ? (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <input autoFocus value={editVal} onChange={(e) => setEditVal(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(s); if (e.key === 'Escape') cancelEdit(); }}
+                              placeholder="+91…" type="tel"
+                              className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-white border border-[#EFEDEA] text-xs outline-none focus:border-neutral-400" />
+                            <button onClick={() => saveEdit(s)} disabled={saving}
+                              className="p-1 rounded-md text-whatsapp-green-fg hover:bg-whatsapp-green-light"><Check size={14} /></button>
+                            <button onClick={cancelEdit} className="p-1 rounded-md text-neutral-400 hover:bg-[#F4F2EF]"><X size={14} /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(s)}
+                            className="text-xs text-neutral-500 flex items-center gap-1 hover:text-neutral-800 group">
+                            <Phone size={11} />
+                            {s.phone
+                              ? <span className="inline-flex items-center gap-1">{s.phone}<Pencil size={10} className="opacity-0 group-hover:opacity-60" /></span>
+                              : <span className="inline-flex items-center gap-1 text-whatsapp-green-fg"><Plus size={11} /> Add number</span>}
+                            {s.opted_out && <span className="inline-flex items-center gap-0.5 text-amber-600 ml-1"><BellOff size={11} /> opted out</span>}
+                          </button>
+                        )}
                       </div>
                       <Toggle checked={selected.has(s.id)} onChange={() => ok && toggleStudent(s.id)} />
                     </div>
