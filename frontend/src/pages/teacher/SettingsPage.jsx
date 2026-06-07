@@ -117,6 +117,7 @@ export default function SettingsPage() {
   const [pwdInput, setPwdInput] = useState(defaultStudentPassword || '');
   const [pwdSaved, setPwdSaved] = useState(false);
   const [backfill, setBackfill] = useState({ loading: false, msg: '' });
+  const [regen, setRegen] = useState({ loading: false, msg: '' });
   const [pinInput, setPinInput] = useState(terminationPin || '');
   const [pinSaved, setPinSaved] = useState(false);
 
@@ -243,6 +244,25 @@ export default function SettingsPage() {
       });
     } catch (e) {
       setBackfill({ loading: false, msg: e.message || 'Failed to generate IDs.' });
+    }
+  };
+
+  const handleRegenerateCodes = async () => {
+    const ok = window.confirm(
+      'This rewrites EVERY student\'s ID into the new format. Their login ID will change, ' +
+      'so you\'ll need to share the new IDs with them. Continue?'
+    );
+    if (!ok) return;
+    setRegen({ loading: true, msg: '' });
+    try {
+      const res = await teacherApi.backfillStudentCodes(true);
+      const updated = res?.updated ?? 0;
+      setRegen({
+        loading: false,
+        msg: `Regenerated ${updated} student ID${updated !== 1 ? 's' : ''}.`,
+      });
+    } catch (e) {
+      setRegen({ loading: false, msg: e.message || 'Failed to regenerate IDs.' });
     }
   };
 
@@ -548,6 +568,19 @@ export default function SettingsPage() {
                   <CheckCircle2 size={11} /> {backfill.msg}
                 </p>
               )}
+
+              {/* Force-regenerate all IDs into the new format — changes login IDs */}
+              <div className="mt-4 pt-4 border-t border-white/40">
+                <p className="text-xs text-neutral-500 mb-3">Changed the ID format? Rewrite every student's ID to the new format. This changes their login ID — you'll need to share the new IDs.</p>
+                <Btn variant="default" size="sm" onClick={handleRegenerateCodes} disabled={regen.loading}>
+                  {regen.loading ? <><Loader2 size={12} className="animate-spin mr-1" />Regenerating…</> : 'Regenerate all Student IDs (new format)'}
+                </Btn>
+                {regen.msg && (
+                  <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
+                    <CheckCircle2 size={11} /> {regen.msg}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>

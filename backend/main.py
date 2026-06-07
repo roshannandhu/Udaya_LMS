@@ -840,8 +840,9 @@ def login(request: LoginRequest):
         if not service_supabase:
             raise HTTPException(status_code=503, detail="Login unavailable")
 
-        # 1. Try Student ID first (codes start with letters, so pure-digit phone
-        #    inputs never match here). Stored codes are uppercase.
+        # 1. Try Student ID first. Codes lead with a 2-digit year but always
+        #    contain the institution letters (e.g. 25UDAYA100001), so a pure-digit
+        #    phone input can never equal one here. Stored codes are uppercase.
         try:
             code_lookup = service_supabase.table("students").select("email").eq("student_code", identifier.upper()).single().execute()
             if code_lookup.data and code_lookup.data.get("email"):
@@ -2066,13 +2067,15 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
 
 
 # ─── STUDENT ID (human-readable code) GENERATION ───────────────────────────
-# Format (no separators): {INSTITUTION}{YYYY}{STD}{SEQ}  e.g. UDAYA202510001
+# Format (no separators): {YY}{INSTITUTION}{STD}{SEQ}  e.g. 25UDAYA100001
+#   YY          = admission year, last 2 digits (e.g. 2025 -> "25")
 #   INSTITUTION = branding name, A-Z0-9 only, capped 8 chars (default "Udaya")
-#   YYYY        = admission year (year the student is created)
 #   STD         = standard number (zero-padded 2) or first 2 alnum chars
-#   SEQ         = running number per {INSTITUTION}{YYYY}{STD} prefix, 3+ digits
+#   SEQ         = running roll number per {YY}{INSTITUTION}{STD} prefix, 4+ digits
 # Fixed widths keep the glued code decodable; a partial unique index on
-# students.student_code is the hard uniqueness guarantee.
+# students.student_code is the hard uniqueness guarantee. The institution letters
+# always sit between the two numeric groups, so the code stays unambiguous even
+# though it now leads with digits.
 
 def _institution_prefix() -> str:
     name = (get_teacher_settings().get("lms_name") or "Udaya")
@@ -2112,14 +2115,14 @@ def generate_student_code(standard_id, year=None, seq_cache=None):
     except Exception:
         standard = {}
     yr = year or datetime.now().year
-    prefix = f"{_institution_prefix()}{yr}{_std_token(standard)}"
+    prefix = f"{str(yr)[-2:]}{_institution_prefix()}{_std_token(standard)}"
     if seq_cache is not None and prefix in seq_cache:
         seq = seq_cache[prefix] + 1
     else:
         seq = _max_seq_for_prefix(prefix) + 1
     if seq_cache is not None:
         seq_cache[prefix] = seq
-    return f"{prefix}{seq:03d}"
+    return f"{prefix}{seq:04d}"
 
 def assign_student_code(student_db_id, standard_id, year=None, seq_cache=None):
     """Generate + persist a student_code as a post-insert UPDATE (mirrors the
@@ -2200,10 +2203,16 @@ def create_student_admin(request: CreateStudentRequest, user = Depends(verify_to
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/admin/backfill-student-codes")
-def backfill_student_codes(user = Depends(verify_token)):
-    """One-time: assign a student_code to every existing student that lacks one.
-    Idempotent — students that already have a code are skipped. Year is each
-    student's admission year (from created_at); sequence is per standard/year."""
+def backfill_student_codes(force: bool = False, user = Depends(verify_token)):
+    """Assign student codes. Two modes:
+      - default (force=False): one-time fill — students that already have a code
+        are skipped (idempotent).
+      - force=True: regenerate ALL codes into the current format. Clears every
+        code first so numbering restarts at 0001 per {YY}{INST}{STD} prefix in
+        created_at order, which makes the action deterministic and re-runnable.
+        NOTE: this changes existing students' login IDs.
+    Year is each student's admission year (from created_at); sequence is per
+    standard/year."""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
@@ -2219,10 +2228,18 @@ def backfill_student_codes(user = Depends(verify_token)):
         "id, standard_id, student_code, created_at"
     ).in_("standard_id", standard_ids).order("created_at").execute()
 
+    if force:
+        # Wipe existing codes so regeneration is deterministic and re-runnable.
+        # The partial unique index ignores NULLs, so this can't collide.
+        service_supabase.table("students").update({"student_code": None}).in_("standard_id", standard_ids).execute()
+
     seq_cache = {}
     updated = skipped = 0
     for s in (rows.data or []):
-        if s.get("student_code") or not s.get("standard_id"):
+        if not s.get("standard_id"):
+            skipped += 1
+            continue
+        if not force and s.get("student_code"):
             skipped += 1
             continue
         year = None

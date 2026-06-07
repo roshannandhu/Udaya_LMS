@@ -297,8 +297,11 @@ export const teacherApi = {
   getSettings: () => apiClient('/teacher/settings'),
   updateSettings: (data) => apiClient('/teacher/settings', { method: 'POST', body: JSON.stringify(data) }),
 
-  // One-time: assign Student IDs to existing students that don't have one yet
-  backfillStudentCodes: () => apiClient('/admin/backfill-student-codes', { method: 'POST' }),
+  // Assign Student IDs. Default fills only students missing one (idempotent).
+  // Pass force=true to regenerate EVERY student's ID into the current format
+  // (this changes existing students' login IDs).
+  backfillStudentCodes: (force = false) =>
+    apiClient(`/admin/backfill-student-codes${force ? '?force=true' : ''}`, { method: 'POST' }),
 
   // Universal auto-thumbnail base image (teacher's face + blank space on one side)
   getThumbnail: () => apiClient('/teacher/thumbnail'),
