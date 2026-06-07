@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import { MdPerson, MdLibraryBooks, MdPeople, MdChatBubble, MdEvent, MdBarChart, MdNotifications, MdSettings, MdHelp, MdChevronRight, MdEdit, MdLogout, MdLoop } from 'react-icons/md';
+import { FaWhatsapp } from 'react-icons/fa';
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Modal } from '../../components/ui';
 import { Btn, Input } from '../../components/ui';
@@ -24,6 +25,7 @@ export default function MorePage() {
     { icon: MdLibraryBooks,    label: 'Question Bank', sub: 'Reusable questions',         onClick: () => navigate('/teacher/question-bank') },
     { icon: MdPeople,          label: 'Students',      sub: 'Manage class students',      onClick: () => navigate('/teacher/students') },
     { icon: MdChatBubble,      label: 'Broadcasts',    sub: 'Send messages to students',  onClick: () => navigate('/teacher/broadcasts') },
+    { icon: FaWhatsapp,        label: 'WhatsApp',      sub: 'Message parents by class',   onClick: () => navigate('/teacher/whatsapp') },
     { icon: MdEvent,           label: 'Attendance',    sub: 'Mark & view attendance',     onClick: () => navigate('/teacher/attendance') },
     { icon: MdBarChart,        label: 'Reports',       sub: 'Analytics & low attendance', onClick: () => navigate('/teacher/reports') },
     { icon: MdNotifications,   label: 'Notifications', sub: 'Reminders & alerts',         onClick: () => navigate('/teacher/reminders') },

@@ -20,6 +20,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
+import whatsapp as wa
+
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 app = FastAPI(title="Tutoria LMS API")
@@ -280,6 +282,7 @@ async def startup_event():
     # Fire-and-forget: do NOT await — these must not delay login readiness.
     asyncio.create_task(_deferred_startup_migrations())
     asyncio.create_task(_broadcast_cleanup_loop())
+    asyncio.create_task(_whatsapp_scheduler_loop())
 
 
 # Models
@@ -6829,6 +6832,834 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ─── WHATSAPP MESSAGE CONTROLLER ────────────────────────────────────────────
+# Parent messaging: config, recipients (by class), manual send (template/free-
+# form + media), cost estimate, report cards + criteria-based sends, templates,
+# history, and scheduled/automatic jobs. Provider logic + report rendering live
+# in whatsapp.py (imported as `wa`); routes stay here per convention. The
+# provider degrades gracefully (UnconfiguredProvider) when no API key is set.
+# ════════════════════════════════════════════════════════════════════════════
+
+class WhatsAppConfigInput(BaseModel):
+    provider: Optional[str] = None
+    api_key: Optional[str] = None          # secret — only overwritten when sent non-empty
+    sender: Optional[str] = None
+    currency: Optional[str] = None
+    rates: Optional[dict] = None
+    auto_welcome: Optional[bool] = None
+    welcome_template: Optional[str] = None
+    quiet_hours: Optional[dict] = None
+
+class WhatsAppEstimateInput(BaseModel):
+    standard_ids: Optional[List[str]] = None
+    included_student_ids: Optional[List[str]] = None
+    category: str = "utility"
+
+class WhatsAppSendInput(BaseModel):
+    standard_ids: Optional[List[str]] = None
+    included_student_ids: Optional[List[str]] = None
+    mode: str = "template"                  # template|freeform
+    template_name: Optional[str] = None
+    language: str = "en"
+    variables: Optional[list] = None
+    body_text: Optional[str] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
+    category: str = "utility"
+    test_to_self: Optional[str] = None      # if set, send a single message to this phone only
+
+class WhatsAppTemplateInput(BaseModel):
+    name: str
+    category: str = "utility"
+    language: str = "en"
+    header_type: str = "none"
+    body_text: str
+    variables: Optional[list] = None
+    submit: bool = False                    # also push to provider for approval
+
+class WhatsAppReportSendInput(BaseModel):
+    standard_ids: Optional[List[str]] = None
+    included_student_ids: Optional[List[str]] = None
+    test_id: Optional[str] = None
+    period: str = "overall"
+    report_format: str = "pdf"              # pdf|image|text
+    category: str = "utility"
+    mode: str = "freeform"                  # template|freeform for the message part
+    template_name: Optional[str] = None
+    default_message: Optional[str] = None
+    criteria: Optional[List[dict]] = None   # [{min,max,message,template_name,attach_report}]
+
+class WhatsAppWelcomeInput(BaseModel):
+    student_ids: Optional[List[str]] = None
+    standard_ids: Optional[List[str]] = None
+    template_name: Optional[str] = None
+    message: Optional[str] = None
+    category: str = "utility"
+
+class WhatsAppJobInput(BaseModel):
+    name: str
+    target_type: str = "all"               # class|classes|all
+    target_ids: Optional[list] = None
+    trigger_type: str = "interval"         # interval|post_exam|fixed_date
+    trigger_config: Optional[dict] = None  # {every:"1 week"} / {days:N} / {test_id} / {at}
+    mode: str = "template"                 # template|freeform|report
+    template_name: Optional[str] = None
+    body_text: Optional[str] = None
+    category: str = "utility"
+    report_format: str = "none"
+    criteria: Optional[list] = None
+    quiet_hours: Optional[dict] = None
+    active: bool = True
+
+
+def _wa_require_teacher(user):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+
+def _wa_branding_name() -> str:
+    try:
+        return (get_teacher_settings().get("lms_name") or "").strip()
+    except Exception:
+        return ""
+
+
+def _wa_fetch_students(standard_ids: List[str]) -> list:
+    """Fetch students for the given standards, tolerating a DB without the
+    whatsapp_opt_out column yet (graceful-degrade)."""
+    if not standard_ids:
+        return []
+    try:
+        rows = service_supabase.table("students").select(
+            "id, name, phone, student_code, standard_id, whatsapp_opt_out"
+        ).in_("standard_id", standard_ids).execute().data or []
+    except Exception:
+        rows = service_supabase.table("students").select(
+            "id, name, phone, student_code, standard_id"
+        ).in_("standard_id", standard_ids).execute().data or []
+        for r in rows:
+            r["whatsapp_opt_out"] = False
+    return rows
+
+
+def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=None,
+                           include_opted_out=False):
+    """Resolve the parent-message recipient list for a teacher, scoped to their
+    standards. Returns a flat list of dicts; opted-out parents excluded by default."""
+    stds = service_supabase.table("standards").select("id, name").eq(
+        "teacher_id", teacher_id).execute().data or []
+    std_name = {s["id"]: s["name"] for s in stds}
+    target = [sid for sid in (standard_ids or list(std_name.keys())) if sid in std_name]
+    if not target:
+        return []
+    inc = set(included_student_ids) if included_student_ids else None
+    out = []
+    for r in _wa_fetch_students(target):
+        if inc is not None and r["id"] not in inc:
+            continue
+        if not include_opted_out and r.get("whatsapp_opt_out"):
+            continue
+        out.append({
+            "id": r["id"],
+            "name": r.get("name") or "",
+            "phone": r.get("phone") or "",
+            "student_code": r.get("student_code") or "",
+            "standard_id": r.get("standard_id"),
+            "standard_name": std_name.get(r.get("standard_id"), ""),
+            "opted_out": bool(r.get("whatsapp_opt_out")),
+            "session_open": False,   # conservative: free-form only when known-open
+        })
+    return out
+
+
+async def _wa_ensure_bucket():
+    try:
+        await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("whatsapp"))
+    except Exception:
+        await asyncio.to_thread(lambda: service_supabase.storage.create_bucket(
+            "whatsapp", options={"public": True}))
+
+
+async def _wa_upload_bytes(data: bytes, ext: str, content_type: str) -> str:
+    await _wa_ensure_bucket()
+    fname = f"{uuid.uuid4()}{ext}"
+    await asyncio.to_thread(lambda: service_supabase.storage.from_("whatsapp").upload(
+        fname, data, {"content-type": content_type}))
+    return await asyncio.to_thread(lambda: service_supabase.storage.from_("whatsapp").get_public_url(fname))
+
+
+async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_name=None,
+                           variables=None, body_text=None, media_url=None, media_type=None,
+                           category="utility", language="en", standard_id=None, job_id=None):
+    """Send one message and write a whatsapp_messages row. Returns a per-recipient
+    result dict. Never raises — provider/network errors become a 'failed' status."""
+    to = (recipient.get("phone") or "").strip()
+    if not to:
+        return {"student_id": recipient.get("id"), "name": recipient.get("name"),
+                "status": "failed", "error": "No phone number", "cost": 0}
+    try:
+        if mode == "template":
+            res = await provider.send_template(to, template_name, variables, media_url, media_type, language)
+        else:
+            res = await provider.send_freeform(to, body_text or "", media_url, media_type)
+    except Exception as e:
+        res = {"status": "failed", "provider_message_id": None, "error": str(e)}
+
+    status = res.get("status", "failed")
+    billable = status not in ("failed", "not_configured")
+    est = wa.estimate_cost(1, category)
+    cost = est["amount"] if billable else 0
+    row = {
+        "teacher_id": teacher_id,
+        "standard_id": standard_id or recipient.get("standard_id"),
+        "student_id": recipient.get("id"),
+        "to_phone": to,
+        "template_name": template_name if mode == "template" else None,
+        "body_text": body_text,
+        "media_url": media_url,
+        "media_type": media_type,
+        "category": category,
+        "status": status,
+        "provider_message_id": res.get("provider_message_id"),
+        "cost_amount": cost,
+        "currency": est["currency"],
+        "error": res.get("error"),
+        "job_id": job_id,
+        "sent_at": datetime.now(timezone.utc).isoformat() if billable else None,
+    }
+    try:
+        service_supabase.table("whatsapp_messages").insert(row).execute()
+    except Exception as e:
+        print(f"[wa] message log insert failed: {e}")
+    return {"student_id": recipient.get("id"), "name": recipient.get("name"),
+            "status": status, "error": res.get("error"), "cost": cost}
+
+
+def _wa_student_score(report: dict, test_id: Optional[str] = None):
+    """Pick the score used for criteria banding: the test's score if test_id is
+    given, else the student's overall average."""
+    if test_id:
+        for t in report.get("test_timeline") or []:
+            if t.get("test_id") == test_id:
+                return t.get("score_pct")
+        return None
+    s = (report.get("student") or {}).get("avg_score")
+    try:
+        return float(s) if s is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+# ── Config ───────────────────────────────────────────────────────────────────
+@app.get("/api/teacher/whatsapp/config")
+def wa_get_config(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    cfg = wa.get_wa_config()
+    return {
+        "configured": bool((cfg.get("api_key") or "").strip()),
+        "provider": cfg.get("provider", "wanotifier"),
+        "sender": cfg.get("sender", ""),
+        "api_key_masked": wa.mask_key(cfg.get("api_key")),
+        "rates": wa.get_rates(cfg),
+        "currency": cfg.get("currency", wa.DEFAULT_CURRENCY),
+        "auto_welcome": bool(cfg.get("auto_welcome")),
+        "welcome_template": cfg.get("welcome_template", ""),
+        "quiet_hours": cfg.get("quiet_hours") or {},
+    }
+
+
+@app.post("/api/teacher/whatsapp/config")
+def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    cfg = wa.get_wa_config()
+    patch = data.model_dump(exclude_unset=True)
+    # Never wipe the stored key with a blank/masked value.
+    if "api_key" in patch:
+        new_key = (patch.pop("api_key") or "").strip()
+        if new_key and not new_key.startswith("••••"):
+            cfg["api_key"] = new_key
+    for k, v in patch.items():
+        cfg[k] = v
+    wa.save_wa_config(cfg)
+    return {"success": True, "configured": bool((cfg.get("api_key") or "").strip())}
+
+
+# ── Recipients (grouped by class) ─────────────────────────────────────────────
+@app.get("/api/teacher/whatsapp/recipients")
+def wa_recipients(standard_ids: Optional[str] = None, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    sid_list = [s for s in (standard_ids.split(",") if standard_ids else []) if s]
+    recips = _wa_resolve_recipients(user["teacher_id"], sid_list or None, include_opted_out=True)
+    groups: Dict[str, dict] = {}
+    for r in recips:
+        g = groups.setdefault(r["standard_id"], {
+            "standard_id": r["standard_id"], "standard_name": r["standard_name"], "students": []})
+        g["students"].append(r)
+    return {
+        "groups": list(groups.values()),
+        "total": len([r for r in recips if not r["opted_out"]]),
+        "with_phone": len([r for r in recips if r["phone"] and not r["opted_out"]]),
+    }
+
+
+# ── Media upload ──────────────────────────────────────────────────────────────
+@app.post("/api/teacher/whatsapp/upload-media")
+async def wa_upload_media(file: UploadFile = File(...), user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    data = await file.read()
+    ext = os.path.splitext(file.filename or "")[1] or ""
+    ctype = file.content_type or "application/octet-stream"
+    try:
+        url = await _wa_upload_bytes(data, ext, ctype)
+        return {"url": url, "type": ctype, "filename": file.filename}
+    except Exception as e:
+        print(f"[wa] media upload error: {e}")
+        b64 = base64.b64encode(data).decode("utf-8")
+        return {"url": f"data:{ctype};base64,{b64}", "type": ctype, "filename": file.filename}
+
+
+# ── Cost estimate ─────────────────────────────────────────────────────────────
+@app.post("/api/teacher/whatsapp/estimate")
+def wa_estimate(data: WhatsAppEstimateInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    recips = _wa_resolve_recipients(user["teacher_id"], data.standard_ids, data.included_student_ids)
+    count = len([r for r in recips if r["phone"]])
+    return wa.estimate_cost(count, data.category)
+
+
+# ── Send (manual) ─────────────────────────────────────────────────────────────
+@app.post("/api/teacher/whatsapp/send")
+async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    provider = wa.get_provider()
+    teacher_id = user["teacher_id"]
+
+    # Test-to-self: single message to a teacher-supplied number.
+    if data.test_to_self:
+        recip = {"id": None, "name": "Test", "phone": data.test_to_self, "standard_id": None}
+        r = await _wa_send_and_log(provider, teacher_id, recip, mode=data.mode,
+                                   template_name=data.template_name, variables=data.variables,
+                                   body_text=data.body_text, media_url=data.media_url,
+                                   media_type=data.media_type, category=data.category,
+                                   language=data.language)
+        return {"results": [r], "sent": 1 if r["status"] not in ("failed", "not_configured") else 0,
+                "total_cost": r["cost"], "configured": provider.configured}
+
+    recips = [r for r in _wa_resolve_recipients(teacher_id, data.standard_ids,
+                                                data.included_student_ids) if r["phone"]]
+    if not recips:
+        raise HTTPException(status_code=400, detail="No recipients with a phone number")
+
+    # Free-form is only allowed when EVERY recipient has an open 24h session.
+    if data.mode == "freeform" and not all(r["session_open"] for r in recips):
+        raise HTTPException(status_code=400,
+                            detail="Free-form messages require an open 24h session for every recipient. Use a template instead.")
+    if data.mode == "template" and not data.template_name:
+        raise HTTPException(status_code=400, detail="A template is required for template mode")
+
+    results = []
+    for r in recips:
+        results.append(await _wa_send_and_log(
+            provider, teacher_id, r, mode=data.mode, template_name=data.template_name,
+            variables=data.variables, body_text=data.body_text, media_url=data.media_url,
+            media_type=data.media_type, category=data.category, language=data.language))
+    sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
+    return {"results": results, "sent": sent, "total_cost": round(sum(x["cost"] for x in results), 2),
+            "configured": provider.configured}
+
+
+# ── History + spend total ─────────────────────────────────────────────────────
+@app.get("/api/teacher/whatsapp/messages")
+def wa_messages(limit: int = 100, status: Optional[str] = None, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        q = service_supabase.table("whatsapp_messages").select("*").eq(
+            "teacher_id", user["teacher_id"]).order("created_at", desc=True).limit(limit)
+        if status:
+            q = q.eq("status", status)
+        rows = q.execute().data or []
+        spend = service_supabase.table("whatsapp_messages").select("cost_amount").eq(
+            "teacher_id", user["teacher_id"]).execute().data or []
+        total = round(sum(float(r.get("cost_amount") or 0) for r in spend), 2)
+    except Exception:
+        return {"messages": [], "spend_total": 0, "count": 0}
+    return {"messages": rows, "spend_total": total, "count": len(rows)}
+
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+@app.get("/api/teacher/whatsapp/templates")
+def wa_list_templates(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        rows = service_supabase.table("whatsapp_templates").select("*").eq(
+            "teacher_id", user["teacher_id"]).order("created_at", desc=True).execute().data or []
+    except Exception:
+        rows = []
+    return {"templates": rows}
+
+
+@app.post("/api/teacher/whatsapp/templates")
+async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    row = {
+        "teacher_id": user["teacher_id"],
+        "name": data.name.strip(),
+        "category": data.category,
+        "language": data.language,
+        "header_type": data.header_type,
+        "body_text": data.body_text,
+        "variables": data.variables or [],
+        "status": "draft",
+    }
+    if data.submit:
+        provider = wa.get_provider()
+        res = await provider.create_template(data.name, data.category, data.language,
+                                             data.body_text, data.header_type, data.variables)
+        row["provider_template_id"] = res.get("provider_template_id")
+        row["status"] = res.get("status", "pending") if res.get("status") != "not_configured" else "draft"
+    try:
+        ins = service_supabase.table("whatsapp_templates").insert(row).execute()
+        return {"template": (ins.data or [row])[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not save template: {e}")
+
+
+@app.post("/api/teacher/whatsapp/templates/{template_id}/submit")
+async def wa_submit_template(template_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    res = service_supabase.table("whatsapp_templates").select("*").eq(
+        "id", template_id).eq("teacher_id", user["teacher_id"]).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Template not found")
+    t = res.data
+    provider = wa.get_provider()
+    r = await provider.create_template(t["name"], t["category"], t["language"],
+                                       t["body_text"], t.get("header_type", "none"),
+                                       t.get("variables"))
+    update = {"provider_template_id": r.get("provider_template_id"),
+              "status": r.get("status", "pending") if r.get("status") != "not_configured" else "draft"}
+    service_supabase.table("whatsapp_templates").update(update).eq("id", template_id).execute()
+    return {"status": update["status"], "error": r.get("error")}
+
+
+@app.get("/api/teacher/whatsapp/templates/{template_id}/status")
+async def wa_template_status(template_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    res = service_supabase.table("whatsapp_templates").select("*").eq(
+        "id", template_id).eq("teacher_id", user["teacher_id"]).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Template not found")
+    pid = res.data.get("provider_template_id")
+    if not pid:
+        return {"status": res.data.get("status", "draft")}
+    r = await wa.get_provider().get_template_status(pid)
+    new_status = r.get("status")
+    if new_status and new_status != res.data.get("status"):
+        service_supabase.table("whatsapp_templates").update({"status": new_status}).eq("id", template_id).execute()
+    return {"status": new_status or res.data.get("status")}
+
+
+@app.delete("/api/teacher/whatsapp/templates/{template_id}")
+def wa_delete_template(template_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    service_supabase.table("whatsapp_templates").delete().eq(
+        "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
+    return {"success": True}
+
+
+# ── Reports + criteria ────────────────────────────────────────────────────────
+def _wa_build_report_rows(teacher_id, std_ids, included_ids, test_id, period, criteria):
+    """Shared between preview and send: resolve students → fetch report → score →
+    band. Returns (recipients_with_report). Each item carries the report dict."""
+    recips = _wa_resolve_recipients(teacher_id, std_ids, included_ids)
+    teacher_user = {"role": "teacher", "teacher_id": teacher_id, "user_id": teacher_id}
+    rows = []
+    for r in recips:
+        try:
+            report = get_student_report_v2(r["id"], period=period, user=teacher_user)
+        except Exception as e:
+            print(f"[wa] report fetch failed for {r['id']}: {e}")
+            continue
+        score = _wa_student_score(report, test_id)
+        band = wa.resolve_band(score, criteria) if criteria else None
+        rows.append({**r, "score": score, "band": band, "_report": report})
+    return rows
+
+
+@app.post("/api/teacher/whatsapp/preview-criteria")
+def wa_preview_criteria(data: WhatsAppReportSendInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    rows = _wa_build_report_rows(user["teacher_id"], data.standard_ids, data.included_student_ids,
+                                 data.test_id, data.period, data.criteria)
+    preview = []
+    skipped = 0
+    for r in rows:
+        band = r["band"] or {}
+        if data.criteria and not r["band"]:
+            skipped += 1
+        msg = band.get("message") or data.default_message or ""
+        preview.append({
+            "student_id": r["id"], "name": r["name"], "phone": r["phone"],
+            "standard_name": r["standard_name"], "score": r["score"],
+            "band": {"min": band.get("min"), "max": band.get("max")} if r["band"] else None,
+            "message": msg, "attach_report": band.get("attach_report", True),
+            "has_phone": bool(r["phone"]),
+        })
+    count = len([p for p in preview if p["has_phone"] and (not data.criteria or p["band"])])
+    return {"preview": preview, "skipped_no_band": skipped,
+            "estimate": wa.estimate_cost(count, data.category)}
+
+
+@app.post("/api/teacher/whatsapp/send-reports")
+async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    provider = wa.get_provider()
+    teacher_id = user["teacher_id"]
+    lms = _wa_branding_name()
+    rows = _wa_build_report_rows(teacher_id, data.standard_ids, data.included_student_ids,
+                                 data.test_id, data.period, data.criteria)
+    results = []
+    for r in rows:
+        if not r["phone"]:
+            continue
+        band = r["band"] or {}
+        if data.criteria and not r["band"]:
+            continue  # no matching band → skip
+        msg = band.get("message") or data.default_message or ""
+        attach = band.get("attach_report", True)
+        template_name = band.get("template_name") or data.template_name
+        media_url = media_type = None
+        body_text = msg
+
+        report = r["_report"]
+        try:
+            if attach and data.report_format == "pdf":
+                pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms)
+                media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf")
+                media_type = "document"
+            elif attach and data.report_format == "image":
+                png = await asyncio.to_thread(wa.build_report_image, report, lms)
+                media_url = await _wa_upload_bytes(png, ".png", "image/png")
+                media_type = "image"
+            elif data.report_format == "text":
+                txt = wa.build_report_text(report, lms)
+                body_text = (txt + ("\n\n" + msg if msg else "")).strip()
+        except Exception as e:
+            print(f"[wa] report artifact build failed for {r['id']}: {e}")
+
+        mode = "template" if (data.mode == "template" and template_name) else "freeform"
+        results.append(await _wa_send_and_log(
+            provider, teacher_id, r, mode=mode, template_name=template_name,
+            variables=data.criteria and None, body_text=body_text, media_url=media_url,
+            media_type=media_type, category=data.category, standard_id=r["standard_id"]))
+    sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
+    return {"results": results, "sent": sent,
+            "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
+
+
+# ── Welcome / credentials (onboarding) ────────────────────────────────────────
+@app.post("/api/teacher/whatsapp/send-welcome")
+async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    provider = wa.get_provider()
+    teacher_id = user["teacher_id"]
+    recips = [r for r in _wa_resolve_recipients(teacher_id, data.standard_ids,
+                                                data.student_ids) if r["phone"]]
+    if not recips:
+        raise HTTPException(status_code=400, detail="No recipients with a phone number")
+    lms = _wa_branding_name()
+    cfg = wa.get_wa_config()
+    template_name = data.template_name or cfg.get("welcome_template")
+    results = []
+    for r in recips:
+        body = data.message or (
+            f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
+            f"Student ID: {r['student_code']}.")
+        mode = "template" if template_name else "freeform"
+        results.append(await _wa_send_and_log(
+            provider, teacher_id, r, mode=mode, template_name=template_name,
+            body_text=body, category=data.category, standard_id=r["standard_id"]))
+    sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
+    return {"results": results, "sent": sent,
+            "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
+
+
+# ── Delivery-status webhook (no auth — provider-signed callbacks) ──────────────
+@app.post("/api/teacher/whatsapp/webhook")
+async def wa_webhook(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": True}
+    pid = body.get("id") or body.get("message_id")
+    status = body.get("status")
+    if pid and status and service_supabase:
+        try:
+            service_supabase.table("whatsapp_messages").update(
+                {"status": status}).eq("provider_message_id", pid).execute()
+        except Exception as e:
+            print(f"[wa] webhook update failed: {e}")
+    return {"ok": True}
+
+
+# ── Scheduled / automatic jobs ────────────────────────────────────────────────
+def _wa_parse_interval(cfg: dict) -> timedelta:
+    cfg = cfg or {}
+    if cfg.get("days"):
+        try:
+            return timedelta(days=int(cfg["days"]))
+        except (TypeError, ValueError):
+            pass
+    e = str(cfg.get("every", "1 week")).lower()
+    if "month" in e:
+        return timedelta(days=30)
+    if "week" in e:
+        return timedelta(days=7)
+    digits = "".join(ch for ch in e if ch.isdigit())
+    if "day" in e:
+        return timedelta(days=int(digits) if digits else 1)
+    return timedelta(days=7)
+
+
+def _wa_initial_next_run(job_input: WhatsAppJobInput):
+    now = datetime.now(timezone.utc)
+    cfg = job_input.trigger_config or {}
+    if job_input.trigger_type == "interval":
+        return now + _wa_parse_interval(cfg)
+    if job_input.trigger_type in ("fixed_date", "post_exam"):
+        at = cfg.get("at")
+        if at:
+            try:
+                return datetime.fromisoformat(at.replace("Z", "+00:00"))
+            except Exception:
+                return now
+        return now
+    return now
+
+
+def _wa_quiet_now(quiet: dict) -> bool:
+    """True if the current UTC time is inside the configured quiet-hours window
+    (sends should be deferred). Window is {start:'HH:MM', end:'HH:MM'} as allowed
+    hours; outside = quiet."""
+    if not quiet or not quiet.get("start") or not quiet.get("end"):
+        return False
+    try:
+        now = datetime.now(timezone.utc).strftime("%H:%M")
+        start, end = quiet["start"], quiet["end"]
+        if start <= end:
+            allowed = start <= now <= end
+        else:  # window wraps midnight
+            allowed = now >= start or now <= end
+        return not allowed
+    except Exception:
+        return False
+
+
+async def _wa_execute_job(job: dict, force: bool = False):
+    """Run a single scheduled job: resolve recipients, honour quiet hours + dedupe,
+    send, then advance next_run_at / deactivate one-shot triggers."""
+    teacher_id = job["teacher_id"]
+    quiet = job.get("quiet_hours") or wa.get_wa_config().get("quiet_hours") or {}
+    if not force and _wa_quiet_now(quiet):
+        return {"deferred": True}  # leave next_run_at; retry next poll
+
+    provider = wa.get_provider()
+    target_type = job.get("target_type", "all")
+    std_ids = job.get("target_ids") if target_type in ("class", "classes") else None
+    criteria = job.get("criteria") or None
+    category = job.get("category", "utility")
+    report_format = job.get("report_format", "none")
+    lms = _wa_branding_name()
+
+    # Dedupe: skip a student already messaged by THIS job in the last 12h.
+    since = (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()
+    recent_ids = set()
+    try:
+        dd = service_supabase.table("whatsapp_messages").select("student_id").eq(
+            "job_id", job["id"]).gte("created_at", since).execute().data or []
+        recent_ids = {d["student_id"] for d in dd if d.get("student_id")}
+    except Exception:
+        pass
+
+    results = []
+    if job.get("mode") == "report" or report_format != "none":
+        rows = _wa_build_report_rows(teacher_id, std_ids, None,
+                                     (job.get("trigger_config") or {}).get("test_id"),
+                                     "overall", criteria)
+        for r in rows:
+            if not r["phone"] or r["id"] in recent_ids:
+                continue
+            if criteria and not r["band"]:
+                continue
+            band = r["band"] or {}
+            body = band.get("message") or job.get("body_text") or ""
+            media_url = media_type = None
+            try:
+                if report_format == "pdf":
+                    pdf = await asyncio.to_thread(wa.build_report_pdf, r["_report"], lms)
+                    media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf"); media_type = "document"
+                elif report_format == "image":
+                    png = await asyncio.to_thread(wa.build_report_image, r["_report"], lms)
+                    media_url = await _wa_upload_bytes(png, ".png", "image/png"); media_type = "image"
+                elif report_format == "text":
+                    body = (wa.build_report_text(r["_report"], lms) + ("\n\n" + body if body else "")).strip()
+            except Exception as e:
+                print(f"[wa job] artifact failed: {e}")
+            tn = band.get("template_name") or job.get("template_name")
+            mode = "template" if (job.get("mode") == "template" and tn) else "freeform"
+            results.append(await _wa_send_and_log(
+                provider, teacher_id, r, mode=mode, template_name=tn, body_text=body,
+                media_url=media_url, media_type=media_type, category=category,
+                standard_id=r["standard_id"], job_id=job["id"]))
+    else:
+        recips = [r for r in _wa_resolve_recipients(teacher_id, std_ids)
+                  if r["phone"] and r["id"] not in recent_ids]
+        for r in recips:
+            mode = "template" if (job.get("mode") == "template" and job.get("template_name")) else "freeform"
+            results.append(await _wa_send_and_log(
+                provider, teacher_id, r, mode=mode, template_name=job.get("template_name"),
+                body_text=job.get("body_text"), category=category,
+                standard_id=r["standard_id"], job_id=job["id"]))
+
+    # Advance schedule.
+    now = datetime.now(timezone.utc)
+    update = {"last_run_at": now.isoformat()}
+    if job.get("trigger_type") == "interval":
+        update["next_run_at"] = (now + _wa_parse_interval(job.get("trigger_config") or {})).isoformat()
+    else:
+        update["active"] = False
+        update["next_run_at"] = None
+    try:
+        service_supabase.table("whatsapp_scheduled_jobs").update(update).eq("id", job["id"]).execute()
+    except Exception as e:
+        print(f"[wa job] schedule update failed: {e}")
+    sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
+    return {"sent": sent, "results": results}
+
+
+async def _whatsapp_run_due_jobs():
+    if not service_supabase:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        due = service_supabase.table("whatsapp_scheduled_jobs").select("*").eq(
+            "active", True).lte("next_run_at", now).execute().data or []
+    except Exception:
+        return  # table may not exist yet — degrade quietly
+    for job in due:
+        try:
+            await _wa_execute_job(job)
+        except Exception as e:
+            print(f"[wa scheduler] job {job.get('id')} failed: {e}")
+
+
+async def _whatsapp_scheduler_loop():
+    """In-process poller (single uvicorn worker). Mirrors _broadcast_cleanup_loop."""
+    await asyncio.sleep(25)  # let startup settle
+    while True:
+        try:
+            await _whatsapp_run_due_jobs()
+        except Exception as e:
+            print(f"[wa scheduler] loop error: {e}")
+        await asyncio.sleep(60)
+
+
+@app.get("/api/teacher/whatsapp/jobs")
+def wa_list_jobs(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        rows = service_supabase.table("whatsapp_scheduled_jobs").select("*").eq(
+            "teacher_id", user["teacher_id"]).order("created_at", desc=True).execute().data or []
+    except Exception:
+        rows = []
+    return {"jobs": rows}
+
+
+@app.post("/api/teacher/whatsapp/jobs")
+def wa_create_job(data: WhatsAppJobInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    row = {
+        "teacher_id": user["teacher_id"],
+        "name": data.name.strip(),
+        "target_type": data.target_type,
+        "target_ids": data.target_ids or [],
+        "trigger_type": data.trigger_type,
+        "trigger_config": data.trigger_config or {},
+        "mode": data.mode,
+        "template_name": data.template_name,
+        "body_text": data.body_text,
+        "category": data.category,
+        "report_format": data.report_format,
+        "criteria": data.criteria or [],
+        "quiet_hours": data.quiet_hours or {},
+        "active": data.active,
+        "next_run_at": _wa_initial_next_run(data).isoformat(),
+    }
+    try:
+        ins = service_supabase.table("whatsapp_scheduled_jobs").insert(row).execute()
+        return {"job": (ins.data or [row])[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not create job: {e}")
+
+
+@app.put("/api/teacher/whatsapp/jobs/{job_id}")
+def wa_update_job(job_id: str, data: WhatsAppJobInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    update = {
+        "name": data.name.strip(),
+        "target_type": data.target_type,
+        "target_ids": data.target_ids or [],
+        "trigger_type": data.trigger_type,
+        "trigger_config": data.trigger_config or {},
+        "mode": data.mode,
+        "template_name": data.template_name,
+        "body_text": data.body_text,
+        "category": data.category,
+        "report_format": data.report_format,
+        "criteria": data.criteria or [],
+        "quiet_hours": data.quiet_hours or {},
+        "active": data.active,
+        "next_run_at": _wa_initial_next_run(data).isoformat(),
+    }
+    service_supabase.table("whatsapp_scheduled_jobs").update(update).eq(
+        "id", job_id).eq("teacher_id", user["teacher_id"]).execute()
+    return {"success": True}
+
+
+@app.delete("/api/teacher/whatsapp/jobs/{job_id}")
+def wa_delete_job(job_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    service_supabase.table("whatsapp_scheduled_jobs").delete().eq(
+        "id", job_id).eq("teacher_id", user["teacher_id"]).execute()
+    return {"success": True}
+
+
+@app.post("/api/teacher/whatsapp/jobs/{job_id}/toggle")
+def wa_toggle_job(job_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    res = service_supabase.table("whatsapp_scheduled_jobs").select("active").eq(
+        "id", job_id).eq("teacher_id", user["teacher_id"]).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    new_active = not res.data.get("active")
+    service_supabase.table("whatsapp_scheduled_jobs").update(
+        {"active": new_active}).eq("id", job_id).execute()
+    return {"active": new_active}
+
+
+@app.post("/api/teacher/whatsapp/jobs/{job_id}/run-now")
+async def wa_run_job_now(job_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    res = service_supabase.table("whatsapp_scheduled_jobs").select("*").eq(
+        "id", job_id).eq("teacher_id", user["teacher_id"]).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return await _wa_execute_job(res.data, force=True)
 
 
 if __name__ == "__main__":

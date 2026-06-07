@@ -670,3 +670,89 @@ CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);
 -- UNION ALL SELECT 'broadcasts.expires_at' FROM information_schema.columns WHERE table_name='broadcasts' AND column_name='expires_at'
 -- UNION ALL SELECT 'broadcasts.reply_to' FROM information_schema.columns WHERE table_name='broadcasts' AND column_name='reply_to'
 -- UNION ALL SELECT 'standards.broadcast_ttl_hours' FROM information_schema.columns WHERE table_name='standards' AND column_name='broadcast_ttl_hours';
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION: WhatsApp Message Controller (parent messaging)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- The backend uses the SERVICE ROLE key (bypasses RLS) and enforces all auth in
+-- main.py, so every table below gets a deny-all RLS policy — the anon client must
+-- never read these directly. Same pattern as `notes` / `broadcast_reactions`.
+
+-- Approved/draft message templates (Meta requires pre-approved templates outside
+-- the 24h customer-service window).
+CREATE TABLE IF NOT EXISTS whatsapp_templates (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id           UUID NOT NULL,
+    name                 TEXT NOT NULL,
+    category             TEXT NOT NULL DEFAULT 'utility',   -- utility|marketing|auth
+    language             TEXT NOT NULL DEFAULT 'en',
+    header_type          TEXT NOT NULL DEFAULT 'none',      -- none|image|document|audio|text
+    body_text            TEXT NOT NULL,
+    variables            JSONB DEFAULT '[]'::jsonb,
+    provider_template_id TEXT,
+    status               TEXT NOT NULL DEFAULT 'draft',     -- draft|pending|approved|rejected
+    created_at           TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wa_templates_teacher ON whatsapp_templates(teacher_id);
+ALTER TABLE whatsapp_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_wa_templates" ON whatsapp_templates;
+CREATE POLICY "deny_all_wa_templates" ON whatsapp_templates FOR ALL USING (false);
+
+-- Send log — one row per recipient per send. Drives History + spend total.
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id          UUID NOT NULL,
+    standard_id         UUID,
+    student_id          UUID,
+    to_phone            TEXT NOT NULL,
+    template_name       TEXT,
+    body_text           TEXT,
+    media_url           TEXT,
+    media_type          TEXT,
+    category            TEXT DEFAULT 'utility',
+    status              TEXT NOT NULL DEFAULT 'queued',     -- queued|sent|delivered|read|failed|not_configured
+    provider_message_id TEXT,
+    cost_amount         NUMERIC DEFAULT 0,
+    currency            TEXT DEFAULT 'INR',
+    error               TEXT,
+    job_id              UUID,
+    sent_at             TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wa_messages_teacher  ON whatsapp_messages(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_wa_messages_created  ON whatsapp_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_wa_messages_provider ON whatsapp_messages(provider_message_id);
+ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_wa_messages" ON whatsapp_messages;
+CREATE POLICY "deny_all_wa_messages" ON whatsapp_messages FOR ALL USING (false);
+
+-- Scheduled / automatic jobs (after 1 week / 1 month / custom, post-exam, etc.)
+CREATE TABLE IF NOT EXISTS whatsapp_scheduled_jobs (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id    UUID NOT NULL,
+    name          TEXT NOT NULL,
+    target_type   TEXT NOT NULL DEFAULT 'all',     -- class|classes|all
+    target_ids    JSONB DEFAULT '[]'::jsonb,
+    trigger_type  TEXT NOT NULL DEFAULT 'interval',-- interval|post_exam|fixed_date
+    trigger_config JSONB DEFAULT '{}'::jsonb,       -- {every:"1 week"} / {test_id} / {at}
+    mode          TEXT NOT NULL DEFAULT 'template', -- template|report
+    template_name TEXT,
+    body_text     TEXT,
+    category      TEXT DEFAULT 'utility',
+    report_format TEXT DEFAULT 'none',              -- none|pdf|image|text
+    criteria      JSONB DEFAULT '[]'::jsonb,        -- [{min,max,template_name,message,attach_report}]
+    quiet_hours   JSONB DEFAULT '{}'::jsonb,        -- {start:"09:00", end:"20:00"}
+    active        BOOLEAN DEFAULT true,
+    next_run_at   TIMESTAMPTZ,
+    last_run_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wa_jobs_teacher ON whatsapp_scheduled_jobs(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_wa_jobs_due     ON whatsapp_scheduled_jobs(active, next_run_at);
+ALTER TABLE whatsapp_scheduled_jobs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_wa_jobs" ON whatsapp_scheduled_jobs;
+CREATE POLICY "deny_all_wa_jobs" ON whatsapp_scheduled_jobs FOR ALL USING (false);
+
+-- Per-parent opt-out (respect-the-parent / DLT compliance). Excluded from every
+-- recipient resolver + cost estimate.
+ALTER TABLE students ADD COLUMN IF NOT EXISTS whatsapp_opt_out BOOLEAN DEFAULT false;

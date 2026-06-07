@@ -1,6 +1,5 @@
 import React, { memo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Link, useLocation } from 'react-router-dom';
 import { useSettingsStore } from '../../store';
 
 import { TEACHER_NAV, STUDENT_NAV } from './nav-items';
@@ -19,6 +18,7 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
       if (path.startsWith('/teacher/broadcasts'))   return 'broadcasts';
       if (path.startsWith('/teacher/live-classes')) return 'live';
       if (path.startsWith('/teacher/reports'))      return 'reports';
+      if (path.startsWith('/teacher/whatsapp'))     return 'whatsapp';
       return 'more';
     } else {
       if (path === '/student' || path === '/student/') return 'home';

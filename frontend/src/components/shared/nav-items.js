@@ -1,4 +1,5 @@
 import { MdHome, MdMenuBook, MdPeople, MdChatBubble, MdEvent, MdVideocam, MdBarChart, MdPerson, MdAssignment, MdEmojiEvents, MdMoreHoriz } from 'react-icons/md';
+import { FaWhatsapp } from 'react-icons/fa';
 
 // Single source of truth for primary navigation, shared by TopNav (desktop)
 // and BottomNav (mobile). `primary` items show in the mobile bottom bar.
@@ -11,6 +12,7 @@ export const TEACHER_NAV = [
   { id: 'attendance', label: 'Attendance',   icon: MdEvent,         path: '/teacher/attendance',   primary: true },
   { id: 'live',       label: 'Live Classes', icon: MdVideocam,      path: '/teacher/live-classes', primary: true },
   { id: 'reports',    label: 'Reports',      icon: MdBarChart,      path: '/teacher/reports' },
+  { id: 'whatsapp',   label: 'WhatsApp',     icon: FaWhatsapp,      path: '/teacher/whatsapp' },
   { id: 'more',       label: 'Profile',      icon: MdPerson,        path: '/teacher/more' },
 ];
 
@@ -37,6 +39,7 @@ export function activeNavId(type, path) {
     if (path.startsWith('/teacher/broadcasts'))   return 'broadcasts';
     if (path.startsWith('/teacher/live-classes')) return 'live';
     if (path.startsWith('/teacher/reports'))      return 'reports';
+    if (path.startsWith('/teacher/whatsapp'))     return 'whatsapp';
     return 'more';
   }
   if (path === '/student' || path === '/student/') return 'home';

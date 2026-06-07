@@ -486,3 +486,61 @@ export const aiApi = {
     }
   },
 };
+
+export const whatsappApi = {
+  // Config (secret key is returned masked; only sent back when changed)
+  getConfig:    ()     => apiClient('/teacher/whatsapp/config'),
+  setConfig:    (data) => apiClient('/teacher/whatsapp/config', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Recipients grouped by class
+  getRecipients: (standardIds) =>
+    apiClient(`/teacher/whatsapp/recipients${standardIds && standardIds.length ? `?standard_ids=${standardIds.join(',')}` : ''}`),
+
+  // Cost estimate + send
+  estimate: (data) => apiClient('/teacher/whatsapp/estimate', { method: 'POST', body: JSON.stringify(data) }),
+  send:     (data) => apiClient('/teacher/whatsapp/send',     { method: 'POST', body: JSON.stringify(data) }),
+
+  // History + spend total
+  getMessages: (limit = 100, status) =>
+    apiClient(`/teacher/whatsapp/messages?limit=${limit}${status ? `&status=${status}` : ''}`),
+
+  // Templates
+  listTemplates:   ()       => apiClient('/teacher/whatsapp/templates'),
+  createTemplate:  (data)   => apiClient('/teacher/whatsapp/templates', { method: 'POST', body: JSON.stringify(data) }),
+  submitTemplate:  (id)     => apiClient(`/teacher/whatsapp/templates/${id}/submit`, { method: 'POST' }),
+  templateStatus:  (id)     => apiClient(`/teacher/whatsapp/templates/${id}/status`),
+  deleteTemplate:  (id)     => apiClient(`/teacher/whatsapp/templates/${id}`, { method: 'DELETE' }),
+
+  // Reports + criteria
+  previewCriteria: (data) => apiClient('/teacher/whatsapp/preview-criteria', { method: 'POST', body: JSON.stringify(data) }),
+  sendReports:     (data) => apiClient('/teacher/whatsapp/send-reports',     { method: 'POST', body: JSON.stringify(data) }),
+
+  // Onboarding
+  sendWelcome: (data) => apiClient('/teacher/whatsapp/send-welcome', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Automation jobs
+  listJobs:  ()         => apiClient('/teacher/whatsapp/jobs'),
+  createJob: (data)     => apiClient('/teacher/whatsapp/jobs', { method: 'POST', body: JSON.stringify(data) }),
+  updateJob: (id, data) => apiClient(`/teacher/whatsapp/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteJob: (id)       => apiClient(`/teacher/whatsapp/jobs/${id}`, { method: 'DELETE' }),
+  toggleJob: (id)       => apiClient(`/teacher/whatsapp/jobs/${id}/toggle`, { method: 'POST' }),
+  runJobNow: (id)       => apiClient(`/teacher/whatsapp/jobs/${id}/run-now`, { method: 'POST' }),
+
+  // Media upload (FormData)
+  uploadMedia: async (file) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/teacher/whatsapp/upload-media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || 'Upload failed');
+    }
+    _cache.clear();
+    return res.json();
+  },
+};

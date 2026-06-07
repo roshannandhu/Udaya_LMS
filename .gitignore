@@ -20,6 +20,12 @@ broadcasts.json
 # teacher Settings page if they want the AI mentorship feature.
 teacher_settings.json
 
+# whatsapp_config.json holds the WhatsApp provider (WANotifier) API key + sender
+# number — server-only secret, NOT committed. Each teacher adds their own key in
+# the WhatsApp → Settings tab.
+whatsapp_config.json
+backend/whatsapp_config.json
+
 # Screenshots & Images
 screenshots/
 *.png
