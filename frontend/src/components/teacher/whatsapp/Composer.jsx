@@ -32,8 +32,9 @@ function currentMsgType(value) {
 }
 
 // Compose a message: template (with variable slots) OR free-form, plus optional
-// media (PDF / image / audio). `value` is owned by the parent.
-export default function Composer({ value, onChange, templates = [], freeformAllowed = false }) {
+// media (PDF / image / audio). `value` is owned by the parent. Free-form is always
+// available (with a 24h-window note); no more silent dead-end.
+export default function Composer({ value, onChange, templates = [], onGoToTemplates }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [pendingAccept, setPendingAccept] = useState(null);
@@ -97,20 +98,19 @@ export default function Composer({ value, onChange, templates = [], freeformAllo
           {['template', 'freeform'].map((m) => (
             <button key={m}
               onClick={() => set({ mode: m })}
-              disabled={m === 'freeform' && !freeformAllowed}
               className={`px-3 py-1.5 rounded-pill text-xs font-medium border transition-colors ${
                 value.mode === m
                   ? 'bg-ink text-white border-ink'
                   : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'
-              } ${m === 'freeform' && !freeformAllowed ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              {m === 'template' ? 'Use an approved template' : 'Write freely'}
+              }`}>
+              {m === 'template' ? 'Use a ready template' : 'Write your own message'}
             </button>
           ))}
         </div>
         <p className="text-[11px] text-neutral-400 mt-1">
           {value.mode === 'template'
-            ? 'Templates are pre-approved by WhatsApp — required to message parents who haven’t replied recently.'
-            : 'Free typing only works for parents who messaged you in the last 24 hours.'}
+            ? 'Templates are pre-approved by WhatsApp — the way to reach parents who haven’t messaged you recently.'
+            : 'Heads-up: a message you type yourself only reaches parents who messaged you in the last 24 hours. For everyone else, use a ready template.'}
         </p>
       </div>
 
@@ -126,9 +126,12 @@ export default function Composer({ value, onChange, templates = [], freeformAllo
               {approved.map(t => <option key={t.id} value={t.name}>{t.name} ({t.category})</option>)}
             </select>
             {approved.length === 0 && (
-              <p className="text-[11px] text-amber-600 mt-1">
-                No approved templates yet. Create &amp; submit one in the Templates tab.
-              </p>
+              <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2 text-[11px] text-amber-800">
+                No ready templates yet. {onGoToTemplates
+                  ? <button onClick={onGoToTemplates} className="underline font-medium">Create one in Templates →</button>
+                  : 'Create one in the Templates tab.'}
+                {' '}Or switch to <span className="font-medium">“Write your own message”</span> for parents who messaged you in the last 24h.
+              </div>
             )}
           </div>
 

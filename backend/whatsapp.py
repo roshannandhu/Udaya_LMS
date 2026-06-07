@@ -225,17 +225,137 @@ class WANotifierProvider(WhatsAppProvider):
         return False
 
 
+class MetaCloudProvider(WhatsAppProvider):
+    """Official Meta WhatsApp Cloud API (Graph) adapter.
+
+    Matches the app's model: send free-form text/media, send an approved template
+    by name + body variables, create templates, and poll their status. Sending uses
+    the phone-number-id node; template create/status use the WABA-id node.
+    """
+
+    name = "meta"
+    configured = True
+    BASE = "https://graph.facebook.com/v21.0"
+
+    def __init__(self, access_token: str, phone_number_id: str, waba_id: Optional[str] = None):
+        self.token = access_token
+        self.phone_number_id = phone_number_id
+        self.waba_id = waba_id
+
+    @staticmethod
+    def _digits(to: str) -> str:
+        # Cloud API wants the number in international format; tolerate +, spaces.
+        return "".join(c for c in (to or "") if c.isdigit())
+
+    async def _graph(self, method: str, node: str, *, json_body: dict = None, params: dict = None) -> dict:
+        url = f"{self.BASE}/{node.lstrip('/')}"
+        headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.request(method, url, headers=headers, json=json_body, params=params)
+            try:
+                data = resp.json()
+            except Exception:
+                data = {"raw": resp.text}
+            if resp.status_code >= 400:
+                err = (data.get("error") or {})
+                msg = err.get("error_user_msg") or err.get("message") or f"HTTP {resp.status_code}"
+                return {"_ok": False, "error": msg, "raw": data}
+            return {"_ok": True, "raw": data}
+        except Exception as e:  # network/timeout — never raise into the request path
+            return {"_ok": False, "error": str(e)}
+
+    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+        payload: Dict[str, Any] = {"messaging_product": "whatsapp",
+                                   "recipient_type": "individual", "to": self._digits(to)}
+        if media_url:
+            kind = "image" if (media_type or "").startswith("image") else (
+                "audio" if (media_type or "").startswith("audio") else "document")
+            payload["type"] = kind
+            obj: Dict[str, Any] = {"link": media_url}
+            if kind != "audio" and text:
+                obj["caption"] = text
+            if kind == "document":
+                obj["filename"] = "attachment"
+            payload[kind] = obj
+        else:
+            payload["type"] = "text"
+            payload["text"] = {"preview_url": False, "body": text or ""}
+        res = await self._graph("POST", f"{self.phone_number_id}/messages", json_body=payload)
+        return self._send_result(res)
+
+    async def send_template(self, to, template, variables=None, media_url=None,
+                            media_type=None, language="en") -> dict:
+        components: list = []
+        if media_url:
+            kind = "image" if (media_type or "").startswith("image") else (
+                "video" if (media_type or "").startswith("video") else "document")
+            header_obj = {"link": media_url}
+            if kind == "document":
+                header_obj["filename"] = "attachment"
+            components.append({"type": "header",
+                               "parameters": [{"type": kind, kind: header_obj}]})
+        if variables:
+            components.append({"type": "body",
+                               "parameters": [{"type": "text", "text": str(v)} for v in variables]})
+        tpl: Dict[str, Any] = {"name": template, "language": {"code": language or "en"}}
+        if components:
+            tpl["components"] = components
+        payload = {"messaging_product": "whatsapp", "to": self._digits(to),
+                   "type": "template", "template": tpl}
+        res = await self._graph("POST", f"{self.phone_number_id}/messages", json_body=payload)
+        return self._send_result(res)
+
+    @staticmethod
+    def _send_result(res: dict) -> dict:
+        if not res.get("_ok"):
+            return {"status": "failed", "provider_message_id": None, "error": res.get("error")}
+        raw = res.get("raw") or {}
+        msgs = raw.get("messages") or [{}]
+        return {"status": "sent", "provider_message_id": msgs[0].get("id"), "error": None}
+
+    async def create_template(self, name, category, language, body_text,
+                              header_type="none", variables=None) -> dict:
+        if not self.waba_id:
+            return {"status": "failed", "provider_template_id": None,
+                    "error": "WhatsApp Business Account ID is required to create templates."}
+        components = [{"type": "BODY", "text": body_text}]
+        payload = {"name": name, "language": language or "en",
+                   "category": (category or "utility").upper(), "components": components}
+        res = await self._graph("POST", f"{self.waba_id}/message_templates", json_body=payload)
+        if not res.get("_ok"):
+            return {"status": "failed", "provider_template_id": None, "error": res.get("error")}
+        raw = res.get("raw") or {}
+        return {"status": raw.get("status", "pending").lower(),
+                "provider_template_id": raw.get("id"), "error": None}
+
+    async def get_template_status(self, provider_template_id: str) -> dict:
+        if not self.waba_id:
+            return {"status": "pending"}
+        res = await self._graph("GET", f"{self.waba_id}/message_templates",
+                                params={"name": provider_template_id})
+        if not res.get("_ok"):
+            return {"status": "pending"}
+        data = (res.get("raw") or {}).get("data") or []
+        return {"status": (data[0].get("status", "pending").lower()) if data else "pending"}
+
+
 def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
-    """Factory: real provider when an API key exists, else the degrade provider."""
+    """Factory: real provider when credentials exist, else the degrade provider."""
     config = config if config is not None else get_wa_config()
+    provider = (config.get("provider") or "wanotifier").lower()
+
+    if provider == "meta":
+        token = (config.get("meta_access_token") or "").strip()
+        phone_id = (config.get("meta_phone_number_id") or "").strip()
+        if token and phone_id:
+            return MetaCloudProvider(token, phone_id, (config.get("meta_waba_id") or "").strip() or None)
+        return UnconfiguredProvider()
+
     api_key = (config.get("api_key") or "").strip()
     if not api_key:
         return UnconfiguredProvider()
-    provider = (config.get("provider") or "wanotifier").lower()
     sender = config.get("sender") or None
-    if provider == "wanotifier":
-        return WANotifierProvider(api_key, sender)
-    # Unknown provider id → fall back to WANotifier shape.
     return WANotifierProvider(api_key, sender)
 
 

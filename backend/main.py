@@ -6880,13 +6880,17 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
 
 class WhatsAppConfigInput(BaseModel):
     provider: Optional[str] = None
-    api_key: Optional[str] = None          # secret — only overwritten when sent non-empty
+    api_key: Optional[str] = None          # WANotifier secret — only overwritten when sent non-empty
     sender: Optional[str] = None
     currency: Optional[str] = None
     rates: Optional[dict] = None
     auto_welcome: Optional[bool] = None
     welcome_template: Optional[str] = None
     quiet_hours: Optional[dict] = None
+    # Meta WhatsApp Cloud API
+    meta_access_token: Optional[str] = None    # secret — only overwritten when sent non-empty
+    meta_phone_number_id: Optional[str] = None
+    meta_waba_id: Optional[str] = None
 
 class WhatsAppEstimateInput(BaseModel):
     standard_ids: Optional[List[str]] = None
@@ -7129,15 +7133,28 @@ def _wa_student_score(report: dict, test_id: Optional[str] = None):
 
 
 # ── Config ───────────────────────────────────────────────────────────────────
+def _wa_is_configured(cfg: dict) -> bool:
+    """True when the active provider has the credentials it needs to send."""
+    provider = (cfg.get("provider") or "wanotifier").lower()
+    if provider == "meta":
+        return bool((cfg.get("meta_access_token") or "").strip()
+                    and (cfg.get("meta_phone_number_id") or "").strip())
+    return bool((cfg.get("api_key") or "").strip())
+
+
 @app.get("/api/teacher/whatsapp/config")
 def wa_get_config(user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
     return {
-        "configured": bool((cfg.get("api_key") or "").strip()),
+        "configured": _wa_is_configured(cfg),
         "provider": cfg.get("provider", "wanotifier"),
         "sender": cfg.get("sender", ""),
         "api_key_masked": wa.mask_key(cfg.get("api_key")),
+        # Meta Cloud API (token masked; ids are not secret)
+        "meta_phone_number_id": cfg.get("meta_phone_number_id", ""),
+        "meta_waba_id": cfg.get("meta_waba_id", ""),
+        "meta_token_masked": wa.mask_key(cfg.get("meta_access_token")),
         "rates": wa.get_rates(cfg),
         "currency": cfg.get("currency", wa.DEFAULT_CURRENCY),
         "auto_welcome": bool(cfg.get("auto_welcome")),
@@ -7151,15 +7168,16 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
     patch = data.model_dump(exclude_unset=True)
-    # Never wipe the stored key with a blank/masked value.
-    if "api_key" in patch:
-        new_key = (patch.pop("api_key") or "").strip()
-        if new_key and not new_key.startswith("••••"):
-            cfg["api_key"] = new_key
+    # Never wipe a stored secret with a blank/masked value.
+    for secret in ("api_key", "meta_access_token"):
+        if secret in patch:
+            new_val = (patch.pop(secret) or "").strip()
+            if new_val and not new_val.startswith("••••"):
+                cfg[secret] = new_val
     for k, v in patch.items():
         cfg[k] = v
     wa.save_wa_config(cfg)
-    return {"success": True, "configured": bool((cfg.get("api_key") or "").strip())}
+    return {"success": True, "configured": _wa_is_configured(cfg)}
 
 
 # ── Recipients (grouped by class) ─────────────────────────────────────────────

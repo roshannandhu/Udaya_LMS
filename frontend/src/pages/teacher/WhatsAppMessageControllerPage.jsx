@@ -125,7 +125,8 @@ export default function WhatsAppMessageControllerPage() {
               <ComposeTab groups={groups} selected={selected} setSelected={setSelected}
                 templates={templates} estimateFor={estimateFor} currency={currency}
                 configured={config?.configured} selectedCount={selectedCount}
-                reloadRecipients={loadRecipients} onSendCredentials={() => go('credentials')} />
+                reloadRecipients={loadRecipients} onSendCredentials={() => go('credentials')}
+                onGoToTemplates={() => go('templates')} />
             )}
             {tab === 'reports' && (
               <ReportsTab groups={groups} selected={selected} setSelected={setSelected}
@@ -184,14 +185,13 @@ function PreviewPanel({ children }) {
 }
 
 // ── Compose ───────────────────────────────────────────────────────────────────
-function ComposeTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount, reloadRecipients, onSendCredentials }) {
+function ComposeTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount, reloadRecipients, onSendCredentials, onGoToTemplates }) {
   const [msg, setMsg] = useState({ mode: 'template', category: 'utility', variables: [], body_text: '' });
   const [sending, setSending] = useState(false);
   const [testPhone, setTestPhone] = useState('');
 
   const selectedStudents = useMemo(
     () => groups.flatMap(g => g.students).filter(s => selected.has(s.id)), [groups, selected]);
-  const freeformAllowed = selectedStudents.length > 0 && selectedStudents.every(s => s.session_open);
   const classCount = useMemo(
     () => new Set(selectedStudents.map(s => s.standard_id)).size, [selectedStudents]);
 
@@ -219,7 +219,11 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
     setSending(true);
     try {
       const r = await whatsappApi.send(buildPayload());
-      alert(`Sent ${r.sent}/${r.results.length}. Cost ₹${(r.total_cost || 0).toFixed(2)}.${!r.configured ? ' (Not configured — no real messages went out.)' : ''}`);
+      const failed = (r.results || []).filter(x => x.status === 'failed' || x.status === 'not_configured');
+      let extra = '';
+      if (!r.configured) extra = '\n\n(Not configured — add your WhatsApp details in Settings.)';
+      else if (failed.length) extra = `\n\n${failed.length} failed — e.g. "${failed[0].error || 'unknown error'}"`;
+      alert(`Sent ${r.sent}/${r.results.length}. Cost ₹${(r.total_cost || 0).toFixed(2)}.${extra}`);
     } catch (e) { alert(e.message); } finally { setSending(false); }
   };
 
@@ -228,7 +232,9 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
     setSending(true);
     try {
       const r = await whatsappApi.send({ ...buildPayload(), test_to_self: testPhone.trim() });
-      alert(`Test send: ${r.results[0]?.status}.`);
+      const res = r.results?.[0] || {};
+      const ok = res.status && res.status !== 'failed' && res.status !== 'not_configured';
+      alert(ok ? `✅ Test sent (${res.status}).` : `❌ Test failed: ${res.error || (!r.configured ? 'not configured' : 'unknown error')}`);
     } catch (e) { alert(e.message); } finally { setSending(false); }
   };
 
@@ -248,7 +254,12 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
         </Step>
 
         <Step n="2" title="Your message" hint="Type it, attach a file, or pick a template">
-          <Composer value={msg} onChange={setMsg} templates={templates} freeformAllowed={freeformAllowed} />
+          {!configured && (
+            <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+              WhatsApp isn’t connected yet — messages won’t actually send. Add your details in the <span className="font-medium">Settings</span> tab.
+            </div>
+          )}
+          <Composer value={msg} onChange={setMsg} templates={templates} onGoToTemplates={onGoToTemplates} />
         </Step>
 
         <Step n="3" title="Review & send" hint="Send a test to yourself first if you like">
@@ -511,9 +522,12 @@ function CredentialsTab({ groups, estimateFor, currency, configured, reloadRecip
 // ── Settings ───────────────────────────────────────────────────────────────────
 function SettingsTab({ config, reload }) {
   const [form, setForm] = useState({
-    provider: config?.provider || 'wanotifier',
+    provider: config?.provider || 'meta',
     api_key: '',
     sender: config?.sender || '',
+    meta_access_token: '',
+    meta_phone_number_id: config?.meta_phone_number_id || '',
+    meta_waba_id: config?.meta_waba_id || '',
     currency: config?.currency || 'INR',
     rates: config?.rates || { utility: 0.14, marketing: 0.78, auth: 0.13 },
     auto_welcome: config?.auto_welcome || false,
@@ -521,18 +535,40 @@ function SettingsTab({ config, reload }) {
     quiet_hours: config?.quiet_hours || {},
   });
   const [saving, setSaving] = useState(false);
+  const [testNumber, setTestNumber] = useState('');
+  const [testing, setTesting] = useState(false);
   const set = (patch) => setForm({ ...form, ...patch });
+  const isMeta = form.provider === 'meta';
 
   const save = async () => {
     setSaving(true);
     try {
       const body = { ...form };
-      if (!body.api_key) delete body.api_key;   // don't overwrite stored key with blank
+      if (!body.api_key) delete body.api_key;                 // keep stored secret if blank
+      if (!body.meta_access_token) delete body.meta_access_token;
       await whatsappApi.setConfig(body);
       await reload();
-      setForm(f => ({ ...f, api_key: '' }));
+      setForm(f => ({ ...f, api_key: '', meta_access_token: '' }));
       alert('Saved.');
     } catch (e) { alert(e.message); } finally { setSaving(false); }
+  };
+
+  // One-click delivery check: Meta seeds every account with the approved
+  // "hello_world" template, so this proves the connection without any setup.
+  const sendTest = async () => {
+    if (!testNumber.trim()) { alert('Enter your WhatsApp number to test.'); return; }
+    if (!config?.configured) { alert('Save your provider details first, then test.'); return; }
+    setTesting(true);
+    try {
+      const r = await whatsappApi.send({ test_to_self: testNumber.trim(), mode: 'template',
+        template_name: 'hello_world', language: 'en' });
+      const res = r.results?.[0] || {};
+      if (res.status && res.status !== 'failed' && res.status !== 'not_configured') {
+        alert(`✅ Test sent (${res.status}). Check WhatsApp on ${testNumber.trim()}.`);
+      } else {
+        alert(`❌ Test failed: ${res.error || 'unknown error'}`);
+      }
+    } catch (e) { alert(e.message); } finally { setTesting(false); }
   };
 
   return (
@@ -541,19 +577,52 @@ function SettingsTab({ config, reload }) {
         <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Provider</label>
         <select value={form.provider} onChange={(e) => set({ provider: e.target.value })}
           className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
+          <option value="meta">Meta WhatsApp Cloud API (recommended)</option>
           <option value="wanotifier">WANotifier</option>
         </select>
       </div>
 
-      <Input label="API key" type="password"
-        placeholder={config?.api_key_masked || 'Enter API key'}
-        value={form.api_key} onChange={(e) => set({ api_key: e.target.value })} />
-      <p className="text-[11px] text-neutral-400 -mt-2">
-        {config?.configured ? `Stored: ${config.api_key_masked}. Leave blank to keep it.` : 'Stored server-side only; never shown again in full.'}
-      </p>
+      {isMeta ? (
+        <>
+          <Input label="Phone number ID" placeholder="e.g. 123456789012345"
+            value={form.meta_phone_number_id} onChange={(e) => set({ meta_phone_number_id: e.target.value })} />
+          <div>
+            <Input label="Access token" type="password"
+              placeholder={config?.meta_token_masked || 'Permanent access token'}
+              value={form.meta_access_token} onChange={(e) => set({ meta_access_token: e.target.value })} />
+            <p className="text-[11px] text-neutral-400 mt-1">
+              {config?.meta_token_masked ? `Stored: ${config.meta_token_masked}. Leave blank to keep it.` : 'Stored server-side only; never shown again in full.'}
+            </p>
+          </div>
+          <Input label="WhatsApp Business Account ID (for templates)" placeholder="e.g. 987654321098765"
+            value={form.meta_waba_id} onChange={(e) => set({ meta_waba_id: e.target.value })} />
+          <p className="text-[11px] text-neutral-400 -mt-2">
+            Get these from Meta → WhatsApp Manager → API setup. Template approval is handled by Meta (24–48h).
+          </p>
 
-      <Input label="Sender number / WhatsApp ID" value={form.sender}
-        onChange={(e) => set({ sender: e.target.value })} />
+          {/* One-click delivery check */}
+          <div className="glass-panel border border-[#EBEAE7] rounded-xl p-3">
+            <p className="text-xs font-medium text-neutral-700 mb-2">Test the connection</p>
+            <div className="flex items-end gap-2">
+              <div className="flex-1"><Input label="Your WhatsApp number" placeholder="+91…"
+                value={testNumber} onChange={(e) => setTestNumber(e.target.value)} /></div>
+              <Btn icon={Send} onClick={sendTest} disabled={testing}>{testing ? 'Sending…' : 'Send test'}</Btn>
+            </div>
+            <p className="text-[11px] text-neutral-400 mt-1.5">Sends Meta’s pre-approved “hello_world” message — proves delivery works. Save first.</p>
+          </div>
+        </>
+      ) : (
+        <>
+          <Input label="API key" type="password"
+            placeholder={config?.api_key_masked || 'Enter API key'}
+            value={form.api_key} onChange={(e) => set({ api_key: e.target.value })} />
+          <p className="text-[11px] text-neutral-400 -mt-2">
+            {config?.api_key_masked ? `Stored: ${config.api_key_masked}. Leave blank to keep it.` : 'Stored server-side only; never shown again in full.'}
+          </p>
+          <Input label="Sender number / WhatsApp ID" value={form.sender}
+            onChange={(e) => set({ sender: e.target.value })} />
+        </>
+      )}
 
       <div>
         <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Per-message rates ({form.currency})</label>

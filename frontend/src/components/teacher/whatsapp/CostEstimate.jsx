@@ -13,13 +13,19 @@ export default function CostEstimate({ count, estimate, currency = 'INR', onSend
   return (
     <div className="sticky bottom-0 left-0 right-0 mt-4 -mx-4 px-4 py-3 bg-white/90 backdrop-blur border-t border-[#EBEAE7] flex items-center justify-between gap-3 z-10">
       <div className="text-sm">
-        <div className="font-semibold text-neutral-900">
-          {count} {count === 1 ? 'recipient' : 'recipients'} · est. {sym}{amount.toFixed(2)}
-        </div>
-        <div className="text-xs text-neutral-500">
-          {count} × {sym}{Number(rate).toFixed(2)} per message
-          {!configured && ' · WhatsApp not configured (no real send)'}
-        </div>
+        {count === 0 ? (
+          <div className="text-amber-700 font-medium">Select at least one parent with a phone number</div>
+        ) : (
+          <>
+            <div className="font-semibold text-neutral-900">
+              {count} {count === 1 ? 'recipient' : 'recipients'} · est. {sym}{amount.toFixed(2)}
+            </div>
+            <div className="text-xs text-neutral-500">
+              {count} × {sym}{Number(rate).toFixed(2)} per message
+              {!configured && ' · WhatsApp not configured (no real send)'}
+            </div>
+          </>
+        )}
       </div>
       <Btn variant="primary" onClick={onSend} disabled={disabled || sending || count === 0}>
         {sending ? 'Sending…' : `${sendLabel} (${sym}${amount.toFixed(2)})`}
