@@ -303,8 +303,22 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
     })();
   }, []);
 
+  // An exam belongs to one standard — scope recipients to it.
+  const examStandardId = reportType === 'exam'
+    ? (exams.find(e => e.id === examId)?.standard_id || null) : null;
+  const visibleGroups = examStandardId ? groups.filter(g => g.standard_id === examStandardId) : groups;
+
+  // When the chosen exam changes, auto-select only that standard's eligible students.
+  useEffect(() => {
+    if (reportType !== 'exam' || !examStandardId) return;
+    const ids = groups.filter(g => g.standard_id === examStandardId)
+      .flatMap(g => g.students.filter(s => s.phone && !s.opted_out).map(s => s.id));
+    setSelected(new Set(ids));
+  }, [examId, examStandardId, reportType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const payload = () => ({
     included_student_ids: Array.from(selected),
+    standard_ids: examStandardId ? [examStandardId] : undefined,
     report_format: format,
     period: reportType === 'exam' ? 'overall' : reportType,   // weekly | monthly
     test_id: reportType === 'exam' ? (examId || undefined) : undefined,
@@ -362,15 +376,20 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
               <select value={examId} onChange={(e) => setExamId(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
                 <option value="">Select an exam…</option>
-                {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
+                {exams.map(ex => (
+                  <option key={ex.id} value={ex.id}>
+                    {ex.title}{ex.standard_name ? ` — ${ex.standard_name}` : ''}
+                  </option>
+                ))}
               </select>
               {exams.length === 0 && <p className="text-[11px] text-neutral-400 mt-1">No exams found yet.</p>}
             </div>
           )}
         </Step>
 
-        <Step n="2" title="Who gets it?" hint="Pick the classes or students">
-          <RecipientPicker groups={groups} selected={selected} onChange={setSelected} onStudentUpdated={reloadRecipients} />
+        <Step n="2" title="Who gets it?"
+          hint={examStandardId ? 'Only this exam’s class — exam results stay within its standard' : 'Pick the classes or students'}>
+          <RecipientPicker groups={visibleGroups} selected={selected} onChange={setSelected} onStudentUpdated={reloadRecipients} />
         </Step>
 
         <Step n="3" title="Preview & send" hint="See exactly what parents receive">

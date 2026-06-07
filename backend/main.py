@@ -3349,17 +3349,28 @@ def get_tests(class_id: Optional[str] = None, user = Depends(verify_token)):
         response = service_supabase.table("tests").select("*").in_("class_id", class_ids).neq("status", "draft").execute()
         return response.data or []
 
-    # Teacher: return all tests for their standards
-    stds = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
+    # Teacher: return all tests for their standards, enriched with the exam's
+    # standard + subject (so callers can scope an exam to its own class).
+    stds = service_supabase.table("standards").select("id, name").eq("teacher_id", user["teacher_id"]).execute()
     if not stds.data:
         return []
-    std_ids = [s["id"] for s in stds.data]
-    subjects = service_supabase.table("subject_classes").select("id").in_("standard_id", std_ids).execute()
+    std_name = {s["id"]: s["name"] for s in stds.data}
+    std_ids = list(std_name.keys())
+    subjects = service_supabase.table("subject_classes").select("id, name, standard_id").in_("standard_id", std_ids).execute()
     if not subjects.data:
         return []
-    class_ids = [s["id"] for s in subjects.data]
+    class_meta = {c["id"]: {"standard_id": c.get("standard_id"),
+                            "standard_name": std_name.get(c.get("standard_id"), ""),
+                            "subject_name": c.get("name")} for c in subjects.data}
+    class_ids = list(class_meta.keys())
     response = service_supabase.table("tests").select("*").in_("class_id", class_ids).execute()
-    return response.data or []
+    tests = response.data or []
+    for t in tests:
+        meta = class_meta.get(t.get("class_id"), {})
+        t["standard_id"] = meta.get("standard_id")
+        t["standard_name"] = meta.get("standard_name")
+        t["subject_name"] = meta.get("subject_name")
+    return tests
 
 @app.post("/api/tests")
 def create_test(test: Test, user = Depends(verify_token)):
@@ -7434,9 +7445,28 @@ def wa_delete_template(template_id: str, user = Depends(verify_token)):
 
 
 # ── Reports + criteria ────────────────────────────────────────────────────────
+def _wa_exam_standard_id(test_id: str):
+    """Resolve a test's owning standard: tests.class_id → subject_classes.standard_id."""
+    try:
+        t = (service_supabase.table("tests").select("class_id").eq(
+            "id", test_id).limit(1).execute().data or [None])[0]
+        if not t or not t.get("class_id"):
+            return None
+        sc = (service_supabase.table("subject_classes").select("standard_id").eq(
+            "id", t["class_id"]).limit(1).execute().data or [None])[0]
+        return sc.get("standard_id") if sc else None
+    except Exception:
+        return None
+
+
 def _wa_build_report_rows(teacher_id, std_ids, included_ids, test_id, period, criteria):
     """Shared between preview and send: resolve students → fetch report → score →
-    band. Returns (recipients_with_report). Each item carries the report dict."""
+    band. Returns (recipients_with_report). Each item carries the report dict.
+    Exam mode (test_id): recipients are forced to the exam's own standard, so an
+    exam report can never reach another standard — regardless of what the client sent."""
+    if test_id:
+        exam_std = _wa_exam_standard_id(test_id)
+        std_ids = [exam_std] if exam_std else std_ids
     recips = _wa_resolve_recipients(teacher_id, std_ids, included_ids)
     teacher_user = {"role": "teacher", "teacher_id": teacher_id, "user_id": teacher_id}
     rows = []
