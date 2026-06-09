@@ -10,14 +10,21 @@ const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 function formatChatDate(dateString) {
   if (!dateString) return 'Unknown Date';
+  // Parse date in UTC and convert to Indian Standard Time (Asia/Kolkata) for consistent display
   const d = new Date(dateString);
+  const timeZone = 'Asia/Kolkata';
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dDate = d.toLocaleDateString('en-GB', { timeZone });
+  const todayDate = today.toLocaleDateString('en-GB', { timeZone });
+  const yesterdayDate = yesterday.toLocaleDateString('en-GB', { timeZone });
+
+  if (dDate === todayDate) return 'Today';
+  if (dDate === yesterdayDate) return 'Yesterday';
+  // Return formatted date in Indian format with explicit timezone
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone });
 }
 
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
@@ -138,13 +145,16 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   }, [std.id]);
 
   function mapBroadcast(b) {
+    // Convert timestamps to Indian Standard Time (Asia/Kolkata) for consistent UI display
+    const createdAt = new Date(b.created_at);
+    const time = createdAt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
     return {
       id: b.id,
       text: b.message,
       sender: 'Teacher',
       senderRole: 'Class Teacher',
       created_at: b.created_at,
-      time: new Date(b.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }),
+      time,
       pinned: false,
       attachments: b.attachment_url ? [{ url: b.attachment_url, type: b.attachment_type, name: 'Attachment' }] : [],
       edited: !!b.edited,
