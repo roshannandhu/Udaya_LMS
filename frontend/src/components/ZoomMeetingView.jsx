@@ -68,7 +68,9 @@ function loadZoomClientView() {
 // idle) so the first "Watch" click doesn't pay the full download. Safe to call
 // repeatedly — loadZoomClientView() de-dupes via the shared promise.
 export function preloadZoomSDK() {
-  try { loadZoomClientView(); } catch { /* best-effort */ }
+  // Swallow the async rejection too (offline / CDN blocked) so the idle preload
+  // never surfaces as an "Uncaught (in promise)" error on the live-classes pages.
+  try { loadZoomClientView().catch(() => {}); } catch { /* best-effort */ }
 }
 
 export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, display_name, passcode, zak, onLeave }) {

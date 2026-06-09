@@ -4,6 +4,7 @@ import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
 import SubjectIcon, { IconPicker } from '../shared/SubjectIcon';
+import { PASTEL, pastelFor } from '../cards/pastel';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -318,40 +319,18 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
-      {/* Header (Mobile) */}
-      <div className="md:hidden flex items-center gap-2 px-4 py-2 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
+      {/* Unified WhatsApp-style Header */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-[#f0f2f5] border-b border-neutral-200 z-10 shrink-0">
         {showBackBtn && (
-          <button onClick={onBack} className="p-1.5 -ml-1.5 text-neutral-500 hover:text-neutral-900 rounded-full hover:bg-neutral-100">
-            <ArrowLeft size={18} />
+          <button onClick={onBack} className="md:hidden p-1.5 -ml-1.5 mr-1 text-neutral-500 hover:text-neutral-900 rounded-full hover:bg-neutral-200 transition-colors">
+            <ArrowLeft size={20} />
           </button>
         )}
         <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
           <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
-            className="w-9 h-9 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
-            <SubjectIcon value={std.emoji} size={18} fallback="graduation" />
-          </button>
-          {showEmojiPicker && (
-            <div className="absolute top-11 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
-              <p className="text-[11px] font-medium text-neutral-500 mb-2">Class icon</p>
-              <IconPicker value={std.emoji} onChange={handleEmojiChange} fallback="graduation" />
-            </div>
-          )}
-        </div>
-        <div className="flex-1 min-w-0 ml-1">
-          <p className="text-[15px] font-semibold text-neutral-900 truncate leading-tight">{std.name}</p>
-          <p className="text-[11px] text-neutral-500">{studentCount} students</p>
-        </div>
-        <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${showSearch ? 'text-neutral-900' : 'text-neutral-500'}`}>
-          <Search size={18} />
-        </button>
-      </div>
-
-      {/* Header (Desktop) */}
-      <div className="hidden md:flex items-center gap-3 px-5 py-3 bg-white border-b border-neutral-200 z-10 shadow-sm shrink-0">
-        <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-          <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
-            className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center text-neutral-700 hover:ring-2 hover:ring-neutral-300 transition-all">
-            <SubjectIcon value={std.emoji} size={20} fallback="graduation" />
+            className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-700 hover:opacity-80 transition-all overflow-hidden"
+            style={{ background: PASTEL[pastelFor(std.name)]?.hex || '#e2e8f0' }}>
+            <SubjectIcon value={std.emoji} size={22} fallback="graduation" />
           </button>
           {showEmojiPicker && (
             <div className="absolute top-12 left-0 z-50 bg-white border border-neutral-200 shadow-xl rounded-2xl p-3 w-64">
@@ -360,12 +339,15 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
             </div>
           )}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-semibold text-neutral-900 truncate leading-tight">{std.name}</p>
-          <p className="text-xs text-neutral-500">{studentCount} students</p>
+        <div className="flex-1 min-w-0 ml-2 cursor-pointer" onClick={() => setShowEmojiPicker(p => !p)}>
+          <p className="text-[16px] font-medium text-neutral-900 truncate leading-tight">{std.name}</p>
+          <p className="text-[13px] text-neutral-500 truncate mt-0.5">{studentCount} students</p>
         </div>
-        <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full hover:bg-neutral-100 transition-colors ${showSearch ? 'text-neutral-900' : 'text-neutral-500'}`}>
-          <Search size={18} />
+        <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-neutral-200 text-neutral-900' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700'}`}>
+          <Search size={20} />
+        </button>
+        <button className="hidden sm:block p-2 rounded-full text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700 transition-colors">
+          <MoreVertical size={20} />
         </button>
       </div>
 

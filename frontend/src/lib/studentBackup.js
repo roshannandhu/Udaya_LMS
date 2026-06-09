@@ -60,6 +60,35 @@ function downloadCsv(header, rows, filename) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Download a single-sheet workbook from an array-of-arrays (first row = header).
+ * xlsx is lazy-imported; if it fails to load/write (flaky network, mobile-browser
+ * quirks, PWA), it falls back to CSV so the download never silently does nothing.
+ * Use this for any one-off spreadsheet export instead of calling XLSX.writeFile
+ * directly — that call is failure-prone in the deployed browser.
+ *
+ * @param {Array<Array<any>>} aoa  Rows; aoa[0] is the header row.
+ * @param {{ filename?: string, cols?: Array<{wch:number}>, sheetName?: string }} opts
+ *        filename is WITHOUT extension (the helper appends .xlsx / .csv).
+ * @returns {Promise<{ ok: boolean, format: 'xlsx'|'csv' }>}
+ */
+export async function downloadAoaWorkbook(aoa, { filename = 'export', cols = null, sheetName = 'Sheet1' } = {}) {
+  const rows2d = Array.isArray(aoa) ? aoa : [];
+  try {
+    const XLSX = await import('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet(rows2d);
+    if (cols) ws['!cols'] = cols;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, uniqueSheetName(sheetName, new Set()));
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+    return { ok: true, format: 'xlsx' };
+  } catch (err) {
+    console.error('xlsx write failed, falling back to CSV:', err);
+    downloadCsv(rows2d[0] || [], rows2d.slice(1), `${filename}.csv`);
+    return { ok: true, format: 'csv' };
+  }
+}
+
 // ── full backup: every student, one sheet per standard ───────────────────────
 
 const FULL_HEADER = ['Student ID', 'Name', 'Username', 'Email', 'Phone', 'Standard', 'Points', 'Attendance %', 'Avg Score', 'Joined'];

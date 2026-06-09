@@ -123,44 +123,51 @@ export default function BroadcastsPage() {
   }
 
   return (
-    <div onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
-      <TopBar
-        title={showThread && std ? std.name : 'Inbox'}
-        subtitle={showThread && std ? `${studentCounts[std.id] || 0} students` : 'Class broadcasts'}
-        showSearch={!showThread}
-      />
-      <div className="max-w-5xl mx-auto">
-        <div className="flex h-[calc(100dvh-160px)] md:h-[calc(100dvh-90px)]">
+    <div className="flex flex-col flex-1 h-full bg-[#f0f2f5] lg:p-4 lg:pb-6" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
+      {/* Mobile TopBar */}
+      <div className="md:hidden flex-shrink-0">
+        <TopBar
+          title={showThread && std ? std.name : 'Inbox'}
+          subtitle={showThread && std ? `${studentCounts[std.id] || 0} students` : 'Class broadcasts'}
+          showSearch={!showThread}
+        />
+      </div>
 
-          {/* Standards list pane */}
-          <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-80 md:border-r border-white/40 overflow-y-auto flex-shrink-0`}>
+      <div className="flex flex-1 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 h-[calc(100dvh-160px)] md:h-[calc(100vh-120px)]">
+
+        {/* Standards list pane (Sidebar) */}
+        <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-[350px] lg:w-[400px] bg-white border-r border-neutral-200 flex-shrink-0`}>
+          {/* Sidebar Header */}
+          <div className="hidden md:flex items-center justify-between px-4 py-3 bg-[#f0f2f5] border-b border-neutral-200">
+            <h2 className="text-lg font-bold text-neutral-800">Broadcasts</h2>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto">
             {standards.map(s => {
               const broadcasts = (broadcastsByStandard[s.id] || []).filter(b => !b.deleted);
               const lastMsg = broadcasts[broadcasts.length - 1];
               const isActive = s.id === activeStdId;
               return (
-                <div key={s.id} className={`flex items-center gap-3 px-4 py-3.5 border-b border-[#F1EFEC] hover:bg-[#F4F2EF] transition-colors ${isActive ? 'bg-pastel-sky/50' : ''}`}>
-                  <button onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 text-neutral-700"
-                      style={{ background: PASTEL[pastelFor(s.name)].hex }}>
-                      <SubjectIcon value={s.emoji} size={22} fallback="graduation" />
+                <div key={s.id} className={`flex items-center gap-3 px-4 py-3 border-b border-neutral-100 cursor-pointer transition-colors ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`} onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-neutral-700 overflow-hidden"
+                    style={{ background: PASTEL[pastelFor(s.name)].hex }}>
+                    <SubjectIcon value={s.emoji} size={24} fallback="graduation" />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-base font-medium text-neutral-900 truncate">{s.name}</p>
+                      {lastMsg && <span className="text-xs text-neutral-500 flex-shrink-0">{lastMsg.time}</span>}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold truncate">{s.name}</p>
-                        {lastMsg && <span className="text-[10px] text-neutral-400 flex-shrink-0">{lastMsg.time}</span>}
-                      </div>
-                      <p className="text-xs text-neutral-500 truncate">
-                        {lastMsg ? lastMsg.text : `${studentCounts[s.id] || 0} students`}
-                      </p>
-                    </div>
-                  </button>
+                    <p className="text-sm text-neutral-500 truncate mt-0.5">
+                      {lastMsg ? lastMsg.text : `${studentCounts[s.id] || 0} students`}
+                    </p>
+                  </div>
                   {/* Auto-delete settings gear */}
                   <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setTtlOpenFor(ttlOpenFor === s.id ? null : s.id)}
-                      className={`p-1.5 rounded-md transition-colors ${ttlOpenFor === s.id ? 'text-neutral-700 bg-neutral-100' : 'text-neutral-300 hover:text-neutral-600 hover:bg-neutral-100'}`}
+                      className={`p-2 rounded-full transition-colors ${ttlOpenFor === s.id ? 'text-neutral-700 bg-neutral-200' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
                       title="Auto-delete settings">
-                      <Settings size={14} />
+                      <Settings size={18} />
                     </button>
                     {ttlOpenFor === s.id && (
                       <TTLPopover standardId={s.id} onClose={() => setTtlOpenFor(null)} />
@@ -170,25 +177,27 @@ export default function BroadcastsPage() {
               );
             })}
           </div>
+        </div>
 
-          {/* Thread pane */}
-          <div className={`${showThread ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-w-0`}>
-            {std ? (
-              <BroadcastThread
-                key={activeStdId}
-                std={std}
-                broadcasts={broadcastsByStandard[std.id] || []}
-                onUpdate={updater => updateBroadcasts(std.id, updater)}
-                onBack={() => setPaneView('list')}
-                showBackBtn={showThread}
-                studentCount={studentCounts[std.id] || 0}
-              />
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-sm text-neutral-400">
-                Select a class to view broadcasts
-              </div>
-            )}
-          </div>
+        {/* Thread pane (Chat Area) */}
+        <div className={`${showThread ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-w-0 bg-[#efeae2] relative`}>
+          {std ? (
+            <BroadcastThread
+              key={activeStdId}
+              std={std}
+              broadcasts={broadcastsByStandard[std.id] || []}
+              onUpdate={updater => updateBroadcasts(std.id, updater)}
+              onBack={() => setPaneView('list')}
+              showBackBtn={showThread}
+              studentCount={studentCounts[std.id] || 0}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-neutral-500">
+              <MessageSquare size={48} className="mb-4 text-neutral-300" strokeWidth={1} />
+              <p className="text-lg font-medium text-neutral-600">Tutoria Broadcasts</p>
+              <p className="text-sm text-neutral-400 mt-2">Select a class to send messages, assignments, and announcements.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

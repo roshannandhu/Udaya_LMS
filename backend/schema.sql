@@ -276,6 +276,8 @@ ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS chapters JSONB DEFAULT '[]';
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS topic_tag TEXT;
 ALTER TABLE tests ADD COLUMN IF NOT EXISTS topic_tag TEXT;
+-- Let a teacher dismiss an exam from the WhatsApp "Pending Actions" list ("Later"/✕):
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS results_notify_dismissed BOOLEAN DEFAULT false;
 
 -- ── Row Level Security ────────────────────────────────────────────────────────
 -- The FastAPI backend uses the service_role key which bypasses RLS.
@@ -686,14 +688,21 @@ CREATE TABLE IF NOT EXISTS whatsapp_templates (
     name                 TEXT NOT NULL,
     category             TEXT NOT NULL DEFAULT 'utility',   -- utility|marketing|auth
     language             TEXT NOT NULL DEFAULT 'en',
-    header_type          TEXT NOT NULL DEFAULT 'none',      -- none|image|document|audio|text
+    header_type          TEXT NOT NULL DEFAULT 'none',      -- none|image|document|audio|text (derived from media)
     body_text            TEXT NOT NULL,
+    media_url            TEXT,                              -- optional file attached to this template
+    media_type           TEXT,
+    media_name           TEXT,
     variables            JSONB DEFAULT '[]'::jsonb,
     provider_template_id TEXT,
     status               TEXT NOT NULL DEFAULT 'draft',     -- draft|pending|approved|rejected
     created_at           TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_wa_templates_teacher ON whatsapp_templates(teacher_id);
+-- Templates can carry an optional attachment (added after initial release):
+ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_url  TEXT;
+ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_type TEXT;
+ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_name TEXT;
 ALTER TABLE whatsapp_templates ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_all_wa_templates" ON whatsapp_templates;
 CREATE POLICY "deny_all_wa_templates" ON whatsapp_templates FOR ALL USING (false);
@@ -722,6 +731,10 @@ CREATE TABLE IF NOT EXISTS whatsapp_messages (
 CREATE INDEX IF NOT EXISTS idx_wa_messages_teacher  ON whatsapp_messages(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_wa_messages_created  ON whatsapp_messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_wa_messages_provider ON whatsapp_messages(provider_message_id);
+-- Attribute an exam-result send to its exam so the "Pending Actions" card can
+-- dedupe parents who have already been notified (added after initial release):
+ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS test_id UUID;
+CREATE INDEX IF NOT EXISTS idx_wa_messages_test ON whatsapp_messages(test_id);
 ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_all_wa_messages" ON whatsapp_messages;
 CREATE POLICY "deny_all_wa_messages" ON whatsapp_messages FOR ALL USING (false);

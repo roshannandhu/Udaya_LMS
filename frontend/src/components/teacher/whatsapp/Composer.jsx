@@ -1,11 +1,12 @@
 import React, { useRef, useState } from 'react';
-import { Paperclip, X, FileText, Image as ImageIcon, Music, Type } from 'lucide-react';
-import { Input, Textarea } from '../../ui';
+import { Paperclip, X, FileText, Image as ImageIcon, Music, Type, Loader2 } from 'lucide-react';
+import { Textarea } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
+import VariablePicker from './VariablePicker';
 
 const CATEGORIES = [
-  { id: 'utility',   label: 'Utility',   hint: 'Account & report updates — cheapest' },
-  { id: 'marketing', label: 'Marketing', hint: 'Promotions & announcements' },
+  { id: 'utility',   label: 'Update',     hint: 'Account & report updates — cheapest' },
+  { id: 'marketing', label: 'Promotion',  hint: 'Offers & announcements' },
   { id: 'auth',      label: 'Login code', hint: 'One-time passwords' },
 ];
 
@@ -24,33 +25,78 @@ function MediaIcon({ type }) {
   return <FileText size={14} />;
 }
 
-function currentMsgType(value) {
+function currentMsgType(value, pendingType) {
+  if (pendingType) return pendingType;
   if (!value.media_type) return 'text';
   if (value.media_type.startsWith('image')) return 'image';
   if (value.media_type.startsWith('audio')) return 'audio';
   return 'pdf';
 }
 
-// Compose a message: template (with variable slots) OR free-form, plus optional
-// media (PDF / image / audio). `value` is owned by the parent. Free-form is always
-// available (with a 24h-window note); no more silent dead-end.
-export default function Composer({ value, onChange, templates = [], onGoToTemplates }) {
+// Find the "ask" variables used in a body — ones the teacher must type a value for
+// before sending. A {tag} that matches an auto variable fills itself; anything else
+// (a known "ask" tag, or a custom word) becomes a labelled input.
+export function findAskVars(body = '', registry = []) {
+  const byName = {};
+  (registry || []).forEach((v) => { byName[String(v.name).toLowerCase()] = v; });
+  const b = String(body || '').replace(/\{\{/g, '{').replace(/\}\}/g, '}');
+  const out = [];
+  const seen = new Set();
+  let m;
+  const re = /\{([^{}]+)\}/g;
+  while ((m = re.exec(b)) !== null) {
+    const name = m[1].trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    const v = byName[key];
+    if (v && v.kind === 'auto') continue; // fills itself
+    seen.add(key);
+    out.push({ name, example: v?.example || '' });
+  }
+  return out;
+}
+
+// Compose a message: a saved template OR your own words, plus optional media.
+// One variable format ({Named Tags}); auto tags fill themselves, "ask" tags get a
+// small input below. `value` is owned by the parent.
+export default function Composer({ value, onChange, templates = [], onGoToTemplates,
+                                   provider = 'meta', selectedCount = 0, variables = [] }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [pendingAccept, setPendingAccept] = useState(null);
+  const [pendingType, setPendingType] = useState(null);
   const set = (patch) => onChange({ ...value, ...patch });
 
-  const approved = templates.filter(t => t.status === 'approved');
-  const selectedTemplate = approved.find(t => t.name === value.template_name);
-  const varCount = selectedTemplate?.variables?.length || 0;
-  const msgType = currentMsgType(value);
+  const isMeta = provider === 'meta';
+  // On Meta, only Meta-approved templates can reach parents; elsewhere every saved
+  // template is usable straight away.
+  const usable = isMeta ? templates.filter((t) => t.status === 'approved') : templates;
+  const selectedTemplate = usable.find((t) => t.name === value.template_name);
+
+  // "Write your own" only needs a guard on Meta (it can't free-message many parents).
+  const forceTemplate = isMeta && selectedCount > 1;
+  const mode = forceTemplate ? 'template' : (value.mode || 'template');
+
+  const msgType = currentMsgType(value, pendingType);
+
+  // Body the message is built from → drives the "fill in the blanks" inputs + preview.
+  const activeBody = mode === 'template' ? (selectedTemplate?.body_text || '') : (value.body_text || '');
+  const askVars = findAskVars(activeBody, variables);
+
+  const setManual = (name, v) => set({ manual_values: { ...(value.manual_values || {}), [name]: v } });
+  const insertTag = (token) => {
+    const body = value.body_text || '';
+    const needSpace = body && !body.endsWith(' ') && !body.endsWith('\n');
+    set({ body_text: body + (needSpace ? ' ' : '') + token });
+  };
 
   const pickType = (t) => {
     if (t.id === 'text') {
       set({ media_url: null, media_type: null, media_name: null });
+      setPendingType(null);
       return;
     }
-    // open the file picker filtered to this type
+    setPendingType(t.id);
     setPendingAccept(t.accept);
     setTimeout(() => fileRef.current?.click(), 0);
   };
@@ -62,8 +108,10 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
     try {
       const res = await whatsappApi.uploadMedia(file);
       set({ media_url: res.url, media_type: res.type, media_name: res.filename });
+      setPendingType(null);
     } catch (err) {
       alert(err.message || 'Upload failed');
+      setPendingType(null);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -82,8 +130,9 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
               <button key={t.id} onClick={() => pickType(t)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-xs font-medium border transition-colors ${
                   active ? 'bg-whatsapp-green-light text-whatsapp-green-fg border-whatsapp-green-fg/30'
-                         : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'}`}>
-                <t.icon size={14} /> {t.label}
+                         : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'}`}
+                disabled={uploading}>
+                {active && uploading ? <Loader2 size={14} className="animate-spin" /> : <t.icon size={14} />} {t.label}
               </button>
             );
           })}
@@ -91,46 +140,59 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
         <p className="text-[11px] text-neutral-400 mt-1">Pick a type to attach a file, or just type a text message below.</p>
       </div>
 
-      {/* Mode switch (template vs free-form) */}
+      {/* Mode switch (template vs your own words) */}
       <div>
-        <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Message wording</label>
+        <label className="text-xs font-medium text-neutral-600 mb-1.5 block">How do you want to write it?</label>
         <div className="flex flex-wrap items-center gap-2">
-          {['template', 'freeform'].map((m) => (
-            <button key={m}
-              onClick={() => set({ mode: m })}
-              className={`px-3 py-1.5 rounded-pill text-xs font-medium border transition-colors ${
-                value.mode === m
-                  ? 'bg-ink text-white border-ink'
-                  : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'
-              }`}>
-              {m === 'template' ? 'Use a ready template' : 'Write your own message'}
-            </button>
-          ))}
+          <button onClick={() => set({ mode: 'template' })}
+            className={`px-3 py-1.5 rounded-pill text-xs font-medium border transition-colors ${
+              mode === 'template' ? 'bg-ink text-white border-ink'
+                : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'}`}>
+            Use a saved template
+          </button>
+          <button onClick={() => { if (!forceTemplate) set({ mode: 'freeform' }); }}
+            disabled={forceTemplate}
+            title={forceTemplate ? 'Available when messaging a single parent' : ''}
+            className={`px-3 py-1.5 rounded-pill text-xs font-medium border transition-colors ${
+              mode === 'freeform' ? 'bg-ink text-white border-ink'
+                : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'} ${
+              forceTemplate ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            Write your own
+          </button>
         </div>
-        <p className="text-[11px] text-neutral-400 mt-1">
-          {value.mode === 'template'
-            ? 'Templates are pre-approved by WhatsApp — the way to reach parents who haven’t messaged you recently.'
-            : 'Heads-up: a message you type yourself only reaches parents who messaged you in the last 24 hours. For everyone else, use a ready template.'}
-        </p>
+        {isMeta && (
+          <p className="text-[11px] text-neutral-400 mt-1">
+            {mode === 'template'
+              ? (forceTemplate ? 'Multiple parents selected — a saved template is required on WhatsApp Cloud.'
+                               : 'Templates are pre-approved by WhatsApp, so they reach everyone.')
+              : 'Heads-up: your own words only reach a parent who messaged you in the last 24 hours.'}
+          </p>
+        )}
       </div>
 
-      {value.mode === 'template' ? (
+      {mode === 'template' ? (
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Choose a template</label>
-            <select
-              value={value.template_name || ''}
-              onChange={(e) => set({ template_name: e.target.value })}
+            <select value={value.template_name || ''}
+              onChange={(e) => {
+                const tmpl = usable.find((t) => t.name === e.target.value);
+                // Auto-attach the template's own file (if it has one).
+                set({ template_name: e.target.value, category: tmpl?.category || 'utility',
+                  media_url: tmpl?.media_url || null, media_type: tmpl?.media_type || null,
+                  media_name: tmpl?.media_name || null });
+              }}
               className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm outline-none focus:border-neutral-400">
               <option value="">Select a template…</option>
-              {approved.map(t => <option key={t.id} value={t.name}>{t.name} ({t.category})</option>)}
+              {usable.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
-            {approved.length === 0 && (
+            {usable.length === 0 && (
               <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2 text-[11px] text-amber-800">
-                No ready templates yet. {onGoToTemplates
+                No saved templates yet.{' '}
+                {onGoToTemplates
                   ? <button onClick={onGoToTemplates} className="underline font-medium">Create one in Templates →</button>
                   : 'Create one in the Templates tab.'}
-                {' '}Or switch to <span className="font-medium">“Write your own message”</span> for parents who messaged you in the last 24h.
+                {' '}Or switch to <span className="font-medium">“Write your own”</span>.
               </div>
             )}
           </div>
@@ -140,45 +202,53 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
               {selectedTemplate.body_text}
             </div>
           )}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <Textarea label="Your message" rows={5} placeholder="Type your message to parents…"
+            value={value.body_text || ''} onChange={(e) => set({ body_text: e.target.value })} />
+          <VariablePicker variables={variables} onInsert={insertTag} />
 
-          {varCount > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] text-neutral-500">Fill in the blanks — these change per parent:</p>
-              {Array.from({ length: varCount }).map((_, i) => (
-                <Input key={i} label={selectedTemplate.variables[i] || `Value for blank ${i + 1}`}
-                  placeholder={selectedTemplate.variables[i] || `Value for blank ${i + 1}`}
-                  value={(value.variables || [])[i] || ''}
-                  onChange={(e) => {
-                    const vars = [...(value.variables || [])];
-                    vars[i] = e.target.value;
-                    set({ variables: vars });
-                  }} />
-              ))}
+          {provider !== 'evolution' && (
+            <div>
+              <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Message type (affects cost)</label>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((c) => (
+                  <button key={c.id} onClick={() => set({ category: c.id })} title={c.hint}
+                    className={`px-3 py-1.5 rounded-pill text-xs font-medium border ${
+                      value.category === c.id ? 'bg-ink text-white border-ink' : 'bg-white text-neutral-700 border-[#EBEAE7]'}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-neutral-400 mt-1">
+                {CATEGORIES.find((c) => c.id === value.category)?.hint || CATEGORIES[0].hint}
+              </p>
             </div>
           )}
         </div>
-      ) : (
-        <Textarea label="Your message" rows={5} placeholder="Type your message to parents…"
-          value={value.body_text || ''} onChange={(e) => set({ body_text: e.target.value })} />
       )}
 
-      {/* Category */}
-      <div>
-        <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Message type (affects cost)</label>
-        <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map(c => (
-            <button key={c.id} onClick={() => set({ category: c.id })} title={c.hint}
-              className={`px-3 py-1.5 rounded-pill text-xs font-medium border ${
-                value.category === c.id ? 'bg-ink text-white border-ink' : 'bg-white text-neutral-700 border-[#EBEAE7]'
-              }`}>
-              {c.label}
-            </button>
-          ))}
+      {/* Fill in the blanks — only the variables that can't fill themselves */}
+      {askVars.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+          <p className="text-[11px] font-medium text-amber-800 mb-2">
+            Fill in these blanks before sending — the same value goes to every parent:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {askVars.map((v) => (
+              <div key={v.name} className="flex flex-col gap-1">
+                <label className="text-[11px] font-medium text-neutral-600">{v.name}</label>
+                <input
+                  value={(value.manual_values || {})[v.name] || ''}
+                  onChange={(e) => setManual(v.name, e.target.value)}
+                  placeholder={v.example ? `e.g. ${v.example}` : v.name}
+                  className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] text-sm outline-none focus:border-neutral-400" />
+              </div>
+            ))}
+          </div>
         </div>
-        <p className="text-[11px] text-neutral-400 mt-1">
-          {CATEGORIES.find(c => c.id === value.category)?.hint || CATEGORIES[0].hint}
-        </p>
-      </div>
+      )}
 
       {/* Media attach (shown when a non-text type is active, or a file is attached) */}
       {(msgType !== 'text' || value.media_url) && (
@@ -188,13 +258,13 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
             <div className="flex items-center gap-2 bg-[#F7F6F4] border border-[#EBEAE7] rounded-xl px-3 py-2">
               <MediaIcon type={value.media_type} />
               <span className="text-sm flex-1 truncate">{value.media_name || value.media_type}</span>
-              <button onClick={() => set({ media_url: null, media_type: null, media_name: null })}
+              <button onClick={() => { set({ media_url: null, media_type: null, media_name: null }); setPendingType(null); }}
                 className="text-neutral-400 hover:text-neutral-700"><X size={15} /></button>
             </div>
           ) : (
             <button onClick={() => fileRef.current?.click()} disabled={uploading}
               className="flex items-center gap-2 text-sm text-neutral-700 border border-dashed border-[#D9D7D3] rounded-xl px-3 py-2.5 w-full hover:bg-[#F4F2EF]">
-              <Paperclip size={15} />
+              {uploading ? <Loader2 size={15} className="animate-spin" /> : <Paperclip size={15} />}
               {uploading ? 'Uploading…' : 'Choose a file'}
             </button>
           )}

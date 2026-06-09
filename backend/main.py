@@ -29,7 +29,7 @@ app = FastAPI(title="Tutoria LMS API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -105,10 +105,13 @@ async def _ensure_live_class_columns():
     """Auto-add live-class auto-thumbnail/passcode columns + teacher_branding table if missing."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
         return
-    # Probe first — fast path if everything already exists
+    # Probe first — fast path if everything already exists. Probe the NEWEST
+    # column of each table (e.g. teacher_branding.profile_photo_url) so an
+    # un-migrated DB falls through and the DDL below runs.
     try:
         service_supabase.table("live_classes").select("thumbnail_url").limit(1).execute()
-        service_supabase.table("teacher_branding").select("teacher_id").limit(1).execute()
+        service_supabase.table("teacher_branding").select("profile_photo_url").limit(1).execute()
+        service_supabase.table("whatsapp_templates").select("media_url").limit(1).execute()
         return
     except Exception:
         pass
@@ -128,7 +131,11 @@ async def _ensure_live_class_columns():
             thumbnail_text_side TEXT DEFAULT 'right',
             updated_at          TIMESTAMPTZ DEFAULT now()
         );
+        ALTER TABLE teacher_branding ADD COLUMN IF NOT EXISTS profile_photo_url TEXT;
         ALTER TABLE teacher_branding ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_url TEXT;
+        ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_type TEXT;
+        ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_name TEXT;
     """
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -136,7 +143,7 @@ async def _ensure_live_class_columns():
                 f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
             )
             if resp.is_success:
-                print("[*] Auto-migrated: live_classes thumbnail/passcode columns + teacher_branding table")
+                print("[*] Auto-migrated: live_classes + teacher_branding + whatsapp_templates media columns")
             else:
                 raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
     except Exception as e:
@@ -1606,7 +1613,7 @@ def delete_subject(subject_id: str, user = Depends(verify_token)):
 
 # Students
 @app.get("/api/students")
-def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)):
+def get_students(standard_id: Optional[str] = None, include_passwords: bool = False, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -1616,15 +1623,26 @@ def get_students(standard_id: Optional[str] = None, user = Depends(verify_token)
     student_public_fields = "id, name, username, standard_id, points, attendance_pct, avg_score, avatar_url"
 
     if user["role"] == "teacher":
-        if standard_id:
-            response = service_supabase.table("students").select(teacher_fields).eq("standard_id", standard_id).execute()
-        else:
+        def _run(sel):
+            if standard_id:
+                return service_supabase.table("students").select(sel).eq("standard_id", standard_id).execute()
             standards = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
             standard_ids = [s["id"] for s in (standards.data or [])]
-            if standard_ids:
-                response = service_supabase.table("students").select(teacher_fields).in_("standard_id", standard_ids).execute()
-            else:
-                return []
+            if not standard_ids:
+                return None
+            return service_supabase.table("students").select(sel).in_("standard_id", standard_ids).execute()
+
+        if include_passwords:
+            # The Manage grid asks for plain_password explicitly (teacher-only).
+            # Guard the column — older DBs without it must fall back, not 500.
+            try:
+                response = _run(teacher_fields + ", plain_password")
+            except Exception:
+                response = _run(teacher_fields)
+        else:
+            response = _run(teacher_fields)
+        if response is None:
+            return []
     else:
         # Students can see classmates but not their phone/email
         if standard_id:
@@ -5513,7 +5531,14 @@ async def get_live_classes(class_id: Optional[str] = None, standard_id: Optional
             return service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
         def fetch_brand():
             if not owner_id: return None
-            return service_supabase.table("teacher_branding").select("thumbnail_url, thumbnail_text_side, profile_photo_url").eq("teacher_id", owner_id).single().execute()
+            # Branding is decorative — never let a missing column/row (e.g.
+            # teacher_branding.profile_photo_url absent on an un-migrated DB) raise
+            # here, since this runs inside asyncio.gather() and would otherwise 500
+            # the entire live-classes list and show zero cards.
+            try:
+                return service_supabase.table("teacher_branding").select("thumbnail_url, thumbnail_text_side, profile_photo_url").eq("teacher_id", owner_id).single().execute()
+            except Exception:
+                return None
         def fetch_enroll():
             return service_supabase.table("students").select("id", count="exact").eq("standard_id", standard_id).execute()
 
@@ -6891,6 +6916,10 @@ class WhatsAppConfigInput(BaseModel):
     meta_access_token: Optional[str] = None    # secret — only overwritten when sent non-empty
     meta_phone_number_id: Optional[str] = None
     meta_waba_id: Optional[str] = None
+    # Evolution API
+    evolution_base_url: Optional[str] = None
+    evolution_api_key: Optional[str] = None    # secret
+    evolution_instance: Optional[str] = None
 
 class WhatsAppEstimateInput(BaseModel):
     standard_ids: Optional[List[str]] = None
@@ -6903,7 +6932,8 @@ class WhatsAppSendInput(BaseModel):
     mode: str = "template"                  # template|freeform
     template_name: Optional[str] = None
     language: str = "en"
-    variables: Optional[list] = None
+    variables: Optional[list] = None        # legacy (ignored by the named-tag engine)
+    manual_values: Optional[dict] = None    # {"Fee Amount": "5000", ...} for "ask" variables
     body_text: Optional[str] = None
     media_url: Optional[str] = None
     media_type: Optional[str] = None
@@ -6914,8 +6944,11 @@ class WhatsAppTemplateInput(BaseModel):
     name: str
     category: str = "utility"
     language: str = "en"
-    header_type: str = "none"
+    header_type: str = "none"               # derived from media on save
     body_text: str
+    media_url: Optional[str] = None         # optional file attached to the template
+    media_type: Optional[str] = None
+    media_name: Optional[str] = None
     variables: Optional[list] = None
     submit: bool = False                    # also push to provider for approval
 
@@ -6976,6 +7009,206 @@ def _wa_login_url() -> str:
         return ""
 
 
+# ── Variables (single source of truth) ────────────────────────────────────────
+# Human-friendly variables a teacher can drop into a message. "auto" variables are
+# filled from real data per student; "ask" variables prompt the teacher to type a
+# value once before sending. The frontend picker is driven by this exact list
+# (GET /api/teacher/whatsapp/variables) so nothing drifts.
+WA_VARIABLES = [
+    {"name": "Student Name",       "kind": "auto", "group": "Student",     "example": "Arjun",            "description": "The student's name"},
+    {"name": "Student ID",         "kind": "auto", "group": "Student",     "example": "25UDAYA100001",    "description": "The login Student ID"},
+    {"name": "Class",              "kind": "auto", "group": "Student",     "example": "10th Standard",    "description": "The student's class / standard"},
+    {"name": "Username",           "kind": "auto", "group": "Login",       "example": "arjun01",          "description": "Login username"},
+    {"name": "Password",           "kind": "auto", "group": "Login",       "example": "••••••",           "description": "Login password"},
+    {"name": "Login Link",         "kind": "auto", "group": "Login",       "example": "your portal link", "description": "Link to your portal"},
+    {"name": "Attendance",         "kind": "auto", "group": "Performance", "example": "92%",              "description": "Attendance percentage"},
+    {"name": "Score",              "kind": "auto", "group": "Performance", "example": "88%",              "description": "Average score"},
+    {"name": "Points",             "kind": "auto", "group": "Performance", "example": "120",              "description": "Reward points earned"},
+    {"name": "Latest Exam",        "kind": "auto", "group": "Academics",   "example": "Unit Test 2",      "description": "Most recent exam name"},
+    {"name": "Latest Assignment",  "kind": "auto", "group": "Academics",   "example": "Algebra Worksheet","description": "Most recent assignment"},
+    {"name": "Study Material",     "kind": "auto", "group": "Academics",   "example": "Chapter 5 Notes",  "description": "Latest study material"},
+    {"name": "Live Class",         "kind": "auto", "group": "Academics",   "example": "Physics Doubts",   "description": "Upcoming live class"},
+    {"name": "Institute Name",     "kind": "auto", "group": "General",     "example": "Udaya Academy",    "description": "Your institute's name"},
+    {"name": "Date",               "kind": "auto", "group": "General",     "example": "08 Jun 2026",      "description": "Today's date"},
+    {"name": "Time",               "kind": "auto", "group": "General",     "example": "03:45 PM",         "description": "Current time"},
+    {"name": "Fee Amount",         "kind": "ask",  "group": "You type this", "example": "5000",           "description": "You'll type this before sending"},
+    {"name": "Due Date",           "kind": "ask",  "group": "You type this", "example": "15 Jun",         "description": "You'll type this before sending"},
+    {"name": "Class Date",         "kind": "ask",  "group": "You type this", "example": "Monday",         "description": "You'll type this before sending"},
+    {"name": "Class Time",         "kind": "ask",  "group": "You type this", "example": "5:00 PM",        "description": "You'll type this before sending"},
+    {"name": "Teacher Name",       "kind": "ask",  "group": "You type this", "example": "Mr. Rao",        "description": "You'll type this before sending"},
+]
+
+# Every key an "auto" variable can resolve to (canonical, lower-cased). Includes a
+# couple of resolvable-but-unlisted ones ({Parent Name}, {Student Phone}).
+_WA_AUTO_KEYS = {
+    "student name", "student id", "class", "username", "password", "login link",
+    "institute name", "attendance", "score", "points", "latest exam",
+    "latest assignment", "study material", "live class", "date", "time",
+    "month", "year", "parent name", "student phone",
+}
+
+# Legacy / loose spellings → canonical auto key. Keeps old templates and snake-case
+# tags ({student_name}, {school_name}…) working with the new named engine.
+_WA_ALIAS = {
+    "student_name": "student name", "name": "student name", "child": "student name",
+    "student_code": "student id", "studentid": "student id", "roll no": "student id", "id": "student id",
+    "class_name": "class", "standard": "class", "grade": "class",
+    "school_name": "institute name", "school": "institute name", "institute": "institute name",
+    "login_url": "login link", "link": "login link", "url": "login link",
+    "parent_name": "parent name", "guardian": "parent name",
+    "student_phone": "student phone", "phone": "student phone", "mobile": "student phone",
+    "test": "latest exam", "exam": "latest exam", "latest_test": "latest exam",
+    "assignment": "latest assignment", "homework": "latest assignment", "latest_assignment": "latest assignment",
+    "study_material": "study material", "material": "study material", "notes": "study material",
+    "live_class": "live class", "zoom": "live class", "meeting": "live class",
+    "marks": "score", "average": "score", "percentage": "score",
+}
+
+
+def _wa_auto_value(key: str, recip: dict) -> str:
+    """Resolve a canonical auto-variable key to a string for one recipient."""
+    now = datetime.now()
+    table = {
+        "student name":      recip.get("name") or "Student",
+        "student id":        recip.get("student_code") or "",
+        "class":             recip.get("standard_name") or "",
+        "username":          recip.get("username") or "",
+        "password":          recip.get("plain_password") or "******",
+        "login link":        _wa_login_url() or "",
+        "institute name":    _wa_branding_name() or "our institute",
+        "parent name":       "Parent",
+        "student phone":     recip.get("phone") or "",
+        "attendance":        f"{recip.get('attendance_pct') or 0}%",
+        "score":             f"{recip.get('avg_score') or 0}%",
+        "points":            str(recip.get("points") or 0),
+        "latest exam":       recip.get("latest_test") or "",
+        "latest assignment": recip.get("latest_assignment") or "",
+        "study material":    recip.get("latest_material") or "",
+        "live class":        recip.get("upcoming_live_class") or "",
+        "date":              now.strftime("%d %b %Y"),
+        "time":              now.strftime("%I:%M %p"),
+        "month":             now.strftime("%B"),
+        "year":              now.strftime("%Y"),
+    }
+    return table.get(key, "")
+
+
+def _wa_canonical(raw: str) -> str:
+    key = str(raw or "").strip().lower()
+    return _WA_ALIAS.get(key, key)
+
+
+def _wa_normalize_body(body: str) -> str:
+    """Forgiving clean-up of a freshly typed body: collapse accidental {{x}} to {x}
+    and drop empty {} so they never reach a parent as broken placeholders."""
+    if not body:
+        return body or ""
+    b = body.replace("{{", "{").replace("}}", "}")
+    return re.sub(r"\{\s*\}", "", b)
+
+
+def _wa_render(text_or_list, recip: dict, manual_values: Optional[dict] = None):
+    """THE single template engine. Replace every {Named Tag} in a body (or list of
+    strings) with its value for this recipient: auto tags from data, the rest from
+    the teacher's manual_values map. Unknown / empty tags are stripped, never sent
+    as raw braces. Replaces the old positional {{1}} system + guess heuristics."""
+    mv = {str(k).strip().lower(): ("" if v is None else str(v))
+          for k, v in (manual_values or {}).items()}
+
+    def render_one(s: str) -> str:
+        s = str(s or "").replace("{{", "{").replace("}}", "}")
+
+        def repl(m):
+            raw = m.group(1).strip()
+            key = raw.lower()
+            canon = _WA_ALIAS.get(key, key)
+            if canon in _WA_AUTO_KEYS:
+                return _wa_auto_value(canon, recip)
+            if key in mv:
+                return mv[key]
+            if canon in mv:
+                return mv[canon]
+            return ""  # unknown / unfilled → strip (no broken placeholder)
+
+        out = re.sub(r"\{([^{}]+)\}", repl, s)
+        return out.replace("{}", "")
+
+    if isinstance(text_or_list, list):
+        return [render_one(v) for v in text_or_list]
+    return render_one(text_or_list)
+
+
+def _wa_parse_variables(body: str) -> list:
+    """List the variables used in a body (de-duplicated, in order). Each is tagged
+    auto|ask so the UI knows which ones to prompt for. Drives template-save responses
+    and the composer's 'fill in the blanks' inputs."""
+    body = _wa_normalize_body(body)
+    out, seen = [], set()
+    for m in re.finditer(r"\{([^{}]+)\}", body or ""):
+        raw = m.group(1).strip()
+        if not raw:
+            continue
+        key = raw.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        canon = _WA_ALIAS.get(key, key)
+        is_auto = canon in _WA_AUTO_KEYS
+        out.append({"name": raw, "kind": "auto" if is_auto else "ask"})
+    return out
+
+
+def _wa_to_meta_body(body: str):
+    """Convert a named-tag body to Meta's positional {{1}}, {{2}}… format and return
+    (positional_body, [ordered_names]). Used ONLY at Meta template-submit/send time."""
+    body = _wa_normalize_body(body)
+    names = []
+
+    def repl(m):
+        raw = m.group(1).strip()
+        if raw.lower() not in [n.lower() for n in names]:
+            names.append(raw)
+        idx = [n.lower() for n in names].index(raw.lower())
+        return "{{%d}}" % (idx + 1)
+
+    out = re.sub(r"\{([^{}]+)\}", repl, body or "")
+    return out, names
+
+
+def _wa_positional_values(body: str, recip: dict, manual_values: Optional[dict] = None) -> list:
+    """Resolve a named-tag body's variables to an ordered value list aligned with the
+    {{1}}, {{2}}… produced by _wa_to_meta_body — for Meta send_template()."""
+    _, names = _wa_to_meta_body(body)
+    mv = {str(k).strip().lower(): ("" if v is None else str(v))
+          for k, v in (manual_values or {}).items()}
+    vals = []
+    for raw in names:
+        key = raw.strip().lower()
+        canon = _WA_ALIAS.get(key, key)
+        if canon in _WA_AUTO_KEYS:
+            vals.append(str(_wa_auto_value(canon, recip)))
+        else:
+            vals.append(mv.get(key, mv.get(canon, "")))
+    return vals
+
+
+def _wa_migrate_legacy_body(body: str, labels) -> str:
+    """One-way: turn an old stored body with Meta positional {{1}}/{{2}} back into
+    named tags using the stored variable labels, so legacy templates open correctly
+    in the new editor. Best-effort; stray placeholders are dropped."""
+    if not body or "{{" not in body:
+        return body
+    labels = labels or []
+
+    def repl(m):
+        i = int(m.group(1)) - 1
+        if 0 <= i < len(labels) and str(labels[i]).strip():
+            return "{" + str(labels[i]).strip() + "}"
+        return ""
+
+    return re.sub(r"\{\{\s*(\d+)\s*\}\}", repl, body)
+
+
 def _wa_fetch_credentials(student_ids: List[str]) -> dict:
     """Map student_id → {student_code, plain_password, must_change_pwd}. Sensitive —
     only used by the credentials/welcome send path. Graceful-degrades."""
@@ -7013,15 +7246,58 @@ def _wa_fetch_students(standard_ids: List[str]) -> list:
         return []
     try:
         rows = service_supabase.table("students").select(
-            "id, name, phone, student_code, standard_id, whatsapp_opt_out"
+            "id, name, username, phone, student_code, standard_id, whatsapp_opt_out, attendance_pct, avg_score, points, plain_password"
         ).in_("standard_id", standard_ids).execute().data or []
     except Exception:
         rows = service_supabase.table("students").select(
-            "id, name, phone, student_code, standard_id"
+            "id, name, username, phone, student_code, standard_id, attendance_pct, avg_score, points, plain_password"
         ).in_("standard_id", standard_ids).execute().data or []
         for r in rows:
             r["whatsapp_opt_out"] = False
     return rows
+
+
+def _wa_fetch_standard_events(standard_ids: List[str]) -> dict:
+    """Fetches the latest assignment, test, and upcoming live class for each standard."""
+    out = {sid: {} for sid in standard_ids}
+    try:
+        classes = service_supabase.table("subject_classes").select("id, standard_id").in_("standard_id", standard_ids).execute().data or []
+        class_to_std = {c["id"]: c["standard_id"] for c in classes}
+        class_ids = list(class_to_std.keys())
+        if not class_ids: return out
+        
+        assigns = service_supabase.table("assignments").select("title, class_id").in_("class_id", class_ids).order("created_at", desc=True).execute().data or []
+        for a in assigns:
+            std = class_to_std.get(a["class_id"])
+            if std and "latest_assignment" not in out[std]:
+                out[std]["latest_assignment"] = a["title"]
+                
+        tests = service_supabase.table("tests").select("title, class_id").in_("class_id", class_ids).order("created_at", desc=True).execute().data or []
+        for t in tests:
+            std = class_to_std.get(t["class_id"])
+            if std and "latest_test" not in out[std]:
+                out[std]["latest_test"] = t["title"]
+                
+        lives = service_supabase.table("live_classes").select("title, class_id").in_("class_id", class_ids).eq("status", "scheduled").order("scheduled_at").execute().data or []
+        for l in lives:
+            std = class_to_std.get(l["class_id"])
+            if std and "upcoming_live_class" not in out[std]:
+                out[std]["upcoming_live_class"] = l["title"]
+                
+        videos = service_supabase.table("videos").select("title, class_id").in_("class_id", class_ids).order("created_at", desc=True).execute().data or []
+        for v in videos:
+            std = class_to_std.get(v["class_id"])
+            if std and "latest_video" not in out[std]:
+                out[std]["latest_video"] = v["title"]
+                
+        materials = service_supabase.table("study_materials").select("title, class_id").in_("class_id", class_ids).order("created_at", desc=True).execute().data or []
+        for m in materials:
+            std = class_to_std.get(m["class_id"])
+            if std and "latest_material" not in out[std]:
+                out[std]["latest_material"] = m["title"]
+    except Exception as e:
+        print(f"Error fetching contextual standard events: {e}")
+    return out
 
 
 def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=None,
@@ -7036,20 +7312,33 @@ def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=N
         return []
     inc = set(included_student_ids) if included_student_ids else None
     out = []
+    events = _wa_fetch_standard_events(target)
     for r in _wa_fetch_students(target):
         if inc is not None and r["id"] not in inc:
             continue
         if not include_opted_out and r.get("whatsapp_opt_out"):
             continue
+            
+        std_id = r.get("standard_id")
         out.append({
             "id": r["id"],
             "name": r.get("name") or "",
+            "username": r.get("username") or "",
             "phone": r.get("phone") or "",
             "student_code": r.get("student_code") or "",
-            "standard_id": r.get("standard_id"),
-            "standard_name": std_name.get(r.get("standard_id"), ""),
+            "standard_id": std_id,
+            "standard_name": std_name.get(std_id, ""),
             "opted_out": bool(r.get("whatsapp_opt_out")),
-            "session_open": False,   # conservative: free-form only when known-open
+            "session_open": getattr(wa.get_provider(), 'name', '') == 'evolution',
+            "attendance_pct": r.get("attendance_pct") or 0,
+            "avg_score": r.get("avg_score") or 0,
+            "points": r.get("points") or 0,
+            "plain_password": r.get("plain_password") or "",
+            "latest_assignment": events.get(std_id, {}).get("latest_assignment") or "N/A",
+            "latest_test": events.get(std_id, {}).get("latest_test") or "N/A",
+            "upcoming_live_class": events.get(std_id, {}).get("upcoming_live_class") or "N/A",
+            "latest_video": events.get(std_id, {}).get("latest_video") or "N/A",
+            "latest_material": events.get(std_id, {}).get("latest_material") or "N/A",
         })
     return out
 
@@ -7070,20 +7359,65 @@ async def _wa_upload_bytes(data: bytes, ext: str, content_type: str) -> str:
     return await asyncio.to_thread(lambda: service_supabase.storage.from_("whatsapp").get_public_url(fname))
 
 
+_WA_MESSAGES_TEST_ID_OK = False
+
+
+def _wa_messages_have_test_id() -> bool:
+    """True once whatsapp_messages has the test_id column. Self-heals after the
+    one-time ALTER (see schema.sql) so sends never crash before it's run, and the
+    pending detector can dedupe by exam once it's present."""
+    global _WA_MESSAGES_TEST_ID_OK
+    if _WA_MESSAGES_TEST_ID_OK:
+        return True
+    try:
+        service_supabase.table("whatsapp_messages").select("test_id").limit(1).execute()
+        _WA_MESSAGES_TEST_ID_OK = True
+    except Exception:
+        _WA_MESSAGES_TEST_ID_OK = False
+    return _WA_MESSAGES_TEST_ID_OK
+
+
 async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_name=None,
-                           variables=None, body_text=None, media_url=None, media_type=None,
-                           category="utility", language="en", standard_id=None, job_id=None):
+                           variables=None, body_text=None, manual_values=None,
+                           template_body=None, meta_approved=False,
+                           media_url=None, media_type=None,
+                           category="utility", language="en", standard_id=None, job_id=None,
+                           test_id=None):
     """Send one message and write a whatsapp_messages row. Returns a per-recipient
-    result dict. Never raises — provider/network errors become a 'failed' status."""
+    result dict. Never raises — provider/network errors become a 'failed' status.
+
+    The message body (named {Tags}) is rendered once via the single _wa_render engine.
+    A true Meta template is only used when the active provider is Meta AND the named
+    template has a Meta-approved counterpart; otherwise the rendered text is sent as a
+    normal message (the beginner/Evolution path)."""
     to = (recipient.get("phone") or "").strip()
     if not to:
         return {"student_id": recipient.get("id"), "name": recipient.get("name"),
                 "status": "failed", "error": "No phone number", "cost": 0}
+
+    # Resolve the named-tag body to render. Callers may pass body_text directly
+    # (reports/credentials), or just a template_name we look up.
+    raw_body = body_text
+    if raw_body is None and mode == "template" and template_name:
+        raw_body = template_body
+        if raw_body is None:
+            try:
+                t_rows = service_supabase.table("whatsapp_templates").select("body_text").eq(
+                    "name", template_name).eq("teacher_id", teacher_id).execute().data
+                raw_body = (t_rows[0].get("body_text") if t_rows else "") or ""
+            except Exception as e:
+                print(f"[wa] template body fetch failed: {e}")
+                raw_body = ""
+    rendered = _wa_render(raw_body or "", recipient, manual_values)
+
+    use_meta_template = (provider.name == "meta" and mode == "template"
+                         and bool(template_name) and meta_approved)
     try:
-        if mode == "template":
-            res = await provider.send_template(to, template_name, variables, media_url, media_type, language)
+        if use_meta_template:
+            positional = _wa_positional_values(template_body or raw_body or "", recipient, manual_values)
+            res = await provider.send_template(to, template_name, positional, media_url, media_type, language)
         else:
-            res = await provider.send_freeform(to, body_text or "", media_url, media_type)
+            res = await provider.send_freeform(to, rendered, media_url, media_type)
     except Exception as e:
         res = {"status": "failed", "provider_message_id": None, "error": str(e)}
 
@@ -7097,7 +7431,7 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
         "student_id": recipient.get("id"),
         "to_phone": to,
         "template_name": template_name if mode == "template" else None,
-        "body_text": body_text,
+        "body_text": rendered,
         "media_url": media_url,
         "media_type": media_type,
         "category": category,
@@ -7109,6 +7443,8 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
         "job_id": job_id,
         "sent_at": datetime.now(timezone.utc).isoformat() if billable else None,
     }
+    if test_id and _wa_messages_have_test_id():
+        row["test_id"] = test_id
     try:
         service_supabase.table("whatsapp_messages").insert(row).execute()
     except Exception as e:
@@ -7139,6 +7475,10 @@ def _wa_is_configured(cfg: dict) -> bool:
     if provider == "meta":
         return bool((cfg.get("meta_access_token") or "").strip()
                     and (cfg.get("meta_phone_number_id") or "").strip())
+    if provider == "evolution":
+        return bool((cfg.get("evolution_base_url") or "").strip()
+                    and (cfg.get("evolution_api_key") or "").strip()
+                    and (cfg.get("evolution_instance") or "").strip())
     return bool((cfg.get("api_key") or "").strip())
 
 
@@ -7155,6 +7495,10 @@ def wa_get_config(user = Depends(verify_token)):
         "meta_phone_number_id": cfg.get("meta_phone_number_id", ""),
         "meta_waba_id": cfg.get("meta_waba_id", ""),
         "meta_token_masked": wa.mask_key(cfg.get("meta_access_token")),
+        # Evolution API
+        "evolution_base_url": cfg.get("evolution_base_url", ""),
+        "evolution_instance": cfg.get("evolution_instance", ""),
+        "evolution_key_masked": wa.mask_key(cfg.get("evolution_api_key")),
         "rates": wa.get_rates(cfg),
         "currency": cfg.get("currency", wa.DEFAULT_CURRENCY),
         "auto_welcome": bool(cfg.get("auto_welcome")),
@@ -7169,7 +7513,7 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
     cfg = wa.get_wa_config()
     patch = data.model_dump(exclude_unset=True)
     # Never wipe a stored secret with a blank/masked value.
-    for secret in ("api_key", "meta_access_token"):
+    for secret in ("api_key", "meta_access_token", "evolution_api_key"):
         if secret in patch:
             new_val = (patch.pop(secret) or "").strip()
             if new_val and not new_val.startswith("••••"):
@@ -7178,6 +7522,57 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
         cfg[k] = v
     wa.save_wa_config(cfg)
     return {"success": True, "configured": _wa_is_configured(cfg)}
+
+
+# ── Connection / QR pairing (WhatsApp-Web-style setup) ─────────────────────────
+@app.get("/api/teacher/whatsapp/connection")
+async def wa_connection(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    cfg = wa.get_wa_config()
+    provider = (cfg.get("provider") or "wanotifier").lower()
+    if provider == "evolution":
+        prov = wa.get_provider(cfg)
+        if getattr(prov, "name", "") != "evolution":
+            return {"provider": provider, "connected": False, "state": "no_server", "number": "",
+                    "error": "The WhatsApp server isn’t set up yet. Ask your admin to add it under Advanced."}
+        state = await prov.connection_state()
+        connected = state == "open"
+        number = await prov.owner_number() if connected else ""
+        return {"provider": provider, "connected": connected, "state": state, "number": number}
+    # Meta / WANotifier don't QR-pair — "connected" just means credentials are present.
+    configured = _wa_is_configured(cfg)
+    return {"provider": provider, "connected": configured,
+            "state": "open" if configured else "close", "number": ""}
+
+
+@app.get("/api/teacher/whatsapp/qr")
+async def wa_qr(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    cfg = wa.get_wa_config()
+    provider = (cfg.get("provider") or "wanotifier").lower()
+    if provider != "evolution":
+        return {"state": "n/a",
+                "error": "Scan-to-connect is for the simple setup. Your provider connects with credentials under Advanced."}
+    prov = wa.get_provider(cfg)
+    if getattr(prov, "name", "") != "evolution":
+        return {"state": "no_server",
+                "error": "The WhatsApp server isn’t set up yet. Ask your admin to add it under Advanced (for developers)."}
+    state = await prov.connection_state()
+    if state == "open":
+        return {"state": "open", "qr_base64": None, "pairing_code": None}
+    res = await prov.get_qr()
+    return {"state": state, "qr_base64": res.get("qr_base64"),
+            "pairing_code": res.get("pairing_code"), "error": res.get("error")}
+
+
+@app.post("/api/teacher/whatsapp/disconnect")
+async def wa_disconnect(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    prov = wa.get_provider(wa.get_wa_config())
+    if getattr(prov, "name", "") == "evolution":
+        r = await prov.logout()
+        return {"success": bool(r.get("_ok")), "error": r.get("error")}
+    return {"success": True}
 
 
 # ── Recipients (grouped by class) ─────────────────────────────────────────────
@@ -7196,6 +7591,13 @@ def wa_recipients(standard_ids: Optional[str] = None, user = Depends(verify_toke
         "total": len([r for r in recips if not r["opted_out"]]),
         "with_phone": len([r for r in recips if r["phone"] and not r["opted_out"]]),
     }
+
+
+# ── Variables (picker source of truth) ────────────────────────────────────────
+@app.get("/api/teacher/whatsapp/variables")
+def wa_variables(user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    return {"variables": [{**v, "token": "{" + v["name"] + "}"} for v in WA_VARIABLES]}
 
 
 # ── Media upload ──────────────────────────────────────────────────────────────
@@ -7223,6 +7625,25 @@ def wa_estimate(data: WhatsAppEstimateInput, user = Depends(verify_token)):
     return wa.estimate_cost(count, data.category)
 
 
+def _parse_dynamic_tags(text_or_list, recip):
+    """Backward-compatible shim — the real work now lives in the single engine
+    _wa_render(). Kept so any older call site still resolves named tags."""
+    if not text_or_list:
+        return text_or_list
+    return _wa_render(text_or_list, recip, None)
+
+
+def _wa_missing_manual(body: str, manual_values: Optional[dict]) -> list:
+    """Names of "ask" variables used in the body that the teacher hasn't filled in.
+    Drives the friendly 'Please fill in: …' send-time validation."""
+    filled = {str(k).strip().lower()
+              for k, v in (manual_values or {}).items() if str(v).strip()}
+    missing = []
+    for var in _wa_parse_variables(body):
+        if var["kind"] == "ask" and var["name"].strip().lower() not in filled:
+            missing.append(var["name"])
+    return missing
+
 # ── Send (manual) ─────────────────────────────────────────────────────────────
 @app.post("/api/teacher/whatsapp/send")
 async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
@@ -7230,12 +7651,45 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     provider = wa.get_provider()
     teacher_id = user["teacher_id"]
 
+    # Resolve the chosen template once: its canonical named-tag body + whether it has
+    # a Meta-approved counterpart (only relevant when the Meta provider is active).
+    template_body = None
+    meta_approved = False
+    if data.mode == "template":
+        if not data.template_name:
+            raise HTTPException(status_code=400, detail="Please choose a template first.")
+        try:
+            t = service_supabase.table("whatsapp_templates").select(
+                "body_text, status, provider_template_id").eq(
+                "name", data.template_name).eq("teacher_id", teacher_id).limit(1).execute().data
+            if t:
+                template_body = t[0].get("body_text") or ""
+                meta_approved = bool(t[0].get("provider_template_id")) and t[0].get("status") == "approved"
+        except Exception:
+            pass
+        body_for_check = template_body if template_body is not None else (data.body_text or "")
+    else:
+        body_for_check = data.body_text or ""
+        if not body_for_check.strip() and not data.media_url:
+            raise HTTPException(status_code=400, detail="Type a message or attach a file first.")
+
+    # Friendly validation: every "ask" blank must be filled before we send.
+    missing = _wa_missing_manual(body_for_check, data.manual_values)
+    if missing:
+        raise HTTPException(status_code=400, detail="Please fill in: " + ", ".join(missing))
+
+    free_body = None if data.mode == "template" else data.body_text
+
     # Test-to-self: single message to a teacher-supplied number.
     if data.test_to_self:
-        recip = {"id": None, "name": "Test", "phone": data.test_to_self, "standard_id": None}
+        recip = {"id": None, "name": "Test", "phone": data.test_to_self, "standard_id": None,
+                 "standard_name": "Test Class", "student_code": "", "username": "",
+                 "plain_password": "", "attendance_pct": 0, "avg_score": 0, "points": 0}
         r = await _wa_send_and_log(provider, teacher_id, recip, mode=data.mode,
-                                   template_name=data.template_name, variables=data.variables,
-                                   body_text=data.body_text, media_url=data.media_url,
+                                   template_name=data.template_name,
+                                   body_text=free_body, manual_values=data.manual_values,
+                                   template_body=template_body, meta_approved=meta_approved,
+                                   media_url=data.media_url,
                                    media_type=data.media_type, category=data.category,
                                    language=data.language)
         return {"results": [r], "sent": 1 if r["status"] not in ("failed", "not_configured") else 0,
@@ -7246,18 +7700,16 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     if not recips:
         raise HTTPException(status_code=400, detail="No recipients with a phone number")
 
-    # Free-form is only allowed when EVERY recipient has an open 24h session.
-    if data.mode == "freeform" and not all(r["session_open"] for r in recips):
-        raise HTTPException(status_code=400,
-                            detail="Free-form messages require an open 24h session for every recipient. Use a template instead.")
-    if data.mode == "template" and not data.template_name:
-        raise HTTPException(status_code=400, detail="A template is required for template mode")
-
     results = []
-    for r in recips:
+    for idx, r in enumerate(recips):
+        if idx > 0 and provider.name == "evolution":
+            await asyncio.sleep(2.5)
+
         results.append(await _wa_send_and_log(
             provider, teacher_id, r, mode=data.mode, template_name=data.template_name,
-            variables=data.variables, body_text=data.body_text, media_url=data.media_url,
+            body_text=free_body, manual_values=data.manual_values,
+            template_body=template_body, meta_approved=meta_approved,
+            media_url=data.media_url,
             media_type=data.media_type, category=data.category, language=data.language))
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
     return {"results": results, "sent": sent, "total_cost": round(sum(x["cost"] for x in results), 2),
@@ -7382,6 +7834,59 @@ def wa_stats(user = Depends(verify_token)):
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────
+def _wa_template_out(row: dict) -> dict:
+    """Normalize a stored template for the API/UI: migrate any legacy positional
+    {{n}} body back to named {Tags}, and attach the parsed variable list
+    (each {name, kind}). Persists the migration once, best-effort."""
+    body = row.get("body_text") or ""
+    if "{{" in body:
+        migrated = _wa_migrate_legacy_body(body, row.get("variables"))
+        if migrated != body:
+            row["body_text"] = migrated
+            body = migrated
+            try:
+                service_supabase.table("whatsapp_templates").update(
+                    {"body_text": migrated}).eq("id", row["id"]).execute()
+            except Exception:
+                pass
+    row["variables"] = _wa_parse_variables(body)
+    return row
+
+
+def _wa_header_from_media(media_type: Optional[str]) -> str:
+    """Derive a template header_type from an attached file's MIME type."""
+    if not media_type:
+        return "none"
+    if media_type.startswith("image"):
+        return "image"
+    if media_type.startswith("audio"):
+        return "audio"
+    return "document"
+
+
+_WA_TEMPLATE_MEDIA_OK = False
+
+
+def _wa_templates_have_media() -> bool:
+    """True once whatsapp_templates has the media columns. Self-heals after the
+    one-time ALTER (see schema.sql) so template saves never crash before it's run."""
+    global _WA_TEMPLATE_MEDIA_OK
+    if _WA_TEMPLATE_MEDIA_OK:
+        return True
+    try:
+        service_supabase.table("whatsapp_templates").select("media_url").limit(1).execute()
+        _WA_TEMPLATE_MEDIA_OK = True
+    except Exception:
+        _WA_TEMPLATE_MEDIA_OK = False
+    return _WA_TEMPLATE_MEDIA_OK
+
+
+async def _wa_meta_create(provider, name, category, language, body_text, header_type):
+    """Submit a named-tag body to Meta in its required positional {{1}} format."""
+    pos_body, names = _wa_to_meta_body(body_text)
+    return await provider.create_template(name, category, language, pos_body, header_type, names)
+
+
 @app.get("/api/teacher/whatsapp/templates")
 def wa_list_templates(user = Depends(verify_token)):
     _wa_require_teacher(user)
@@ -7390,33 +7895,77 @@ def wa_list_templates(user = Depends(verify_token)):
             "teacher_id", user["teacher_id"]).order("created_at", desc=True).execute().data or []
     except Exception:
         rows = []
-    return {"templates": rows}
+    return {"templates": [_wa_template_out(r) for r in rows]}
 
 
 @app.post("/api/teacher/whatsapp/templates")
 async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
+    body = _wa_normalize_body(data.body_text)
+    header_type = _wa_header_from_media(data.media_type)
     row = {
         "teacher_id": user["teacher_id"],
         "name": data.name.strip(),
         "category": data.category,
         "language": data.language,
-        "header_type": data.header_type,
-        "body_text": data.body_text,
-        "variables": data.variables or [],
+        "header_type": header_type,
+        "body_text": body,
+        "variables": _wa_parse_variables(body),
         "status": "draft",
     }
+    if _wa_templates_have_media():
+        row.update({"media_url": data.media_url, "media_type": data.media_type, "media_name": data.media_name})
+    submit_error = None
     if data.submit:
         provider = wa.get_provider()
-        res = await provider.create_template(data.name, data.category, data.language,
-                                             data.body_text, data.header_type, data.variables)
+        res = await _wa_meta_create(provider, data.name, data.category, data.language,
+                                    body, header_type)
         row["provider_template_id"] = res.get("provider_template_id")
         row["status"] = res.get("status", "pending") if res.get("status") != "not_configured" else "draft"
+        submit_error = res.get("error")
     try:
         ins = service_supabase.table("whatsapp_templates").insert(row).execute()
-        return {"template": (ins.data or [row])[0]}
+        return {"template": (ins.data or [row])[0], "error": submit_error}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not save template: {e}")
+
+
+@app.put("/api/teacher/whatsapp/templates/{template_id}")
+async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    body = _wa_normalize_body(data.body_text)
+    header_type = _wa_header_from_media(data.media_type)
+    update = {
+        "name": data.name.strip(),
+        "category": data.category,
+        "language": data.language,
+        "header_type": header_type,
+        "body_text": body,
+        "variables": _wa_parse_variables(body),
+        # Editing the wording invalidates any prior Meta approval — back to draft.
+        "status": "draft",
+        "provider_template_id": None,
+    }
+    if _wa_templates_have_media():
+        update.update({"media_url": data.media_url, "media_type": data.media_type, "media_name": data.media_name})
+    submit_error = None
+    if data.submit:
+        provider = wa.get_provider()
+        res = await _wa_meta_create(provider, data.name, data.category, data.language,
+                                    body, header_type)
+        update["provider_template_id"] = res.get("provider_template_id")
+        update["status"] = res.get("status", "pending") if res.get("status") != "not_configured" else "draft"
+        submit_error = res.get("error")
+    try:
+        upd = service_supabase.table("whatsapp_templates").update(update).eq(
+            "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
+        if not upd.data:
+            raise HTTPException(status_code=404, detail="Template not found")
+        return {"template": _wa_template_out(upd.data[0]), "error": submit_error}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not update template: {e}")
 
 
 @app.post("/api/teacher/whatsapp/templates/{template_id}/submit")
@@ -7427,10 +7976,10 @@ async def wa_submit_template(template_id: str, user = Depends(verify_token)):
     if not res.data:
         raise HTTPException(status_code=404, detail="Template not found")
     t = res.data
+    body = _wa_migrate_legacy_body(t["body_text"] or "", t.get("variables")) if "{{" in (t.get("body_text") or "") else (t.get("body_text") or "")
     provider = wa.get_provider()
-    r = await provider.create_template(t["name"], t["category"], t["language"],
-                                       t["body_text"], t.get("header_type", "none"),
-                                       t.get("variables"))
+    r = await _wa_meta_create(provider, t["name"], t["category"], t["language"],
+                              body, t.get("header_type", "none"))
     update = {"provider_template_id": r.get("provider_template_id"),
               "status": r.get("status", "pending") if r.get("status") != "not_configured" else "draft"}
     service_supabase.table("whatsapp_templates").update(update).eq("id", template_id).execute()
@@ -7538,7 +8087,9 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     rows = _wa_build_report_rows(teacher_id, data.standard_ids, data.included_student_ids,
                                  data.test_id, data.period, data.criteria)
     results = []
-    for r in rows:
+    for idx, r in enumerate(rows):
+        if idx > 0 and provider.name == "evolution":
+            await asyncio.sleep(2.5)
         if not r["phone"]:
             continue
         # Exam mode: only students who actually took THIS exam get a result.
@@ -7556,27 +8107,177 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
         report = r["_report"]
         try:
             if attach and data.report_format == "pdf":
-                pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms)
+                pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms, data.test_id)
                 media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf")
-                media_type = "document"
+                media_type = "application/pdf"
             elif attach and data.report_format == "image":
-                png = await asyncio.to_thread(wa.build_report_image, report, lms)
+                png = await asyncio.to_thread(wa.build_report_image, report, lms, data.test_id)
                 media_url = await _wa_upload_bytes(png, ".png", "image/png")
-                media_type = "image"
+                media_type = "image/png"
             elif data.report_format == "text":
-                txt = wa.build_report_text(report, lms)
+                txt = wa.build_report_text(report, lms, data.test_id)
                 body_text = (txt + ("\n\n" + msg if msg else "")).strip()
         except Exception as e:
             print(f"[wa] report artifact build failed for {r['id']}: {e}")
 
-        mode = "template" if (data.mode == "template" and template_name) else "freeform"
+        mode = "template" if template_name else "freeform"
         results.append(await _wa_send_and_log(
             provider, teacher_id, r, mode=mode, template_name=template_name,
-            variables=data.criteria and None, body_text=body_text, media_url=media_url,
-            media_type=media_type, category=data.category, standard_id=r["standard_id"]))
+            body_text=body_text, media_url=media_url,
+            media_type=media_type, category=data.category, standard_id=r["standard_id"],
+            test_id=data.test_id))
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
     return {"results": results, "sent": sent,
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
+
+
+# ── Pending Actions (auto-detected exam-result notifications) ──────────────────
+_WA_PENDING_DAYS = 30
+
+
+@app.get("/api/teacher/whatsapp/pending")
+def wa_pending(user = Depends(verify_token)):
+    """Auto-detected 'Pending Actions' for the WhatsApp dashboard. Currently exam
+    results: recent exams (attempts in the last _WA_PENDING_DAYS days) whose parents
+    haven't been notified yet and that the teacher hasn't dismissed. The envelope
+    leaves room to add attendance/fee tiles later without breaking the client."""
+    _wa_require_teacher(user)
+    tid = user["teacher_id"]
+    empty = {"exam_results": {"total_parents": 0, "exams": []}}
+    if not service_supabase:
+        return empty
+
+    try:
+        stds = service_supabase.table("standards").select("id, name").eq("teacher_id", tid).execute().data or []
+    except Exception:
+        stds = []
+    if not stds:
+        return empty
+    std_name = {s["id"]: s["name"] for s in stds}
+
+    try:
+        subs = service_supabase.table("subject_classes").select(
+            "id, name, standard_id").in_("standard_id", list(std_name.keys())).execute().data or []
+    except Exception:
+        subs = []
+    if not subs:
+        return empty
+    class_meta = {c["id"]: {"standard_id": c.get("standard_id"),
+                            "standard_name": std_name.get(c.get("standard_id"), ""),
+                            "subject_name": c.get("name")} for c in subs}
+    class_ids = list(class_meta.keys())
+
+    # Teacher's tests (+ dismissed flag, guarded for pre-migration DBs).
+    have_dismiss = True
+    try:
+        tests = service_supabase.table("tests").select(
+            "id, title, class_id, results_notify_dismissed").in_("class_id", class_ids).execute().data or []
+    except Exception:
+        have_dismiss = False
+        tests = service_supabase.table("tests").select(
+            "id, title, class_id").in_("class_id", class_ids).execute().data or []
+    if not tests:
+        return empty
+    test_meta = {t["id"]: t for t in tests}
+    test_ids = list(test_meta.keys())
+
+    # Only consider exams with recent attempts.
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=_WA_PENDING_DAYS)).isoformat()
+    try:
+        attempts = service_supabase.table("test_attempts").select(
+            "test_id, student_id, submitted_at").in_("test_id", test_ids).gte(
+            "submitted_at", cutoff).execute().data or []
+    except Exception:
+        attempts = []
+    if not attempts:
+        return empty
+
+    took = {}            # test_id -> set(student_id who took it)
+    last_attempt = {}    # test_id -> latest submitted_at
+    student_ids = set()
+    for a in attempts:
+        t, s = a.get("test_id"), a.get("student_id")
+        if not t or not s:
+            continue
+        took.setdefault(t, set()).add(s)
+        student_ids.add(s)
+        sa = a.get("submitted_at")
+        if sa and (t not in last_attempt or sa > last_attempt[t]):
+            last_attempt[t] = sa
+
+    # Keep only students with a phone and not opted out (the real notifiable parents).
+    try:
+        srows = service_supabase.table("students").select(
+            "id, phone, whatsapp_opt_out").in_("id", list(student_ids)).execute().data or []
+    except Exception:
+        srows = []
+    eligible = {s["id"] for s in srows
+                if (s.get("phone") or "").strip() and not s.get("whatsapp_opt_out")}
+
+    # Already-notified (test_id, student_id) pairs — needs the migrated test_id column.
+    # Only count real sends: a failed/not_configured row must NOT clear the parent,
+    # so a teacher who clicks "Send all" while disconnected can retry later.
+    notified = set()
+    if _wa_messages_have_test_id():
+        try:
+            mrows = service_supabase.table("whatsapp_messages").select(
+                "test_id, student_id, status").eq("teacher_id", tid).in_("test_id", test_ids).execute().data or []
+            notified = {(m.get("test_id"), m.get("student_id")) for m in mrows
+                        if m.get("status") not in ("failed", "not_configured")}
+        except Exception:
+            notified = set()
+
+    exams = []
+    total = 0
+    for t_id, students in took.items():
+        meta = test_meta.get(t_id) or {}
+        if have_dismiss and meta.get("results_notify_dismissed"):
+            continue
+        cm = class_meta.get(meta.get("class_id"), {})
+        took_eligible = {s for s in students if s in eligible}
+        pending = {s for s in took_eligible if (t_id, s) not in notified}
+        if not pending:
+            continue
+        total += len(pending)
+        exams.append({
+            "test_id": t_id,
+            "title": meta.get("title") or "Exam",
+            "standard_name": cm.get("standard_name", ""),
+            "subject_name": cm.get("subject_name", ""),
+            "pending_parents": len(pending),
+            "took": len(took_eligible),
+            "last_attempt_at": last_attempt.get(t_id),
+        })
+    exams.sort(key=lambda e: e.get("last_attempt_at") or "", reverse=True)
+    return {"exam_results": {"total_parents": total, "exams": exams}}
+
+
+class WhatsAppPendingDismissInput(BaseModel):
+    test_id: str
+
+
+@app.post("/api/teacher/whatsapp/pending/dismiss")
+def wa_pending_dismiss(data: WhatsAppPendingDismissInput, user = Depends(verify_token)):
+    """Dismiss an exam from the Pending Actions list ('Later'/✕). Scoped to the
+    teacher who owns the exam's standard. No-ops gracefully pre-migration."""
+    _wa_require_teacher(user)
+    tid = user["teacher_id"]
+    std_id = _wa_exam_standard_id(data.test_id)
+    if not std_id:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    try:
+        owner = (service_supabase.table("standards").select("teacher_id").eq(
+            "id", std_id).limit(1).execute().data or [None])[0]
+    except Exception:
+        owner = None
+    if not owner or owner.get("teacher_id") != tid:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    try:
+        service_supabase.table("tests").update(
+            {"results_notify_dismissed": True}).eq("id", data.test_id).execute()
+    except Exception as e:
+        print(f"[wa] pending dismiss skipped (missing column?): {e}")
+    return {"ok": True}
 
 
 # ── Welcome / credentials (onboarding) ────────────────────────────────────────
@@ -7723,6 +8424,30 @@ async def wa_webhook(request: Request):
 
     pid = body.get("id") or body.get("message_id")
     status = body.get("status")
+    
+    # Evolution API payload normalization
+    evo_event = body.get("event")
+    evo_data = body.get("data", {})
+    if evo_event == "messages.update":
+        # Delivery status
+        if isinstance(evo_data, dict) and "key" in evo_data and "update" in evo_data:
+            pid = evo_data["key"].get("id")
+            evo_status = evo_data["update"].get("status")
+            if evo_status == "SERVER_ACK": status = "sent"
+            elif evo_status == "DELIVERY_ACK": status = "delivered"
+            elif evo_status == "READ": status = "read"
+            elif evo_status == "ERROR": status = "failed"
+    elif evo_event == "messages.upsert":
+        # Incoming message
+        if isinstance(evo_data, dict) and "message" in evo_data:
+            msg = evo_data["message"]
+            if msg.get("key", {}).get("fromMe") is False:
+                pid = msg["key"].get("id")
+                from_phone = msg["key"].get("remoteJid", "").split("@")[0]
+                text = msg.get("message", {}).get("conversation") or msg.get("message", {}).get("extendedTextMessage", {}).get("text")
+                body["from"] = from_phone
+                body["text"] = text
+                body["direction"] = "inbound"
 
     # 1) Delivery-status update for a message we sent.
     if pid and status:
@@ -7895,11 +8620,13 @@ async def _wa_execute_job(job: dict, force: bool = False):
         pass
 
     results = []
+    job_test_id = (job.get("trigger_config") or {}).get("test_id")
     if job.get("mode") == "report" or report_format != "none":
         rows = _wa_build_report_rows(teacher_id, std_ids, None,
-                                     (job.get("trigger_config") or {}).get("test_id"),
-                                     "overall", criteria)
-        for r in rows:
+                                     job_test_id, "overall", criteria)
+        for idx, r in enumerate(rows):
+            if idx > 0 and provider.name == "evolution":
+                await asyncio.sleep(2.5)
             if not r["phone"] or r["id"] in recent_ids:
                 continue
             if criteria and not r["band"]:
@@ -7909,13 +8636,13 @@ async def _wa_execute_job(job: dict, force: bool = False):
             media_url = media_type = None
             try:
                 if report_format == "pdf":
-                    pdf = await asyncio.to_thread(wa.build_report_pdf, r["_report"], lms)
-                    media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf"); media_type = "document"
+                    pdf = await asyncio.to_thread(wa.build_report_pdf, r["_report"], lms, job_test_id)
+                    media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf"); media_type = "application/pdf"
                 elif report_format == "image":
-                    png = await asyncio.to_thread(wa.build_report_image, r["_report"], lms)
-                    media_url = await _wa_upload_bytes(png, ".png", "image/png"); media_type = "image"
+                    png = await asyncio.to_thread(wa.build_report_image, r["_report"], lms, job_test_id)
+                    media_url = await _wa_upload_bytes(png, ".png", "image/png"); media_type = "image/png"
                 elif report_format == "text":
-                    body = (wa.build_report_text(r["_report"], lms) + ("\n\n" + body if body else "")).strip()
+                    body = (wa.build_report_text(r["_report"], lms, job_test_id) + ("\n\n" + body if body else "")).strip()
             except Exception as e:
                 print(f"[wa job] artifact failed: {e}")
             tn = band.get("template_name") or job.get("template_name")
@@ -7923,7 +8650,7 @@ async def _wa_execute_job(job: dict, force: bool = False):
             results.append(await _wa_send_and_log(
                 provider, teacher_id, r, mode=mode, template_name=tn, body_text=body,
                 media_url=media_url, media_type=media_type, category=category,
-                standard_id=r["standard_id"], job_id=job["id"]))
+                standard_id=r["standard_id"], job_id=job["id"], test_id=job_test_id))
     else:
         recips = [r for r in _wa_resolve_recipients(teacher_id, std_ids)
                   if r["phone"] and r["id"] not in recent_ids]

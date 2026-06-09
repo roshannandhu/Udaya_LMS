@@ -150,8 +150,8 @@ export default function StudentBroadcastsPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24">
-        <TopBar title="Class Updates" showSearch={false} />
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 md:pb-0 h-[calc(100dvh-160px)] md:h-[calc(100vh-64px)]">
+        <div className="md:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin text-neutral-400" size={24} />
         </div>
@@ -161,8 +161,8 @@ export default function StudentBroadcastsPage() {
 
   if (!standard) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24">
-        <TopBar title="Class Updates" showSearch={false} />
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 md:pb-0 h-[calc(100dvh-160px)] md:h-[calc(100vh-64px)]">
+        <div className="md:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
         <div className="px-5 py-16 text-center">
           <MessageSquare size={32} className="mx-auto mb-3 text-neutral-400" />
           <p className="text-sm text-neutral-500">No broadcasts available yet.</p>
@@ -174,44 +174,40 @@ export default function StudentBroadcastsPage() {
   let currentGroup = null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2]">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-neutral-200 shadow-sm shrink-0">
-        <div className="px-4 md:px-8 py-3 flex items-center justify-between max-w-5xl mx-auto">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-pastel-sky flex items-center justify-center flex-shrink-0 text-neutral-700">
-              <SubjectIcon value={standard.emoji} size={20} fallback="graduation" />
-            </div>
-            <div>
-              <h1 className="text-lg md:text-xl font-semibold text-neutral-900 leading-tight">{standard.name}</h1>
-              <p className="text-xs text-neutral-500">Updates from Class Teacher</p>
+    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] md:pb-0 h-[calc(100dvh-160px)] md:h-[calc(100vh-64px)]">
+      <div className="md:hidden flex-shrink-0"><TopBar title="Class Updates" showSearch={false} /></div>
+      <div className="flex flex-1 w-full max-w-[1000px] mx-auto bg-[#efeae2] md:border-x md:border-black/5 shadow-sm relative flex-col min-h-0">
+        
+        {/* Unified WhatsApp-style Header */}
+        <div className="flex items-center gap-2 px-4 py-2 bg-[#f0f2f5] border-b border-neutral-200 z-10 shrink-0">
+          <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-700 bg-[#e2e8f0] overflow-hidden">
+              <SubjectIcon value={standard.emoji} size={22} fallback="graduation" />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowSearch(s => !s)}
-              className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'}`}>
-              <Search size={18} />
-            </button>
+          <div className="flex-1 min-w-0 ml-2">
+            <p className="text-[16px] font-medium text-neutral-900 truncate leading-tight">{standard.name}</p>
+            <p className="text-[13px] text-neutral-500 truncate mt-0.5">Updates from Class Teacher</p>
           </div>
+          <button onClick={() => setShowSearch(s => !s)} className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-neutral-200 text-neutral-900' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700'}`}>
+            <Search size={20} />
+          </button>
         </div>
         
         {/* Search Bar */}
         {showSearch && (
-          <div className="px-4 md:px-8 pb-3 max-w-5xl mx-auto border-t border-neutral-100 pt-3">
-            <div className="flex items-center gap-2 bg-neutral-100 rounded-full px-4 py-2">
-              <Search size={16} className="text-neutral-400 flex-shrink-0" />
-              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search messages…"
-                className="flex-1 text-sm bg-transparent outline-none placeholder:text-neutral-400" />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-neutral-400 hover:text-neutral-700">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+          <div className="px-4 py-2 bg-white border-b border-neutral-200 flex items-center gap-2 shrink-0">
+            <Search size={16} className="text-neutral-400 flex-shrink-0" />
+            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search messages…"
+              className="flex-1 text-sm bg-transparent outline-none placeholder:text-neutral-400" />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="text-neutral-400 hover:text-neutral-700">
+                <X size={16} />
+              </button>
+            )}
           </div>
         )}
-      </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full" onClick={() => setEmojiPickerId(null)}>
           {broadcasts.length === 0 ? (
@@ -355,6 +351,7 @@ export default function StudentBroadcastsPage() {
             </div>
           )}
         </div>
+      </div>
     </div>
   );
 }

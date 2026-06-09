@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronRight, Users, Upload, Download, CheckCircle2, Loader2 } from 'lucide-react';
+import { Search, ChevronRight, Users, Upload, Download, CheckCircle2, Loader2, List, Table2 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Tag, Skeleton, Btn } from '../../components/ui';
 import BulkImportModal from '../../components/teacher/BulkImportModal';
+import StudentManageGrid from '../../components/teacher/StudentManageGrid';
 import { useAppCache, useSettingsStore } from '../../store';
 import { apiClient } from '../../lib/api';
 import { exportStudentsBackup } from '../../lib/studentBackup';
@@ -14,6 +15,7 @@ export default function StudentsPage() {
   const [search, setSearch]       = useState('');
   const [stdFilter, setStdFilter] = useState('all');
   const [sortBy, setSortBy]       = useState('name');
+  const [view, setView]           = useState('list'); // 'list' | 'manage'
   const [importOpen, setImportOpen] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [backedUp, setBackedUp]   = useState(false);
@@ -71,6 +73,7 @@ export default function StudentsPage() {
         (s.name || '').toLowerCase().includes(q) ||
         (s.username || '').toLowerCase().includes(q) ||
         (s.email || '').toLowerCase().includes(q) ||
+        (s.student_code || '').toLowerCase().includes(q) ||
         (s.phone || '').includes(search)
       );
     }
@@ -87,7 +90,22 @@ export default function StudentsPage() {
   return (
     <div>
       <TopBar title="Students" subtitle={loading ? '…' : `${filtered.length} of ${students.length}`} />
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+      <div className={`px-5 md:px-8 py-6 mx-auto ${view === 'manage' ? 'max-w-7xl' : 'max-w-5xl'}`}>
+
+        {/* List / Manage toggle */}
+        <div className="inline-flex items-center gap-1 p-1 mb-4 rounded-pill bg-[#F1F1EF] border border-[#EFEDEA]">
+          {[
+            ['list', 'List', List],
+            ['manage', 'Manage (Excel)', Table2],
+          ].map(([key, label, Icon]) => (
+            <button key={key} onClick={() => setView(key)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-colors ${
+                view === key ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-800'
+              }`}>
+              <Icon size={14} />{label}
+            </button>
+          ))}
+        </div>
 
         {/* Filters */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
@@ -117,17 +135,22 @@ export default function StudentsPage() {
             <option value="all">All standards</option>
             {standards.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] outline-none text-sm shadow-sm">
-            <option value="name">Name</option>
-            <option value="score">Avg score</option>
-            <option value="attendance">Attendance</option>
-            <option value="points">Points</option>
-          </select>
+          {view === 'list' && (
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] outline-none text-sm shadow-sm">
+              <option value="name">Name</option>
+              <option value="score">Avg score</option>
+              <option value="attendance">Attendance</option>
+              <option value="points">Points</option>
+            </select>
+          )}
         </div>
 
-        {/* List */}
-        {loading ? (
+        {/* Manage (Excel) grid — phone editing lives only here */}
+        {view === 'manage' ? (
+          <StudentManageGrid search={search} stdFilter={stdFilter} standards={standards} />
+        ) : /* List */
+        loading ? (
           <div className="space-y-2">
             {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}
           </div>

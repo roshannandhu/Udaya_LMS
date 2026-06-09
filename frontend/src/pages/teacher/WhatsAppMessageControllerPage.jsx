@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LayoutDashboard, MessageSquare, FileBarChart, Clock, LayoutTemplate, Inbox, History, Settings as SettingsIcon, Send, Eye, KeyRound, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { LayoutDashboard, MessageSquare, FileBarChart, Clock, LayoutTemplate, Inbox, History, Settings as SettingsIcon, Send, Eye, KeyRound, ChevronDown, SlidersHorizontal, QrCode, CheckCircle2, Loader2 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Input, Skeleton } from '../../components/ui';
 import { whatsappApi, testApi } from '../../lib/api';
@@ -14,39 +15,32 @@ import InboxTab from '../../components/teacher/whatsapp/InboxTab';
 import HistoryTab from '../../components/teacher/whatsapp/HistoryTab';
 import AutomationTab from '../../components/teacher/whatsapp/AutomationTab';
 import WhatsAppPreview from '../../components/teacher/whatsapp/WhatsAppPreview';
-import { fillTemplate } from '../../components/teacher/whatsapp/previewText';
-
-// 4 everyday tabs; power features live behind "Advanced".
-const PRIMARY_TABS = [
-  { id: 'overview', label: 'Dashboard',            icon: LayoutDashboard },
-  { id: 'compose',  label: 'Send Message',         icon: MessageSquare },
-  { id: 'reports',  label: 'Send Progress Report', icon: FileBarChart },
-  { id: 'settings', label: 'Settings',             icon: SettingsIcon },
-];
-const ADVANCED_TABS = [
-  { id: 'templates',  label: 'Templates',  icon: LayoutTemplate },
-  { id: 'automation', label: 'Automation', icon: Clock },
-  { id: 'inbox',      label: 'Inbox',      icon: Inbox },
-  { id: 'history',    label: 'History',    icon: History },
-];
-const ADVANCED_IDS = ADVANCED_TABS.map(t => t.id);
+import FlowStepper from '../../components/teacher/whatsapp/FlowStepper';
+import PendingActions from '../../components/teacher/whatsapp/PendingActions';
+import { renderPreview } from '../../components/teacher/whatsapp/previewText';
 
 export default function WhatsAppMessageControllerPage() {
-  const [tab, setTab] = useState('overview');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const location = useLocation();
+  // Honour deep-links from the test Results sheet ("Review First" → reports + exam preselected).
+  const [tab, setTab] = useState(location.state?.tab || 'compose');
+  const [pendingExamId, setPendingExamId] = useState(location.state?.examId || null);
   const [config, setConfig] = useState(null);
   const [groups, setGroups] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [variables, setVariables] = useState([]);
+  const [connection, setConnection] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const loadConfig = async () => { try { setConfig(await whatsappApi.getConfig()); } catch { setConfig({}); } };
+  const loadConnection = async () => { try { setConnection(await whatsappApi.getConnection()); } catch { setConnection({ connected: false }); } };
   const loadTemplates = async () => { try { const r = await whatsappApi.listTemplates(); setTemplates(r.templates || []); } catch { setTemplates([]); } };
+  const loadVariables = async () => { try { const r = await whatsappApi.getVariables(); setVariables(r.variables || []); } catch { setVariables([]); } };
   const loadRecipients = async () => {
     try {
       const r = await whatsappApi.getRecipients();
       setGroups(r.groups || []);
-      // default: select every eligible student
       const ids = (r.groups || []).flatMap(g => g.students.filter(s => s.phone && !s.opted_out).map(s => s.id));
       setSelected(new Set(ids));
     } catch { setGroups([]); }
@@ -55,96 +49,140 @@ export default function WhatsAppMessageControllerPage() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await Promise.all([loadConfig(), loadTemplates(), loadRecipients()]);
+      await Promise.all([loadConfig(), loadConnection(), loadTemplates(), loadVariables(), loadRecipients()]);
       setLoading(false);
     })();
   }, []);
 
   const rates = config?.rates || { utility: 0.14, marketing: 0.78, auth: 0.13 };
   const currency = config?.currency || 'INR';
-
+  const provider = config?.provider;
   const selectedCount = selected.size;
-  const estimateFor = (category) => ({ rate: rates[category] ?? 0.14, amount: selectedCount * (rates[category] ?? 0.14) });
+  // Evolution (self-hosted) has no per-message cost — keep the UI free of ₹ jargon.
+  const estimateFor = (category) => {
+    if (provider === 'evolution') return { rate: 0, amount: 0 };
+    const rate = rates[category] ?? 0.14;
+    return { rate, amount: selectedCount * rate };
+  };
 
-  // Navigate; auto-open the Advanced drawer when targeting an advanced tab.
-  const go = (id) => { setTab(id); if (ADVANCED_IDS.includes(id)) setAdvancedOpen(true); };
-  const showAdvancedRow = advancedOpen || ADVANCED_IDS.includes(tab);
+  // Essentials are what a first-timer needs; everything else hides under "Advanced".
+  const essentials = [
+    { id: 'compose',   label: 'Send a Message', icon: MessageSquare },
+    { id: 'templates', label: 'Templates',      icon: LayoutTemplate },
+    { id: 'history',   label: 'Delivery Reports', icon: History },
+  ];
+  const advanced = [
+    { id: 'overview',   label: 'Dashboard',        icon: LayoutDashboard },
+    { id: 'reports',    label: 'Progress Reports', icon: FileBarChart },
+    { id: 'inbox',      label: 'Inbox',            icon: Inbox },
+    { id: 'automation', label: 'Automations',      icon: Clock },
+    { id: 'settings',   label: 'Settings',         icon: SettingsIcon },
+  ];
+  const allNav = [...essentials, ...advanced];
 
   return (
-    <div className="min-h-screen bg-transparent">
-      <TopBar title="WhatsApp" />
-      <div className="max-w-5xl mx-auto p-4 pb-[calc(7rem_+_env(safe-area-inset-bottom))] lg:pb-8">
-        {!config?.configured && (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            WhatsApp is not configured yet. Add your provider API key in the <button
-              className="underline font-medium" onClick={() => setTab('settings')}>Settings</button> tab.
-            You can still set everything up — real sends start once a key is added.
+    <div className="flex flex-col h-screen bg-[#f0f2f5]">
+      <TopBar title="WhatsApp Center" />
+      <div className="flex flex-1 w-full max-w-[1400px] mx-auto bg-white md:my-4 md:rounded-2xl md:shadow-sm overflow-hidden border border-black/5 h-[calc(100vh-64px)] md:h-[calc(100vh-100px)]">
+        
+        {/* Sidebar Navigation */}
+        <div className="w-[240px] bg-[#f8f9fa] border-r border-[#EBEAE7] flex flex-col flex-shrink-0 hidden md:flex">
+          <div className="p-4 border-b border-[#EBEAE7] bg-white">
+            <h2 className="font-bold text-neutral-800 flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-whatsapp-green flex items-center justify-center">
+                <MessageSquare size={12} className="text-white fill-current" />
+              </div>
+              WhatsApp
+            </h2>
           </div>
-        )}
+          <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+            {essentials.map(item => {
+              const active = tab === item.id;
+              return (
+                <button key={item.id} onClick={() => setTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    active ? 'bg-whatsapp-green-light text-whatsapp-green-fg' : 'text-neutral-600 hover:bg-[#EBEAE7]'
+                  }`}>
+                  <item.icon size={16} /> {item.label}
+                </button>
+              );
+            })}
 
-        {/* Primary tabs */}
-        <div className="flex gap-1 overflow-x-auto mb-2 -mx-1 px-1">
-          {PRIMARY_TABS.map(t => (
-            <button key={t.id} onClick={() => go(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-pill text-xs font-medium whitespace-nowrap transition-colors ${
-                tab === t.id ? 'bg-ink text-white' : 'bg-white border border-[#EBEAE7] text-neutral-700 hover:bg-[#F4F2EF]'
-              }`}>
-              <t.icon size={14} /> {t.label}
+            <button onClick={() => setAdvancedOpen(o => !o)}
+              className="w-full flex items-center gap-2 px-3 py-2 mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 hover:text-neutral-600">
+              <ChevronDown size={13} className={`transition-transform ${(advancedOpen || advanced.some(a => a.id === tab)) ? '' : '-rotate-90'}`} />
+              Advanced
             </button>
-          ))}
-          <button onClick={() => setAdvancedOpen(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-pill text-xs font-medium whitespace-nowrap transition-colors ${
-              showAdvancedRow ? 'bg-[#F4F2EF] border border-[#EBEAE7] text-neutral-700' : 'bg-white border border-[#EBEAE7] text-neutral-500 hover:bg-[#F4F2EF]'
-            }`}>
-            <SlidersHorizontal size={13} /> Advanced
-            <ChevronDown size={13} className={`transition-transform ${showAdvancedRow ? 'rotate-180' : ''}`} />
-          </button>
+            {(advancedOpen || advanced.some(a => a.id === tab)) && advanced.map(item => {
+              const active = tab === item.id;
+              return (
+                <button key={item.id} onClick={() => setTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    active ? 'bg-whatsapp-green-light text-whatsapp-green-fg' : 'text-neutral-600 hover:bg-[#EBEAE7]'
+                  }`}>
+                  <item.icon size={16} /> {item.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Advanced drawer */}
-        {showAdvancedRow && (
-          <div className="flex gap-1 overflow-x-auto mb-4 -mx-1 px-1">
-            {ADVANCED_TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill text-[11px] font-medium whitespace-nowrap transition-colors ${
-                  tab === t.id ? 'bg-ink text-white' : 'bg-white border border-[#EBEAE7] text-neutral-600 hover:bg-[#F4F2EF]'
-                }`}>
-                <t.icon size={12} /> {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-        {!showAdvancedRow && <div className="mb-2" />}
+        {/* Mobile Nav (Scrollable row) */}
+        <div className="md:hidden flex gap-1 overflow-x-auto p-2 bg-white border-b border-[#EBEAE7] flex-shrink-0">
+          {allNav.map(item => (
+            <button key={item.id} onClick={() => setTab(item.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-pill text-xs font-medium whitespace-nowrap transition-colors ${
+                tab === item.id ? 'bg-ink text-white' : 'bg-white border border-[#EBEAE7] text-neutral-700 hover:bg-[#F4F2EF]'
+              }`}>
+              <item.icon size={14} /> {item.label}
+            </button>
+          ))}
+        </div>
 
-        {loading ? (
-          <div className="space-y-3">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
-        ) : (
-          <>
-            {tab === 'overview' && <OverviewTab onNavigate={go} currency={currency} />}
-            {tab === 'compose' && (
-              <ComposeTab groups={groups} selected={selected} setSelected={setSelected}
-                templates={templates} estimateFor={estimateFor} currency={currency}
-                configured={config?.configured} selectedCount={selectedCount}
-                reloadRecipients={loadRecipients} onSendCredentials={() => go('credentials')}
-                onGoToTemplates={() => go('templates')} />
-            )}
-            {tab === 'reports' && (
-              <ReportsTab groups={groups} selected={selected} setSelected={setSelected}
-                templates={templates} estimateFor={estimateFor} currency={currency}
-                configured={config?.configured} selectedCount={selectedCount}
-                reloadRecipients={loadRecipients} />
-            )}
-            {tab === 'credentials' && (
-              <CredentialsTab groups={groups} estimateFor={estimateFor} currency={currency}
-                configured={config?.configured} reloadRecipients={loadRecipients} />
-            )}
-            {tab === 'automation' && <AutomationTab templates={templates} groups={groups} />}
-            {tab === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} />}
-            {tab === 'inbox' && <InboxTab />}
-            {tab === 'history' && <HistoryTab />}
-            {tab === 'settings' && <SettingsTab config={config} reload={loadConfig} />}
-          </>
-        )}
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white relative">
+          {connection && !connection.connected && tab !== 'settings' && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
+              <span>WhatsApp isn’t connected yet — scan the QR code to start sending.</span>
+              <Btn onClick={() => setTab('settings')} size="sm" variant="secondary">Connect WhatsApp</Btn>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}</div>
+          ) : (
+            <div className="max-w-4xl">
+              {(tab === 'compose' || tab === 'overview') && (
+                <PendingActions
+                  onReview={(id) => { setPendingExamId(id); setTab('reports'); }}
+                  onSent={loadRecipients} />
+              )}
+              {tab === 'overview' && <OverviewTab onNavigate={setTab} currency={currency} />}
+              {tab === 'compose' && (
+                <ComposeTab groups={groups} selected={selected} setSelected={setSelected}
+                  templates={templates} estimateFor={estimateFor} currency={currency}
+                  configured={connection?.connected} selectedCount={selectedCount} variables={variables}
+                  reloadRecipients={loadRecipients} onSendCredentials={() => setTab('credentials')}
+                  onGoToTemplates={() => setTab('templates')} provider={provider} />
+              )}
+              {tab === 'reports' && (
+                <ReportsTab groups={groups} selected={selected} setSelected={setSelected}
+                  templates={templates} estimateFor={estimateFor} currency={currency}
+                  configured={connection?.connected} selectedCount={selectedCount}
+                  reloadRecipients={loadRecipients} initialExamId={pendingExamId} />
+              )}
+              {tab === 'credentials' && (
+                <CredentialsTab groups={groups} estimateFor={estimateFor} currency={currency}
+                  configured={connection?.connected} reloadRecipients={loadRecipients} />
+              )}
+              {tab === 'automation' && <AutomationTab templates={templates} groups={groups} />}
+              {tab === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} variables={variables} provider={provider} />}
+              {tab === 'inbox' && <InboxTab />}
+              {tab === 'history' && <HistoryTab />}
+              {tab === 'settings' && <SettingsTab config={config} reload={loadConfig} onConnected={loadConnection} />}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -185,8 +223,8 @@ function PreviewPanel({ children }) {
 }
 
 // ── Compose ───────────────────────────────────────────────────────────────────
-function ComposeTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount, reloadRecipients, onSendCredentials, onGoToTemplates }) {
-  const [msg, setMsg] = useState({ mode: 'template', category: 'utility', variables: [], body_text: '' });
+function ComposeTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount, reloadRecipients, onSendCredentials, onGoToTemplates, provider, variables }) {
+  const [msg, setMsg] = useState({ mode: provider === 'meta' ? 'template' : 'freeform', category: 'utility', manual_values: {}, body_text: '' });
   const [sending, setSending] = useState(false);
   const [testPhone, setTestPhone] = useState('');
 
@@ -195,33 +233,37 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
   const classCount = useMemo(
     () => new Set(selectedStudents.map(s => s.standard_id)).size, [selectedStudents]);
 
-  // Live preview text: filled template (sample = first selected student's name) or free-form body.
-  const sampleName = selectedStudents[0]?.name || 'your child';
-  const tpl = templates.find(t => t.name === msg.template_name && t.status === 'approved');
-  const previewText = msg.mode === 'template'
-    ? (tpl ? fillTemplate(tpl.body_text, msg.variables, tpl.variables) : '')
-    : (msg.body_text || '');
+  const sample = selectedStudents[0] || {};
+  const tpl = templates.find(t => t.name === msg.template_name);
+  const activeBody = msg.mode === 'template' ? (tpl?.body_text || '') : (msg.body_text || '');
   const previewMessages = [{
-    text: previewText.replace(/\{your child\}/gi, sampleName),
+    text: renderPreview(activeBody, variables, msg.manual_values, sample),
     mediaType: msg.media_type, mediaUrl: msg.media_url, mediaName: msg.media_name,
   }];
 
+  // Which step is the teacher on? Advances the flow bar as they fill things in.
+  const hasMessage = (msg.mode === 'template' ? !!tpl : !!(msg.body_text || '').trim()) || !!msg.media_url;
+  const currentStep = !hasMessage ? 1 : selectedCount === 0 ? 2 : 3;
+
   const buildPayload = () => ({
     included_student_ids: Array.from(selected),
-    mode: msg.mode, template_name: msg.template_name, variables: msg.variables,
+    mode: (provider === 'meta' && selectedCount > 1) ? 'template' : msg.mode,
+    template_name: msg.template_name, manual_values: msg.manual_values,
     body_text: msg.body_text, media_url: msg.media_url, media_type: msg.media_type,
     category: msg.category,
   });
 
   const send = async () => {
-    if (selectedCount === 0) return;
-    if (!confirm(`This will message ${selectedCount} parent(s) for ~₹${estimateFor(msg.category).amount.toFixed(2)}. Send?`)) return;
+    if (selectedCount === 0) { alert('Pick at least one student first.'); return; }
+    const est = estimateFor(msg.category);
+    const costNote = est.amount > 0 ? ` for ~₹${est.amount.toFixed(2)}` : '';
+    if (!confirm(`This will message ${selectedCount} parent(s)${costNote}. Send?`)) return;
     setSending(true);
     try {
       const r = await whatsappApi.send(buildPayload());
       const failed = (r.results || []).filter(x => x.status === 'failed' || x.status === 'not_configured');
       let extra = '';
-      if (!r.configured) extra = '\n\n(Not configured — add your WhatsApp details in Settings.)';
+      if (!r.configured) extra = '\n\n(Not connected — add your WhatsApp details in Settings.)';
       else if (failed.length) extra = `\n\n${failed.length} failed — e.g. "${failed[0].error || 'unknown error'}"`;
       alert(`Sent ${r.sent}/${r.results.length}. Cost ₹${(r.total_cost || 0).toFixed(2)}.${extra}`);
     } catch (e) { alert(e.message); } finally { setSending(false); }
@@ -234,74 +276,73 @@ function ComposeTab({ groups, selected, setSelected, templates, estimateFor, cur
       const r = await whatsappApi.send({ ...buildPayload(), test_to_self: testPhone.trim() });
       const res = r.results?.[0] || {};
       const ok = res.status && res.status !== 'failed' && res.status !== 'not_configured';
-      alert(ok ? `✅ Test sent (${res.status}).` : `❌ Test failed: ${res.error || (!r.configured ? 'not configured' : 'unknown error')}`);
+      alert(ok ? `✅ Test sent (${res.status}).` : `❌ Test failed: ${res.error || (!r.configured ? 'not connected' : 'unknown error')}`);
     } catch (e) { alert(e.message); } finally { setSending(false); }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
-      {/* Left: guided steps */}
-      <div className="space-y-4">
-        <Step n="1" title="Who gets it?"
-          hint={selectedCount > 0 ? `${selectedCount} parent${selectedCount > 1 ? 's' : ''} across ${classCount} class${classCount > 1 ? 'es' : ''}` : 'Pick the classes or students to message'}>
-          <RecipientPicker groups={groups} selected={selected} onChange={setSelected} onStudentUpdated={reloadRecipients} />
-          {onSendCredentials && (
-            <button onClick={onSendCredentials}
-              className="mt-2 text-xs font-medium text-whatsapp-green-fg hover:underline flex items-center gap-1">
-              <KeyRound size={12} /> Send login details (ID & password) instead
-            </button>
-          )}
-        </Step>
+    <div>
+      <FlowStepper current={currentStep} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
+        {/* Left: guided steps — write, then choose, then send */}
+        <div className="space-y-4">
+          <Step n="1" title="Write your message" hint="Type it, attach a file, or start from a saved template">
+            {!configured && (
+              <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+                WhatsApp isn’t connected yet — messages won’t actually send. Add your details in the <span className="font-medium">Settings</span> tab (under Advanced).
+              </div>
+            )}
+            <Composer value={msg} onChange={setMsg} templates={templates} onGoToTemplates={onGoToTemplates}
+              provider={provider} selectedCount={selectedCount} variables={variables} />
+          </Step>
 
-        <Step n="2" title="Your message" hint="Type it, attach a file, or pick a template">
-          {!configured && (
-            <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
-              WhatsApp isn’t connected yet — messages won’t actually send. Add your details in the <span className="font-medium">Settings</span> tab.
+          <Step n="2" title="Choose who gets it"
+            hint={selectedCount > 0 ? `${selectedCount} parent${selectedCount > 1 ? 's' : ''} across ${classCount} class${classCount > 1 ? 'es' : ''}` : 'Pick the classes or students to message'}>
+            <RecipientPicker groups={groups} selected={selected} onChange={setSelected} onStudentUpdated={reloadRecipients} />
+            {onSendCredentials && (
+              <button onClick={onSendCredentials}
+                className="mt-2 text-xs font-medium text-whatsapp-green-fg hover:underline flex items-center gap-1">
+                <KeyRound size={12} /> Send login details (ID & password) instead
+              </button>
+            )}
+          </Step>
+
+          <Step n="3" title="Preview & send" hint="Check the preview on the right, then send">
+            <div className="flex items-end gap-2 mb-3">
+              <div className="flex-1"><Input label="Test to my number first (optional)" placeholder="+91…"
+                value={testPhone} onChange={(e) => setTestPhone(e.target.value)} /></div>
+              <Btn icon={Send} onClick={sendTest} disabled={sending || !testPhone.trim()}>Test</Btn>
             </div>
-          )}
-          <Composer value={msg} onChange={setMsg} templates={templates} onGoToTemplates={onGoToTemplates} />
-        </Step>
+            <CostEstimate count={selectedCount} estimate={estimateFor(msg.category)} currency={currency}
+              onSend={send} sending={sending} configured={configured} />
+          </Step>
+        </div>
 
-        <Step n="3" title="Review & send" hint="Send a test to yourself first if you like">
-          <div className="flex items-end gap-2 mb-3">
-            <div className="flex-1"><Input label="Test to my number first (optional)" placeholder="+91…"
-              value={testPhone} onChange={(e) => setTestPhone(e.target.value)} /></div>
-            <Btn icon={Send} onClick={sendTest} disabled={sending || !testPhone.trim()}>Test</Btn>
-          </div>
-          <CostEstimate count={selectedCount} estimate={estimateFor(msg.category)} currency={currency}
-            onSend={send} sending={sending} configured={configured} />
-        </Step>
+        {/* Right: live WhatsApp preview */}
+        <PreviewPanel>
+          <WhatsAppPreview messages={previewMessages}
+            footnote="Live preview — variables show example values here, and fill in for real for each parent." />
+        </PreviewPanel>
       </div>
-
-      {/* Right: live WhatsApp preview */}
-      <PreviewPanel>
-        <WhatsAppPreview messages={previewMessages}
-          footnote="Live preview — variable blanks show example values until you fill them." />
-      </PreviewPanel>
     </div>
   );
 }
 
 // ── Send Progress Report (1-click; power features under Advanced) ───────────────
-// Friendly, adaptive default bands so the message varies by score with zero config.
-const DEFAULT_BANDS = [
-  { min: 0, max: 20, message: 'Your child needs extra focus — let’s work together to improve.', attach_report: true },
-  { min: 20, max: 50, message: 'Your child is doing okay, with room to grow. Keep encouraging them!', attach_report: true },
-  { min: 50, max: null, message: 'Your child is performing well. Thank you for your support!', attach_report: true },
-];
 const REPORT_TYPES = [
   { id: 'weekly',  label: 'Weekly Report',  hint: 'Last week’s progress' },
   { id: 'monthly', label: 'Monthly Report', hint: 'Last month’s progress' },
   { id: 'exam',    label: 'Exam Report',    hint: 'Results for one exam' },
 ];
 
-function ReportsTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount, reloadRecipients }) {
-  const [reportType, setReportType] = useState('monthly');
-  const [examId, setExamId] = useState('');
+function ReportsTab({ groups, selected, setSelected, templates, estimateFor, currency, configured, selectedCount, reloadRecipients, initialExamId }) {
+  const [reportType, setReportType] = useState('exam');
+  const [examId, setExamId] = useState(initialExamId || '');
   const [exams, setExams] = useState([]);
-  const [format, setFormat] = useState('image');        // nice report-card image by default
-  const [criteria, setCriteria] = useState(DEFAULT_BANDS);
-  const [defaultMsg, setDefaultMsg] = useState('Please find your child’s progress report attached.');
+  const [format, setFormat] = useState('pdf'); // pdf | image | text
+  const [criteria, setCriteria] = useState([]);
+  const [defaultMsg, setDefaultMsg] = useState('Please find your child’s report attached.');
+  const [defaultTemplateName, setDefaultTemplateName] = useState('');
   const [category] = useState('utility');
   const [preview, setPreview] = useState(null);
   const [sending, setSending] = useState(false);
@@ -313,6 +354,11 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
       catch { setExams([]); }
     })();
   }, []);
+
+  // Re-target the picker when arriving via "Review First" for a specific exam.
+  useEffect(() => {
+    if (initialExamId) { setReportType('exam'); setExamId(initialExamId); }
+  }, [initialExamId]);
 
   // An exam belongs to one standard — scope recipients to it.
   const examStandardId = reportType === 'exam'
@@ -333,7 +379,7 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
     report_format: format,
     period: reportType === 'exam' ? 'overall' : reportType,   // weekly | monthly
     test_id: reportType === 'exam' ? (examId || undefined) : undefined,
-    criteria, default_message: defaultMsg, category, mode: 'freeform',
+    criteria, default_message: defaultMsg, template_name: defaultTemplateName || undefined, category, mode: 'template',
   });
 
   const runPreview = async () => {
@@ -449,13 +495,25 @@ function ReportsTab({ groups, selected, setSelected, templates, estimateFor, cur
                 <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Report format</label>
                 <select value={format} onChange={(e) => setFormat(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
-                  <option value="image">Image card (recommended)</option>
-                  <option value="pdf">PDF attachment</option>
+                  <option value="pdf">PDF attachment (recommended)</option>
+                  <option value="image">Image card</option>
                   <option value="text">Text summary</option>
                 </select>
               </div>
               <Input label="Default message (when no band matches)" value={defaultMsg}
                 onChange={(e) => setDefaultMsg(e.target.value)} />
+              {templates.filter(t => t.status === 'approved').length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Default Template (optional)</label>
+                  <select value={defaultTemplateName} onChange={(e) => setDefaultTemplateName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
+                    <option value="">Free-form message</option>
+                    {templates.filter(t => t.status === 'approved').map(t => (
+                      <option key={t.id} value={t.name}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <CriteriaBuilder value={criteria} onChange={setCriteria} templates={templates} />
             </div>
           </details>
@@ -520,14 +578,165 @@ function CredentialsTab({ groups, estimateFor, currency, configured, reloadRecip
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────────
-function SettingsTab({ config, reload }) {
+// ── Connect WhatsApp (scan-to-pair) + Advanced (for developers) ────────────────
+function SettingsTab({ config, reload, onConnected }) {
+  const [conn, setConn] = useState(null);
+  const [qr, setQr] = useState(null);
+  const [loadingConn, setLoadingConn] = useState(true);
+  const [showQr, setShowQr] = useState(false);
+  const [testNumber, setTestNumber] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const refreshConn = async () => {
+    try { const c = await whatsappApi.getConnection(); setConn(c); return c; }
+    catch { setConn({ connected: false, state: 'error' }); return null; }
+    finally { setLoadingConn(false); }
+  };
+  useEffect(() => { refreshConn(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadQr = async () => {
+    setQr(null);
+    try { setQr(await whatsappApi.getQr()); } catch (e) { setQr({ error: e.message }); }
+  };
+  const startConnect = async () => { setShowQr(true); await loadQr(); };
+
+  // While the QR is on screen, poll until the phone links.
+  useEffect(() => {
+    if (!showQr) return undefined;
+    const id = setInterval(async () => {
+      const c = await refreshConn();
+      if (c?.connected) { setShowQr(false); onConnected?.(); }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [showQr]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const disconnect = async () => {
+    if (!confirm('Disconnect WhatsApp? You’ll need to scan again to reconnect.')) return;
+    setBusy(true);
+    try { await whatsappApi.disconnect(); await refreshConn(); onConnected?.(); }
+    catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
+  const sendTest = async () => {
+    if (!testNumber.trim()) { alert('Enter your WhatsApp number.'); return; }
+    setTesting(true);
+    try {
+      const r = await whatsappApi.send({ test_to_self: testNumber.trim(), mode: 'freeform',
+        body_text: 'Test ✅ Your institute’s WhatsApp is connected and ready to send.' });
+      const res = r.results?.[0] || {};
+      const ok = res.status && res.status !== 'failed' && res.status !== 'not_configured';
+      alert(ok ? `✅ Sent to ${testNumber.trim()}.` : `❌ Failed: ${res.error || 'unknown error'}`);
+    } catch (e) { alert(e.message); } finally { setTesting(false); }
+  };
+
+  const connected = conn?.connected;
+  const noServer = conn?.state === 'no_server' || qr?.state === 'no_server';
+
+  return (
+    <div className="space-y-4 max-w-lg">
+      <div>
+        <h3 className="text-base font-semibold text-neutral-800">Connect WhatsApp</h3>
+        <p className="text-sm text-neutral-500">Link your WhatsApp once — then every message sends from your own number.</p>
+      </div>
+
+      {loadingConn ? (
+        <Skeleton className="h-28 w-full rounded-2xl" />
+      ) : connected ? (
+        <div className="glass-panel border border-whatsapp-green-fg/30 bg-whatsapp-green-light/30 rounded-card p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-whatsapp-green text-white flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={18} />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-neutral-800 leading-tight">Connected</p>
+            <p className="text-xs text-neutral-500">{conn.number ? `+${conn.number}` : 'Your WhatsApp is linked.'}</p>
+          </div>
+          <Btn size="sm" variant="danger" onClick={disconnect} disabled={busy}>Disconnect</Btn>
+        </div>
+      ) : noServer ? (
+        <div className="rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          The WhatsApp server isn’t set up yet. Ask your admin/developer to add it under
+          <span className="font-medium"> Advanced (for developers)</span> below.
+        </div>
+      ) : (
+        <div className="glass-panel border border-[#EBEAE7] rounded-card p-4">
+          {!showQr ? (
+            <div className="text-center py-3">
+              <div className="w-12 h-12 rounded-full bg-whatsapp-green-light mx-auto flex items-center justify-center mb-2">
+                <QrCode size={22} className="text-whatsapp-green-fg" />
+              </div>
+              <p className="text-sm text-neutral-600 mb-3">Your WhatsApp isn’t linked yet.</p>
+              <Btn variant="primary" icon={QrCode} onClick={startConnect}>Connect WhatsApp</Btn>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+              <div className="flex items-center justify-center">
+                {qr?.qr_base64 ? (
+                  <img src={qr.qr_base64} alt="WhatsApp QR code"
+                    className="w-44 h-44 rounded-lg border border-[#EBEAE7] bg-white p-1" />
+                ) : qr?.error ? (
+                  <p className="text-xs text-red-600 text-center px-2">{qr.error}</p>
+                ) : (
+                  <div className="w-44 h-44 rounded-lg border border-dashed border-[#D9D7D3] flex items-center justify-center text-neutral-400">
+                    <Loader2 size={20} className="animate-spin" />
+                  </div>
+                )}
+              </div>
+              <div className="text-sm">
+                <p className="font-semibold text-neutral-800 mb-2">Scan to link</p>
+                <ol className="text-xs text-neutral-600 space-y-1 list-decimal ml-4">
+                  <li>Open <b>WhatsApp</b> on your phone</li>
+                  <li>Tap <b>⋮ → Linked devices</b></li>
+                  <li>Tap <b>Link a device</b></li>
+                  <li>Point your phone at this code</li>
+                </ol>
+                {qr?.pairing_code && (
+                  <p className="text-xs text-neutral-500 mt-2">Or enter code: <span className="font-mono font-semibold">{qr.pairing_code}</span></p>
+                )}
+                <button onClick={loadQr} className="mt-3 text-xs text-whatsapp-green-fg hover:underline">Refresh code</button>
+                <p className="text-[11px] text-neutral-400 mt-2 flex items-center gap-1">
+                  <Loader2 size={11} className="animate-spin" /> Waiting for you to scan…
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {connected && (
+        <div className="glass-panel border border-[#EBEAE7] rounded-card p-3">
+          <p className="text-xs font-medium text-neutral-700 mb-2">Send yourself a test message</p>
+          <div className="flex items-end gap-2">
+            <div className="flex-1"><Input label="Your WhatsApp number" placeholder="+91…"
+              value={testNumber} onChange={(e) => setTestNumber(e.target.value)} /></div>
+            <Btn icon={Send} onClick={sendTest} disabled={testing}>{testing ? 'Sending…' : 'Send test'}</Btn>
+          </div>
+        </div>
+      )}
+
+      <details className="group">
+        <summary className="cursor-pointer text-xs font-medium text-neutral-500 hover:text-neutral-800 select-none flex items-center gap-1">
+          <SlidersHorizontal size={12} /> Advanced (for developers)
+        </summary>
+        <div className="mt-3 border-l-2 border-[#EFEDEA] pl-3">
+          <AdvancedSettings config={config} reload={reload} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function AdvancedSettings({ config, reload }) {
   const [form, setForm] = useState({
-    provider: config?.provider || 'meta',
+    provider: config?.provider || 'evolution',
     api_key: '',
     sender: config?.sender || '',
     meta_access_token: '',
     meta_phone_number_id: config?.meta_phone_number_id || '',
     meta_waba_id: config?.meta_waba_id || '',
+    evolution_base_url: config?.evolution_base_url || '',
+    evolution_api_key: '',
+    evolution_instance: config?.evolution_instance || '',
     currency: config?.currency || 'INR',
     rates: config?.rates || { utility: 0.14, marketing: 0.78, auth: 0.13 },
     auto_welcome: config?.auto_welcome || false,
@@ -546,9 +755,10 @@ function SettingsTab({ config, reload }) {
       const body = { ...form };
       if (!body.api_key) delete body.api_key;                 // keep stored secret if blank
       if (!body.meta_access_token) delete body.meta_access_token;
+      if (!body.evolution_api_key) delete body.evolution_api_key;
       await whatsappApi.setConfig(body);
       await reload();
-      setForm(f => ({ ...f, api_key: '', meta_access_token: '' }));
+      setForm(f => ({ ...f, api_key: '', meta_access_token: '', evolution_api_key: '' }));
       alert('Saved.');
     } catch (e) { alert(e.message); } finally { setSaving(false); }
   };
@@ -579,10 +789,11 @@ function SettingsTab({ config, reload }) {
           className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
           <option value="meta">Meta WhatsApp Cloud API (recommended)</option>
           <option value="wanotifier">WANotifier</option>
+          <option value="evolution">Evolution API</option>
         </select>
       </div>
 
-      {isMeta ? (
+      {form.provider === 'meta' && (
         <>
           <Input label="Phone number ID" placeholder="e.g. 123456789012345"
             value={form.meta_phone_number_id} onChange={(e) => set({ meta_phone_number_id: e.target.value })} />
@@ -611,7 +822,27 @@ function SettingsTab({ config, reload }) {
             <p className="text-[11px] text-neutral-400 mt-1.5">Sends Meta’s pre-approved “hello_world” message — proves delivery works. Save first.</p>
           </div>
         </>
-      ) : (
+      )}
+      {form.provider === 'evolution' && (
+        <>
+          <Input label="Evolution Base URL" placeholder="e.g. http://localhost:8080"
+            value={form.evolution_base_url} onChange={(e) => set({ evolution_base_url: e.target.value })} />
+          <div>
+            <Input label="Global API Key" type="password"
+              placeholder={config?.evolution_key_masked || 'Enter API key'}
+              value={form.evolution_api_key} onChange={(e) => set({ evolution_api_key: e.target.value })} />
+            <p className="text-[11px] text-neutral-400 mt-1">
+              {config?.evolution_key_masked ? `Stored: ${config.evolution_key_masked}. Leave blank to keep it.` : 'Stored server-side only; never shown again in full.'}
+            </p>
+          </div>
+          <Input label="Instance Name" placeholder="e.g. TutoriaInstance"
+            value={form.evolution_instance} onChange={(e) => set({ evolution_instance: e.target.value })} />
+          <p className="text-[11px] text-neutral-400 -mt-2">
+            The WhatsApp instance must be created and paired (QR code) in the Evolution API manager.
+          </p>
+        </>
+      )}
+      {form.provider === 'wanotifier' && (
         <>
           <Input label="API key" type="password"
             placeholder={config?.api_key_masked || 'Enter API key'}

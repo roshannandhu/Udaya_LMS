@@ -78,5 +78,8 @@
       "Bash(ls backend/.env)",
       "PowerShell($cmds = @\\('py','python','python3'\\); foreach \\($c in $cmds\\) { $p = Get-Command $c -ErrorAction SilentlyContinue; if \\($p\\) { Write-Output \"FOUND: $c -> $\\($p.Source\\)\" } })"
     ]
+  },
+  "enabledPlugins": {
+    "figma@claude-plugins-official": true
   }
 }

@@ -1,439 +1,616 @@
-# WhatsApp Management Module — Full Working Reference
+# WhatsApp Module — Full Working Reference (Architecture · UI · Logic)
 
-> Teacher-facing WhatsApp communication console for the Tutoria/Udaya LMS.
-> Lets a teacher message **parents** (the phone captured at student import) with
-> manual broadcasts, criteria-based report cards, automated schedules, templates,
-> a dashboard, and a read-only inbox — all billed through the **WhatsApp Business
-> API via WANotifier (BSP)**.
-
-- **Branch:** `whatsapp-message-controller`
-- **Page route:** `/teacher/whatsapp`
-- **Stack:** FastAPI (`backend/main.py` + `backend/whatsapp.py`) · React + Vite + Tailwind + recharts · Supabase (Postgres + Storage)
+> Parent-messaging console for the Tutoria/Udaya LMS. This document explains the **whole**
+> module after the beginner-friendly rebuild: the idea, the architecture, the UI, every
+> endpoint, the database — and the **actual logic/algorithms** behind each flow.
+>
+> **Branch:** `whatsapp-message-controller` · **Route:** `/teacher/whatsapp`
+> **Stack:** FastAPI (`backend/main.py` + `backend/whatsapp.py`) · React + Vite + Tailwind ·
+> Supabase (Postgres + Storage) · Evolution API (default provider) / Meta Cloud API / WANotifier.
 
 ---
 
 ## Table of contents
-1. [What it does & why](#1-what-it-does--why)
-2. [The hard WhatsApp constraint (24h window + templates)](#2-the-hard-whatsapp-constraint)
-3. [Architecture overview](#3-architecture-overview)
-4. [Data model (tables)](#4-data-model)
-5. [Configuration & secrets](#5-configuration--secrets)
-6. [Provider adapter (`whatsapp.py`)](#6-provider-adapter)
-7. [Cost model](#7-cost-model)
-8. [Report generators](#8-report-generators)
-9. [Backend API reference](#9-backend-api-reference)
-10. [Webhook (delivery status + inbound inbox)](#10-webhook)
-11. [Automation / scheduler](#11-automation--scheduler)
-12. [Frontend page & components](#12-frontend-page--components)
-13. [End-to-end flows](#13-end-to-end-flows)
-14. [Setup & deployment](#14-setup--deployment)
-15. [Decisions & deferred scope](#15-decisions--deferred-scope)
-16. [File map](#16-file-map)
+1. [What it is](#1-what-it-is)
+2. [Mental model & user journey](#2-mental-model--user-journey)
+3. [Architecture](#3-architecture)
+4. [Providers](#4-providers)
+5. [Connecting WhatsApp — QR setup (logic)](#5-connecting-whatsapp--qr-setup-logic)
+6. [The variable engine (logic)](#6-the-variable-engine-logic)
+7. [Templates (logic)](#7-templates-logic)
+8. [Sending a message (logic)](#8-sending-a-message-logic)
+9. [Progress reports (logic)](#9-progress-reports-logic)
+10. [Login details / Welcome](#10-login-details--welcome)
+11. [Automations / scheduler (logic)](#11-automations--scheduler-logic)
+12. [Inbox & webhook (logic)](#12-inbox--webhook-logic)
+13. [Dashboard & delivery reports](#13-dashboard--delivery-reports)
+14. [Cost model (logic)](#14-cost-model-logic)
+15. [UI map — every screen & component](#15-ui-map--every-screen--component)
+16. [Backend endpoint reference](#16-backend-endpoint-reference)
+17. [Database schema](#17-database-schema)
+18. [Configuration & environment](#18-configuration--environment)
+19. [One-time DB setup for template files](#19-one-time-db-setup-for-template-files)
+20. [Design decisions & fixed bugs](#20-design-decisions--fixed-bugs)
+21. [File map](#21-file-map)
 
 ---
 
-## 1. What it does & why
+## 1. What it is
 
-The product goal is **keeping parents looped into their child's learning** with
-near-zero effort and near-zero cost. Three outcomes:
+A teacher (or office staff) sends WhatsApp messages to **students' parents** — progress
+reports, fee reminders, login details, exam results, absence alerts — straight from the LMS,
+with each student's real data filled in automatically. It is built so a **first-time computer
+user understands the whole flow in under two minutes**. Everything technical (providers,
+tokens, approval, cost categories) is hidden behind an **Advanced** area.
 
-| Outcome | Examples |
-|---|---|
-| **Onboarding** | Welcome + login credentials the moment a student is created |
-| **Awareness** | Periodic report digests, exam mark reports, attendance status |
-| **Intervention** | "Marks < 20 → needs to focus", low-attendance alerts, with guidance |
-
-Design principles: right message at the right moment at the lowest cost (cheap
-**Utility** templates); teacher always in control (nothing auto-sends unconfigured);
-respect the parent (opt-out, quiet hours); personal, not robotic.
+The simple path uses the **Evolution** provider, which links by **QR code like WhatsApp Web**
+and sends from the institute's own number — no Meta business verification, no template
+approval, no per-message cost.
 
 ---
 
-## 2. The hard WhatsApp constraint
-
-WhatsApp Business API does **not** let you freely send arbitrary text/media to a
-parent. There are two send modes:
-
-| Mode | When allowed |
-|---|---|
-| **Free-form** (any text/media) | Only inside a **24-hour customer-service window**, opened when the *parent* messages you first |
-| **Template** (pre-approved by Meta, fixed body with `{{1}}` slots + optional media header) | Anytime — this is the path for business-initiated messages |
-
-Consequences baked into the module:
-- The **primary send path is template-based**. Free-form is gated: the backend
-  rejects a free-form send unless **every** recipient has an open session
-  (`session_open`), which is conservatively `False` until inbound tracking proves otherwise.
-- A full **Template management** UI exists (create → submit to Meta → track approval).
-- Reports/credentials use the **Utility** category (cheapest, transactional, legitimate).
-
----
-
-## 3. Architecture overview
+## 2. Mental model & user journey
 
 ```
-Teacher (browser)
-  │  /teacher/whatsapp  (React page, tabs)
-  ▼
-FastAPI  /api/teacher/whatsapp/*   (backend/main.py — endpoints + auth + scheduler)
-  │
-  ├── backend/whatsapp.py          (provider adapter, report builders, cost helper, config I/O)
-  │        └── WANotifierProvider → https://api.wanotifier.com   (the BSP → Meta)
-  │
-  ├── Supabase Postgres            (whatsapp_templates / _messages / _scheduled_jobs / _inbox)
-  └── Supabase Storage             (public "whatsapp" bucket — media + generated report PDFs/images)
-
-Provider → (delivery status & inbound replies) → POST /api/teacher/whatsapp/webhook
+Connect WhatsApp (scan QR) → ①Write message → ②Choose students → ③Preview → ④Send → ⑤Delivery report
 ```
 
-- **Endpoints live in `main.py`** (preserving the repo's "routes in main.py" convention).
-- **Adapter + report rendering + config live in `whatsapp.py`** to keep `main.py` lean.
-- **Provider is swappable** behind `WhatsAppProvider`; WANotifier is the first implementation.
+A persistent **FlowStepper** bar (`FlowStepper.jsx`) sits on top of the Send screen and lights
+up the current step. Every screen answers: **What am I doing? Why? What happens next?**
 
----
-
-## 4. Data model
-
-All tables are service-role only (RLS `deny_all`) — the backend uses the service
-key; the frontend never touches them directly. Defined in `backend/schema.sql`.
-
-### `whatsapp_templates`
-| Column | Notes |
-|---|---|
-| `id`, `teacher_id` | owner scope |
-| `name` | lowercase_with_underscores (Meta requirement) |
-| `category` | `utility` \| `marketing` \| `auth` |
-| `language` | default `en` |
-| `header_type` | `none` \| `image` \| `document` \| `audio` \| `text` |
-| `body_text` | body with `{{1}}`, `{{2}}` slots |
-| `variables` | JSONB array of labels |
-| `provider_template_id` | id returned by WANotifier |
-| `status` | `draft` \| `pending` \| `approved` \| `rejected` |
-
-### `whatsapp_messages` (outbound send log — drives History, spend, donut)
-| Column | Notes |
-|---|---|
-| `id`, `teacher_id`, `standard_id`, `student_id` | scope + joins |
-| `to_phone`, `template_name`, `body_text`, `media_url`, `media_type`, `category` | message content |
-| `status` | `queued` \| `sent` \| `delivered` \| `read` \| `failed` \| `not_configured` |
-| `provider_message_id` | matched by the delivery webhook |
-| `cost_amount`, `currency` | billed only on a billable (non-failed) status |
-| `error`, `job_id`, `sent_at`, `created_at` | diagnostics + automation link |
-
-### `whatsapp_scheduled_jobs` (automation)
-| Column | Notes |
-|---|---|
-| `name`, `target_type` (`all`\|`classes`), `target_ids` | who |
-| `trigger_type` (`interval`\|`post_exam`\|`fixed_date`), `trigger_config` | when (`{every:"1 week"}` / `{at}` / `{test_id}`) |
-| `mode` (`template`\|`freeform`\|`report`), `template_name`, `body_text`, `report_format`, `criteria` | what |
-| `category`, `quiet_hours`, `active`, `next_run_at`, `last_run_at` | controls |
-
-### `whatsapp_inbox` (read-only inbound replies)
-| Column | Notes |
-|---|---|
-| `id`, `teacher_id` | scope |
-| `from_phone`, `student_id`, `student_name`, `standard_id`, `standard_name` | resolved by phone match |
-| `body`, `media_url`, `media_type`, `provider_message_id` | message |
-| `read_by_teacher`, `received_at`, `created_at` | unread tracking |
-
-### `students.whatsapp_opt_out` (BOOLEAN)
-Per-parent opt-out. Opted-out parents are excluded from every recipient resolver
-and cost estimate (DLT / policy compliance).
-
----
-
-## 5. Configuration & secrets
-
-- WhatsApp credentials (API key, sender, provider) are stored **server-side only**
-  via `wa.get_wa_config()` / `wa.save_wa_config()` (a JSON file), **never** returned
-  to the client in full. `GET /config` returns the key **masked** (`••••1234`)
-  through `wa.mask_key()`.
-- Non-secret prefs also live there: per-category `rates`, `currency`, `quiet_hours`,
-  `auto_welcome`, `welcome_template`.
-- The Settings tab writes config via `POST /config`; a blank/masked API-key field
-  never overwrites the stored key.
-
----
-
-## 6. Provider adapter
-
-`backend/whatsapp.py`:
-
-```python
-class WhatsAppProvider:              # abstract contract
-    name, configured
-    async send_template(to, template, variables, media_url, media_type, language)
-    async send_freeform(to, text, media_url, media_type)
-    async create_template(name, category, language, body_text, header_type, variables)
-    async get_template_status(provider_template_id)
-    async get_session_state(to)      # is the 24h window open?
-
-class UnconfiguredProvider(WhatsAppProvider):   # graceful no-op when no API key
-    # every send returns {status: "not_configured"} — nothing goes out, nothing billed
-
-class WANotifierProvider(WhatsAppProvider):     # concrete BSP
-    BASE = "https://api.wanotifier.com/v1"
-    # _post() wraps auth; send_*/create_template/get_template_status call the REST API
-    # get_session_state() → False (no inbound store assumed, so free-form stays gated)
-
-def get_provider(config=None) -> WhatsAppProvider   # factory; picks WANotifier or Unconfigured
+The stepper's "current step" is derived live (`ComposeTab` in the page):
+```
+hasMessage = (template chosen) OR (free-form body non-empty) OR (a file attached)
+currentStep = !hasMessage ? 1 : (selectedCount === 0 ? 2 : 3)
 ```
 
-Every send returns a uniform dict: `{status, provider_message_id, error}`. This is
-what makes the rest of the system provider-agnostic.
-
 ---
 
-## 7. Cost model
+## 3. Architecture
 
-```python
-DEFAULT_RATES = {"utility": 0.14, "marketing": 0.78, "auth": 0.13}   # INR, editable in Settings
-estimate_cost(recipient_count, category) -> {count, rate, amount, currency}
+```
+┌──────────────────────────┐   HTTPS (Bearer JWT)   ┌─────────────────────────────┐
+│ Frontend (React + Vite)  │ ─────────────────────▶ │ Backend (FastAPI, main.py)  │
+│ whatsappApi (api.js)     │ ◀───────────────────── │ /api/teacher/whatsapp/*     │
+│ WhatsAppMessageCtrlPage  │                        │  ┌───────────────────────┐  │
+└──────────────────────────┘                        │  │ Variable engine        │  │
+                                                     │  │ (_wa_render, registry) │  │
+                                                     │  └───────────────────────┘  │
+                                                     │  ┌───────────────────────┐  │
+                                                     │  │ Provider adapter        │  │
+                                                     │  │ (whatsapp.py)           │  │
+                                                     │  └──────────┬─────────────┘  │
+                              Supabase (Postgres)                 │ provider API
+                       templates / messages / jobs / inbox        ▼
+                                                       ┌───────────────────────┐
+                                                       │ Evolution API server   │ → WhatsApp
+                                                       │ (or Meta / WANotifier) │
+                                                       └───────────────────────┘
 ```
 
-- **Pre-send estimate:** Compose/Reports footer shows `count × rate = ₹total`
-  (`POST /estimate`).
-- **Actual spend:** summed from `whatsapp_messages.cost_amount`. A row is billed
-  only when the provider returns a billable status (not `failed`/`not_configured`).
-- **Dashboard:** `GET /stats` returns `spend.month` (current calendar month) and
-  `spend.total`.
-
-Example: 30 parents × ₹0.14 utility ≈ **₹4.20**.
+- The frontend never talks to WhatsApp directly — it calls the backend; the backend calls the
+  active **provider**, which calls WhatsApp.
+- Secrets (provider keys, Evolution server address) live server-side in `whatsapp_config.json`,
+  masked before reaching the browser (`mask_key`).
+- Every endpoint requires a teacher JWT (`verify_token` + `_wa_require_teacher`), except the
+  provider webhook.
 
 ---
 
-## 8. Report generators
+## 4. Providers
 
-In `whatsapp.py`, consuming the existing `GET /api/students/{id}/report/v2` shape
-(avg score, attendance, rank, subject radar, recent tests):
+`backend/whatsapp.py`. Factory `get_provider(config)` returns the right adapter from
+`whatsapp_config.json`. All adapters return a uniform result
+`{status, provider_message_id, error}`, which keeps everything above them provider-agnostic.
 
-| Function | Output | Used for |
-|---|---|---|
-| `build_report_text(report)` | WhatsApp-friendly text summary | text format |
-| `build_report_pdf(report)` | A4 PDF bytes (reportlab) | PDF attachment |
-| `build_report_image(report)` | 800×1000 PNG card (Pillow) | image card |
-| `resolve_band(score, criteria)` | matches a score to a criteria band | rule-based messaging |
+| Provider | Class | Links by | Templates | Cost |
+|----------|-------|----------|-----------|------|
+| **Evolution** (default/simple) | `EvolutionProvider` | **QR scan** | sent as normal text | **free** |
+| **Meta Cloud API** | `MetaCloudProvider` | token + phone-id + WABA-id | real approved templates `{{1}}` | per-msg |
+| **WANotifier** | `WANotifierProvider` | api key + sender | Meta-style templates | per-msg |
+| **Unconfigured** | `UnconfiguredProvider` | — | — | — (returns `not_configured`, never crashes) |
 
-Generated PDFs/images are uploaded to the public **`whatsapp` Supabase bucket** to
-get a URL the provider can attach.
-
-Requires `reportlab` and `Pillow` (in `backend/requirements.txt`).
-
----
-
-## 9. Backend API reference
-
-All under `/api/teacher/whatsapp`, teacher-only (`_wa_require_teacher`), except the
-webhook (provider-signed, unauthenticated).
-
-### Config
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/config` | `{configured, provider, sender, api_key_masked, rates, currency, auto_welcome, welcome_template, quiet_hours}` |
-| POST | `/config` | Update config; blank/masked key never overwrites stored key |
-
-### Recipients & media
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/recipients?standard_ids=` | Parents grouped by class: `{groups:[{standard_id, standard_name, students:[{id,name,phone,student_code,opted_out,session_open}]}], total, with_phone}` |
-| POST | `/upload-media` | FormData → `whatsapp` bucket → `{url, type, filename}` |
-
-### Send & estimate
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/estimate` | `{count, rate, amount, currency}` |
-| POST | `/send` | Manual send (template or free-form, optional media, `test_to_self`). Writes one `whatsapp_messages` row per recipient → `{results, sent, total_cost, configured}` |
-
-### History & dashboard
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/messages?limit=&status=` | History rows (enriched with `student_name` + `standard_name`) + `spend_total` |
-| GET | `/stats` | Dashboard: `{counts, totals, spend:{month,total}, performance:[{status,count}], recent:[…enriched], jobs:[…]}` |
-
-### Templates
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/templates` | List teacher templates |
-| POST | `/templates` | Create (draft, or `submit:true`) |
-| POST | `/templates/{id}/submit` | Submit a draft to Meta via WANotifier |
-| GET | `/templates/{id}/status` | Refresh approval status |
-| DELETE | `/templates/{id}` | Delete |
-
-### Reports & criteria
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/preview-criteria` | Dry-run: per student → resolved band + message (no send) |
-| POST | `/send-reports` | Generate (pdf/image/text) + send per criteria band |
-| POST | `/send-welcome` | Onboarding credentials/welcome |
-
-### Automation jobs
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/jobs` | List |
-| POST | `/jobs` | Create |
-| PUT | `/jobs/{id}` | Update |
-| DELETE | `/jobs/{id}` | Delete |
-| POST | `/jobs/{id}/toggle` | Active on/off |
-| POST | `/jobs/{id}/run-now` | Execute immediately |
-
-### Inbox (read-only)
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/inbox` | Inbound replies grouped by parent: `{threads:[{from_phone, student_name, standard_name, unread, messages:[…]}], unread, count}` |
-| POST | `/inbox/mark-read` | Mark a thread / messages read |
-
-### Webhook
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/webhook` | Provider callbacks — delivery status **and** inbound replies (see §10) |
+**Factory logic** (`get_provider`):
+```
+provider = config.provider or "wanotifier"
+if provider == "meta":      return Meta if (token and phone_id) else Unconfigured
+if provider == "evolution": return Evolution if (base_url and api_key and instance) else Unconfigured
+else (wanotifier):          return WANotifier if api_key else Unconfigured
+```
 
 ---
 
-## 10. Webhook
+## 5. Connecting WhatsApp — QR setup (logic)
 
-`POST /api/teacher/whatsapp/webhook` is **unauthenticated** (provider-signed) and
-handles two payload kinds in one endpoint:
+The Evolution **server** (address + key + instance) is configured **once by a developer** in
+`whatsapp_config.json`; the teacher only **scans a QR**.
 
-1. **Delivery status update** — if the payload has `id`/`message_id` + `status`, it
-   updates the matching `whatsapp_messages.status` (`sent → delivered → read`, or `failed`).
-2. **Inbound parent reply** — if the payload carries a sender phone + body/media (and
-   no status, or an explicit `direction`/`type` of inbound), it:
-   - resolves the parent via `_wa_match_inbound()` (phone → `students.phone` using
-     `_wa_phone_variants()`, which tolerates `+`, country code `91`, last-10-digits),
-   - derives the owning teacher + class from the student's standard,
-   - inserts a row into `whatsapp_inbox`.
+**Backend (Evolution API v2 calls in `EvolutionProvider`):**
+```
+connection_state(): GET /instance/connectionState/{instance} → "open" | "connecting" | "close"
+ensure_instance():  GET /instance/fetchInstances?instanceName=… ; if missing → POST /instance/create
+get_qr():           ensure_instance(); GET /instance/connect/{instance} → { base64 (QR image), pairingCode }
+owner_number():     GET /instance/fetchInstances?instanceName=… → linked number (strip @s.whatsapp.net)
+logout():           DELETE /instance/logout/{instance}
+```
 
-All branches are exception-guarded — a malformed payload just returns `{"ok": true}`.
+**Endpoint logic:**
+```
+GET /connection:
+    if provider == evolution and server configured:
+        state = connection_state(); connected = (state == "open")
+        number = owner_number() if connected else ""
+        return {provider, connected, state, number}
+    else (meta/wanotifier): connected = credentials present  (no QR)
 
-> Configure this URL in the WANotifier dashboard as the status + incoming-message webhook.
+GET /qr:
+    if provider != evolution: return {error: "use credentials under Advanced"}
+    if server not configured: return {state: "no_server", error: "ask your admin"}
+    if connection_state() == "open": return {state:"open"}     # already linked
+    return get_qr()  → {qr_base64, pairing_code}
 
----
+POST /disconnect: evolution → logout()
+```
 
-## 11. Automation / scheduler
-
-- A lightweight **in-process poller** `_whatsapp_scheduler_loop()` runs on FastAPI
-  startup (~25s settle, then every 60s). The backend is always-on uvicorn (not serverless).
-- `_wa_execute_job(job)` resolves recipients, honours **quiet hours**, applies a
-  **12-hour dedupe** (a job won't re-message the same parent within 12h), sends via
-  the normal send path, then advances `next_run_at` (or deactivates one-shot triggers).
-- Triggers: `interval` (every 1 day/week/month), `fixed_date` (`{at}`), `post_exam`.
-- Jobs can send a template, free-form, or a **criteria-based report** (reusing §8 + bands).
-
----
-
-## 12. Frontend page & components
-
-**Page:** `frontend/src/pages/teacher/WhatsAppMessageControllerPage.jsx` — a tabbed
-shell (pill tab bar, `max-w-5xl`). On load it fetches config + templates + recipients.
-A banner prompts for setup until an API key is saved.
-
-**Tabs:** `Overview · Compose · Reports · Automation · Templates · Inbox · History · Settings`
-(Overview is the default landing tab).
-
-| Tab / component | File | What it does |
-|---|---|---|
-| **Overview** | `whatsapp/OverviewTab.jsx` | Dashboard from `GET /stats`: month/total spend pills, 4 KPI `StatCard`s (Total/Delivered/Read/Failed), performance donut, quick actions, recent-messages table, automation-rules summary with live toggles |
-| Performance donut | `whatsapp/MessagePerformanceDonut.jsx` | recharts `PieChart` (donut) over delivered/read/sent/pending/failed |
-| Quick actions | `whatsapp/QuickActions.jsx` | Tiles that jump to Compose/Reports/Templates/Automation/Inbox |
-| Recent messages | `whatsapp/RecentMessagesTable.jsx` | Styled table + status pills (also exports `fmtDate`, `msgType`) |
-| **Compose** | page-local `ComposeTab` | `RecipientPicker` + `Composer` + test-to-self + `CostEstimate` |
-| Recipient picker | `whatsapp/RecipientPicker.jsx` | Class accordions, per-student include toggles, opt-out aware |
-| Composer | `whatsapp/Composer.jsx` | Template/free-form switch, variable fields, category, media attach |
-| Cost estimate | `whatsapp/CostEstimate.jsx` | Sticky `count × rate = ₹total` + Send |
-| **Reports** | page-local `ReportsTab` | Format (pdf/image/text) + period + `CriteriaBuilder` + criteria preview |
-| Criteria builder | `whatsapp/CriteriaBuilder.jsx` | Score bands (min/max → message/template + attach-report); presets `<20 / 20–50 / 50+` |
-| **Automation** | `whatsapp/AutomationTab.jsx` | Job list + on/off toggles + run-now + create/edit modal |
-| **Templates** | `whatsapp/TemplatesTab.jsx` | Create/submit/track approval; 4 presets |
-| **Inbox** | `whatsapp/InboxTab.jsx` | Read-only threads grouped by parent, unread badges, conversation view; marks read on open |
-| **History** | `whatsapp/HistoryTab.jsx` | Filterable/searchable table (status filter + name/number search) + total spend |
-| **Settings** | page-local `SettingsTab` | Provider, masked API key, sender, rates, quiet hours |
-
-**API client:** `frontend/src/lib/api.js` → `whatsappApi` (config, recipients,
-estimate, send, getMessages, getStats, templates CRUD, previewCriteria, sendReports,
-sendWelcome, jobs CRUD, getInbox, markInboxRead, uploadMedia).
-
-**Theme:** WhatsApp-green accent token in `tailwind.config.js` + `cards/pastel.js`
-(`whatsapp`), layered on the app's flat pastel design system.
+**Frontend logic** (`SettingsTab` → "Connect WhatsApp" card):
+```
+on open: getConnection()
+if not connected → "Connect" → getQr() → show <img src=qr_base64> + pairing code + steps
+while QR visible: every 3s → getConnection(); if connected → hide QR, refresh banner
+if connected → green "Connected ✓ +number" + Send-test + Disconnect
+```
+The page-level banner ("WhatsApp isn't connected — scan the QR") is keyed on the **live
+connection state**, not on whether credentials exist.
 
 ---
 
-## 13. End-to-end flows
+## 6. The variable engine (logic)
 
-**Manual broadcast (template):** Compose → pick class(es) in RecipientPicker →
-choose an **approved** template + fill variables (+ optional media) → see live cost
-→ Send → backend resolves recipients, sends each via the provider, logs rows → History
-+ Overview update; provider webhook later flips statuses to delivered/read.
+**One** variable format: human-friendly named tags like `{Student Name}`, `{Fee Amount}`. No
+`{{1}}` positions and no `[Label]` brackets in the teacher's world. (The old module had three
+coexisting formats with a lossy round-trip and ~120 lines of regex "guessing" — all deleted.)
 
-**Report cards by criteria:** Reports → pick recipients + format + period → define
-bands (e.g. `<20 → "needs to focus"`, `20–50 → "average"`, `50+ → "great work"`) →
-**Preview criteria** (per-student band/message, no send) → Send → backend fetches each
-report, resolves the band, renders pdf/image/text, uploads, sends.
+### Source of truth — `WA_VARIABLES` (in `main.py`)
+A single registry exposed via `GET /variables`. Each entry: `{name, kind, group, example,
+description}` (+ `token` = `{Name}`). Two kinds:
 
-**Automation:** Automation → New job (target, trigger, message/report, quiet hours,
-active) → poller fires due jobs (or **Run now**) → logged to History with `job_id`.
+- **auto** — filled from data per student: `{Student Name}`, `{Student ID}`, `{Class}`,
+  `{Username}`, `{Password}`, `{Login Link}`, `{Attendance}`, `{Score}`, `{Points}`,
+  `{Latest Exam}`, `{Latest Assignment}`, `{Study Material}`, `{Live Class}`,
+  `{Institute Name}`, `{Date}`, `{Time}` (+ alias-resolvable `{Parent Name}`, `{Student Phone}`,
+  `{Month}`, `{Year}`).
+- **ask** — teacher types one value before sending (same for everyone in that send):
+  `{Fee Amount}`, `{Due Date}`, `{Class Date}`, `{Class Time}`, `{Teacher Name}`. **Any unknown
+  `{tag}` is also treated as "ask".**
 
-**Inbox:** Parent replies on WhatsApp → WANotifier posts to `/webhook` → matched to
-student/teacher by phone → stored in `whatsapp_inbox` → appears in the Inbox tab with
-an unread badge (read-only; reply from the WhatsApp Business app).
+### `_wa_render(text, recipient, manual_values)` — THE engine
+```
+manual = { lower(key): str(value) for key,value in manual_values }      # case-insensitive
+text   = text.replace("{{","{").replace("}}","}")                       # forgive {{x}}
+for each {token} matched by /\{([^{}]+)\}/:
+    key   = lower(token.strip())
+    canon = ALIAS[key] or key                                           # snake → canonical
+    if canon in AUTO_KEYS:   replace with _wa_auto_value(canon, recipient)
+    elif key   in manual:    replace with manual[key]
+    elif canon in manual:    replace with manual[canon]
+    else:                    replace with ""                            # strip unknown/empty
+out = out.replace("{}","")                                              # no broken artifacts
+```
+Result: parents **never** see `{...}` or `{{1}}`. `_wa_auto_value` maps a canonical key to the
+recipient's value (name, code, class, attendance%, avg score%, points, latest exam/etc., today's
+date) — and crucially `{Institute Name}` → `_wa_branding_name()` (settings `lms_name`) and
+`{Login Link}` → `_wa_login_url()` (settings `login_url`).
 
-**Onboarding:** `send-welcome` pushes a credentials/welcome template to a new student's parent.
+### `_wa_parse_variables(body)` — classify what's used
+```
+normalize body; for each unique {token}:
+    classify "auto" if canonical(token) in AUTO_KEYS else "ask"
+return [ {name, kind}, … ]                # drives the builder + "fill the blanks"
+```
+
+### `_wa_missing_manual(body, manual_values)` — send-time validation
+```
+filled = { lower(k) for k,v in manual_values if v.strip() }
+return [ var.name for var in parse(body) if var.kind=="ask" and lower(var.name) not in filled ]
+# non-empty → HTTP 400 "Please fill in: Fee Amount, Due Date"
+```
+
+### Meta compatibility (only when provider = meta)
+```
+_wa_to_meta_body(body)      → ("Hi {{1}}, {{2}}", ["Student Name","Score"])   # named → positional
+_wa_positional_values(body, recipient, manual) → ["Arjun","88%"]              # ordered values
+```
+
+### Legacy migration (lazy, on read)
+```
+_wa_migrate_legacy_body("Hi {{1}}, {{2}}", labels=["Student Name","Score"]) → "Hi {Student Name}, {Score}"
+```
+Run inside `_wa_template_out` when a stored body still contains `{{`, then persisted once.
 
 ---
 
-## 14. Setup & deployment
+## 7. Templates (logic)
 
-1. **Database** — run `backend/schema.sql` in the Supabase SQL Editor so the
-   `whatsapp_templates`, `whatsapp_messages`, `whatsapp_scheduled_jobs`, **`whatsapp_inbox`**
-   tables + `students.whatsapp_opt_out` exist.
-2. **Backend deps** — `pip install -r backend/requirements.txt` (includes
-   `reportlab`, `Pillow`).
-3. **WANotifier** — create a Meta Business account, verify the business, connect your
-   number in WANotifier, then in the app **Settings** tab enter the API key + sender number.
-4. **Templates** — create your Utility templates and submit them for Meta approval
-   (24–48h). Only approved templates can be sent.
-5. **Webhook** — point WANotifier's delivery + incoming-message webhook at
-   `https://<your-host>/api/teacher/whatsapp/webhook`.
-6. **Storage** — the public `whatsapp` bucket is auto-created on first media/report upload.
+A template = a **saved, reusable message** with named variables. On the simple path there is no
+"approval": pick → fill blanks → send.
 
-Local dev: `uvicorn main:app --reload --port 8001` + `npm run dev` (port 3001).
-Until an API key is configured, the `UnconfiguredProvider` makes every send a logged
-no-op (`status: not_configured`) — safe to click through the whole UI.
+### `_wa_template_out(row)` — normalize a stored template for the UI
+```
+if body has "{{":  body = _wa_migrate_legacy_body(body, row.variables); persist once
+row.variables = _wa_parse_variables(body)     # always return parsed {name,kind}
+return row                                     # media_url/type/name pass through select("*")
+```
+
+### Create / Update
+```
+POST /templates:
+    body = _wa_normalize_body(input.body)
+    header_type = _wa_header_from_media(input.media_type)        # image|audio|document|none
+    row = { name, category, language, header_type, body, variables=parse(body), status:"draft" }
+    if _wa_templates_have_media():  row += { media_url, media_type, media_name }   # graceful if columns absent
+    if input.submit (meta):  create Meta template from _wa_to_meta_body(body)
+    insert row
+
+PUT /templates/{id}:  same, but resets status→draft + clears provider_template_id (edit invalidates Meta approval)
+```
+
+### `_wa_templates_have_media()` — self-healing guard
+```
+cached True once whatsapp_templates.media_url probes OK;
+until then media fields are omitted so saves never crash (templates degrade to text-only).
+```
+
+### Ready-made library — `templateLibrary.js`
+Categorized starter templates ("Use this" = duplicate & edit): **Admissions** (Admission
+Confirmation, Welcome) · **Fees** (Fee Reminder, Payment Received) · **Classes** (Class Reminder,
+Class Rescheduled) · **Exams** (Exam Notification, Result Published) · **Attendance** (Absent
+Alert, Attendance Warning) · **General** (Login Details, Holiday Notice).
+
+### Templates carry a real file
+A template can hold an uploaded PDF/image/audio (`media_url/type/name`). When the template is
+**chosen in the composer**, its file is **auto-attached** to the send (the composer copies the
+template's media into the send payload).
 
 ---
 
-## 15. Decisions & deferred scope
+## 8. Sending a message (logic)
 
-**Decisions made:** WANotifier (behind a swappable adapter) · reuse `students.phone`
-as the parent number · support all 3 report formats · class-only grouping · read-only
-inbox · pastel + green visual style.
+**Frontend payload** (`POST /send`): `{included_student_ids, mode, template_name,
+manual_values, body_text, media_url, media_type, category}`.
 
-**Deferred (not built this round):**
-- **Parent Name / Section / Batch / Academic Year** fields (and the `{{ParentName}}`
-  variable) — current contact scope is **Class-only**; `student_code` = Admission No.
-- **Two-way reply composer** / live realtime inbox — inbox is **read-only** capture.
-- **Queue + automatic retry** of failed sends — current send is single-attempt
-  (failures are logged, not auto-retried).
+### `wa_send` (endpoint) — decision tree
+```
+if mode == "template":
+    require template_name
+    fetch template → template_body (canonical named), status, provider_template_id
+    meta_approved = (provider_template_id present) AND (status == "approved")
+    body_for_check = template_body
+else (freeform):
+    body_for_check = body_text
+    require body_for_check non-empty OR media_url
+
+missing = _wa_missing_manual(body_for_check, manual_values)
+if missing: 400 "Please fill in: " + missing
+
+if test_to_self:  send one message to that number; return
+recipients = _wa_resolve_recipients(teacher, standard_ids, included_ids) filtered to those WITH a phone
+if none: 400 "No recipients with a phone number"
+
+for each recipient (Evolution sleeps 2.5s between, to avoid rate-limits):
+    result = _wa_send_and_log(...)
+return { results, sent, total_cost, configured }
+```
+
+### `_wa_send_and_log(...)` — render once, choose the send method
+```
+raw_body = body_text  OR  template_body  OR  (fetch template body by name)
+rendered = _wa_render(raw_body, recipient, manual_values)        # the single engine
+
+use_meta_template = provider=="meta" AND mode=="template" AND template_name AND meta_approved
+if use_meta_template:
+    positional = _wa_positional_values(template_body, recipient, manual_values)
+    res = provider.send_template(to, template_name, positional, media_url, media_type, language)
+else:
+    res = provider.send_freeform(to, rendered, media_url, media_type)   # Evolution / default path
+
+# log one whatsapp_messages row: store the RENDERED text, status, cost (billable only), provider id
+```
+Key point: **for the beginner/Evolution path everything is rendered text sent free-form**; the
+Meta true-template branch only triggers when the Meta provider is active *and* an approved
+template exists.
+
+### `_wa_resolve_recipients(...)` — who & with what data
+```
+standards = teacher's standards (scoping — a teacher can never message another teacher's students)
+events    = _wa_fetch_standard_events(standards)   # latest exam/assignment/material/live class per standard
+for each student in target standards:
+    skip if not in included_ids (when provided)
+    skip if whatsapp_opt_out
+    emit { id,name,phone,student_code,standard_name,username,plain_password,
+           attendance_pct,avg_score,points, latest_test/assignment/material/live_class }
+```
 
 ---
 
-## 16. File map
+## 9. Progress reports (logic)
+
+**Endpoints:** `POST /preview-criteria` (dry-run), `POST /send-reports`.
+
+### `_wa_build_report_rows(...)` — shared by preview & send
+```
+if test_id:  standard = _wa_exam_standard_id(test_id)   # exam report can ONLY go to its own standard
+recipients = _wa_resolve_recipients(...)
+for each recipient:
+    report = get_student_report_v2(id, period)          # reuse the existing report endpoint shape
+    score  = _wa_student_score(report, test_id)         # the test's score, else overall avg
+    band   = resolve_band(score, criteria)              # first band where min <= score < max
+    row += { …recipient, score, band, _report: report }
+```
+
+### `wa_send_reports` per recipient
+```
+skip if no phone
+if exam mode and score is None: skip          # only students who actually took the exam
+if criteria set and no band matched: skip
+message = band.message or default_message
+artifact (when attach):
+    pdf   → build_report_pdf(report)   → upload → media_url (application/pdf)   [DEFAULT format]
+    image → build_report_image(report) → upload → media_url (image/png)
+    text  → build_report_text(report)  → appended to the message body
+send via _wa_send_and_log(...)
+```
+Report artifacts (`whatsapp.py`): `build_report_text` (WhatsApp-friendly summary),
+`build_report_pdf` (reportlab A4), `build_report_image` (Pillow PNG card). Uploaded to the public
+Supabase `whatsapp` bucket to get an attachable URL. **PDF is the default attachment**.
+
+---
+
+## 10. Login details / Welcome
+
+`POST /send-welcome` (`include_credentials`). `_wa_credentials_body()` builds the message;
+`_wa_fetch_credentials()` reads the sensitive Student ID + password; `{Login Link}` resolves from
+settings. An **auto-welcome** (`_wa_auto_welcome`) can fire when a new student is created if the
+teacher enabled it. UI: the `CredentialsTab` (reached from the compose "Send login details" link).
+
+---
+
+## 11. Automations / scheduler (logic)
+
+UI: `AutomationTab.jsx`. A job has: target (all/selected classes), trigger (interval / fixed
+date / after-an-exam), message (template / free-form / report+criteria), quiet hours, on/off.
+Each job has **Test** (send its exact message to your own number — safe), **Run now** (to
+everyone, with confirm), Edit, Delete.
+
+**Runner** — `_whatsapp_scheduler_loop()` (in-process poller, FastAPI always-on):
+```
+every ~60s:
+    due = jobs where active AND next_run_at <= now
+    for job in due: _wa_execute_job(job)
+
+_wa_execute_job(job):
+    if in quiet hours (and not forced): defer
+    recipients = resolve(job.target)
+    skip any recipient this job already messaged in the last 12h     # dedupe
+    send each (template/freeform/report) via the normal send path, tagging whatsapp_messages.job_id
+    advance next_run_at by the interval  (or deactivate one-shot fixed_date/post_exam)
+```
+
+**Test logic** (`AutomationTab.testJob`): prompts for a number (remembered in localStorage) and
+sends the job's exact content via `/send` with `test_to_self` — template jobs send the real
+template, report jobs send the message wording (the report file only attaches on the real run).
+
+---
+
+## 12. Inbox & webhook (logic)
+
+`POST /api/teacher/whatsapp/webhook` is **unauthenticated** (provider-signed) and handles two
+payload kinds:
+```
+if payload has message id + status:   update matching whatsapp_messages.status (sent→delivered→read / failed)
+elif payload has a sender phone + body/media (inbound):
+    student = match phone via _wa_phone_variants()    # tolerates "+", country code 91, last-10-digits
+    derive teacher + class from the student's standard
+    insert into whatsapp_inbox
+always return {ok:true}   # every branch guarded — a malformed payload never errors
+```
+UI: `InboxTab.jsx` — read-only threads grouped by parent (`GET /inbox`), unread badges,
+mark-read on open (`POST /inbox/mark-read`). Replies are sent from the WhatsApp app itself.
+
+---
+
+## 13. Dashboard & delivery reports
+
+- **Dashboard** (`OverviewTab.jsx`, under Advanced) from `GET /stats`: KPIs
+  (queued/sent/delivered/read/failed), `MessagePerformanceDonut`, month/total spend, recent
+  messages (`RecentMessagesTable`), scheduled jobs, `QuickActions`.
+- **Delivery Reports** (`HistoryTab.jsx`, Essentials) from `GET /messages`: per-recipient send
+  log — status, cost, and the **rendered text that was actually sent**.
+
+---
+
+## 14. Cost model (logic)
+
+```
+backend estimate_cost(count, category):
+    if provider == evolution: return amount 0          # self-hosted = free
+    else: amount = count × rates[category]              # utility 0.14 / marketing 0.78 / auth 0.13 (INR, editable)
+
+frontend estimateFor(category):
+    if provider == evolution: return { rate:0, amount:0 }
+    else: { rate, amount: selectedCount × rate }
+
+CostEstimate.jsx: if amount === 0 → show "N parents · Ready to send" + plain "Send" (no ₹)
+                  else → "N parents · est. ₹X" + "Send (₹X)"
+```
+Because Evolution returns 0, the **entire** UI drops ₹ and the utility/marketing/auth category
+chips on the simple path. Actual spend = sum of billable `whatsapp_messages.cost_amount`.
+
+---
+
+## 15. UI map — every screen & component
+
+**Page shell** — `pages/teacher/WhatsAppMessageControllerPage.jsx`
+- Left sidebar: **Essentials** (Send a Message, Templates, Delivery Reports) + a collapsible
+  **Advanced** group (Dashboard, Progress Reports, Inbox, Automations, Settings). Mobile = a
+  scrollable pill row.
+- `tab` state selects the view. `SettingsTab` = "Connect WhatsApp" + `AdvancedSettings` (the old
+  provider/token/rate/quiet-hour form, kept under a `<details>`).
+
+| File | Role |
+|------|------|
+| `FlowStepper.jsx` | 5-step mental-model bar atop the Send screen. |
+| `Composer.jsx` | Write a message (template/free-form), `VariablePicker`, ask-var inputs, media; category hidden on Evolution; auto-attaches a template's file. |
+| `VariablePicker.jsx` | Shared "Add student info" chips + "What is a variable?" explainer. |
+| `RecipientPicker.jsx` | Choose classes/students, counts, inline phone edit, opt-out aware. |
+| `CostEstimate.jsx` | Sticky send footer (hides ₹ when free). |
+| `WhatsAppPreview.jsx` | Faithful WhatsApp chat-bubble preview. |
+| `previewText.jsx` | `renderPreview` (named-tag preview) + `formatWhatsApp` (safe `*bold*`/`_italic_`/`~strike~`) + `mediaKind`. |
+| `TemplatesTab.jsx` | Ready-made library + guided builder (real file upload + live preview) + saved templates (Edit/Delete; Meta status only on Meta). |
+| `templateLibrary.js` | Categorized starter templates. |
+| `CriteriaBuilder.jsx` | Score-band rules for reports (min/max → message/template + attach). |
+| `AutomationTab.jsx` | Scheduled jobs (Test / Run now / Edit / Delete). |
+| `InboxTab.jsx` | Parent replies (read-only). |
+| `HistoryTab.jsx` | Delivery report (send log, status filter + search). |
+| `OverviewTab.jsx` + `MessagePerformanceDonut.jsx` + `RecentMessagesTable.jsx` + `QuickActions.jsx` | Dashboard. |
+
+**Frontend preview logic** (`previewText.renderPreview` + `Composer.findAskVars`):
+```
+renderPreview(body, registry, manualValues, sampleStudent):
+    for each {token}: typed manual value → use it; auto → sample/registry example; ask → example; unknown → the word
+findAskVars(body, registry):
+    tokens that are NOT auto in the registry → render a labelled input feeding manual_values
+```
+
+**API client** — `frontend/src/lib/api.js` → `whatsappApi`: `getConfig/setConfig`,
+`getConnection/getQr/disconnect`, `getRecipients`, `getVariables`, `estimate/send`,
+`getMessages/getStats`, `getInbox/markInboxRead`, `listTemplates/createTemplate/updateTemplate/
+submitTemplate/templateStatus/deleteTemplate`, `previewCriteria/sendReports`, `sendWelcome`,
+`listJobs/createJob/updateJob/deleteJob/toggleJob/runJobNow`, `uploadMedia`.
+
+---
+
+## 16. Backend endpoint reference
+
+All under `/api/teacher/whatsapp`, teacher-auth required (except the public webhook).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET / POST | `/config` | Read (masked) / save config (never wipes a secret with a blank/masked value). |
+| GET | `/connection` | Live status `{connected, state, number}`. |
+| GET | `/qr` | QR image + pairing code (Evolution). |
+| POST | `/disconnect` | Log the phone out (Evolution). |
+| GET | `/recipients` | Students grouped by class (phone/opt-out). |
+| GET | `/variables` | The variable registry. |
+| POST | `/upload-media` | Upload a file → Supabase `whatsapp` bucket (base64 fallback). |
+| POST | `/estimate` | Cost estimate. |
+| POST | `/send` | **Core send** (template or free-form, `manual_values`, `test_to_self`). |
+| GET | `/messages` | Delivery log + total spend. |
+| GET | `/stats` | Dashboard KPIs. |
+| GET / POST | `/templates` | List / create. |
+| PUT / DELETE | `/templates/{id}` | Edit / delete. |
+| POST | `/templates/{id}/submit` · GET `/templates/{id}/status` | Meta approval (advanced). |
+| POST | `/preview-criteria` | Dry-run a banded report send. |
+| POST | `/send-reports` | Send progress reports (pdf/image/text + bands). |
+| POST | `/send-welcome` | Send login details / welcome. |
+| POST | `/webhook` | Inbound statuses + parent replies (no auth). |
+| GET | `/inbox` · POST `/inbox/mark-read` | Parent replies / mark read. |
+| GET / POST | `/jobs` · PUT/DELETE `/jobs/{id}` · POST `/jobs/{id}/toggle` · POST `/jobs/{id}/run-now` | Automations. |
+
+---
+
+## 17. Database schema
+
+`backend/schema.sql` — all RLS `deny_all` to the anon role; the backend uses the service key.
+
+| Table | Holds |
+|-------|-------|
+| `whatsapp_templates` | Saved templates: named-tag `body_text`, optional `media_url/type/name`, `variables` (JSONB), `category`, `header_type`, Meta `status`/`provider_template_id`. |
+| `whatsapp_messages` | One row per recipient per send — `to_phone`, rendered `body_text`, `media_*`, `category`, `status`, `provider_message_id`, `cost_amount`, `error`, `job_id`, `sent_at`. |
+| `whatsapp_scheduled_jobs` | Automations: `target_*`, `trigger_*`, `mode`, message, `report_format`, `criteria`, `quiet_hours`, `active`, `next_run_at`. |
+| `whatsapp_inbox` | Inbound parent replies (matched to student/teacher by phone). |
+| `students.whatsapp_opt_out` | Per-student opt-out (excluded from every resolver). |
+
+---
+
+## 18. Configuration & environment
+
+**Server-only** — `backend/whatsapp_config.json` (never sent to the browser):
+```json
+{
+  "provider": "evolution",
+  "evolution_base_url": "http://<host>:8080",
+  "evolution_api_key": "…",
+  "evolution_instance": "udaya-lms",
+  "meta_access_token": "…", "meta_phone_number_id": "…", "meta_waba_id": "…",
+  "api_key": "…", "sender": "…",
+  "currency": "INR",
+  "rates": { "utility": 0.14, "marketing": 0.78, "auth": 0.13 },
+  "auto_welcome": false, "welcome_template": "", "quiet_hours": {}
+}
+```
+`{Institute Name}` / `{Login Link}` come from **teacher settings** (`lms_name`, `login_url`) via
+`_wa_branding_name()` / `_wa_login_url()`.
+
+**Run locally:** `cd backend && uvicorn main:app --reload --port 8001` · `cd frontend && npm run dev`
+(→ http://localhost:3001).
+
+---
+
+## 19. One-time DB setup for template files
+
+This hosted Supabase does **not** expose `pg-meta`, so the app's auto-migration can't add
+columns; they're added by hand (the convention for the rest of the schema). Template **file
+attachments** need three columns — run once in the Supabase SQL editor:
+```sql
+ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_url  TEXT;
+ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_type TEXT;
+ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_name TEXT;
+```
+Until then templates still save/send **text-only** — `_wa_templates_have_media()` detects the
+missing columns and degrades gracefully (no crash).
+
+---
+
+## 20. Design decisions & fixed bugs
+
+- **One variable system** replaced three coexisting formats (`{tag}` / `{{1}}` / `[Label]`) and
+  the regex "guessing" that silently lost data. Now: named tags only, one render engine, the
+  registry as source of truth.
+- **No approval jargon** on the simple path; Meta's approval/pending/24h-window only surfaces
+  when the Meta provider is selected.
+- **`{Institute Name}` / `{Login Link}`** were hardcoded ("Tutoria LMS"/"udaya.app") — now from settings.
+- **Template editing** was impossible (create/delete only) — added `PUT /templates/{id}`.
+- **Missing/broken placeholders** — validated on save + before send; unknown/empty tags stripped.
+- **Setup was developer-grade** (paste tokens/URLs) — replaced with **scan-a-QR** pairing.
+- **"Attach a file?" was a lie** — no media column existed, so it did nothing on Evolution. Now
+  templates carry a **real** file that auto-attaches in the composer.
+- **Cost jargon on Evolution** (₹0.00, utility/marketing/auth) — hidden, since Evolution is free.
+- **Automations got a safe "Test"** (to your own number), distinct from "Run now" (to everyone).
+- **Progress reports default to PDF**.
+
+---
+
+## 21. File map
 
 **Backend**
-- `backend/main.py` — all `whatsapp/*` endpoints, Pydantic models, helpers
-  (`_wa_resolve_recipients`, `_wa_send_and_log`, `_wa_enrich_messages`,
-  `_wa_match_inbound`, `_wa_phone_variants`), webhook, scheduler loop.
-- `backend/whatsapp.py` — provider adapter, report builders, cost helper, config I/O.
-- `backend/schema.sql` — `whatsapp_*` tables + RLS.
-- `backend/requirements.txt` — `reportlab`, `Pillow`.
+- `backend/main.py` — all `whatsapp/*` endpoints + the variable engine + send/report/job/inbox
+  logic + the scheduler loop + Pydantic models.
+- `backend/whatsapp.py` — provider adapters (Evolution/Meta/WANotifier/Unconfigured), QR/
+  connection methods, report builders, cost helper, config I/O.
+- `backend/schema.sql` — `whatsapp_*` tables + RLS (+ the template media ALTERs).
+- `backend/whatsapp_config.json` — server-only secrets.
 
 **Frontend**
-- `frontend/src/pages/teacher/WhatsAppMessageControllerPage.jsx`
-- `frontend/src/components/teacher/whatsapp/` — `OverviewTab`, `MessagePerformanceDonut`,
-  `QuickActions`, `RecentMessagesTable`, `RecipientPicker`, `Composer`, `CostEstimate`,
-  `CriteriaBuilder`, `TemplatesTab`, `InboxTab`, `HistoryTab`, `AutomationTab`
-- `frontend/src/lib/api.js` — `whatsappApi`
-- `frontend/tailwind.config.js`, `frontend/src/components/cards/pastel.js` — green token
+- `frontend/src/pages/teacher/WhatsAppMessageControllerPage.jsx` — the page shell, `ComposeTab`,
+  `ReportsTab`, `CredentialsTab`, `SettingsTab` (Connect WhatsApp), `AdvancedSettings`.
+- `frontend/src/components/teacher/whatsapp/*` — `FlowStepper`, `Composer`, `VariablePicker`,
+  `RecipientPicker`, `CostEstimate`, `WhatsAppPreview`, `previewText`, `TemplatesTab`,
+  `templateLibrary`, `CriteriaBuilder`, `AutomationTab`, `InboxTab`, `HistoryTab`, `OverviewTab`,
+  `MessagePerformanceDonut`, `RecentMessagesTable`, `QuickActions`.
+- `frontend/src/lib/api.js` — `whatsappApi`.
 
 ---
 
-*Module status: dashboard + manual + reports/criteria + automation + templates +
-read-only inbox implemented and building clean on branch `whatsapp-message-controller`.*
+*Status: beginner-friendly rebuild complete on `whatsapp-message-controller` — one named-tag
+variable engine, scan-a-QR setup, templates that carry real files, Evolution-free cost UX,
+compose/reports/credentials/automation/inbox/dashboard all wired through the shared engine.*

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileUp, AlertTriangle, CheckCircle2, XCircle, ChevronRight, Loader2, Download, UserPlus } from 'lucide-react';
 import { Modal, Btn } from '../ui';
 import { parseImportFile } from '../../lib/bulkImport';
+import { downloadAoaWorkbook } from '../../lib/studentBackup';
 import { apiClient } from '../../lib/api';
 import { useSettingsStore } from '../../store';
 export default function BulkImportModal({ open, onClose, standards, existingStudents, onImportComplete, initialStandardId = null }) {
@@ -19,7 +20,6 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
   const { defaultStudentPassword } = useSettingsStore();
 
   const downloadTemplate = async () => {
-    const XLSX = await import('xlsx');
     const initStd = initialStandardId ? standards.find(s => s.id === initialStandardId) : null;
     const stdName = initStd ? initStd.name : '10th Standard';
     const wsData = [
@@ -28,11 +28,11 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
       ['Meera Singh',  '', '', stdName],
       ['Rohan Kumar',  '', '', stdName],
     ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Students');
-    XLSX.writeFile(wb, 'Student_Import_Template.xlsx');
+    await downloadAoaWorkbook(wsData, {
+      filename: 'Student_Import_Template',
+      cols: [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }],
+      sheetName: 'Students',
+    });
   };
 
   // Fire onImportComplete immediately when step becomes 'done'
@@ -132,8 +132,6 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
   };
 
   const downloadCredentials = async () => {
-    const XLSX = await import('xlsx');
-
     // Prefer the backend response (carries the generated Student ID). Fall back
     // to the locally parsed rows if the server didn't return them (older backend).
     const useServer = createdStudents.length > 0;
@@ -164,13 +162,11 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
       ...rows.map(r => [r.student_code, r.name, r.username, r.temp_password, r.standard, r.email, r.phone, 'https://tutoria.app/login']),
     ];
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{wch: 16}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 25}];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Credentials");
-
-    XLSX.writeFile(wb, `Student_Credentials_${new Date().toISOString().split('T')[0]}.xlsx`);
+    await downloadAoaWorkbook(wsData, {
+      filename: `Student_Credentials_${new Date().toISOString().split('T')[0]}`,
+      cols: [{wch: 16}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 25}],
+      sheetName: 'Credentials',
+    });
   };
 
   const groupByStandard = (students) => {

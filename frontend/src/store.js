@@ -209,6 +209,14 @@ export const useAppCache = create(
       /* ── Invalidate (call after mutations) ── */
       invalidate:         () => set({ standardsTs: null, subjectsTs: null, studentsTs: null }),
       invalidateStudents: () => set({ studentsTs: null }),
+
+      /* ── Full reset (call on login/logout so one account never shows another
+            account's cached standards / subjects / students). ── */
+      reset: () => set({
+        standards: [], subjects: [], students: [],
+        standardsTs: null, subjectsTs: null, studentsTs: null,
+        standardsReady: false, subjectsReady: false, studentsReady: false,
+      }),
     }),
     {
       name: 'tutoria-app-cache',               // localStorage key

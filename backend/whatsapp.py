@@ -66,6 +66,9 @@ def estimate_cost(recipient_count: int, category: str = "utility",
                   config: Optional[dict] = None) -> dict:
     """Live cost estimate: count × per-category rate."""
     config = config if config is not None else get_wa_config()
+    provider = (config.get("provider") or "wanotifier").lower()
+    if provider == "evolution":
+        return {"count": recipient_count, "rate": 0, "amount": 0.00, "currency": "INR"}
     rates = get_rates(config)
     rate = float(rates.get(category, DEFAULT_RATES.get(category, 0.14)))
     currency = config.get("currency") or DEFAULT_CURRENCY
@@ -143,7 +146,7 @@ class WANotifierProvider(WhatsAppProvider):
 
     name = "wanotifier"
     configured = True
-    BASE = "https://api.wanotifier.com/v1"
+    BASE = "https://app.wanotifier.com/api/v1"
 
     def __init__(self, api_key: str, sender: Optional[str] = None):
         self.api_key = api_key
@@ -340,6 +343,169 @@ class MetaCloudProvider(WhatsAppProvider):
         return {"status": (data[0].get("status", "pending").lower()) if data else "pending"}
 
 
+class EvolutionProvider(WhatsAppProvider):
+    """Evolution API adapter.
+    
+    Pairs via QR code, bypassing 24h limits and Meta template requirements.
+    Only supports free-form texts and media sending.
+    """
+
+    name = "evolution"
+    configured = True
+
+    def __init__(self, base_url: str, api_key: str, instance: str):
+        self.base_url = base_url.rstrip('/')
+        self.api_key = api_key
+        self.instance = instance
+
+    async def _post(self, path: str, payload: dict) -> dict:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {"apikey": self.api_key, "Content-Type": "application/json"}
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+            data = resp.json() if resp.content else {}
+            if resp.status_code >= 400:
+                err_msg = data.get("error") or f"HTTP {resp.status_code}"
+                detail = data.get("message")
+                if detail:
+                    err_msg = f"{err_msg}: {detail}"
+                if isinstance(err_msg, dict):
+                    err_msg = str(err_msg)
+                print(f"[Evolution API] Request failed: {err_msg} (Payload: {payload})")
+                return {"status": "failed", "provider_message_id": None, "error": err_msg}
+            msg_id = None
+            if "key" in data and isinstance(data["key"], dict):
+                msg_id = data["key"].get("id")
+            return {"status": "sent", "provider_message_id": msg_id, "error": None, "raw": data}
+        except Exception as e:
+            print(f"[Evolution API] Network exception: {e}")
+            return {"status": "failed", "provider_message_id": None, "error": str(e)}
+
+    @staticmethod
+    def _digits(to: str) -> str:
+        return "".join(c for c in (to or "") if c.isdigit())
+
+    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+        to_digits = self._digits(to)
+        if media_url:
+            kind = "image" if (media_type or "").startswith("image") else (
+                "video" if (media_type or "").startswith("video") else (
+                    "audio" if (media_type or "").startswith("audio") else "document"))
+            payload: Dict[str, Any] = {
+                "number": to_digits,
+                "mediatype": kind,
+                "mimetype": media_type or ("application/pdf" if kind == "document" else "image/jpeg"),
+                "media": media_url,
+            }
+            if kind != "audio" and text:
+                payload["caption"] = text
+            if kind == "document":
+                ext = ".pdf" if (media_type or "").startswith("application/pdf") else ""
+                payload["fileName"] = f"attachment{ext}"
+            return await self._post(f"message/sendMedia/{self.instance}", payload)
+        else:
+            return await self._post(f"message/sendText/{self.instance}", {
+                "number": to_digits, 
+                "text": text or ""
+            })
+
+    async def send_template(self, to, template, variables=None, media_url=None, media_type=None, language="en") -> dict:
+        return {"status": "failed", "provider_message_id": None, "error": "Evolution API does not use Meta templates. Please use free-form messages."}
+
+    async def create_template(self, name, category, language, body_text, header_type="none", variables=None) -> dict:
+        return {"status": "approved", "provider_template_id": f"evo_{name}", "error": None}
+
+    async def get_template_status(self, provider_template_id: str) -> dict:
+        return {"status": "approved"}
+
+    async def get_session_state(self, to: str) -> bool:
+        return True
+
+    # ── Connection / QR pairing (WhatsApp-Web-style setup) ───────────────────
+    async def _get(self, path: str) -> dict:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {"apikey": self.api_key}
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.get(url, headers=headers)
+            data = resp.json() if resp.content else {}
+            if resp.status_code >= 400:
+                return {"_ok": False, "data": data,
+                        "error": (data.get("message") or data.get("error") or f"HTTP {resp.status_code}")}
+            return {"_ok": True, "data": data, "error": None}
+        except Exception as e:
+            return {"_ok": False, "data": {}, "error": str(e)}
+
+    async def _delete(self, path: str) -> dict:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {"apikey": self.api_key}
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.delete(url, headers=headers)
+            data = resp.json() if resp.content else {}
+            return {"_ok": resp.status_code < 400, "data": data,
+                    "error": None if resp.status_code < 400 else (data.get("message") or f"HTTP {resp.status_code}")}
+        except Exception as e:
+            return {"_ok": False, "data": {}, "error": str(e)}
+
+    async def connection_state(self) -> str:
+        """'open' (linked), 'connecting' (awaiting scan), or 'close' (not linked)."""
+        r = await self._get(f"instance/connectionState/{self.instance}")
+        if not r["_ok"]:
+            return "close"
+        d = r["data"] or {}
+        inst = d.get("instance") if isinstance(d.get("instance"), dict) else {}
+        return inst.get("state") or d.get("state") or "close"
+
+    async def ensure_instance(self) -> None:
+        """Create the instance on the Evolution server if it doesn't exist yet."""
+        try:
+            r = await self._get(f"instance/fetchInstances?instanceName={self.instance}")
+            data = r.get("data")
+            exists = (isinstance(data, list) and len(data) > 0) or \
+                     (isinstance(data, dict) and bool(data.get("instance") or data.get("instanceName") or data.get("name")))
+            if exists:
+                return
+            url = f"{self.base_url}/instance/create"
+            headers = {"apikey": self.api_key, "Content-Type": "application/json"}
+            body = {"instanceName": self.instance, "integration": "WHATSAPP-BAILEYS", "qrcode": True}
+            async with httpx.AsyncClient(timeout=20) as client:
+                await client.post(url, headers=headers, json=body)
+        except Exception as e:
+            print(f"[Evolution API] ensure_instance failed: {e}")
+
+    async def get_qr(self) -> dict:
+        """Fetch the pairing QR (base64 image) + numeric pairing code to link a phone."""
+        await self.ensure_instance()
+        r = await self._get(f"instance/connect/{self.instance}")
+        if not r["_ok"]:
+            return {"error": r["error"]}
+        d = r["data"] or {}
+        qr = d.get("qrcode") if isinstance(d.get("qrcode"), dict) else {}
+        return {
+            "qr_base64": d.get("base64") or qr.get("base64"),
+            "pairing_code": d.get("pairingCode") or qr.get("pairingCode"),
+            "error": None,
+        }
+
+    async def owner_number(self) -> str:
+        """The linked WhatsApp number (digits only) when connected, else ''."""
+        r = await self._get(f"instance/fetchInstances?instanceName={self.instance}")
+        if not r["_ok"]:
+            return ""
+        data = r["data"]
+        rec = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
+        if not rec:
+            return ""
+        inst = rec.get("instance") if isinstance(rec.get("instance"), dict) else rec
+        owner = inst.get("owner") or inst.get("ownerJid") or inst.get("number") or ""
+        return str(owner).split("@")[0] if owner else ""
+
+    async def logout(self) -> dict:
+        return await self._delete(f"instance/logout/{self.instance}")
+
+
 def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
     """Factory: real provider when credentials exist, else the degrade provider."""
     config = config if config is not None else get_wa_config()
@@ -352,6 +518,14 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
             return MetaCloudProvider(token, phone_id, (config.get("meta_waba_id") or "").strip() or None)
         return UnconfiguredProvider()
 
+    if provider == "evolution":
+        base_url = (config.get("evolution_base_url") or "").strip()
+        apikey = (config.get("evolution_api_key") or "").strip()
+        instance = (config.get("evolution_instance") or "").strip()
+        if base_url and apikey and instance:
+            return EvolutionProvider(base_url, apikey, instance)
+        return UnconfiguredProvider()
+
     api_key = (config.get("api_key") or "").strip()
     if not api_key:
         return UnconfiguredProvider()
@@ -360,46 +534,88 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
 
 
 # ── Report rendering (consumes the GET /students/{id}/report/v2 shape) ────────
-def _report_fields(report: dict) -> dict:
-    """Pull the common fields used by all three renderers from a report/v2 dict."""
+def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
+    """Pull the common fields used by all three renderers from a report/v2 dict.
+
+    Scopes the figures to *what is being sent* so the artifact matches the message:
+    - exam (``test_id`` given): only that one exam's result — its score + title, no
+      history and no lifetime averages;
+    - weekly/monthly: the period's OWN average + attendance (computed from the
+      already date-filtered data), not the student's lifetime figures;
+    - overall: the student's lifetime figures.
+    """
     student = report.get("student") or {}
     radar = report.get("subject_radar") or []
     timeline = report.get("test_timeline") or []
-    last_tests = timeline[-5:] if timeline else []
+    period = report.get("period") or "overall"
+
+    is_exam = bool(test_id)
+    exam = None
+    if is_exam:
+        exam = next((t for t in timeline if t.get("test_id") == test_id), None)
+        recent_tests = [exam] if exam else []
+        radar = []  # a single-exam result shows no subject radar / history
+        avg_score = exam.get("score_pct") if exam else None
+        attendance_pct = None
+        points = rank = total_students = None
+    else:
+        recent_tests = timeline[-5:] if timeline else []
+        if period in ("weekly", "monthly"):
+            # Average of THIS period's tests (timeline is already date-filtered upstream).
+            pcts = [t.get("score_pct") for t in timeline if t.get("score_pct") is not None]
+            avg_score = round(sum(pcts) / len(pcts), 1) if pcts else None
+            # Records-weighted mean of per-subject attendance (each already counts late).
+            att_total = sum((s.get("att_total") or 0) for s in radar)
+            attendance_pct = round(
+                sum((s.get("attendance_pct") or 0) * (s.get("att_total") or 0) for s in radar)
+                / att_total, 1) if att_total else None
+        else:
+            avg_score = student.get("avg_score")
+            attendance_pct = student.get("attendance_pct")
+        points = student.get("points")
+        rank = report.get("rank")
+        total_students = report.get("total_students")
+
     return {
         "name": student.get("name") or "Student",
         "standard": student.get("standard_name") or "",
         "student_code": student.get("student_code") or "",
-        "attendance_pct": student.get("attendance_pct"),
-        "avg_score": student.get("avg_score"),
-        "points": student.get("points"),
-        "rank": report.get("rank"),
-        "total_students": report.get("total_students"),
+        "attendance_pct": attendance_pct,
+        "avg_score": avg_score,
+        "points": points,
+        "rank": rank,
+        "total_students": total_students,
         "radar": radar,
-        "recent_tests": last_tests,
-        "period": report.get("period") or "overall",
+        "recent_tests": recent_tests,
+        "period": period,
+        "is_exam": is_exam,
+        "exam_title": (exam.get("test_title") if exam else None),
     }
 
 
-def build_report_text(report: dict, lms_name: str = "") -> str:
-    """A clean, WhatsApp-friendly text summary of a student's report."""
-    f = _report_fields(report)
+def build_report_text(report: dict, lms_name: str = "", test_id: Optional[str] = None) -> str:
+    """A clean, WhatsApp-friendly text summary of a student's report (or one exam)."""
+    f = _report_fields(report, test_id)
+    is_exam = f["is_exam"]
     lines: List[str] = []
-    header = lms_name.strip() or "Progress Report"
+    header = lms_name.strip() or ("Exam Result" if is_exam else "Progress Report")
     lines.append(f"*{header}*")
     lines.append(f"Student: {f['name']}" + (f" ({f['standard']})" if f["standard"] else ""))
+    if is_exam and f["exam_title"]:
+        lines.append(f"Exam: {f['exam_title']}")
     if f["attendance_pct"] is not None:
         lines.append(f"Attendance: {f['attendance_pct']}%")
     if f["avg_score"] is not None:
-        lines.append(f"Average score: {f['avg_score']}%")
+        lines.append((f"Score: {f['avg_score']}%") if is_exam else (f"Average score: {f['avg_score']}%"))
     if f["rank"] and f["total_students"]:
         lines.append(f"Class rank: {f['rank']} / {f['total_students']}")
-    if f["radar"]:
+    # Subjects + history are only meaningful for a multi-test report, not one exam.
+    if not is_exam and f["radar"]:
         lines.append("")
         lines.append("*Subjects*")
         for s in f["radar"]:
             lines.append(f"• {s.get('subject', '')}: {s.get('test_avg', 0)}% avg")
-    if f["recent_tests"]:
+    if not is_exam and f["recent_tests"]:
         lines.append("")
         lines.append("*Recent tests*")
         for t in f["recent_tests"]:
@@ -407,7 +623,7 @@ def build_report_text(report: dict, lms_name: str = "") -> str:
     return "\n".join(lines)
 
 
-def build_report_pdf(report: dict, lms_name: str = "") -> bytes:
+def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = None) -> bytes:
     """Render the report as a PDF (reportlab). Layout mirrors StudentReportCard."""
     try:
         from reportlab.lib.pagesizes import A4
@@ -417,7 +633,8 @@ def build_report_pdf(report: dict, lms_name: str = "") -> bytes:
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("reportlab is required for PDF reports") from e
 
-    f = _report_fields(report)
+    f = _report_fields(report, test_id)
+    is_exam = f["is_exam"]
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     W, H = A4
@@ -425,7 +642,7 @@ def build_report_pdf(report: dict, lms_name: str = "") -> bytes:
 
     c.setFillColor(colors.HexColor("#111111"))
     c.setFont("Helvetica-Bold", 20)
-    c.drawString(20 * mm, y, (lms_name.strip() or "Progress Report"))
+    c.drawString(20 * mm, y, (lms_name.strip() or ("Exam Result" if is_exam else "Progress Report")))
     y -= 9 * mm
     c.setFont("Helvetica", 12)
     c.setFillColor(colors.HexColor("#444444"))
@@ -442,7 +659,7 @@ def build_report_pdf(report: dict, lms_name: str = "") -> bytes:
     if f["attendance_pct"] is not None:
         kpis.append(("Attendance", f"{f['attendance_pct']}%"))
     if f["avg_score"] is not None:
-        kpis.append(("Avg score", f"{f['avg_score']}%"))
+        kpis.append((("Score" if is_exam else "Avg score"), f"{f['avg_score']}%"))
     if f["rank"] and f["total_students"]:
         kpis.append(("Class rank", f"{f['rank']}/{f['total_students']}"))
     x = 20 * mm
@@ -476,7 +693,7 @@ def build_report_pdf(report: dict, lms_name: str = "") -> bytes:
         y -= 4 * mm
 
     if f["recent_tests"]:
-        section("Recent tests")
+        section("Exam result" if is_exam else "Recent tests")
         c.setFont("Helvetica", 11)
         c.setFillColor(colors.HexColor("#333333"))
         for t in f["recent_tests"]:
@@ -491,14 +708,15 @@ def build_report_pdf(report: dict, lms_name: str = "") -> bytes:
     return buf.getvalue()
 
 
-def build_report_image(report: dict, lms_name: str = "") -> bytes:
+def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] = None) -> bytes:
     """Render the report as a PNG card (Pillow)."""
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("Pillow is required for image reports") from e
 
-    f = _report_fields(report)
+    f = _report_fields(report, test_id)
+    is_exam = f["is_exam"]
     W, H = 800, 1000
     img = Image.new("RGB", (W, H), "#FAFAF9")
     d = ImageDraw.Draw(img)
@@ -512,7 +730,7 @@ def build_report_image(report: dict, lms_name: str = "") -> bytes:
 
     pad = 48
     y = pad
-    d.text((pad, y), (lms_name.strip() or "Progress Report"), fill="#111111", font=font(40, True))
+    d.text((pad, y), (lms_name.strip() or ("Exam Result" if is_exam else "Progress Report")), fill="#111111", font=font(40, True))
     y += 56
     subtitle = f["name"] + (f"  •  {f['standard']}" if f["standard"] else "")
     d.text((pad, y), subtitle, fill="#555555", font=font(24))
@@ -524,7 +742,7 @@ def build_report_image(report: dict, lms_name: str = "") -> bytes:
     if f["attendance_pct"] is not None:
         kpis.append(("Attendance", f"{f['attendance_pct']}%"))
     if f["avg_score"] is not None:
-        kpis.append(("Avg score", f"{f['avg_score']}%"))
+        kpis.append((("Score" if is_exam else "Avg score"), f"{f['avg_score']}%"))
     if f["rank"] and f["total_students"]:
         kpis.append(("Rank", f"{f['rank']}/{f['total_students']}"))
     x = pad
@@ -549,7 +767,7 @@ def build_report_image(report: dict, lms_name: str = "") -> bytes:
         y += 24
 
     if f["recent_tests"]:
-        section("Recent tests")
+        section("Exam result" if is_exam else "Recent tests")
         for t in f["recent_tests"]:
             d.text((pad + 16, y), t.get("test_title", "Test"), fill="#333333", font=font(22))
             val = f"{t.get('score_pct', 0)}%"

@@ -124,9 +124,10 @@ export default function StudentDetailPage() {
 
   const handleSave = async () => {
     try {
+      // Phone is intentionally omitted — it can only be edited in Students → Manage (Excel).
       await apiClient(`/students/${studentId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name: editForm.name, email: editForm.email, phone: editForm.phone }),
+        body: JSON.stringify({ name: editForm.name, email: editForm.email }),
       });
       setStudent((prev) => ({ ...prev, ...editForm }));
       useAppCache.getState().invalidateStudents();
@@ -311,7 +312,13 @@ export default function StudentDetailPage() {
         <div className="space-y-4">
           <Input label="Full name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} autoFocus />
           <Input label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-          <Input label="Phone" type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+          <div>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Phone</label>
+            <div className="w-full px-3.5 py-2.5 rounded-xl bg-[#F4F2EF] border border-[#EFEDEA] text-sm text-neutral-500">
+              {editForm.phone || <span className="text-neutral-400">No phone</span>}
+            </div>
+            <p className="text-[11px] text-neutral-400 mt-1">Phone can only be edited in Students → Manage (Excel).</p>
+          </div>
           <div className="flex gap-2 justify-end pt-2">
             <Btn variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Btn>
             <Btn variant="primary" onClick={handleSave}>Save</Btn>

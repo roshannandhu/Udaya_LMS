@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Play, Trash2, Pencil } from 'lucide-react';
+import { Plus, Play, Trash2, Pencil, Send } from 'lucide-react';
 import { Btn, Input, Textarea, Toggle, Tag, Modal, SectionHeader } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
 import CriteriaBuilder from './CriteriaBuilder';
@@ -164,9 +164,40 @@ export default function AutomationTab({ templates, groups }) {
 
   const toggle = async (id) => { await whatsappApi.toggleJob(id); load(); };
   const runNow = async (id) => {
+    if (!confirm('Run this automation now and message all its recipients for real?')) return;
     try { const r = await whatsappApi.runJobNow(id); alert(`Ran job — sent ${r.sent ?? 0} message(s).`); load(); }
     catch (e) { alert(e.message); }
   };
+
+  // Test an automation safely: send its exact message to one number (yourself)
+  // before it ever goes out to parents. Reuses the /send test_to_self path.
+  const testJob = async (j) => {
+    const last = (() => { try { return localStorage.getItem('wa_test_phone') || ''; } catch { return ''; } })();
+    const phone = (window.prompt('Send a test of this automation to which WhatsApp number?', last) || '').trim();
+    if (!phone) return;
+    try { localStorage.setItem('wa_test_phone', phone); } catch {}
+    const base = { test_to_self: phone, category: j.category || 'utility' };
+    let payload;
+    if (j.mode === 'template') {
+      if (!j.template_name) { alert('This automation has no template selected yet.'); return; }
+      payload = { ...base, mode: 'template', template_name: j.template_name };
+    } else if (j.mode === 'report') {
+      const msg = (j.criteria && j.criteria[0]?.message) || j.body_text
+        || 'Report card preview — the report file is built per student when this runs.';
+      payload = { ...base, mode: 'freeform', body_text: msg };
+    } else {
+      payload = { ...base, mode: 'freeform', body_text: j.body_text || '' };
+    }
+    try {
+      const r = await whatsappApi.send(payload);
+      const res = r.results?.[0] || {};
+      const ok = res.status && res.status !== 'failed' && res.status !== 'not_configured';
+      const note = j.mode === 'report' ? '\n(Test shows the message wording; the report file is attached only on the real run.)' : '';
+      alert(ok ? `✅ Test sent (${res.status}) to ${phone}.${note}`
+               : `❌ Test failed: ${res.error || (!r.configured ? 'not connected — set up Settings first' : 'unknown error')}`);
+    } catch (e) { alert(e.message); }
+  };
+
   const remove = async (id) => { if (confirm('Delete this job?')) { await whatsappApi.deleteJob(id); load(); } };
 
   return (
@@ -188,7 +219,8 @@ export default function AutomationTab({ templates, groups }) {
               {' · '}{j.trigger_type}{j.trigger_type === 'interval' ? ` (${j.trigger_config?.every || ''})` : ''}
               {' · '}next: {fmt(j.next_run_at)}
             </p>
-            <div className="flex gap-2 mt-2">
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Btn size="sm" icon={Send} onClick={() => testJob(j)}>Test</Btn>
               <Btn size="sm" icon={Play} onClick={() => runNow(j.id)}>Run now</Btn>
               <Btn size="sm" icon={Pencil} onClick={() => { setEditing(j); setModal(true); }}>Edit</Btn>
               <Btn size="sm" variant="danger" icon={Trash2} onClick={() => remove(j.id)}>Delete</Btn>

@@ -250,6 +250,9 @@ function ScheduleLiveClassModal({ open, onClose, subjects, onScheduled }) {
 export default function TeacherLiveClassesPage() {
   const subjects  = useAppCache(s => s.subjects);
   const standards = useAppCache(s => s.standards);
+  const standardsReady   = useAppCache(s => s.standardsReady);
+  const refreshStandards = useAppCache(s => s.refreshStandards);
+  const refreshSubjects  = useAppCache(s => s.refreshSubjects);
   const { user } = useAuthStore();
 
   // Enrich subjects with standard name for the schedule modal dropdown
@@ -265,7 +268,13 @@ export default function TeacherLiveClassesPage() {
   const [attendanceSheetId, setAttendanceSheetId] = useState(null);
 
   const fetchAll = async () => {
-    if (!standards.length) return;
+    if (!standards.length) {
+      // Standards may still be loading on first paint (or a direct navigation
+      // with a cold cache). Only drop the spinner once they've actually been
+      // fetched — otherwise the page hangs on the skeleton forever.
+      if (standardsReady) setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       // One call per standard instead of one per subject — much faster
@@ -287,7 +296,10 @@ export default function TeacherLiveClassesPage() {
     }
   };
 
-  useEffect(() => { fetchAll(); }, [standards]);
+  // Load standards/subjects even on a direct navigation here (the cache may be cold).
+  useEffect(() => { refreshStandards(); refreshSubjects(); }, []);
+
+  useEffect(() => { fetchAll(); }, [standards, standardsReady]);
 
   // Warm the Zoom SDK in the background so the first "Watch" click is instant.
   // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2 } from 'lucide-react';
 import { Sheet, Avatar, Tag, Btn, Skeleton, Input } from '../ui';
-import { testApi, apiClient } from '../../lib/api';
+import { testApi, apiClient, whatsappApi } from '../../lib/api';
+import { examResultsPayload } from './whatsapp/reportDefaults';
 
 export default function TestResultsSheet({ open, onClose, test, onSuccess, onDelete }) {
+  const navigate = useNavigate();
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('attempts');
@@ -12,14 +15,32 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
   const [editSaving, setEditSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [notify, setNotify] = useState('idle'); // idle | sending | sent | later
 
   useEffect(() => {
     if (open && test?.id) {
       fetchResults();
       setIsEditing(false);
       setDeleteConfirm(false);
+      setNotify('idle');
     }
   }, [open, test]);
+
+  const handleNotifyNow = async () => {
+    setNotify('sending');
+    try {
+      await whatsappApi.sendReports(examResultsPayload(test.id));
+      setNotify('sent');
+    } catch (err) {
+      alert(err.message);
+      setNotify('idle');
+    }
+  };
+
+  const handleReviewFirst = () => {
+    navigate('/teacher/whatsapp', { state: { tab: 'reports', examId: test.id } });
+    onClose();
+  };
 
   useEffect(() => {
     if (test) {
@@ -211,6 +232,33 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
             </div>
           ) : results ? (
             <>
+              {results.stats.total_attempts > 0 && notify !== 'later' && (
+                <div className="mb-5 p-4 rounded-md bg-emerald-50 border border-emerald-200">
+                  {notify === 'sent' ? (
+                    <p className="text-sm font-medium text-emerald-800 flex items-center gap-2">
+                      <CheckCircle2 size={16} /> Parents notified.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-2 mb-3">
+                        <Bell size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-900">Results are in — notify parents?</p>
+                          <p className="text-xs text-emerald-700 mt-0.5">Each parent gets their child’s score, a short note, and a PDF report.</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Btn variant="primary" icon={notify === 'sending' ? Loader2 : Send}
+                          disabled={notify === 'sending'} onClick={handleNotifyNow}>
+                          {notify === 'sending' ? 'Sending…' : 'Send Now'}
+                        </Btn>
+                        <Btn variant="default" icon={Eye} onClick={handleReviewFirst}>Review First</Btn>
+                        <Btn variant="ghost" onClick={() => setNotify('later')}>Later</Btn>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               {(() => {
                 const totalM = test.total_marks || test.totalMarks || 100;
                 const toP = v => v != null ? ((v / totalM) * 100).toFixed(1) : '—';

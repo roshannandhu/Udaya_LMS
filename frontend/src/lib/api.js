@@ -22,6 +22,13 @@ const CACHE_TTL = 120_000;
 // (otherwise the teacher's read tick won't turn blue until a manual refresh).
 const NO_CACHE = ['/notifications', '/auth/me', '/live-classes', '/broadcasts/'];
 
+// Clear the in-memory GET cache. Called on login/logout so one account never sees
+// another account's cached /standards, /subjects, /students responses (the cache is
+// keyed by endpoint only, not by the auth token).
+export function clearApiCache() {
+  _cache.clear();
+}
+
 // Refresh the access token using the stored refresh token.
 // Uses a shared promise so concurrent 401 responses all wait for the same refresh
 // instead of the second one immediately triggering logout.
@@ -492,6 +499,11 @@ export const whatsappApi = {
   getConfig:    ()     => apiClient('/teacher/whatsapp/config'),
   setConfig:    (data) => apiClient('/teacher/whatsapp/config', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Connection / QR pairing (scan-to-connect setup)
+  getConnection: () => apiClient('/teacher/whatsapp/connection'),
+  getQr:         () => apiClient('/teacher/whatsapp/qr'),
+  disconnect:    () => apiClient('/teacher/whatsapp/disconnect', { method: 'POST' }),
+
   // Recipients grouped by class
   getRecipients: (standardIds) =>
     apiClient(`/teacher/whatsapp/recipients${standardIds && standardIds.length ? `?standard_ids=${standardIds.join(',')}` : ''}`),
@@ -511,9 +523,13 @@ export const whatsappApi = {
   getInbox:      ()     => apiClient('/teacher/whatsapp/inbox'),
   markInboxRead: (data) => apiClient('/teacher/whatsapp/inbox/mark-read', { method: 'POST', body: JSON.stringify(data || {}) }),
 
+  // Variables (picker source of truth — auto vs ask)
+  getVariables:    ()       => apiClient('/teacher/whatsapp/variables'),
+
   // Templates
   listTemplates:   ()       => apiClient('/teacher/whatsapp/templates'),
   createTemplate:  (data)   => apiClient('/teacher/whatsapp/templates', { method: 'POST', body: JSON.stringify(data) }),
+  updateTemplate:  (id, data) => apiClient(`/teacher/whatsapp/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   submitTemplate:  (id)     => apiClient(`/teacher/whatsapp/templates/${id}/submit`, { method: 'POST' }),
   templateStatus:  (id)     => apiClient(`/teacher/whatsapp/templates/${id}/status`),
   deleteTemplate:  (id)     => apiClient(`/teacher/whatsapp/templates/${id}`, { method: 'DELETE' }),
@@ -521,6 +537,10 @@ export const whatsappApi = {
   // Reports + criteria
   previewCriteria: (data) => apiClient('/teacher/whatsapp/preview-criteria', { method: 'POST', body: JSON.stringify(data) }),
   sendReports:     (data) => apiClient('/teacher/whatsapp/send-reports',     { method: 'POST', body: JSON.stringify(data) }),
+
+  // Pending Actions (auto-detected exam-result notifications)
+  getPending:     ()       => apiClient('/teacher/whatsapp/pending'),
+  dismissPending: (testId) => apiClient('/teacher/whatsapp/pending/dismiss', { method: 'POST', body: JSON.stringify({ test_id: testId }) }),
 
   // Onboarding
   sendWelcome: (data) => apiClient('/teacher/whatsapp/send-welcome', { method: 'POST', body: JSON.stringify(data) }),

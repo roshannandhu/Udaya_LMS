@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { getApiBaseUrl, apiClient } from './api';
+import { getApiBaseUrl, apiClient, clearApiCache } from './api';
 import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
-import { useSettingsStore } from '../store';
+import { useSettingsStore, useAppCache } from '../store';
 
 const API_BASE    = getApiBaseUrl();
 const ROLE_KEY    = 'tutoria_user_role';
@@ -64,6 +64,12 @@ export const useAuthStore = create((set, get) => ({
         role: data.user.role,
         isLoading: false
       });
+
+      // Fresh account → drop any data cached under a previously logged-in account
+      // (both caches are keyed by endpoint, not token, so they'd otherwise bleed
+      // across accounts — e.g. showing the wrong teacher's standards/live classes).
+      clearApiCache();
+      useAppCache.getState().reset();
 
       // Native app: lock screen capture for students, keep open for teachers
       if (data.user.role === 'student') {
@@ -157,6 +163,8 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem(NAME_KEY);
+    clearApiCache();
+    useAppCache.getState().reset();
     disableScreenSecurity(); // always unlock on logout
     set({ user: null, role: null, isLoading: false });
   },
@@ -202,6 +210,8 @@ if (typeof window !== 'undefined') {
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem(NAME_KEY);
+    clearApiCache();
+    useAppCache.getState().reset();
     useAuthStore.setState({ user: null, role: null, isLoading: false });
   });
 }
