@@ -8,3 +8,15 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: ZOOM_ACCOUNT_ID
+        value: "zLkS5kQARUOZ_QRZ5pfFzw"
+      - key: ZOOM_CLIENT_ID
+        value: "hE4jnMKDQkCdzsgRusfkCg"
+      - key: ZOOM_CLIENT_SECRET
+        value: "lXS0kKaakh6T5o1M2B0V1A1WO2TW3sOW"
+      - key: ZOOM_WEBHOOK_SECRET_TOKEN
+        value: "NUU2jYpCRsOhNWlhG-raaA"
+      - key: ZOOM_SDK_KEY
+        value: "fNgVgYvRR_uJbeDLjdlw"
+      - key: ZOOM_SDK_SECRET
+        value: "18t0efngw1AwT6Fjx93XDMC77Kd8aYyk"
