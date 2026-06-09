@@ -237,7 +237,7 @@ async def _broadcast_cleanup_loop():
     while True:
         await asyncio.sleep(3600)
         try:
-            now_iso = datetime.utcnow().isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
             expired_ids = [
                 b["id"] for b in manager.broadcast_history
                 if b.get("expires_at") and not b.get("deleted")
@@ -491,7 +491,7 @@ class ConnectionManager:
         if "id" not in message:
             message["id"] = str(uuid.uuid4())
         if "created_at" not in message:
-            message["created_at"] = datetime.now().isoformat()
+            message["created_at"] = datetime.now(timezone.utc).isoformat()
         self.broadcast_history.append(message)
         def save_and_insert():
             self.save_history()
@@ -933,7 +933,7 @@ def login(request: LoginRequest):
                     service_supabase.table("student_sessions").upsert({
                         "student_id": user.id,
                         "device_fingerprint": request.device_fingerprint,
-                        "last_active_at": datetime.now().isoformat()
+                        "last_active_at": datetime.now(timezone.utc).isoformat()
                     }, on_conflict="student_id").execute()
                 except Exception as e:
                     print(f"Session tracking failed: {e}")
@@ -4452,8 +4452,8 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
         "points_earned": points_earned,
         "flagged": flagged,
         "cheat_events": request.cheat_events,
-        "started_at": datetime.now().isoformat(),
-        "submitted_at": datetime.now().isoformat()
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "submitted_at": datetime.now(timezone.utc).isoformat()
     }
     result = service_supabase.table("test_attempts").insert(attempt_data).execute()
 
@@ -4606,7 +4606,7 @@ def mark_video_complete(video_id: str, user = Depends(verify_token)):
         "completed": True,
         "downloaded": False,
         "progress_secs": 0,
-        "last_watched_at": datetime.now().isoformat()
+        "last_watched_at": datetime.now(timezone.utc).isoformat()
     }, on_conflict="video_id,student_id").execute()
 
     POINTS_PER_VIDEO = 10
@@ -4646,7 +4646,7 @@ def update_video_progress(data: dict, user = Depends(verify_token)):
         "student_id": student_id,
         "progress_secs": progress_secs,
         "completed": already_completed,
-        "last_watched_at": datetime.now().isoformat()
+        "last_watched_at": datetime.now(timezone.utc).isoformat()
     }, on_conflict="video_id,student_id").execute()
 
     return {"status": "ok"}
@@ -4818,7 +4818,7 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
             std_row = await asyncio.to_thread(lambda: service_supabase.table("standards").select("broadcast_ttl_hours").eq("id", req.standard_id).single().execute())
             ttl = std_row.data.get("broadcast_ttl_hours") if std_row.data else None
             if ttl:
-                expires_at = (datetime.utcnow() + timedelta(hours=ttl)).isoformat()
+                expires_at = (datetime.now(timezone.utc) + timedelta(hours=ttl)).isoformat()
         except Exception:
             pass
 
@@ -4844,7 +4844,7 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
     is_future_scheduled = bool(req.scheduled_for and datetime.fromisoformat(req.scheduled_for.replace("Z", "+00:00")).replace(tzinfo=None) > datetime.utcnow())
     if is_future_scheduled:
         payload["id"] = str(uuid.uuid4())
-        payload["created_at"] = datetime.now().isoformat()
+        payload["created_at"] = datetime.now(timezone.utc).isoformat()
         payload["standard_id"] = req.standard_id
         manager.broadcast_history.append(payload)
         def _save_scheduled():
@@ -4875,7 +4875,7 @@ def get_broadcasts(standard_id: Optional[str] = None, user = Depends(verify_toke
     history = manager.broadcast_history
     if standard_id:
         history = [b for b in history if b.get("standard_id") == standard_id]
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     # Filter out expired messages
     history = [b for b in history if not (b.get("expires_at") and b["expires_at"] < now_iso and not b.get("deleted"))]
     # Students never see future-scheduled broadcasts
@@ -4916,7 +4916,7 @@ async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_
         return {"marked": 0}
 
     try:
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         rows = [{"broadcast_id": bid, "student_id": student_id, "read_at": now} for bid in req.broadcast_ids]
         service_supabase.table("broadcast_reads").upsert(rows, on_conflict="broadcast_id,student_id").execute()
         
@@ -5239,7 +5239,7 @@ async def update_note(note_id: str, req: NoteUpdate, user = Depends(verify_token
     updates = req.dict(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
-    updates["updated_at"] = datetime.utcnow().isoformat()
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await asyncio.to_thread(lambda: service_supabase.table("notes").update(updates).eq("id", note_id).execute())
     return (result.data or [{}])[0]
 
@@ -5421,7 +5421,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
             "created": success_count,
             "skipped": skipped_count,
             "errors": error_count,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }).execute()
     except Exception as e:
         print("Failed to insert audit log (table might not exist):", e)
@@ -5458,7 +5458,7 @@ def create_question_bank_item(item: QuestionBankItem, user=Depends(verify_token)
         "options": item.options,
         "correct_idx": item.correct_idx,
         "subject": item.subject,
-        "created_at": datetime.now().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save question")
