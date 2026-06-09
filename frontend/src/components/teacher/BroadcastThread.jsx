@@ -128,12 +128,14 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       } else if (data.type === 'reaction_update') {
         fetchReactions();
       } else if (data.type === 'read_receipt_update') {
+        // Fetch latest read counts and merge with existing state to preserve other counts
         broadcastApi.getReadCounts(std.id)
-          .then(counts => setReadCounts(counts || {}))
+          .then(counts => setReadCounts(prev => ({ ...prev, ...(counts || {}) })))
           .catch(() => {});
         const currentModal = readDetailsModalRef.current;
         if (currentModal && data.broadcast_ids?.includes(currentModal)) {
-           broadcastApi.getReadDetails(currentModal)
+          // Refresh read details for the open modal
+          broadcastApi.getReadDetails(currentModal)
             .then(res => setReadDetailsData({ loading: false, read_by: res.read_by || [], not_read_by: res.not_read_by || [] }))
             .catch(() => {});
         }
