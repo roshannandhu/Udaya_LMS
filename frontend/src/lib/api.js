@@ -87,16 +87,25 @@ export async function apiClient(endpoint, options = {}) {
     try {
       refreshed = await tryRefreshToken();
     } catch {
-      // Network error while refreshing (backend temporarily down).
-      // Do NOT logout — the token itself may still be valid.
-      // The request fails gracefully; the user stays logged in.
       throw new Error('Connection error. Please check your internet connection.');
     }
     if (refreshed) {
-      return apiClient(endpoint, { ...options, _retry: true });
+      const retryRes = await apiClient(endpoint, { ...options, _retry: true });
+      return retryRes;
     }
     // refresh returned false → auth server explicitly rejected the refresh token
     // → session is genuinely expired → force logout
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem('tutoria_user_role');
+    localStorage.removeItem('tutoria_user_name');
+    _cache.clear();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+    }
+    throw new Error('Session expired. Please log in again.');
+  } else if (response.status === 401 && options._retry) {
+    // If the retried request ALSO returns 401, force logout immediately.
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem('tutoria_user_role');

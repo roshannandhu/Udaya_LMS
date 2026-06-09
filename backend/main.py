@@ -826,15 +826,14 @@ def verify_token(authorization: Optional[str] = Header(None)):
                             result["standard_name"] = None
             except Exception:
                 pass
-
         _auth_cache[token] = {"result": result, "expires_at": time_module.time() + _AUTH_TTL}
         if len(_auth_cache) > 500:
             _prune_auth_cache()
         return result
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token verification failed or session expired")
 
 # Auth
 @app.post("/api/auth/login")
