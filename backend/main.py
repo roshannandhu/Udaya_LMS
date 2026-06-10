@@ -3114,8 +3114,10 @@ def delete_student(student_id: str, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # test_attempts lacks ON DELETE CASCADE — delete manually before student row
+    # These tables have no FK/CASCADE to students — must delete manually first
     service_supabase.table("test_attempts").delete().eq("student_id", student_id).execute()
+    service_supabase.table("whatsapp_messages").delete().eq("student_id", student_id).execute()
+    service_supabase.table("whatsapp_inbox").delete().eq("student_id", student_id).execute()
     service_supabase.table("students").delete().eq("id", student_id).execute()
     try:
         service_supabase.auth.admin.delete_user(student_id)

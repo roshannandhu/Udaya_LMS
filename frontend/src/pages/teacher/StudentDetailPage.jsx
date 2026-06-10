@@ -179,6 +179,8 @@ export default function StudentDetailPage() {
   const handleRemove = async () => {
     try {
       await apiClient(`/students/${studentId}`, { method: 'DELETE' });
+      useAppCache.getState().invalidateStudents();
+      useAppCache.getState().refreshStudents();
       setRemoved(true);
       setConfirmRemove(false);
     } catch (err) {
