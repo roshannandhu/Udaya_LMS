@@ -1,5 +1,49 @@
 -- Tutoria LMS Database Schema (Supabase / PostgreSQL)
 -- Uses UUID primary keys. students.id = auth.users.id (set explicitly on insert).
+--
+-- ── PORTABILITY (AWS RDS / plain PostgreSQL) ─────────────────────────────────
+-- This file targets Supabase, but is the single source of truth for the schema.
+-- To provision a NON-Supabase Postgres (e.g. AWS RDS), do these 3 things first:
+--
+-- 1. gen_random_uuid() is built into PostgreSQL 13+. On PG <13 run:
+--      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+--
+-- 2. Several FKs reference Supabase's auth schema (auth.users). Plain Postgres
+--    has no auth schema — create a stub BEFORE running this file:
+--      CREATE SCHEMA IF NOT EXISTS auth;
+--      CREATE TABLE IF NOT EXISTS auth.users (id UUID PRIMARY KEY);
+--    (Your new auth system must insert a row into auth.users for every
+--    teacher/student account, mirroring what Supabase Auth did. Affected FKs:
+--    standards.teacher_id, live_classes.created_by, teacher_branding.teacher_id,
+--    teacher_admins.*)
+--
+-- 3. RLS policies below reference Supabase roles (anon, authenticated). On
+--    plain Postgres those roles don't exist; either create them as NOLOGIN
+--    roles (CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;) or
+--    skip the policy blocks — the FastAPI backend connects with full
+--    privileges and enforces all authorization itself.
+--
+-- 4. Storage buckets (bottom of file) are Supabase Storage, NOT SQL. On AWS,
+--    replace with S3 buckets and update the backend storage calls.
+--
+-- ── TEACHER CREDENTIALS (read before migrating!) ─────────────────────────────
+-- There is NO teachers table. A teacher account is a row in Supabase Auth's
+-- internal auth.users with user_metadata.role = 'teacher' (created via
+-- supabase.auth.admin.create_user in main.py). This file CANNOT recreate them.
+--
+-- To migrate teacher logins to AWS:
+--   1. Export auth.users from Supabase (Dashboard → Database → full pg_dump
+--      includes the auth schema, or use the Auth admin API to list users).
+--   2. Recreate each teacher in the new auth system WITH THE SAME UUID, and
+--      insert that UUID into the auth.users stub (portability note 2 above).
+--      KEEPING THE UUID IS CRITICAL — standards.teacher_id,
+--      teacher_branding.teacher_id, whatsapp_*.teacher_id, live_classes.created_by
+--      and students.id all point at auth.users.id. New UUIDs = orphaned data.
+--   3. Passwords exist ONLY as bcrypt hashes inside Supabase Auth — there is no
+--      plaintext copy anywhere. If the new auth system can't import bcrypt
+--      hashes, issue teachers a password reset on first login after migration.
+--      (Student passwords are easier: students.plain_password holds the
+--      teacher-set password for most students.)
 
 -- Standards (8th, 9th, 10th, 11th, 12th)
 CREATE TABLE IF NOT EXISTS standards (
@@ -65,6 +109,8 @@ CREATE TABLE IF NOT EXISTS attendance_records (
     date DATE NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late')),
     marked_by UUID,  -- teacher's auth.users.id
+    note TEXT,                                -- optional per-record remark
+    updated_at TIMESTAMPTZ,                   -- set when a record is re-marked
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(student_id, subject_class_id, date)
 );
@@ -263,6 +309,9 @@ ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS message TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_url TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachment_type TEXT;
 ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+-- Fix missing CASCADE so student deletes don't fail when test attempts exist
+ALTER TABLE test_attempts DROP CONSTRAINT IF EXISTS test_attempts_student_id_fkey;
+ALTER TABLE test_attempts ADD CONSTRAINT test_attempts_student_id_fkey FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS plain_password TEXT;
 
 -- ── Student ID (human-readable code) Migration ──────────────────────────────
@@ -365,6 +414,9 @@ CREATE POLICY "deny_anon_question_bank"      ON question_bank      FOR ALL TO an
 -- These are NOT SQL tables — they live in Supabase Storage.
 -- The backend auto-creates them on first use via storage.create_bucket().
 -- You can also create them manually: Supabase Dashboard → Storage → New bucket.
+-- NOTE: this section documents the 3 original buckets in detail; the COMPLETE
+-- 7-bucket list from the live project is in the SYNC MIGRATION block at the
+-- bottom of this file (adds: assignments, thumbnails, notes, whatsapp).
 --
 -- Bucket: videos   (public: true)
 --   Used by: POST /api/videos/upload when Cloudflare Stream is NOT configured.
@@ -793,3 +845,65 @@ CREATE INDEX IF NOT EXISTS idx_wa_inbox_phone   ON whatsapp_inbox(from_phone);
 ALTER TABLE whatsapp_inbox ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_all_wa_inbox" ON whatsapp_inbox;
 CREATE POLICY "deny_all_wa_inbox" ON whatsapp_inbox FOR ALL USING (false);
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- SYNC MIGRATION (June 2026) — full live-DB ⇄ schema.sql reconciliation
+-- Produced by introspecting the production Supabase project. Running this whole
+-- file (or just this block) is idempotent and brings any environment — the
+-- current Supabase project OR a fresh AWS Postgres — to the same final schema.
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- ── A. Columns that exist in the live DB but were missing from this file ──────
+
+-- attendance_records extras (also added to the CREATE TABLE above)
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+
+-- broadcasts: legacy columns from the first WhatsApp-style iteration. Current
+-- code writes `message` / `attachment_url`; these stay for data parity so a
+-- dump/restore to AWS round-trips without "column does not exist" surprises.
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS text        TEXT;     -- legacy (pre-`message`)
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS attachments JSONB;    -- legacy (pre-`attachment_url`)
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS pinned      BOOLEAN DEFAULT false;  -- legacy, UI hardcodes false
+
+-- students: legacy column (code reads/writes attendance_pct instead)
+ALTER TABLE students ADD COLUMN IF NOT EXISTS attendance NUMERIC;     -- legacy
+
+-- teacher_admins: legacy table from the original migration set
+-- (frontend/supabase/migrations/001_schema.sql). Unused by current backend code
+-- but present in production — kept so a full data migration round-trips.
+CREATE TABLE IF NOT EXISTS teacher_admins (
+    teacher_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    granted_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    granted_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (teacher_id, granted_by)
+);
+ALTER TABLE teacher_admins ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_teacher_admins" ON teacher_admins;
+CREATE POLICY "deny_anon_teacher_admins" ON teacher_admins FOR ALL TO anon, authenticated USING (false);
+
+-- ── B. Columns defined above but missing from the LIVE DB (catch-up ALTERs) ───
+-- The CREATE TABLE statements are no-ops on an existing DB, so columns added to
+-- them later never materialize without an explicit ALTER. These make running
+-- this file catch the live Supabase project up:
+
+ALTER TABLE standards        ADD COLUMN IF NOT EXISTS start_date DATE;
+ALTER TABLE standards        ADD COLUMN IF NOT EXISTS end_date   DATE;
+ALTER TABLE teacher_branding ADD COLUMN IF NOT EXISTS profile_photo_url TEXT;
+ALTER TABLE teacher_branding ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+-- (tests.results_notify_dismissed, whatsapp_messages.test_id and the
+--  whatsapp_templates media_* columns already have ALTERs earlier in this file.)
+
+-- ── C. Supabase Storage buckets — COMPLETE list from the live project ─────────
+-- Not SQL. The backend auto-creates missing buckets on first use. On AWS,
+-- recreate these as S3 buckets/prefixes and swap the storage layer:
+--   videos       (public)  - video files when Cloudflare Stream isn't configured
+--   avatars      (public)  - student profile photos        → students.avatar_url
+--   broadcasts   (public)  - broadcast attachments         → broadcasts.attachment_url
+--   assignments  (public)  - assignment files/submissions  → assignment_attachments.file_url,
+--                                                            assignment_submissions.file_url
+--   thumbnails   (public)  - live-class thumbnails + teacher profile photos
+--                                                          → teacher_branding.*
+--   notes        (public)  - study-material note files     → notes.file_url
+--   whatsapp     (public)  - WhatsApp template/message media → whatsapp_templates.media_url,
+--                                                              whatsapp_messages.media_url
