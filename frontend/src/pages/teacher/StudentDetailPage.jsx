@@ -17,6 +17,7 @@ export default function StudentDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmUnenroll, setConfirmUnenroll] = useState(false);
   const [removed, setRemoved] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
   const [resetPwResult, setResetPwResult] = useState(null);
@@ -185,6 +186,18 @@ export default function StudentDetailPage() {
     }
   };
 
+  const handleUnenroll = async () => {
+    try {
+      await apiClient(`/students/${studentId}/unenroll`, { method: 'PATCH' });
+      useAppCache.getState().invalidateStudents();
+      useAppCache.getState().refreshStudents();
+      setRemoved(true);
+      setConfirmUnenroll(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleToggleBlock = async () => {
     setBlockLoading(true);
     setMenuOpen(false);
@@ -223,13 +236,13 @@ export default function StudentDetailPage() {
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
           <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
             <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
-            <h1 className="text-lg md:text-xl font-semibold">Student removed</h1>
+            <h1 className="text-lg md:text-xl font-semibold">Done</h1>
           </div>
         </div>
         <div className="px-5 md:px-8 py-16 max-w-5xl mx-auto text-center">
           <CheckCircle2 size={32} className="mx-auto mb-3 text-green-500" />
-          <h3 className="font-medium mb-1">{student?.name} has been removed</h3>
-          <p className="text-sm text-neutral-500 mb-5">They no longer have access to {standard?.name}.</p>
+          <h3 className="font-medium mb-1">{student?.name} removed from {standard?.name}</h3>
+          <p className="text-sm text-neutral-500 mb-5">Their account and history are preserved.</p>
           <Btn variant="primary" onClick={() => navigate('/teacher/students')}>Back to students</Btn>
         </div>
       </div>
@@ -275,7 +288,8 @@ export default function StudentDetailPage() {
                     {s.blocked ? <Shield size={14} /> : <ShieldOff size={14} />} {blockLoading ? 'Updating…' : s.blocked ? 'Unblock student' : 'Block student'}
                   </button>
                   <Divider className="my-1 border-[#EBEAE7]" />
-                  <button onClick={() => { setConfirmRemove(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-left text-red-600"><Trash2 size={14} /> Remove from standard</button>
+                  <button onClick={() => { setConfirmUnenroll(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-amber-50 text-left text-amber-700"><ShieldOff size={14} /> Remove from standard</button>
+                  <button onClick={() => { setConfirmRemove(true); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-left text-red-600"><Trash2 size={14} /> Delete student</button>
                 </div>
               </>
             )}
@@ -381,12 +395,21 @@ export default function StudentDetailPage() {
         )}
       </Modal>
 
-      <Modal open={confirmRemove} onClose={() => setConfirmRemove(false)} title="Remove student?" size="sm">
+      <Modal open={confirmUnenroll} onClose={() => setConfirmUnenroll(false)} title="Remove from standard?" size="sm">
         <p className="text-sm text-neutral-600 mb-2">Remove <strong>{s.name}</strong> from <strong>{standard?.name}</strong>?</p>
-        <p className="text-sm text-neutral-600 mb-5">They'll lose access to all subjects.</p>
+        <p className="text-sm text-neutral-600 mb-5">They'll lose access to all subjects. Their account and history are preserved.</p>
+        <div className="flex gap-2 justify-end">
+          <Btn variant="ghost" onClick={() => setConfirmUnenroll(false)}>Cancel</Btn>
+          <Btn className="bg-amber-500 hover:bg-amber-600 text-white border-transparent" onClick={handleUnenroll}>Remove from standard</Btn>
+        </div>
+      </Modal>
+
+      <Modal open={confirmRemove} onClose={() => setConfirmRemove(false)} title="Delete student?" size="sm">
+        <p className="text-sm text-neutral-600 mb-2">Permanently delete <strong>{s.name}</strong>?</p>
+        <p className="text-sm text-neutral-600 mb-5">Their account and all data will be deleted. This cannot be undone.</p>
         <div className="flex gap-2 justify-end">
           <Btn variant="ghost" onClick={() => setConfirmRemove(false)}>Cancel</Btn>
-          <Btn variant="dangerSolid" onClick={handleRemove}>Remove</Btn>
+          <Btn variant="dangerSolid" onClick={handleRemove}>Delete student</Btn>
         </div>
       </Modal>
 
