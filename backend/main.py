@@ -369,6 +369,11 @@ class StudentProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    # Simple profile-icon choice ('male' | 'female' | 'default'). Stored in
+    # avatar_url as a sentinel ("preset:male") the frontend resolves to a
+    # bundled icon; 'default' clears it back to the neutral icon. Uploaded
+    # photos go through POST /students/me/avatar instead.
+    avatar_preset: Optional[str] = None
 
 class Question(BaseModel):
     test_id: str
@@ -836,6 +841,140 @@ def verify_token(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Token verification failed or session expired")
 
 # Auth
+# ─── TWO-STEP VERIFICATION (email OTP, teachers only) ───────────────────────
+# Enabled via Settings → Security ("security_two_step_verification" in
+# teacher_settings.json). Codes are emailed through Resend (RESEND_API_KEY in
+# .env). A device that passes OTP once is trusted for 30 days, keyed by the
+# same device_fingerprint the frontend already sends on every login.
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+RESEND_FROM = os.environ.get("RESEND_FROM", "").strip() or "onboarding@resend.dev"
+TRUSTED_DEVICES_FILE = Path(__file__).resolve().parent / "trusted_devices.json"
+OTP_TTL_SECS = 5 * 60
+OTP_MAX_ATTEMPTS = 5
+OTP_MAX_RESENDS = 3
+OTP_RESEND_COOLDOWN_SECS = 60
+TRUSTED_DEVICE_DAYS = 30
+
+_otp_pending: dict = {}   # pending_id -> {otp_hash, email, expires, attempts, resends, last_sent, token, refresh_token, user_info}
+
+
+def _otp_hash(code: str) -> str:
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+def _generate_otp_code() -> str:
+    import secrets as _secrets, string as _string
+    return ''.join(_secrets.choice(_string.digits) for _ in range(6))
+
+
+def _mask_email(email: str) -> str:
+    try:
+        local, domain = email.split("@", 1)
+        if len(local) <= 2:
+            masked = local[0] + "*"
+        else:
+            masked = local[0] + "*" * (len(local) - 2) + local[-1]
+        return f"{masked}@{domain}"
+    except Exception:
+        return email
+
+
+def _load_trusted_devices() -> dict:
+    try:
+        if TRUSTED_DEVICES_FILE.exists():
+            return json.loads(TRUSTED_DEVICES_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_trusted_devices(data: dict):
+    try:
+        TRUSTED_DEVICES_FILE.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except Exception as e:
+        print(f"[otp] could not persist trusted devices: {e}")
+
+
+def _is_device_trusted(user_id: str, fingerprint: str) -> bool:
+    if not fingerprint:
+        return False
+    devices = _load_trusted_devices()
+    exp = devices.get(f"{user_id}:{fingerprint}")
+    if not exp:
+        return False
+    try:
+        return datetime.fromisoformat(exp) > datetime.now(timezone.utc)
+    except Exception:
+        return False
+
+
+def _trust_device(user_id: str, fingerprint: str):
+    if not fingerprint:
+        return
+    devices = _load_trusted_devices()
+    now = datetime.now(timezone.utc)
+    # prune expired entries while we're here
+    pruned = {}
+    for k, v in devices.items():
+        try:
+            if datetime.fromisoformat(v) > now:
+                pruned[k] = v
+        except Exception:
+            pass
+    pruned[f"{user_id}:{fingerprint}"] = (now + timedelta(days=TRUSTED_DEVICE_DAYS)).isoformat()
+    _save_trusted_devices(pruned)
+
+
+def send_otp_email(to_email: str, code: str) -> bool:
+    """Send the 6-digit login code via Resend. Returns False on any failure."""
+    if not RESEND_API_KEY:
+        return False
+    lms = (get_teacher_settings().get("lms_name") or "Tutoria").strip() or "Tutoria"
+    try:
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            json={
+                "from": f"{lms} <{RESEND_FROM}>",
+                "to": [to_email],
+                "subject": f"{code} is your {lms} login code",
+                "html": (
+                    f"<div style='font-family:sans-serif;max-width:420px'>"
+                    f"<h2 style='margin-bottom:4px'>{lms}</h2>"
+                    f"<p>Your login verification code is:</p>"
+                    f"<p style='font-size:32px;font-weight:bold;letter-spacing:6px;margin:12px 0'>{code}</p>"
+                    f"<p style='color:#666'>It expires in 5 minutes. If you didn't try to log in, you can ignore this email.</p>"
+                    f"</div>"
+                ),
+            },
+            timeout=15,
+        )
+        if r.status_code in (200, 201):
+            return True
+        print(f"[otp] Resend send failed: {r.status_code} {r.text[:200]}")
+        return False
+    except Exception as e:
+        print(f"[otp] Resend send error: {e}")
+        return False
+
+
+def _prune_otp_pending():
+    now = time_module.time()
+    for k in [k for k, v in _otp_pending.items() if v["expires"] < now]:
+        _otp_pending.pop(k, None)
+
+
+class VerifyOtpRequest(BaseModel):
+    pending_id: str
+    code: str
+    device_fingerprint: Optional[str] = None
+
+
+class ResendOtpRequest(BaseModel):
+    pending_id: str
+
+
 @app.post("/api/auth/login")
 def login(request: LoginRequest):
     if not supabase:
@@ -938,6 +1077,38 @@ def login(request: LoginRequest):
                 except Exception as e:
                     print(f"Session tracking failed: {e}")
 
+        # ── Two-step verification (teachers only, new devices only) ──
+        if role == "teacher" and get_teacher_settings().get("security_two_step_verification"):
+            if not RESEND_API_KEY:
+                # Never lock the teacher out because email isn't configured.
+                print("[otp] 2FA enabled but RESEND_API_KEY missing — skipping OTP")
+            elif _is_device_trusted(user.id, request.device_fingerprint or ""):
+                pass  # trusted device → normal login
+            else:
+                import secrets as _secrets
+                _prune_otp_pending()
+                code = _generate_otp_code()
+                if not send_otp_email(user.email, code):
+                    raise HTTPException(status_code=503, detail="Could not send the verification code. Please try again.")
+                pending_id = _secrets.token_urlsafe(32)
+                _otp_pending[pending_id] = {
+                    "otp_hash": _otp_hash(code),
+                    "email": user.email,
+                    "user_id": user.id,
+                    "expires": time_module.time() + OTP_TTL_SECS,
+                    "attempts": 0,
+                    "resends": 0,
+                    "last_sent": time_module.time(),
+                    "token": response.session.access_token,
+                    "refresh_token": response.session.refresh_token,
+                    "user_info": user_info,
+                }
+                return {
+                    "requires_otp": True,
+                    "pending_id": pending_id,
+                    "email_masked": _mask_email(user.email),
+                }
+
         return {
             "token": response.session.access_token,
             "refresh_token": response.session.refresh_token,
@@ -947,6 +1118,50 @@ def login(request: LoginRequest):
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(request: VerifyOtpRequest):
+    _prune_otp_pending()
+    entry = _otp_pending.get(request.pending_id)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Code expired. Please log in again.")
+    entry["attempts"] += 1
+    if entry["attempts"] > OTP_MAX_ATTEMPTS:
+        _otp_pending.pop(request.pending_id, None)
+        raise HTTPException(status_code=429, detail="Too many attempts. Please log in again.")
+    if _otp_hash(request.code.strip()) != entry["otp_hash"]:
+        raise HTTPException(status_code=401, detail="Incorrect code. Please check your email and try again.")
+    # Success — release the held session and trust this device for 30 days.
+    _otp_pending.pop(request.pending_id, None)
+    _trust_device(entry["user_id"], request.device_fingerprint or "")
+    return {
+        "token": entry["token"],
+        "refresh_token": entry["refresh_token"],
+        "user": entry["user_info"],
+    }
+
+
+@app.post("/api/auth/resend-otp")
+def resend_otp(request: ResendOtpRequest):
+    _prune_otp_pending()
+    entry = _otp_pending.get(request.pending_id)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Code expired. Please log in again.")
+    if entry["resends"] >= OTP_MAX_RESENDS:
+        raise HTTPException(status_code=429, detail="Resend limit reached. Please log in again.")
+    wait = OTP_RESEND_COOLDOWN_SECS - (time_module.time() - entry["last_sent"])
+    if wait > 0:
+        raise HTTPException(status_code=429, detail=f"Please wait {int(wait)}s before resending.")
+    code = _generate_otp_code()
+    if not send_otp_email(entry["email"], code):
+        raise HTTPException(status_code=503, detail="Could not send the verification code. Please try again.")
+    entry["otp_hash"] = _otp_hash(code)            # old code becomes invalid
+    entry["resends"] += 1
+    entry["last_sent"] = time_module.time()
+    entry["expires"] = time_module.time() + OTP_TTL_SECS
+    entry["attempts"] = 0
+    return {"message": "Code re-sent", "email_masked": _mask_email(entry["email"])}
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
@@ -998,6 +1213,7 @@ class ChangePasswordRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = None
+    email: Optional[str] = None
 
 @app.patch("/api/auth/profile")
 def update_profile(request: UpdateProfileRequest, user = Depends(verify_token)):
@@ -1010,6 +1226,32 @@ def update_profile(request: UpdateProfileRequest, user = Depends(verify_token)):
         current_meta = service_supabase.auth.admin.get_user_by_id(user["user_id"]).user.user_metadata or {}
         current_meta.update(updates)
         service_supabase.auth.admin.update_user_by_id(user["user_id"], {"user_metadata": current_meta})
+
+    # Email change = login identifier change. Teacher-only (students log in by
+    # student code/phone and their email is teacher-managed via /students/{id}).
+    new_email = (request.email or "").strip().lower()
+    if new_email:
+        if user["role"] != "teacher":
+            raise HTTPException(status_code=403, detail="Only teachers can change their login email")
+        import re as _re
+        if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_email):
+            raise HTTPException(status_code=400, detail="Invalid email address")
+        try:
+            # email_confirm=True applies it immediately (no confirmation mail) —
+            # the teacher logs in with the new address right away.
+            service_supabase.auth.admin.update_user_by_id(
+                user["user_id"], {"email": new_email, "email_confirm": True})
+        except Exception as e:
+            msg = str(e)
+            if "already" in msg.lower() or "registered" in msg.lower():
+                raise HTTPException(status_code=400, detail="That email is already in use by another account")
+            raise HTTPException(status_code=400, detail=f"Could not change email: {msg}")
+        # Keep the sub_teachers profile row in sync if this account is a team member.
+        try:
+            service_supabase.table("sub_teachers").update({"email": new_email}).eq("id", user["user_id"]).execute()
+        except Exception:
+            pass
+        return {"message": "Profile updated", "email": new_email}
     return {"message": "Profile updated"}
 
 @app.post("/api/auth/change-password")
@@ -2492,9 +2734,20 @@ def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
     allowed = {k: v for k, v in request.model_dump().items() if v is not None}
+    # avatar_preset isn't a column — translate to the avatar_url sentinel.
+    preset = allowed.pop("avatar_preset", None)
+    if preset is not None:
+        if preset in ("male", "female"):
+            allowed["avatar_url"] = f"preset:{preset}"
+        elif preset == "default":
+            allowed["avatar_url"] = None   # back to the neutral icon
+        else:
+            raise HTTPException(status_code=400, detail="avatar_preset must be 'male', 'female' or 'default'")
+        service_supabase.table("students").update({"avatar_url": allowed["avatar_url"]}).eq("id", user["user_id"]).execute()
+        allowed.pop("avatar_url", None)
     if allowed:
         service_supabase.table("students").update(allowed).eq("id", user["user_id"]).execute()
-    return {"message": "Profile updated"}
+    return {"message": "Profile updated", "avatar_url": (f"preset:{preset}" if preset in ("male", "female") else None) if preset is not None else None}
 
 @app.get("/api/students/me/videos")
 def get_my_videos(user = Depends(verify_token)):
@@ -2867,6 +3120,20 @@ def delete_student(student_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Auth delete failed for student {student_id}: {e}")
     return {"message": "Student deleted"}
+
+@app.patch("/api/students/{student_id}/unenroll")
+def unenroll_student(student_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    service_supabase.table("students").update({"standard_id": None}).eq("id", student_id).execute()
+    try:
+        service_supabase.table("student_sessions").delete().eq("student_id", student_id).execute()
+    except Exception as e:
+        print(f"Session clear failed for student {student_id}: {e}")
+    return {"message": "Student unenrolled"}
 
 # Videos
 @app.get("/api/videos")
@@ -6632,6 +6899,7 @@ class TeacherSettingsInput(BaseModel):
     termination_pin: Optional[str] = None
     security_single_device: Optional[bool] = None
     security_auto_logout: Optional[bool] = None
+    security_two_step_verification: Optional[bool] = None  # email OTP on new-device teacher logins
     # Notifications
     notif_test_submission: Optional[bool] = None
     notif_new_student: Optional[bool] = None
@@ -6644,7 +6912,10 @@ class TeacherSettingsInput(BaseModel):
 def get_settings(user: dict = Depends(get_current_user)):
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Not authorized")
-    return get_teacher_settings()
+    settings = dict(get_teacher_settings())
+    # Read-only hint for the Security UI: OTP emails need RESEND_API_KEY in .env.
+    settings["otp_email_ready"] = bool(RESEND_API_KEY)
+    return settings
 
 @app.post("/api/teacher/settings")
 def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current_user)):
@@ -7289,7 +7560,9 @@ def _wa_fetch_standard_events(standard_ids: List[str]) -> dict:
             if std and "latest_video" not in out[std]:
                 out[std]["latest_video"] = v["title"]
                 
-        materials = service_supabase.table("study_materials").select("title, class_id").in_("class_id", class_ids).order("created_at", desc=True).execute().data or []
+        # "Study materials" live in the `notes` table (per-subject teacher notes).
+        # There is no study_materials table — querying it raised on every call.
+        materials = service_supabase.table("notes").select("title, class_id").in_("class_id", class_ids).order("created_at", desc=True).execute().data or []
         for m in materials:
             std = class_to_std.get(m["class_id"])
             if std and "latest_material" not in out[std]:
