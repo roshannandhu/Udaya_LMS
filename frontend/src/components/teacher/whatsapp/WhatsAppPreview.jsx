@@ -71,7 +71,7 @@ export default function WhatsAppPreview({ messages = [], footnote, businessName,
   const lmsLogo = useSettingsStore((s) => s.lmsLogo);
   const name = businessName || lmsName || 'Your Institution';
   const logo = businessLogo || lmsLogo;
-  const time = new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const list = messages.length ? messages : [{ text: '' }];
 
   return (

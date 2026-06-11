@@ -5,6 +5,7 @@ import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, Chevro
 import { Tag } from '../../components/ui';
 import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import { useWhatsNew, isNewSince } from '../../store';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassCard from '../../components/cards/LiveClassCard';
@@ -50,6 +51,15 @@ export default function StudentSubjectViewPage() {
   const [activeJoin, setActiveJoin] = useState(null);
   const [joiningLiveId, setJoiningLiveId] = useState(null);
 
+  // NEW pills compare against the session's seen baseline; opening this page
+  // clears the videos nav badge (tests/live clear from their own pages/tabs).
+  const prevSeen = useWhatsNew(s => s.prevSeen);
+  useEffect(() => { useWhatsNew.getState().markSeen('videos'); }, []);
+  useEffect(() => {
+    if (tab === 'Tests') useWhatsNew.getState().markSeen('tests');
+    if (tab === 'Live') useWhatsNew.getState().markSeen('live');
+  }, [tab]);
+
   useEffect(() => {
     setLeaderboardLoaded(false);
     setLeaderboardRows([]);
@@ -89,7 +99,9 @@ export default function StudentSubjectViewPage() {
     if (tab !== 'Live') return;
     const id = setInterval(() => {
       if (!document.hidden) {
-        liveClassApi.getByClass(classId).catch(() => []).then(d => {
+        liveClassApi.getByClass(classId).catch(() => null).then(d => {
+          // null = refresh failed — keep the last good list on screen
+          if (d === null) return;
           setLiveClasses(Array.isArray(d) ? d.filter(l => l.status !== 'cancelled') : []);
         });
       }
@@ -252,6 +264,11 @@ export default function StudentSubjectViewPage() {
 
                       {/* Status Badges */}
                       <div className="absolute top-4 left-4 flex gap-2 pointer-events-none">
+                        {!v.my_completed && isNewSince(v.created_at, prevSeen.videos) && (
+                          <span className="bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md">
+                            New
+                          </span>
+                        )}
                         {v.my_completed && (
                           <span className="flex items-center gap-1 bg-emerald-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md">
                             <CheckCircle size={10} /> Done
@@ -322,6 +339,9 @@ export default function StudentSubjectViewPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <h4 className={`font-bold text-[17px] leading-tight ${theme.text}`}>{t.title}</h4>
+                        {section === 'available' && isNewSince(t.created_at, prevSeen.tests) && (
+                          <span className="bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full shrink-0">New</span>
+                        )}
                         {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">−{t.penalty}</span>}
                       </div>
                       <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/50 flex-wrap">
@@ -419,7 +439,12 @@ export default function StudentSubjectViewPage() {
                               <motion.div variants={fadeUp} key={t.id} className={`rounded-[32px] ${theme.bg} p-5 opacity-70`}>
                                 <div className="flex items-start justify-between gap-3 mb-2">
                                   <div className="min-w-0 flex-1">
-                                    <h4 className={`font-bold text-[17px] mb-1.5 ${theme.text}`}>{t.title}</h4>
+                                    <h4 className={`font-bold text-[17px] mb-1.5 ${theme.text}`}>
+                                      {t.title}
+                                      {isNewSince(t.created_at, prevSeen.tests) && (
+                                        <span className="ml-2 align-middle bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full">New</span>
+                                      )}
+                                    </h4>
                                     <p className="text-[12px] font-medium text-black/50 bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'} · {t.duration_mins} min · {t.total_marks} marks</p>
                                   </div>
                                   <span className="bg-black/10 text-black/60 text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0">Upcoming</span>
@@ -530,7 +555,12 @@ export default function StudentSubjectViewPage() {
                 const isLive = status === 'live';
                 const isEnded = status === 'ended';
                 return (
-                  <motion.div variants={fadeUp} key={lc.id} className="h-full">
+                  <motion.div variants={fadeUp} key={lc.id} className="h-full relative">
+                    {!isEnded && isNewSince(lc.created_at, prevSeen.live) && (
+                      <span className="absolute -top-2 -right-2 z-20 bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md pointer-events-none">
+                        New
+                      </span>
+                    )}
                     <LiveClassCard
                       lc={lc}
                       themeIndex={idx}

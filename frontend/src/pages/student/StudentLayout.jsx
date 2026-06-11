@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
+import { useWhatsNew } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
 
@@ -27,6 +28,23 @@ export default function StudentLayout() {
     }
   }, [user, isLoading, location.pathname, navigate]);
 
+  // What's New: fetch unseen-content counts on mount and whenever the tab
+  // regains focus, so badges reflect content added while the app was idle.
+  const whatsNewData = useWhatsNew(s => s.data);
+  useEffect(() => {
+    if (isLoading || !user || user.must_change_pwd) return;
+    const fetchNew = () => useWhatsNew.getState().fetch();
+    fetchNew();
+    window.addEventListener('focus', fetchNew);
+    return () => window.removeEventListener('focus', fetchNew);
+  }, [user, isLoading]);
+
+  const badges = {
+    subjects: whatsNewData?.videos?.count || 0,
+    tests:    whatsNewData?.tests?.count  || 0,
+    live:     whatsNewData?.live?.count   || 0,
+  };
+
   const active = getActiveTab(location.pathname);
 
   const handleSignOut = async () => {
@@ -52,13 +70,13 @@ export default function StudentLayout() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopNav type="student" />
+      <TopNav type="student" badges={badges} />
       <div className="flex-1 flex flex-col pb-28 lg:pb-0">
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>
       </div>
-      <BottomNav active={active} setActive={setActive} type="student" />
+      <BottomNav active={active} setActive={setActive} type="student" badges={badges} />
     </div>
   );
 }

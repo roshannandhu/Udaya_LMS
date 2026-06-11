@@ -28,6 +28,8 @@ const SETTINGS_SERVER_KEYS = {
   notifWeeklyReport: 'notif_weekly_report',
   securitySingleDevice: 'security_single_device',
   securityAutoLogout: 'security_auto_logout',
+  securityTwoStepVerification: 'security_two_step_verification',
+  otpEmailReady: 'otp_email_ready',   // read-only (server-computed; never POSTed — no setter)
   studentsCanViewReport: 'students_can_view_report',
 };
 const SETTINGS_LOCAL_KEYS = Object.fromEntries(
@@ -75,6 +77,8 @@ export const useSettingsStore = create(
       // Security preferences
       securitySingleDevice: true,
       securityAutoLogout: false,
+      securityTwoStepVerification: false,   // email OTP on new-device teacher logins
+      otpEmailReady: false,                 // read-only: RESEND_API_KEY configured server-side
       setSecurityPref: (key, val) => { set({ [key]: val }); persistSettings({ [key]: val }); },
 
       // Report visibility
@@ -240,3 +244,56 @@ export const useAppCache = create(
     }
   )
 );
+
+/* ─── What's New (student) ───────────────────────────────────────────
+   Server-tracked per-section "last seen" markers (student_seen table).
+   `data` mirrors GET /student/whats-new. `prevSeen` snapshots the seen-at
+   BEFORE markSeen so item-level NEW pills stay visible for the rest of the
+   session even after the nav badge clears. Not persisted — refetched per
+   session so it can never bleed across accounts.
+──────────────────────────────────────────────────────────────────── */
+const WHATS_NEW_TTL = 60 * 1000; // 1 min between background refetches
+
+export const useWhatsNew = create((set, get) => ({
+  data: null,        // { seen, videos: {count, items}, tests: {...}, live: {...} }
+  prevSeen: {},      // { videos|tests|live: ISO timestamp } — session-stable NEW baseline
+  fetchedAt: 0,
+  fetch: async (force = false) => {
+    const s = get();
+    if (!force && s.data && Date.now() - s.fetchedAt < WHATS_NEW_TTL) return;
+    try {
+      const data = await apiClient('/student/whats-new');
+      if (!data || typeof data !== 'object') return;
+      // Snapshot each section's baseline once per session; markSeen moves the
+      // server marker but the pills keep comparing against this snapshot.
+      const prevSeen = { ...get().prevSeen };
+      for (const sec of ['videos', 'tests', 'live']) {
+        if (!prevSeen[sec] && data.seen?.[sec]) prevSeen[sec] = data.seen[sec];
+      }
+      set({ data, prevSeen, fetchedAt: Date.now() });
+    } catch { /* not a student or offline — leave state as-is */ }
+  },
+  markSeen: async (section) => {
+    const s = get();
+    if (!s.data?.[section]) return;
+    if (s.data[section].count === 0) return; // nothing new — skip the write
+    // Clear the badge optimistically but keep items so NEW pills survive.
+    set({ data: { ...s.data, [section]: { ...s.data[section], count: 0 } } });
+    try {
+      await apiClient('/student/seen', { method: 'POST', body: JSON.stringify({ section }) });
+    } catch { /* server marker stays — badge will just reappear next session */ }
+  },
+  counts: () => {
+    const d = get().data;
+    return {
+      videos: d?.videos?.count || 0,
+      tests:  d?.tests?.count  || 0,
+      live:   d?.live?.count   || 0,
+    };
+  },
+  reset: () => set({ data: null, prevSeen: {}, fetchedAt: 0 }),
+}));
+
+// True if an item's created_at is newer than the session's seen baseline.
+export const isNewSince = (createdAt, baseline) =>
+  !!createdAt && !!baseline && new Date(createdAt) > new Date(baseline);

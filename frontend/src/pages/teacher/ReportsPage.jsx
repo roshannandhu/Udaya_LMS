@@ -18,7 +18,8 @@ export default function ReportsPage() {
   const [activeStd, setActiveStd] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
-  
+  const [loadError, setLoadError] = useState(null);
+
   const loadingStandards = !standardsReady;
 
   useEffect(() => {
@@ -31,18 +32,23 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!activeStd) return;
+    let alive = true;   // ignore responses for a standard the user has already switched away from
     const load = async () => {
       setLoadingData(true);
+      setLoadError(null);
+      setAnalytics(null);   // never show the previous standard's numbers while loading
       try {
         const data = await apiClient(`/reports/standard/${activeStd}/analytics`);
-        setAnalytics(data);
+        if (alive) setAnalytics(data);
       } catch (err) {
         console.error(err);
+        if (alive) setLoadError(err?.message || 'Could not load analytics for this standard.');
       } finally {
-        setLoadingData(false);
+        if (alive) setLoadingData(false);
       }
     };
     load();
+    return () => { alive = false; };
   }, [activeStd]);
 
   const handleExportPDF = async () => {
@@ -68,8 +74,8 @@ export default function ReportsPage() {
       .map((s, i) => [
         i + 1,
         s.name || '—',
-        `${Math.round(s.avg_score || 0)}%`,
-        `${Math.round(s.attendance_pct || 0)}%`,
+        s.has_tests ? `${Math.round(s.avg_score || 0)}%` : '—',
+        s.has_attendance ? `${Math.round(s.attendance_pct || 0)}%` : '—',
         s.points || 0,
       ]);
 
@@ -105,7 +111,12 @@ export default function ReportsPage() {
   const subjectPerf = analytics?.subject_performance || [];
   const recentTests = analytics?.recent_tests || [];
   
-  const atRiskCount = students.filter(s => s.attendance_pct < 75 || s.avg_score < 40).length;
+  // Only students with actual data can be at risk — a brand-new student with no
+  // tests and no attendance is "no data yet", not "failing everything".
+  const isAtRisk = (s) =>
+    (s.has_attendance && (s.attendance_pct || 0) < 75) ||
+    (s.has_tests && (s.avg_score || 0) < 40);
+  const atRiskCount = students.filter(isAtRisk).length;
 
   return (
     <div>
@@ -150,8 +161,25 @@ export default function ReportsPage() {
         )}
 
         {loadingData ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-             {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+          /* Full-layout skeleton so the page doesn't collapse/jump while loading */
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Skeleton className="lg:col-span-2 h-80 rounded-2xl" />
+              <Skeleton className="h-80 rounded-2xl" />
+            </div>
+            <Skeleton className="h-64 rounded-2xl" />
+          </>
+        ) : loadError ? (
+          <div className="text-center py-16 glass-panel rounded-2xl border border-red-100">
+            <AlertTriangle size={28} className="mx-auto mb-3 text-red-400" />
+            <p className="font-medium text-neutral-700 mb-1">Couldn't load analytics</p>
+            <p className="text-sm text-neutral-500 mb-4">{loadError}</p>
+            <Btn variant="primary" size="sm" onClick={() => { const std = activeStd; setActiveStd(null); setTimeout(() => setActiveStd(std), 0); }}>
+              Try again
+            </Btn>
           </div>
         ) : analytics ? (
           <>
@@ -212,9 +240,13 @@ export default function ReportsPage() {
                       <div key={t.test_id} className="p-3 bg-white/50 rounded-xl border border-[#EFEDEA]">
                         <div className="flex justify-between items-start mb-1">
                           <p className="font-medium text-sm text-neutral-900 truncate pr-2" title={t.title}>{t.title}</p>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.avg_score >= 70 ? 'bg-emerald-100 text-emerald-700' : t.avg_score >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                            {t.avg_score}% Avg
-                          </span>
+                          {t.avg_score == null ? (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500 whitespace-nowrap">No attempts</span>
+                          ) : (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${t.avg_score >= 70 ? 'bg-emerald-100 text-emerald-700' : t.avg_score >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                              {t.avg_score}% Avg
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center justify-between text-xs text-neutral-500 mt-2">
                           <span className="flex items-center gap-1"><BookOpen size={12}/> {t.subject_name}</span>
@@ -253,27 +285,35 @@ export default function ReportsPage() {
                             <Avatar src={s.avatar_url} name={s.name} size="sm" />
                             <div>
                               <p className="font-medium text-sm text-neutral-900">{s.name}</p>
-                              {(s.attendance_pct < 75 || s.avg_score < 40) && (
+                              {isAtRisk(s) && (
                                 <p className="text-[10px] font-semibold text-red-500">Requires Attention</p>
                               )}
                             </div>
                           </div>
                         </td>
                         <td className="py-3 px-5 text-center">
-                          <span className={`inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md ${
-                            (s.avg_score||0) >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                            (s.avg_score||0) >= 40 ? 'bg-neutral-100 text-neutral-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {Math.round(s.avg_score||0)}%
-                          </span>
+                          {s.has_tests ? (
+                            <span className={`inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md ${
+                              (s.avg_score||0) >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                              (s.avg_score||0) >= 40 ? 'bg-neutral-100 text-neutral-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {Math.round(s.avg_score||0)}%
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md bg-neutral-50 text-neutral-400" title="No tests taken yet">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-5 text-center">
-                           <span className={`inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md ${
-                            (s.attendance_pct||0) >= 90 ? 'bg-emerald-100 text-emerald-700' :
-                            (s.attendance_pct||0) >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {Math.round(s.attendance_pct||0)}%
-                          </span>
+                          {s.has_attendance ? (
+                            <span className={`inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md ${
+                              (s.attendance_pct||0) >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                              (s.attendance_pct||0) >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {Math.round(s.attendance_pct||0)}%
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md bg-neutral-50 text-neutral-400" title="No attendance marked yet">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-5 text-right">
                           <span className="text-sm font-semibold text-neutral-700">{s.points || 0}</span>

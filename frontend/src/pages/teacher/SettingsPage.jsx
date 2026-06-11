@@ -107,7 +107,7 @@ export default function SettingsPage() {
     defaultStudentPassword, setDefaultStudentPassword,
     terminationPin, setTerminationPin,
     notifTestSubmission, notifNewStudent, notifBroadcastReply, notifWeeklyReport, setNotif,
-    securitySingleDevice, securityAutoLogout, setSecurityPref,
+    securitySingleDevice, securityAutoLogout, securityTwoStepVerification, otpEmailReady, setSecurityPref,
     studentsCanViewReport, setStudentsCanViewReport,
   } = useSettingsStore();
 
@@ -588,6 +588,12 @@ export default function SettingsPage() {
         <Section title="Security">
           <Row label="Single device login" sub="Students can only be logged in on one device" checked={securitySingleDevice} onChange={v => setSecurityPref('securitySingleDevice', v)} />
           <Row label="Auto-logout students" sub="Log out after 30 days of inactivity" checked={securityAutoLogout} onChange={v => setSecurityPref('securityAutoLogout', v)} />
+          <Row label="Two-step verification" sub="Email teachers a 6-digit code when logging in on a new device" checked={securityTwoStepVerification} onChange={v => setSecurityPref('securityTwoStepVerification', v)} />
+          {securityTwoStepVerification && !otpEmailReady && (
+            <p className="px-4 pb-2 -mt-1 text-[11px] text-amber-600">
+              Email isn't configured yet — add <code className="bg-amber-50 px-1 rounded">RESEND_API_KEY</code> to backend/.env and restart the backend. Until then, logins skip the code.
+            </p>
+          )}
 
           {/* Termination PIN — with eye toggle + currently-set indicator */}
           <div className="px-4 py-3">

@@ -1,9 +1,11 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useMotionValue } from 'framer-motion';
 import { MdKeyboardArrowDown, MdLogout, MdSearch } from 'react-icons/md';
+import DockItem from './DockItem';
 import { useSettingsStore } from '../../store';
 import { useAuthStore } from '../../lib/auth';
-import { Avatar } from '../ui';
+import { Avatar, resolveAvatar } from '../ui';
 import NotificationBell from './NotificationBell';
 import SearchPalette from './SearchPalette';
 import { TEACHER_NAV, STUDENT_NAV, activeNavId } from './nav-items';
@@ -12,7 +14,7 @@ import { TEACHER_NAV, STUDENT_NAV, activeNavId } from './nav-items';
  * Dark rounded top navigation bar (desktop only — hidden below lg, where the
  * BottomNav takes over). Matches the reference's dark pill nav.
  */
-const TopNav = memo(function TopNav({ type = 'teacher' }) {
+const TopNav = memo(function TopNav({ type = 'teacher', badges }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { lmsName, lmsLogo } = useSettingsStore();
@@ -31,6 +33,9 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
   }, [menuOpen]);
 
   const profilePath = type === 'teacher' ? '/teacher/more' : '/student/profile';
+
+  // Dock magnification for the center nav icons.
+  const mouseX = useMotionValue(Infinity);
 
   const signOut = async () => {
     await clearAuth();
@@ -52,16 +57,35 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
         </Link>
 
         {/* Center nav - icon only */}
-        <div className="flex flex-1 justify-center items-center gap-3">
+        <div
+          className="flex flex-1 justify-center items-center gap-3 h-[42px]"
+          onMouseMove={(e) => mouseX.set(e.clientX)}
+          onMouseLeave={() => mouseX.set(Infinity)}
+        >
           {items.map((item) => {
             const isActive = active === item.id;
+            const badge = badges?.[item.id] || 0;
             return (
-              <Link key={item.id} to={item.path} title={item.label}
-                className={`flex items-center justify-center w-[42px] h-[42px] rounded-full transition-colors flex-shrink-0 ${
-                  isActive ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'
-                }`}>
-                <item.icon className="w-5 h-5" />
-              </Link>
+              <div key={item.id} className="relative flex-shrink-0">
+                <DockItem
+                  mouseX={mouseX}
+                  baseSize={42}
+                  magnification={58}
+                  distance={100}
+                  to={item.path}
+                  title={item.label}
+                  className={`flex items-center justify-center rounded-full transition-colors flex-shrink-0 ${
+                    isActive ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                </DockItem>
+                {badge > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none pointer-events-none">
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
@@ -77,9 +101,9 @@ const TopNav = memo(function TopNav({ type = 'teacher' }) {
             <button onClick={() => setMenuOpen(o => !o)}
               className="flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-full hover:bg-white/10 transition-colors">
               {user?.avatar_url ? (
-                <img src={user.avatar_url} alt="Profile" className="w-8 h-8 rounded-full object-cover" />
+                <img src={resolveAvatar(user.avatar_url)} alt="Profile" className="w-8 h-8 rounded-full object-cover" />
               ) : (
-                <img src="/default-avatar.png" alt="Profile" className="w-8 h-8 rounded-full object-cover shadow-sm border border-white/20" />
+                <img src="/avatar-neutral.svg" alt="Profile" className="w-8 h-8 rounded-full object-cover shadow-sm border border-white/20" />
               )}
               <MdKeyboardArrowDown className="w-4 h-4 text-neutral-400 flex-shrink-0" />
             </button>

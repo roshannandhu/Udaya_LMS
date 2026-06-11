@@ -65,17 +65,27 @@ const PASTELS = [
   { bg: '#F7E3F0', text: '#AD1A72' }, // pink
 ];
 
+// avatar_url can hold a real photo URL OR a preset sentinel chosen by the
+// student ("preset:male" / "preset:female"). Resolve sentinels to the bundled
+// icons; null/undefined falls back to the neutral default avatar.
+export const AVATAR_PRESETS = {
+  'preset:male':   '/avatar-male.svg',
+  'preset:female': '/avatar-female.svg',
+};
+export const resolveAvatar = (src) => (src ? (AVATAR_PRESETS[src] || src) : null);
+
 export const Avatar = ({ name, src, size = 'md' }) => {
   const [imgError, setImgError] = React.useState(false);
   const initials = name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
   const sizes = { xs: 'w-6 h-6 text-[10px]', sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-14 h-14 text-base', xl: 'w-20 h-20 text-xl' };
   const idx   = (name?.charCodeAt(0) || 0) % PASTELS.length;
-  if (src && !imgError) {
-    return <img src={src} alt={name || ''} onError={() => setImgError(true)}
+  const resolved = resolveAvatar(src);
+  if (resolved && !imgError) {
+    return <img src={resolved} alt={name || ''} onError={() => setImgError(true)}
       className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-[#EFEDEA]`} />;
   }
   return (
-    <img src="/default-avatar.png" alt="Default Avatar"
+    <img src="/avatar-neutral.svg" alt="Default Avatar"
       className={`${sizes[size]} rounded-full object-cover flex-shrink-0 border border-[#EFEDEA] shadow-sm`} />
   );
 };
@@ -147,7 +157,7 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
   }, [open, onClose]);
 
   if (!open) return null;
-  const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-xl' };
+  const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-xl', xl: 'max-w-5xl', '2xl': 'max-w-6xl', '4xl': 'max-w-6xl' };
   return (
     <motion.div
       variants={{ hidden: { opacity: 0 }, show: { opacity: 1 } }}

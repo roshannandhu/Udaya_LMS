@@ -5,20 +5,11 @@ import { useAuthStore } from '../../lib/auth';
 import { broadcastApi, getApiBaseUrl } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import { fmtTime, fmtChatDate } from '../../lib/datetime';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-function formatChatDate(dateString) {
-  if (!dateString) return 'Unknown Date';
-  const d = new Date(dateString);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-}
+const formatChatDate = fmtChatDate;
 
 export default function StudentBroadcastsPage() {
   const { user } = useAuthStore();
@@ -106,7 +97,7 @@ export default function StudentBroadcastsPage() {
       id: b.id,
       text: b.message,
       created_at: b.created_at,
-      time: new Date(b.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }),
+      time: fmtTime(b.created_at),
       pinned: false,
       edited: !!b.edited,
       attachments: b.attachment_url ? [{ url: b.attachment_url, type: b.attachment_type }] : [],

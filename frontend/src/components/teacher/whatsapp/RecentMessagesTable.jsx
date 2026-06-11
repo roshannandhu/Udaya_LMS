@@ -1,5 +1,6 @@
 import React from 'react';
 import { Tag, Avatar } from '../../ui';
+import { fmtDateTime } from '../../../lib/datetime';
 
 const STATUS = {
   queued:        { c: 'gray',  l: 'Queued' },
@@ -12,8 +13,7 @@ const STATUS = {
 
 export function fmtDate(dt) {
   if (!dt) return '—';
-  try { return new Date(dt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }); }
-  catch { return dt; }
+  return fmtDateTime(dt) || dt;
 }
 
 export function msgType(m) {

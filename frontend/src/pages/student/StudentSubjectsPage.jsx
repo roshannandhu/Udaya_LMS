@@ -4,24 +4,31 @@ import { motion } from 'framer-motion';
 import { Play, FileQuestion, ArrowRight } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { apiClient, testApi } from '../../lib/api';
-import { useAppCache } from '../../store';
+import { useAppCache, useWhatsNew } from '../../store';
+import { useAuthStore } from '../../lib/auth';
 import { Skeleton } from '../../components/ui';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { staggerChildren, fadeUp, springCard } from '../../lib/motion';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 
-let subjectsPageCache = null;
+let subjectsPageCache = null; // { userId, videoCounts, testCounts }
 
 export default function StudentSubjectsPage() {
   const navigate = useNavigate();
-  const [videoCounts, setVideoCounts] = useState(subjectsPageCache?.videoCounts || {});
-  const [testCounts, setTestCounts] = useState(subjectsPageCache?.testCounts || {});
-  const [loading, setLoading] = useState(!subjectsPageCache);
+  const { user } = useAuthStore();
+  // The module cache outlives logins — only trust it for the same account.
+  const cache = subjectsPageCache && subjectsPageCache.userId === user?.id ? subjectsPageCache : null;
+  const [videoCounts, setVideoCounts] = useState(cache?.videoCounts || {});
+  const [testCounts, setTestCounts] = useState(cache?.testCounts || {});
+  const [loading, setLoading] = useState(!cache);
   const subjects = useAppCache(s => s.subjects);
+  // New-video chips per subject; visiting this page clears the nav badge.
+  const newVideoItems = useWhatsNew(s => s.data?.videos?.items) || [];
+  useEffect(() => { useWhatsNew.getState().markSeen('videos'); }, []);
 
   useEffect(() => {
     const load = async () => {
-      if (!subjectsPageCache) setLoading(true);
+      if (!cache) setLoading(true);
       try {
         const [vids, tests] = await Promise.all([
           apiClient('/videos'),
@@ -44,7 +51,7 @@ export default function StudentSubjectsPage() {
           });
         setTestCounts(tc);
         
-        subjectsPageCache = { videoCounts: vc, testCounts: tc };
+        subjectsPageCache = { userId: user?.id, videoCounts: vc, testCounts: tc };
       } catch (err) {
         console.error(err);
       } finally {
@@ -72,6 +79,7 @@ export default function StudentSubjectsPage() {
             {subjects.map(c => {
               const vc = videoCounts[c.id] || 0;
               const tc = testCounts[c.id] || 0;
+              const newCount = newVideoItems.filter(v => v.class_id === c.id).length;
               const pastel = PASTEL[pastelFor(c.name)];
               return (
                 <motion.div key={c.id} variants={fadeUp}
@@ -87,7 +95,14 @@ export default function StudentSubjectsPage() {
                       <ArrowRight size={16} />
                     </div>
                   </div>
-                  <p className="font-semibold text-lg tracking-tight mb-3" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{c.name}</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <p className="font-semibold text-lg tracking-tight" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{c.name}</p>
+                    {newCount > 0 && (
+                      <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0">
+                        {newCount} new
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 text-xs font-medium" style={{ color: pastel.fgHex }}>
                     <span className="flex items-center gap-1 bg-white/60 rounded-pill px-2.5 py-1"><Play size={12} />{vc} video{vc !== 1 ? 's' : ''}</span>
                     <span className="flex items-center gap-1 bg-white/60 rounded-pill px-2.5 py-1"><FileQuestion size={12} />{tc} test{tc !== 1 ? 's' : ''}</span>

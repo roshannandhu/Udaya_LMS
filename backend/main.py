@@ -50,11 +50,44 @@ _zoom_token_cache: dict = {"token": None, "expires_at": 0.0}
 supabase: Optional[Client] = None
 service_supabase: Optional[Client] = None
 
+
+def _harden_postgrest_session(client: Client):
+    """postgrest-py hardcodes one shared httpx session with http2=True. Under
+    concurrent threaded use (asyncio.to_thread fan-outs + parallel requests)
+    all calls multiplex onto a single HTTP/2 connection; when Supabase's load
+    balancer drops it, every in-flight call dies with httpx.RemoteProtocolError
+    'Server disconnected' → unhandled 500s (seen as intermittent empty lists
+    in the UI). Replace the session with an HTTP/1.1 client (one pooled TCP
+    connection per concurrent call, 5s keepalive) and retry once when a reused
+    connection turns out to be dead."""
+    pg = client.postgrest  # lazily instantiates the SyncPostgrestClient
+    old = pg.session
+    new = httpx.Client(
+        base_url=old.base_url,
+        headers=old.headers,
+        timeout=old.timeout,
+        follow_redirects=True,
+        transport=httpx.HTTPTransport(retries=2),
+    )
+    orig_request = new.request
+
+    def request_with_retry(*args, **kwargs):
+        try:
+            return orig_request(*args, **kwargs)
+        except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError):
+            return orig_request(*args, **kwargs)
+
+    new.request = request_with_retry
+    pg.session = new
+
+
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        _harden_postgrest_session(supabase)
         if SUPABASE_SERVICE_KEY:
             service_supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+            _harden_postgrest_session(service_supabase)
         print("[*] Supabase connected successfully")
     except Exception as e:
         print(f"[!] Supabase connection failed: {e}")
@@ -760,6 +793,14 @@ def _prune_auth_cache():
         _auth_cache.clear()
 
 
+def _invalidate_auth_cache_for_user(user_id: str):
+    # Drop every cached token for this user so flag changes (must_change_pwd,
+    # role, block) are visible on the very next request instead of after TTL.
+    stale = [t for t, v in _auth_cache.items() if v["result"].get("user_id") == user_id]
+    for t in stale:
+        _auth_cache.pop(t, None)
+
+
 def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
@@ -1270,6 +1311,10 @@ def change_password(request: ChangePasswordRequest, user = Depends(verify_token)
                     service_supabase.table("students").update({"must_change_pwd": False}).eq("id", user["user_id"]).execute()
                 except Exception:
                     pass
+        # The auth cache still holds must_change_pwd=True for this token — drop it
+        # so the immediate /auth/me re-check sees the cleared flag (otherwise the
+        # frontend guard bounces the student back to the change-password page).
+        _invalidate_auth_cache_for_user(user["user_id"])
         return {"message": "Password changed successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1921,102 +1966,121 @@ def get_standard_analytics(standard_id: str, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # 1. Overview & Students
+    # Ownership check — every other standard-scoped endpoint enforces this.
+    std_check = service_supabase.table("standards").select("teacher_id").eq("id", standard_id).single().execute()
+    if not std_check.data or std_check.data.get("teacher_id") != user["teacher_id"]:
+        raise HTTPException(status_code=403, detail="Not your standard")
+
+    # 1. Roster (stored points only — scores/attendance are computed LIVE below so
+    #    the KPI cards, roster and subject chart all agree. The cached
+    #    students.avg_score/attendance_pct columns drift: they're only refreshed on
+    #    submit/marking, never when a test is deleted or attendance edited.)
     students_res = service_supabase.table("students").select(
         "id, name, avatar_url, attendance_pct, avg_score, points"
     ).eq("standard_id", standard_id).execute()
     students = students_res.data or []
-    
     total_students = len(students)
-    avg_score = sum(s.get("avg_score") or 0 for s in students) / total_students if total_students else 0
-    avg_attendance = sum(s.get("attendance_pct") or 0 for s in students) / total_students if total_students else 0
+    roster_ids = {s["id"] for s in students}
     total_points = sum(s.get("points") or 0 for s in students)
-    
-    # 2. Subject-wise performance
+
+    # 2. Subjects
     subjects_res = service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
     subjects = subjects_res.data or []
     subject_ids = [sub["id"] for sub in subjects]
-    
+
     subject_performance = []
     recent_tests = []
-    
+    student_scores: dict = {}   # student_id -> [pct, ...]
+    student_att: dict = {}      # student_id -> [pct, ...]
+
     if subject_ids:
-        # Get attendance summary
-        att_res = service_supabase.table("attendance_summary").select("subject_class_id, attendance_pct").in_("subject_class_id", subject_ids).execute()
-        att_data = att_res.data or []
-        
+        # Attendance summary — include student_id and keep only CURRENT roster
+        # students (the view still carries rows for students who left the standard).
+        att_res = service_supabase.table("attendance_summary").select("student_id, subject_class_id, attendance_pct").in_("subject_class_id", subject_ids).execute()
         subject_att = {}
-        for row in att_data:
-            sid = row["subject_class_id"]
-            if sid not in subject_att:
-                subject_att[sid] = []
-            if row.get("attendance_pct") is not None:
-                subject_att[sid].append(row["attendance_pct"])
-        
-        # Get tests for these subjects
+        for row in (att_res.data or []):
+            if row.get("attendance_pct") is None or row.get("student_id") not in roster_ids:
+                continue
+            subject_att.setdefault(row["subject_class_id"], []).append(row["attendance_pct"])
+            student_att.setdefault(row["student_id"], []).append(row["attendance_pct"])
+
+        # Tests + attempts (attempts limited to the current roster for the same reason)
         tests_res = service_supabase.table("tests").select("id, class_id, title, created_at").in_("class_id", subject_ids).order("created_at", desc=True).execute()
         tests = tests_res.data or []
         test_ids = [t["id"] for t in tests]
-        
+
         subject_scores = {}
-        test_stats = {} 
+        test_stats = {}
         if test_ids:
-            attempts_res = service_supabase.table("test_attempts").select("test_id, score, tests!inner(class_id, total_marks)").in_("test_id", test_ids).execute()
+            attempts_res = service_supabase.table("test_attempts").select("test_id, student_id, score, tests!inner(class_id, total_marks)").in_("test_id", test_ids).execute()
             for a in (attempts_res.data or []):
                 t = a.get("tests") or {}
                 cid = t.get("class_id")
                 score = a.get("score")
                 tm = t.get("total_marks")
-                if cid and score is not None and tm:
-                    pct = (score / tm) * 100
-                    if cid not in subject_scores:
-                        subject_scores[cid] = []
-                    subject_scores[cid].append(pct)
-                    
-                    tid = a["test_id"]
-                    if tid not in test_stats:
-                        test_stats[tid] = {"score_sum": 0, "count": 0}
-                    test_stats[tid]["score_sum"] += pct
-                    test_stats[tid]["count"] += 1
-        
+                if not (cid and score is not None and tm) or a.get("student_id") not in roster_ids:
+                    continue
+                pct = (score / tm) * 100
+                subject_scores.setdefault(cid, []).append(pct)
+                student_scores.setdefault(a["student_id"], []).append(pct)
+                tid = a["test_id"]
+                test_stats.setdefault(tid, {"score_sum": 0, "count": 0})
+                test_stats[tid]["score_sum"] += pct
+                test_stats[tid]["count"] += 1
+
         for sub in subjects:
             sid = sub["id"]
             att_list = subject_att.get(sid, [])
             sc_list = subject_scores.get(sid, [])
-            
             subject_performance.append({
                 "subject_id": sid,
                 "subject_name": sub["name"],
                 "avg_attendance": round(sum(att_list)/len(att_list)) if att_list else 0,
-                "avg_score": round(sum(sc_list)/len(sc_list)) if sc_list else 0
+                "avg_score": round(sum(sc_list)/len(sc_list)) if sc_list else 0,
             })
-            
-        # 3. Recent Tests
+
+        # 3. Recent Tests — avg_score is None (not 0) when nobody attempted yet;
+        #    participation is capped at 100 (roster may have shrunk since attempts).
         for t in tests[:5]:
             stats = test_stats.get(t["id"], {"score_sum": 0, "count": 0})
             count = stats["count"]
-            sc_avg = round(stats["score_sum"] / count) if count > 0 else 0
-            participation = round((count / total_students) * 100) if total_students else 0
             sub_name = next((s["name"] for s in subjects if s["id"] == t["class_id"]), "Unknown")
             recent_tests.append({
                 "test_id": t["id"],
                 "title": t["title"],
                 "subject_name": sub_name,
-                "avg_score": sc_avg,
-                "participation": participation,
-                "date": t["created_at"]
+                "avg_score": round(stats["score_sum"] / count) if count > 0 else None,
+                "attempt_count": count,
+                "participation": min(100, round((count / total_students) * 100)) if total_students else 0,
+                "date": t["created_at"],
             })
-        
+
+    # 4. Live per-student stats → roster + overview computed from the SAME data
+    #    as the subject chart. has_tests/has_attendance let the UI avoid flagging
+    #    brand-new students (no data ≠ at risk).
+    for s in students:
+        sc = student_scores.get(s["id"])
+        at = student_att.get(s["id"])
+        s["has_tests"] = bool(sc)
+        s["has_attendance"] = bool(at)
+        s["avg_score"] = round(sum(sc) / len(sc), 1) if sc else 0
+        s["attendance_pct"] = round(sum(at) / len(at), 1) if at else 0
+
+    scored = [s["avg_score"] for s in students if s["has_tests"]]
+    attended = [s["attendance_pct"] for s in students if s["has_attendance"]]
+
     return {
         "overview": {
             "total_students": total_students,
-            "avg_score": round(avg_score),
-            "avg_attendance": round(avg_attendance),
-            "total_points": total_points
+            # Averages over students who actually have data — a class where only
+            # 3 of 20 students took a test shouldn't show a 12% "class average".
+            "avg_score": round(sum(scored) / len(scored)) if scored else 0,
+            "avg_attendance": round(sum(attended) / len(attended)) if attended else 0,
+            "total_points": total_points,
         },
         "subject_performance": subject_performance,
         "recent_tests": recent_tests,
-        "students": students
+        "students": students,
     }
 
 @app.get("/api/students/{student_id}/report")
@@ -2072,6 +2136,11 @@ def get_student_report(student_id: str, user = Depends(verify_token)):
         "history": history,
         "video_history": video_history,
     }
+
+# standard_id -> (expires_epoch, class_averages dict). Short TTL: fresh enough
+# for a report view, avoids recomputing class-wide stats on every period switch.
+_class_avg_cache: dict = {}
+
 
 @app.get("/api/students/{student_id}/report/v2")
 def get_student_report_v2(student_id: str, period: str = "overall", user = Depends(verify_token)):
@@ -2507,6 +2576,72 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
     except Exception as exc:
         print(f"Live class stats error (non-fatal): {exc}")
 
+    # ── Class averages (real baselines for the skill radar overlay) ────────
+    # Class-wide aggregates are identical for every student in the standard and
+    # for every period tab, but cost 3 extra queries — cache them briefly so
+    # switching Weekly/Monthly/Overall doesn't recompute them each time.
+    class_averages = None
+    _ca_cached = _class_avg_cache.get(std_id) if std_id else None
+    if _ca_cached and _ca_cached[0] > time_module.time():
+        class_averages = _ca_cached[1]
+    elif std_id:
+        try:
+            cls_res = service_supabase.table("students").select(
+                "id, avg_score, attendance_pct, points"
+            ).eq("standard_id", std_id).execute()
+            cls_rows = cls_res.data or []
+            n = len(cls_rows)
+            if n > 0:
+                ids = [r["id"] for r in cls_rows]
+
+                def _mean(vals):
+                    return round(sum(vals) / len(vals), 1) if vals else 0
+
+                class_averages = {
+                    "avg_score":      _mean([r.get("avg_score") or 0 for r in cls_rows]),
+                    "attendance_pct": _mean([r.get("attendance_pct") or 0 for r in cls_rows]),
+                    "points":         _mean([r.get("points") or 0 for r in cls_rows]),
+                    "students_counted": n,
+                }
+
+                # Class-wide video completion: completed rows / (students × videos)
+                video_pct = 0
+                if subjects:
+                    vids_res = service_supabase.table("videos").select("id").in_(
+                        "class_id", [s["id"] for s in subjects]
+                    ).execute()
+                    n_videos = len(vids_res.data or [])
+                    if n_videos > 0:
+                        vp_res = service_supabase.table("video_progress").select(
+                            "id", count="exact"
+                        ).in_("student_id", ids).eq("completed", True).execute()
+                        video_pct = round((vp_res.count or 0) / (n * n_videos) * 100, 1)
+                class_averages["video_pct"] = video_pct
+
+                # Class consistency (100 − 2σ of all attempt percentages, clamped)
+                # and mastery (share of attempts scoring ≥ 75%).
+                consistency = 0
+                mastery = 0
+                ta_res = service_supabase.table("test_attempts").select(
+                    "score, tests(total_marks)"
+                ).in_("student_id", ids).execute()
+                pcts = []
+                for a in (ta_res.data or []):
+                    tm = (a.get("tests") or {}).get("total_marks") or 0
+                    if tm > 0:
+                        pcts.append((a.get("score") or 0) / tm * 100)
+                if pcts:
+                    m = sum(pcts) / len(pcts)
+                    sd = (sum((p - m) ** 2 for p in pcts) / len(pcts)) ** 0.5
+                    consistency = round(max(0, min(100, 100 - 2 * sd)), 1)
+                    mastery = round(sum(1 for p in pcts if p >= 75) / len(pcts) * 100, 1)
+                class_averages["consistency"] = consistency
+                class_averages["mastery"] = mastery
+                _class_avg_cache[std_id] = (time_module.time() + 180, class_averages)
+        except Exception as exc:
+            print(f"Class averages error (non-fatal): {exc}")
+            class_averages = None
+
     return {
         "student": student,
         "period": period,
@@ -2528,6 +2663,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "topic_mastery_pct": topic_mastery_pct,
         "subjects": subjects,
         "live_classes_stats": live_classes_stats,
+        "class_averages": class_averages,
     }
 
 
@@ -2875,6 +3011,92 @@ def get_student_calendar_events(start_date: str, end_date: str, user = Depends(v
 
     return events
 
+# ── What's New: per-section unseen-content feed for students ────────────────
+_SEEN_SECTIONS = ("videos", "tests", "live")
+
+@app.get("/api/student/whats-new")
+def get_student_whats_new(user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    student_id = user.get("student_id") or user["user_id"]
+    standard_id = user.get("standard_id")
+
+    # Baseline = enrollment date, so a brand-new student isn't flooded with
+    # every piece of pre-existing content marked NEW.
+    baseline = None
+    try:
+        row = service_supabase.table("students").select("created_at").eq("id", student_id).single().execute()
+        baseline = row.data.get("created_at") if row.data else None
+    except Exception:
+        pass
+    if not baseline:
+        baseline = datetime.now(timezone.utc).isoformat()
+
+    seen = {s: baseline for s in _SEEN_SECTIONS}
+    try:
+        rows = service_supabase.table("student_seen").select("section, seen_at").eq("student_id", student_id).execute()
+        for r in (rows.data or []):
+            if r.get("section") in seen and r.get("seen_at"):
+                seen[r["section"]] = r["seen_at"]
+    except Exception:
+        pass  # student_seen not migrated yet — enrollment baseline still works
+
+    empty = {"count": 0, "items": []}
+    if not standard_id:
+        return {"seen": seen, "videos": dict(empty), "tests": dict(empty), "live": dict(empty)}
+
+    subjects = service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
+    if not subjects.data:
+        return {"seen": seen, "videos": dict(empty), "tests": dict(empty), "live": dict(empty)}
+    class_ids = [s["id"] for s in subjects.data]
+    class_names = {s["id"]: s["name"] for s in subjects.data}
+
+    def fetch_new(table, fields, seen_at, refine=None):
+        try:
+            q = service_supabase.table(table).select(fields).in_("class_id", class_ids).gt("created_at", seen_at)
+            if refine:
+                q = refine(q)
+            items = q.order("created_at", desc=True).limit(20).execute().data or []
+        except Exception:
+            items = []
+        for it in items:
+            it["subject_name"] = class_names.get(it.get("class_id"), "Unknown")
+        return {"count": len(items), "items": items}
+
+    return {
+        "seen": seen,
+        "videos": fetch_new("videos", "id, title, class_id, thumbnail_url, source_type, duration_secs, created_at", seen["videos"]),
+        "tests": fetch_new("tests", "id, title, class_id, scheduled_for, expires_at, status, created_at", seen["tests"],
+                           lambda q: q.neq("status", "draft")),
+        "live": fetch_new("live_classes", "id, title, class_id, scheduled_at, status, created_at", seen["live"],
+                          lambda q: q.neq("status", "cancelled")),
+    }
+
+class MarkSeenRequest(BaseModel):
+    section: str
+
+@app.post("/api/student/seen")
+def mark_student_seen(request: MarkSeenRequest, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    if request.section not in _SEEN_SECTIONS:
+        raise HTTPException(status_code=400, detail="Invalid section")
+    try:
+        service_supabase.table("student_seen").upsert({
+            "student_id": user.get("student_id") or user["user_id"],
+            "section": request.section,
+            "seen_at": datetime.now(timezone.utc).isoformat()
+        }, on_conflict="student_id,section").execute()
+    except Exception as e:
+        # Table may not be migrated yet — the badge just won't clear until it is.
+        print(f"student_seen upsert failed: {e}")
+    return {"message": "ok"}
+
 @app.post("/api/students/me/avatar")
 async def upload_student_avatar(file: UploadFile = File(...), user = Depends(verify_token)):
     if user["role"] != "student":
@@ -3061,6 +3283,9 @@ def reset_student_password(student_id: str, body: ResetPasswordRequest = None, u
             service_supabase.table("students").update({"must_change_pwd": True, "plain_password": new_password}).eq("id", student_id).execute()
         except Exception:
             service_supabase.table("students").update({"must_change_pwd": True}).eq("id", student_id).execute()
+        # Drop the student's cached auth entries so the forced password change
+        # takes effect on their next request, not after the cache TTL.
+        _invalidate_auth_cache_for_user(student_id)
         return {"new_password": new_password}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -3254,6 +3479,31 @@ def get_video_viewers(video_id: str, user = Depends(verify_token)):
     result.sort(key=lambda x: (0 if x["completed"] else 1 if x["watched"] else 2, x["name"]))
     return result
 
+def _notify_students_of_content(class_id: str, ntype: str, title: str, body: str = "", data: dict = None):
+    """Fan out a notification row to every non-blocked student of the standard
+    that owns class_id. Best-effort: content creation must never fail because
+    notifications did."""
+    if not service_supabase:
+        return
+    try:
+        subj = service_supabase.table("subject_classes").select("standard_id, name").eq("id", class_id).single().execute()
+        if not subj.data:
+            return
+        students = service_supabase.table("students").select("id, blocked").eq("standard_id", subj.data["standard_id"]).execute()
+        rows = [{
+            "recipient_id": s["id"],
+            "recipient_type": "student",
+            "type": ntype,
+            "title": title,
+            "body": body or subj.data.get("name") or "",
+            "data": {**(data or {}), "class_id": class_id},
+            "read": False,
+        } for s in (students.data or []) if not s.get("blocked")]
+        if rows:
+            service_supabase.table("notifications").insert(rows).execute()
+    except Exception as e:
+        print(f"Notification fan-out failed: {e}")
+
 @app.post("/api/videos/youtube")
 async def create_youtube_video(video: YouTubeVideo, user=Depends(verify_token)):
     if user["role"] != "teacher":
@@ -3295,6 +3545,8 @@ async def create_youtube_video(video: YouTubeVideo, user=Depends(verify_token)):
     # Add virtual source_type for the response
     cf = created.get("cloudflare_video_id", "")
     created["source_type"] = "youtube" if cf.startswith("yt:") else "upload"
+    await asyncio.to_thread(_notify_students_of_content, video.class_id, "new_video",
+                            f"New video: {video.title}", "", {"content_id": created["id"]})
     return created
 
 @app.post("/api/videos")
@@ -3315,9 +3567,11 @@ def create_video(video: Video, user = Depends(verify_token)):
     if video.duration_secs: data["duration_secs"] = video.duration_secs
     try:
         response = service_supabase.table("videos").insert(data).execute()
-        return {"id": response.data[0]["id"], "message": "Video created"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    _notify_students_of_content(video.class_id, "new_video",
+                                f"New video: {video.title}", "", {"content_id": response.data[0]["id"]})
+    return {"id": response.data[0]["id"], "message": "Video created"}
 
 @app.post("/api/videos/upload")
 async def upload_video(
@@ -3386,6 +3640,8 @@ async def upload_video(
 
         if not db_resp.data:
             raise HTTPException(status_code=500, detail="Video uploaded but database record creation failed")
+        await asyncio.to_thread(_notify_students_of_content, class_id, "new_video",
+                                f"New video: {title}", "", {"content_id": db_resp.data[0]["id"]})
         return db_resp.data[0]
 
     file_bytes = await file.read()
@@ -3421,6 +3677,8 @@ async def upload_video(
         "created_by": user["id"],
     }
     db_resp = service_supabase.table("videos").insert(video_data).execute()
+    await asyncio.to_thread(_notify_students_of_content, class_id, "new_video",
+                            f"New video: {title}", "", {"content_id": db_resp.data[0]["id"]})
     return db_resp.data[0]
 
 @app.patch("/api/videos/{video_id}")
@@ -3679,6 +3937,9 @@ def create_test(test: Test, user = Depends(verify_token)):
         "created_by": user["user_id"]
     }
     response = service_supabase.table("tests").insert(data).execute()
+    if test.status != "draft":
+        _notify_students_of_content(test.class_id, "new_test",
+                                    f"New test: {test.title}", "", {"content_id": response.data[0]["id"]})
     return {"id": response.data[0]["id"], "message": "Test created"}
 
 @app.patch("/api/tests/{test_id}")
@@ -4435,6 +4696,9 @@ def create_test_with_questions(data: TestWithQuestions, user = Depends(verify_to
             })
         service_supabase.table("questions").insert(questions_data).execute()
 
+    if data.status != "draft":
+        _notify_students_of_content(data.class_id, "new_test",
+                                    f"New test: {data.title}", "", {"content_id": test_id})
     return {"id": test_id, "message": f"Test created with {len(data.questions)} questions"}
 
 # Get full test for editing
@@ -5995,6 +6259,8 @@ async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
     result = await asyncio.to_thread(lambda: service_supabase.table("live_classes").insert(insert).execute())
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create live class")
+    await asyncio.to_thread(_notify_students_of_content, data.class_id, "new_live_class",
+                            f"Live class scheduled: {data.title}", "", {"content_id": result.data[0]["id"]})
     return result.data[0]
 
 
@@ -6951,12 +7217,15 @@ class InsightsRequest(BaseModel):
 
 # Gemini generation tuning. thinkingBudget=0 disables gemini-2.5-flash's
 # default "thinking" pass — the single biggest latency win for short coaching
-# replies. maxOutputTokens caps a 150-300 word answer so generation can't run long.
+# replies. maxOutputTokens caps a 180-350 word answer so generation can't run long.
+# Low temperature keeps the mentor factual: it must only restate real data, never
+# invent test names or numbers, so creative sampling is a liability here.
 GEMINI_GEN_CONFIG = {
-    "temperature": 0.7,
-    "maxOutputTokens": 512,
+    "temperature": 0.3,
+    "maxOutputTokens": 1500,
     "thinkingConfig": {"thinkingBudget": 0},
 }
+OPENAI_TEMPERATURE = 0.3
 
 
 def build_insights_prompt(stats: dict, viewer_role: str) -> str:
@@ -6964,49 +7233,373 @@ def build_insights_prompt(stats: dict, viewer_role: str) -> str:
     if viewer_role == "teacher":
         role_context = (
             "Write as if reporting to the teacher about the student. Use third-person "
-            '("Aisha is improving in Physics"), never address the student directly.'
+            '(e.g. "<student name> is improving in <subject>"), never address the student directly.'
         )
         greeting_rule = "Open with a one-line objective summary of the student's progress."
     else:
         role_context = "Write as if you are talking directly to the student."
-        greeting_rule = "Open with a warm greeting using the student's name."
+        greeting_rule = "Open with a warm greeting using the student's first name."
 
-    return f"""You are an expert learning mentor and student-success coach. Diagnose the student's learning behaviour and give specific, encouraging, actionable guidance — do NOT just restate statistics.
+    # Real calendar anchor — the model cannot know today's date by itself, and an
+    # unanchored timetable would guess weekday placements (a hallucination vector).
+    from datetime import datetime as _dt, timedelta as _td
+    _today = _dt.now()
+    _days = [(_today + _td(days=i)).strftime("%A %d %B %Y") for i in range(8)]
+    calendar_block = (
+        f"Today is {_days[0]}. The Weekly Timetable covers the next 7 days, in exactly this "
+        f"order: {', '.join(d.rsplit(' ', 1)[0] for d in _days[1:])}. Use exactly these day "
+        "names in this order, and place each scheduled event on the day matching its listed date."
+    )
+
+    period = stats.get("period", "overall")
+    if period == "weekly":
+        period_rule = (
+            "This is a WEEKLY report: be tactical. Anchor every recommendation to the next 7 days "
+            "and to what changed since last week."
+        )
+    elif period == "monthly":
+        period_rule = (
+            "This is a MONTHLY report: balance quick wins with one habit change that compounds "
+            "over the coming month."
+        )
+    else:
+        period_rule = (
+            "This is an OVERALL report: take the long view — trajectory, habits and one strategic "
+            "priority matter more than any single test."
+        )
+
+    return f"""You are an expert learning mentor and student-success coach for a private tuition academy. Your job is to diagnose the student's learning BEHAVIOUR from the data and coach them — never just restate statistics back.
 
 {role_context}
+{period_rule}
+
+GROUNDING — ABSOLUTE RULES (these override everything else):
+* Every subject, topic, test, video, number, date and streak you mention MUST appear verbatim in the STUDENT DATA below. NEVER invent or guess a name, score, percentage, date or event.
+* Quote numbers exactly as given — do not round differently, extrapolate, or combine them into new statistics.
+* If a field says "N/A", "None", "No data", "unknown" or is missing, that information does not exist: do not write about it, do not guess at it, and do not fill the gap with a plausible-sounding detail. Work only with what IS present.
+* If there is too little data for a section (e.g. no tests yet), say so honestly in one short sentence and pivot to what the data does support (e.g. attendance or videos). An honest "not enough tests yet to see a trend" is always better than an invented trend.
+* Only claim a cause-effect pattern (e.g. "unwatched video → low score") when BOTH sides of it are literally present in the data.
+* Never promise specific outcomes you cannot know ("you will score 80%") — frame targets as goals, not predictions.
+* The examples in these instructions use <angle-bracket> placeholders and are FORMAT examples only. NEVER copy an example's subject, name, title or number into your answer — every real value must come from STUDENT DATA.
+
+{calendar_block}
+
+LANGUAGE — KEEP IT SIMPLE:
+* Write so a school student understands instantly: short sentences (about 15 words max), everyday words, no jargon.
+* If you must use a study term, explain it in brackets the first time, e.g. "active recall (testing yourself from memory)".
+* One idea per sentence or bullet. Prefer concrete verbs: watch, practise, ask, revise, attempt.
+
+YOU SEE THE STUDENT'S COMPLETE LMS RECORD: profile and class standing, every subject's numbers, full recent test history, weak topics with lesson-video status, day-by-day activity patterns and streaks, assignment status, the class baseline, AND the actual upcoming week (scheduled tests, live classes, assignment due dates, unwatched videos). Analyse ALL of it together — the diagnosis must connect history, habits and the week ahead.
+
+HOW TO DIAGNOSE (reason silently, output only conclusions):
+1. Cross-reference signals before concluding. Examples of patterns to look for:
+   - Weak topic + lesson video NOT watched → a preparation gap, not an ability gap. The fix is watching the lesson before reattempting.
+   - Weak topic + video watched → a comprehension gap. The fix is active recall: notes, practice questions, asking the teacher.
+   - High video completion but flat test scores → passive watching; prescribe self-testing.
+   - Falling improvement trend or "Erratic" consistency → cramming/irregular routine; prescribe a fixed daily slot (use the streak and "most active days" pattern).
+   - Strong best-subject vs weak weakest-subject gap → time is being spent where it's comfortable, not where it's needed.
+   - Low test coverage or an OPEN test in the upcoming week → missed tests are silent score killers; schedule it explicitly.
+2. Use the streak: a live streak is momentum to protect (say so); a broken/short streak is the first habit to rebuild.
+3. Compare against the class baseline and rank only to motivate, never to shame.
 
 RULES:
 * {greeting_rule}
-* Praise real strengths before naming weaknesses.
-* Explain the likely root cause behind any weak area, then give concrete actions the student can do THIS week.
-* Be specific: name the actual subjects, topics, videos and tests from the data. No generic "study harder".
-* Reference the recent test trend and weak topics directly.
-* End with one short line of encouragement. Never say you are an AI.
+* Praise 2 concrete, real wins first (name the subject/test/streak — no empty praise).
+* For each weakness: likely root cause in one sentence, then the fix.
+* "Solutions & Study Ideas" must give 3-4 study techniques, each tied to a diagnosed cause and naming the real subject/topic/video it applies to (e.g. active-recall flashcards for a watched-but-weak topic; watch-then-summarise for an unwatched one). No generic advice.
+* "Goals" must be 2-3 measurable targets, each with a number and a deadline (e.g. "Hit a 5-day study streak by <day>", "Score 70%+ on the next <weakest subject from the data> test"). Goals, not predictions.
+* "Weekly Timetable" is a 7-day plan, one line per day, formatted exactly like: **<Day>:** 30 min — watch "<video title from the data>" (<subject>), then 5 recall questions.
+  - Place every real upcoming event on its actual day: live classes at their listed day, open/scheduled tests before they close, pending assignments before their due dates.
+  - Put unwatched videos for the weakest subjects early in the week.
+  - 30-90 minutes per day; include exactly ONE light/rest day with only a 10-minute review.
+  - Apart from the real items, only revision of topics named in the data is allowed — never invent lessons or events.
+  - If the upcoming week has no scheduled events, say so in one clause and build the week from weak-topic revision and unwatched videos.
+* Be specific everywhere: name the actual subjects, topics, videos and tests from the data. No generic "study harder".
+* End with one short, personal line of encouragement. Never say you are an AI, never mention "the data".
 
-SECTIONS (use these exact markdown headings):
-Focus of the Week
+SECTIONS (use these exact markdown headings, in this order):
+Performance Summary
 What's Going Well
-What I Noticed
-Recommended Actions
-Next Level Goal
-AI Mentor Message
+What Needs Attention
+Solutions & Study Ideas
+Goals
+Weekly Timetable
+Mentor Message
 
 STUDENT DATA:
 Name: {stats.get("student_name", "Student")}
 Standard: {stats.get("standard_name", "N/A")}
-Attendance: {stats.get("attendance_data", "N/A")}
-Video Progress: {stats.get("video_progress_data", "N/A")}
-Assignment Performance: {stats.get("assignment_data", "N/A")}
-Test Performance: {stats.get("test_data", "N/A")}
-Per-subject breakdown: {stats.get("subject_breakdown", "N/A")}
-Recent test trend: {stats.get("recent_tests", "N/A")}
+Report period: {period}
+Profile & standing: {stats.get("profile", stats.get("standing_data", "N/A"))}
+Study streak & activity patterns: {stats.get("activity_patterns", stats.get("streak_data", "N/A"))}
+Score trend: {stats.get("trend_data", "N/A")}
+Best subject: {stats.get("best_subject", "N/A")}
+Weakest subject: {stats.get("weakest_subject", "N/A")}
+Per-subject detail: {stats.get("subjects_detail", stats.get("subject_breakdown", "N/A"))}
+Test history (oldest → newest): {stats.get("test_history", stats.get("recent_tests", "N/A"))}
 Weak topics (topic — score — video watched?): {stats.get("weak_topics_detail", stats.get("topic_data", "N/A"))}
+Assignments: {stats.get("assignments_detail", stats.get("assignment_data", "N/A"))}
+Class baseline: {stats.get("class_baseline", "N/A")}
+Attendance: {stats.get("attendance_data", "N/A")}
+Video progress: {stats.get("video_progress_data", "N/A")}
+UPCOMING WEEK (real scheduled events — anchor the timetable to these): {stats.get("upcoming_week", "N/A")}
 
 OUTPUT REQUIREMENTS:
-* Markdown, 150-300 words total.
-* Lead with actionable next steps, not a recap of the past.
+* Markdown, 350-600 words total.
+* "Performance Summary" is 2-3 sentences capturing the whole picture, including class standing.
+* Lead with what to do next, not a recap of the past.
 * Only cite a percentage when it makes a point clearer.
 """
+
+
+def fetch_upcoming_for_student(student_id: str, standard_id: str, weak_subject_ids: list) -> dict:
+    """Forward-looking LMS data the mentor needs to build a real weekly timetable:
+    upcoming tests, scheduled live classes, pending assignments and unwatched
+    videos (weak subjects first). Every failure degrades to an honest 'none'."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    horizon = (now + timedelta(days=14)).isoformat()
+    out = {"tests": "None scheduled", "live": "None scheduled", "assignments": "None pending", "videos": "None"}
+    if not standard_id or not service_supabase:
+        return out
+    try:
+        subs = service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute().data or []
+        sub_name = {s["id"]: s["name"] for s in subs}
+        class_ids = list(sub_name.keys())
+        if not class_ids:
+            return out
+
+        def d(s):  # short readable date
+            try:
+                return datetime.fromisoformat(str(s).replace("Z", "+00:00")).strftime("%a %d %b")
+            except Exception:
+                return str(s)[:10]
+
+        try:
+            tests = service_supabase.table("tests").select(
+                "title, class_id, status, scheduled_for, expires_at"
+            ).in_("class_id", class_ids).in_("status", ["scheduled", "active"]).execute().data or []
+            lines = []
+            for t in tests:
+                sched = t.get("scheduled_for")
+                if t["status"] == "active":
+                    exp = t.get("expires_at")
+                    if exp and exp < now_iso:
+                        continue
+                    lines.append(f"{t['title']} ({sub_name.get(t['class_id'], '?')}) — OPEN NOW{f', closes {d(exp)}' if exp else ''}")
+                elif sched and now_iso <= sched <= horizon:
+                    lines.append(f"{t['title']} ({sub_name.get(t['class_id'], '?')}) — opens {d(sched)}")
+            out["tests"] = "; ".join(lines[:6]) or "None scheduled"
+        except Exception:
+            pass
+
+        try:
+            lcs = service_supabase.table("live_classes").select(
+                "title, class_id, scheduled_at, status"
+            ).in_("class_id", class_ids).in_("status", ["scheduled", "live"]).execute().data or []
+            lines = [
+                f"{l.get('title') or sub_name.get(l['class_id'], 'Live class')} ({sub_name.get(l['class_id'], '?')}) — {('LIVE NOW' if l['status'] == 'live' else d(l.get('scheduled_at')))}"
+                for l in lcs
+                if l["status"] == "live" or (l.get("scheduled_at") and now_iso <= l["scheduled_at"] <= horizon)
+            ]
+            out["live"] = "; ".join(lines[:6]) or "None scheduled"
+        except Exception:
+            pass
+
+        try:
+            assigns = service_supabase.table("assignments").select(
+                "id, title, class_id, due_date"
+            ).in_("class_id", class_ids).execute().data or []
+            if assigns:
+                subs_res = service_supabase.table("assignment_submissions").select("assignment_id").eq(
+                    "student_id", student_id
+                ).in_("assignment_id", [a["id"] for a in assigns]).execute().data or []
+                done = {s["assignment_id"] for s in subs_res}
+                pending = [a for a in assigns if a["id"] not in done]
+                pending.sort(key=lambda a: a.get("due_date") or "9999")
+                out["assignments"] = "; ".join(
+                    f"{a['title']} ({sub_name.get(a['class_id'], '?')}) — due {d(a['due_date']) if a.get('due_date') else 'no due date'}"
+                    for a in pending[:6]
+                ) or "None pending"
+        except Exception:
+            pass
+
+        try:
+            vids = service_supabase.table("videos").select("id, title, class_id").in_("class_id", class_ids).execute().data or []
+            vp = service_supabase.table("video_progress").select("video_id, completed").eq("student_id", student_id).execute().data or []
+            done_ids = {v["video_id"] for v in vp if v.get("completed")}
+            unwatched = [v for v in vids if v["id"] not in done_ids]
+            # weak subjects first so the timetable attacks the right gaps
+            order = {cid: i for i, cid in enumerate(weak_subject_ids)}
+            unwatched.sort(key=lambda v: order.get(v["class_id"], 99))
+            out["videos"] = "; ".join(
+                f"{v['title']} ({sub_name.get(v['class_id'], '?')})" for v in unwatched[:6]
+            ) or "None"
+        except Exception:
+            pass
+    except Exception as exc:
+        print(f"Upcoming-for-student error (non-fatal): {exc}")
+    return out
+
+
+def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
+    """Distill the full report-v2 payload into the structured digest the mentor
+    prompt consumes. Server-computed — the model sees the whole LMS record."""
+    s = report.get("student") or {}
+    radar = report.get("subject_radar") or []
+    timeline = sorted(report.get("test_timeline") or [], key=lambda t: t.get("date") or "")
+    topics = report.get("topic_map") or []
+    ca = report.get("class_averages") or {}
+    astats = report.get("assignment_stats") or {}
+    live = report.get("live_classes_stats") or {}
+    rank, total = report.get("rank"), report.get("total_students") or 0
+
+    profile = (
+        f"{s.get('name', 'Student')}, {s.get('standard_name', 'N/A')}. "
+        f"Average score {round(s.get('avg_score') or 0)}%, attendance {round(s.get('attendance_pct') or 0)}%, "
+        f"{s.get('points') or 0} points"
+        + (f", rank {rank}/{total} (top {max(1, round(rank / total * 100))}%)" if rank and total else "")
+        + f". Live class attendance {live.get('attendance_pct') or 0}%."
+    )
+
+    subjects_detail = " | ".join(
+        f"{r['subject']}: {r.get('test_count') or 0} tests avg {round(r.get('test_avg') or 0)}%, "
+        f"videos {r.get('video_done') or 0}/{r.get('video_total') or 0}, "
+        f"attendance {round(r.get('attendance_pct') or 0)}%, "
+        f"assignments {r.get('assignment_submitted') or 0}/{r.get('assignment_total') or 0}"
+        for r in radar
+    ) or "No subject data"
+
+    test_history = "; ".join(
+        f"{(t.get('date') or '')[:10]} {t.get('test_title')} ({t.get('subject') or '?'}) {round(t.get('score_pct') or 0)}%"
+        + (" FLAGGED" if t.get("flagged") else "")
+        for t in timeline[-15:]
+    ) or "No tests taken"
+
+    weak = sorted(topics, key=lambda t: t.get("score_pct") or 0)[:8]
+    weak_topics = "; ".join(
+        f"{t.get('topic')} ({t.get('subject') or '?'}) {round(t.get('score_pct') or 0)}% — video {'watched' if t.get('video_completed') else 'NOT watched'}"
+        for t in weak
+    ) or "None identified"
+
+    # Activity patterns: streak + busiest weekdays from the four heatmaps
+    active_days = set()
+    for key, pred in (
+        ("attendance_heatmap", lambda r: (r.get("present") or 0) + (r.get("late") or 0) > 0),
+        ("test_heatmap", lambda r: (r.get("count") or 0) > 0),
+        ("video_heatmap", lambda r: (r.get("minutes") or 0) > 0),
+        ("assignment_heatmap", lambda r: (r.get("count") or 0) > 0),
+    ):
+        for row in report.get(key) or []:
+            if row.get("date") and pred(row):
+                active_days.add(row["date"][:10])
+    from datetime import datetime, timedelta
+    sorted_days = sorted(active_days)
+    best = run = 0
+    prev = None
+    for day in sorted_days:
+        try:
+            cur_d = datetime.fromisoformat(day)
+        except ValueError:
+            continue
+        run = run + 1 if prev and (cur_d - prev).days == 1 else 1
+        best = max(best, run)
+        prev = cur_d
+    current = 0
+    cursor = datetime.now()
+    if cursor.strftime("%Y-%m-%d") not in active_days:
+        cursor -= timedelta(days=1)
+    while cursor.strftime("%Y-%m-%d") in active_days:
+        current += 1
+        cursor -= timedelta(days=1)
+    weekday_counts = {}
+    for day in sorted_days:
+        try:
+            wd = datetime.fromisoformat(day).strftime("%A")
+            weekday_counts[wd] = weekday_counts.get(wd, 0) + 1
+        except ValueError:
+            continue
+    busiest = ", ".join(w for w, _ in sorted(weekday_counts.items(), key=lambda x: -x[1])[:2]) or "no clear pattern"
+    total_mins = round(sum((r.get("minutes") or 0) for r in (report.get("video_heatmap") or [])))
+    activity_patterns = (
+        f"Current study streak {current} day(s), best {best} day(s); {len(active_days)} active day(s) in this period; "
+        f"{total_mins} total video minutes; most active on: {busiest}."
+    )
+    streak_data = f"Current study streak {current} day(s), best ever {best} day(s)"
+
+    scores = [t.get("score_pct") or 0 for t in timeline]
+    if len(scores) >= 4:
+        mid = len(scores) // 2
+        improvement = round(sum(scores[mid:]) / len(scores[mid:]) - sum(scores[:mid]) / mid)
+        trend = f"Score trend {'+' if improvement > 0 else ''}{improvement}% (recent tests vs earlier ones)"
+    else:
+        trend = "Not enough tests for a trend yet"
+    if len(scores) >= 3:
+        mean = sum(scores) / len(scores)
+        sd = (sum((x - mean) ** 2 for x in scores) / len(scores)) ** 0.5
+        label = "Steady" if sd <= 10 else "Variable" if sd <= 20 else "Erratic"
+        trend += f"; consistency is {label} (±{round(sd)}%)"
+    coverage = report.get("total_tests_in_standard") or 0
+    trend += f". Tests taken {len(timeline)}/{coverage if coverage else 'unknown'} available."
+
+    class_baseline = (
+        f"Class averages ({ca.get('students_counted')} students): score {round(ca.get('avg_score') or 0)}%, "
+        f"attendance {round(ca.get('attendance_pct') or 0)}%, video completion {round(ca.get('video_pct') or 0)}%, "
+        f"points {round(ca.get('points') or 0)}."
+        if ca else "Class baseline not available"
+    )
+
+    assignments_detail = (
+        f"Submitted {astats.get('submitted') or 0}/{astats.get('total') or 0}, "
+        f"average marks {astats.get('avg_marks_pct') or 0}%. Pending: {upcoming.get('assignments', 'unknown')}"
+    )
+
+    upcoming_week = (
+        f"Tests: {upcoming.get('tests')}. Live classes: {upcoming.get('live')}. "
+        f"Pending assignments: {upcoming.get('assignments')}. "
+        f"Unwatched videos (weakest subjects first): {upcoming.get('videos')}."
+    )
+
+    tested = [r for r in radar if (r.get("test_count") or 0) > 0]
+    best_sub = max(tested, key=lambda r: r.get("test_avg") or 0) if tested else None
+    worst_sub = min(tested, key=lambda r: r.get("test_avg") or 0) if len(tested) > 1 else None
+
+    return {
+        "student_name": s.get("name") or "Student",
+        "standard_name": s.get("standard_name") or "N/A",
+        "period": period,
+        "profile": profile,
+        "subjects_detail": subjects_detail,
+        "test_history": test_history,
+        "weak_topics_detail": weak_topics,
+        "activity_patterns": activity_patterns,
+        "streak_data": streak_data,
+        "trend_data": trend,
+        "class_baseline": class_baseline,
+        "assignments_detail": assignments_detail,
+        "upcoming_week": upcoming_week,
+        "best_subject": f"{best_sub['subject']} ({round(best_sub.get('test_avg') or 0)}% avg)" if best_sub else "N/A",
+        "weakest_subject": f"{worst_sub['subject']} ({round(worst_sub.get('test_avg') or 0)}% avg)" if worst_sub else "N/A",
+    }
+
+
+async def enrich_insights_stats(req: "InsightsRequest", user: dict) -> dict:
+    """Server-side deep analysis: fetch the student's full report + upcoming week
+    and merge over the client-sent stats. Falls back to the client stats alone if
+    anything fails, so the mentor never hard-errors."""
+    period = (req.stats or {}).get("period", "overall")
+    try:
+        report = await asyncio.to_thread(get_student_report_v2, req.student_id, period, user)
+        radar = sorted(report.get("subject_radar") or [], key=lambda r: r.get("test_avg") if (r.get("test_count") or 0) > 0 else 101)
+        weak_subject_ids = [r.get("subject_id") for r in radar if r.get("subject_id")]
+        standard_id = (report.get("student") or {}).get("standard_id")
+        upcoming = await asyncio.to_thread(fetch_upcoming_for_student, req.student_id, standard_id, weak_subject_ids)
+        digest = compose_student_analysis(report, upcoming, period)
+        return {**(req.stats or {}), **digest}
+    except Exception as exc:
+        print(f"Insights server-side enrichment failed, using client stats: {exc}")
+        return req.stats or {}
 
 
 @app.post("/api/insights/generate")
@@ -7019,7 +7612,8 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
 
-    prompt = build_insights_prompt(req.stats, user.get("role", "student"))
+    stats = await enrich_insights_stats(req, user)
+    prompt = build_insights_prompt(stats, user.get("role", "student"))
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -7042,7 +7636,8 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
                 headers = {"Authorization": f"Bearer {api_key}"}
                 payload = {
                     "model": "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": prompt}]
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": OPENAI_TEMPERATURE,
                 }
                 resp = await client.post(url, headers=headers, json=payload)
                 if not resp.is_success:
@@ -7074,7 +7669,8 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
 
-    prompt = build_insights_prompt(req.stats, user.get("role", "student"))
+    stats = await enrich_insights_stats(req, user)
+    prompt = build_insights_prompt(stats, user.get("role", "student"))
 
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
@@ -7127,6 +7723,7 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
             "model": "gpt-4o-mini",
             "messages": [{"role": "user", "content": prompt}],
             "stream": True,
+            "temperature": OPENAI_TEMPERATURE,
         }
         async with httpx.AsyncClient(timeout=60) as client:
             try:

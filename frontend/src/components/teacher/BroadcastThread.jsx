@@ -5,27 +5,12 @@ import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
 import SubjectIcon, { IconPicker } from '../shared/SubjectIcon';
 import { PASTEL, pastelFor } from '../cards/pastel';
+import { resolveAvatar } from '../ui';
+import { fmtTime, fmtChatDate, fmtShortDateTime } from '../../lib/datetime';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-function formatChatDate(dateString) {
-  if (!dateString) return 'Unknown Date';
-  // Parse date in UTC and convert to Indian Standard Time (Asia/Kolkata) for consistent display
-  const d = new Date(dateString);
-  const timeZone = 'Asia/Kolkata';
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const dDate = d.toLocaleDateString('en-GB', { timeZone });
-  const todayDate = today.toLocaleDateString('en-GB', { timeZone });
-  const yesterdayDate = yesterday.toLocaleDateString('en-GB', { timeZone });
-
-  if (dDate === todayDate) return 'Today';
-  if (dDate === yesterdayDate) return 'Yesterday';
-  // Return formatted date in Indian format with explicit timezone
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone });
-}
+const formatChatDate = fmtChatDate;
 
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
   const [msg, setMsg] = useState('');
@@ -147,9 +132,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   }, [std.id]);
 
   function mapBroadcast(b) {
-    // Convert timestamps to Indian Standard Time (Asia/Kolkata) for consistent UI display
-    const createdAt = new Date(b.created_at);
-    const time = createdAt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+    // Timestamps come from the backend in UTC; render in the viewer's own timezone.
+    const time = fmtTime(b.created_at);
     return {
       id: b.id,
       text: b.message,
@@ -212,7 +196,9 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         attachment_type: attachments.length > 0 ? attachments[0].type : null,
         reply_to: replyTo?.id || null,
       };
-      if (scheduledFor) payload.scheduled_for = scheduledFor;
+      // datetime-local is naive local time — convert to UTC ISO so the backend
+      // (which compares against UTC) schedules at the moment the teacher picked.
+      if (scheduledFor) payload.scheduled_for = new Date(scheduledFor).toISOString();
       setMsg(''); setAttachments([]); setShowSchedule(false); setScheduledFor(''); setReplyTo(null);
       try {
         await apiClient('/broadcasts', { method: 'POST', body: JSON.stringify(payload) });
@@ -475,7 +461,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         {isFutureScheduled && (
                           <div className="flex items-center gap-0.5 text-amber-600 bg-amber-50 px-1 rounded border border-amber-200">
                             <Clock size={8} />
-                            <span>{new Date(b.scheduled_for).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>{fmtShortDateTime(b.scheduled_for)}</span>
                           </div>
                         )}
                         {b.edited && <span className="italic">edited</span>}
@@ -760,14 +746,14 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                     (readDetailsTab === 'read' ? readDetailsData.read_by : readDetailsData.not_read_by).map(reader => (
                       <div key={reader.student_id} className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors">
                         <div className="w-10 h-10 rounded-full bg-pastel-lavender flex items-center justify-center font-bold text-lg text-pastel-lavender-fg shrink-0 overflow-hidden">
-                          {reader.avatar_url ? <img src={reader.avatar_url} alt="" className="w-full h-full object-cover" /> : reader.name.charAt(0).toUpperCase()}
+                          {reader.avatar_url ? <img src={resolveAvatar(reader.avatar_url)} alt="" className="w-full h-full object-cover" /> : reader.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-base font-medium text-neutral-900 truncate">{reader.name}</p>
                         </div>
                         {readDetailsTab === 'read' && reader.read_at && (
                           <div className="text-xs text-neutral-500 shrink-0">
-                            {new Date(reader.read_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                            {fmtTime(reader.read_at)}
                           </div>
                         )}
                         {readDetailsTab === 'unread' && (

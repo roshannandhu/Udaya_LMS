@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="50" fill="#F7E3F0"/>
+  <!-- hair back -->
+  <path d="M28 78 q-4 -20 2 -36 q6 -20 20 -20 q14 0 20 20 q6 16 2 36 q-6 -6 -8 -14 l0 -12 q-14 4 -28 0 l0 12 q-2 8 -8 14 z" fill="#6B4A39"/>
+  <!-- face -->
+  <circle cx="50" cy="46" r="15" fill="#F6C9A0"/>
+  <!-- hair front -->
+  <path d="M36 44 q0 -16 14 -16 q14 0 14 16 q-3 -9 -9 -10 q-7 4 -19 10 z" fill="#6B4A39"/>
+  <!-- body -->
+  <path d="M50 63 q-21 0 -25 21 q11 12 25 12 q14 0 25 -12 q-4 -21 -25 -21 z" fill="#AD1A72"/>
+  <!-- collar -->
+  <path d="M45 64 l5 6 l5 -6 q-2.5 -1 -5 -1 q-2.5 0 -5 1 z" fill="#fff"/>
+</svg>

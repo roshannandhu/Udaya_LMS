@@ -3,6 +3,7 @@ import { Plus, Play, Trash2, Pencil, Send } from 'lucide-react';
 import { Btn, Input, Textarea, Toggle, Tag, Modal, SectionHeader } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
 import CriteriaBuilder from './CriteriaBuilder';
+import { fmtDateTime } from '../../../lib/datetime';
 
 const EMPTY = {
   name: '', target_type: 'all', target_ids: [],
@@ -13,8 +14,7 @@ const EMPTY = {
 
 function fmt(dt) {
   if (!dt) return '—';
-  try { return new Date(dt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }); }
-  catch { return dt; }
+  return fmtDateTime(dt) || dt;
 }
 
 function JobModal({ open, onClose, initial, templates, groups, onSaved }) {

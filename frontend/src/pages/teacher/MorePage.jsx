@@ -62,7 +62,7 @@ export default function MorePage() {
       <div className="p-4 space-y-4 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-4">
         <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
           <div className="flex items-center gap-4">
-            <img src="/default-avatar.png" alt="Profile" className="w-14 h-14 rounded-full object-cover shadow-sm border border-neutral-200" />
+            <img src="/avatar-neutral.svg" alt="Profile" className="w-14 h-14 rounded-full object-cover shadow-sm border border-neutral-200" />
             <div className="flex-1">
               <p className="font-medium">{profile.name}</p>
               <p className="text-sm text-neutral-500">{profile.email}</p>

@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { RefreshCw, Inbox as InboxIcon, MessageSquare } from 'lucide-react';
 import { Avatar, Tag, Skeleton } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
+import { fmtDateTime } from '../../../lib/datetime';
 
 function fmt(dt) {
   if (!dt) return '';
-  try { return new Date(dt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }); }
-  catch { return dt; }
+  return fmtDateTime(dt) || dt;
 }
 
 export default function InboxTab() {

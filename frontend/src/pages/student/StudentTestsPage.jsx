@@ -7,7 +7,8 @@ import {
 import TopBar from '../../components/shared/TopBar';
 import { Tag, Skeleton } from '../../components/ui';
 import { testApi, assignmentApi } from '../../lib/api';
-import { useAppCache } from '../../store';
+import { useAppCache, useWhatsNew, isNewSince } from '../../store';
+import { useAuthStore } from '../../lib/auth';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 
@@ -18,27 +19,33 @@ const CARD_COLORS = [
   { bg: 'bg-[#E8F0FE]', text: 'text-[#1A56DB]', badge: 'bg-[#1A56DB]/10 text-[#1A56DB]' },
 ];
 
-let testsPageCache = null;
+let testsPageCache = null; // { userId, allTests, myAttempts, assignments }
 
 export default function StudentTestsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  // The module cache outlives logins — only trust it for the same account.
+  const cache = testsPageCache && testsPageCache.userId === user?.id ? testsPageCache : null;
 
   // ── Tests state ──────────────────────────────────────────────────
-  const [allTests, setAllTests]   = useState(testsPageCache?.allTests || []);
-  const [myAttempts, setMyAttempts] = useState(testsPageCache?.myAttempts || {});
-  const [loading, setLoading]     = useState(!testsPageCache);
+  const [allTests, setAllTests]   = useState(cache?.allTests || []);
+  const [myAttempts, setMyAttempts] = useState(cache?.myAttempts || {});
+  const [loading, setLoading]     = useState(!cache);
   const subjects = useAppCache(s => s.subjects);
+  // NEW pills compare against the session baseline; visiting clears the nav badge.
+  const prevSeen = useWhatsNew(s => s.prevSeen);
+  useEffect(() => { useWhatsNew.getState().markSeen('tests'); }, []);
 
   // ── Assignments state ─────────────────────────────────────────────
   const [activeTab, setActiveTab]         = useState('tests');
-  const [assignments, setAssignments]     = useState(testsPageCache?.assignments || []);
+  const [assignments, setAssignments]     = useState(cache?.assignments || []);
   const [assignLoading, setAssignLoading] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
 
   // Fetch tests on mount
   useEffect(() => {
     const fetchData = async () => {
-      if (!testsPageCache) setLoading(true);
+      if (!cache) setLoading(true);
       try {
         const [testsRes, historyRes] = await Promise.all([
           testApi.getTests(),
@@ -52,7 +59,7 @@ export default function StudentTestsPage() {
         });
         setMyAttempts(attemptsMap);
         
-        testsPageCache = { ...testsPageCache, allTests: testsData, myAttempts: attemptsMap };
+        testsPageCache = { ...(cache || {}), userId: user?.id, allTests: testsData, myAttempts: attemptsMap };
       } catch (err) {
         console.error(err);
       } finally {
@@ -66,12 +73,12 @@ export default function StudentTestsPage() {
   useEffect(() => {
     if (activeTab === 'assignments') {
       const fetchAssignments = async () => {
-        if (!testsPageCache?.assignments) setAssignLoading(true);
+        if (!cache?.assignments) setAssignLoading(true);
         try {
           const data = await assignmentApi.getAllMyAssignments();
           const list = data?.assignments || [];
           setAssignments(list);
-          testsPageCache = { ...testsPageCache, assignments: list };
+          testsPageCache = { ...(testsPageCache?.userId === user?.id ? testsPageCache : {}), userId: user?.id, assignments: list };
         } catch (err) {
           console.error(err);
         } finally {
@@ -129,6 +136,9 @@ export default function StudentTestsPage() {
               <span className={`bg-white/70 ${theme.text} px-3.5 py-1.5 rounded-full text-[12px] font-extrabold flex items-center gap-1.5 shadow-sm`}>
                 <SubjectIcon value={cls?.emoji} size={13} /> {cls?.name || 'Subject'}
               </span>
+              {section !== 'completed' && section !== 'missed' && isNewSince(t.created_at, prevSeen.tests) && (
+                <span className="bg-indigo-500 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-full shrink-0 shadow-sm uppercase tracking-wider">New</span>
+              )}
               {t.negative_marking && <span className="bg-red-100/90 text-red-700 text-[11px] font-extrabold px-3 py-1.5 rounded-full shrink-0 shadow-sm uppercase tracking-wider">−{t.penalty} Penalty</span>}
             </div>
             <h4 className="font-extrabold text-[22px] sm:text-[24px] leading-[1.15] text-neutral-900 mb-3">{t.title}</h4>
@@ -356,7 +366,12 @@ export default function StudentTestsPage() {
                         <div key={t.id} className={`rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 opacity-70 border border-black/5`}>
                           <div className="flex items-start justify-between gap-3 mb-4">
                             <div className="min-w-0 flex-1">
-                              <h4 className={`font-extrabold text-[22px] sm:text-[24px] leading-[1.15] text-neutral-900 mb-3`}>{t.title}</h4>
+                              <h4 className={`font-extrabold text-[22px] sm:text-[24px] leading-[1.15] text-neutral-900 mb-3`}>
+                                {t.title}
+                                {isNewSince(t.created_at, prevSeen.tests) && (
+                                  <span className="ml-2 align-middle bg-indigo-500 text-white text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">New</span>
+                                )}
+                              </h4>
                               <p className="text-[12px] font-extrabold text-black/50 bg-white/60 px-3 py-1.5 rounded-full inline-flex items-center gap-1 shadow-sm uppercase tracking-wider"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'} · {t.duration_mins}m</p>
                             </div>
                             <span className="bg-black/10 text-black/60 text-[11px] font-extrabold px-3 py-1.5 rounded-full shrink-0 uppercase tracking-widest">Upcoming</span>

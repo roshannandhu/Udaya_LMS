@@ -1,9 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, KeyRound, Users, BookOpen, GraduationCap, Loader2, CheckCircle2 } from 'lucide-react';
-import { Avatar, Btn, Input } from '../../components/ui';
+import { ArrowLeft, Save, KeyRound, Users, BookOpen, GraduationCap, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Avatar, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
 import { apiClient } from '../../lib/api';
+
+function ChangePasswordModal({ open, onClose }) {
+  const { changePassword } = useAuthStore();
+  const [form, setForm] = useState({ next: '', confirm: '' });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (open) { setForm({ next: '', confirm: '' }); setError(''); setSuccess(false); setSaving(false); }
+  }, [open]);
+
+  const handleSave = async () => {
+    if (form.next.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (form.next !== form.confirm) { setError('New passwords do not match.'); return; }
+    setError('');
+    setSaving(true);
+    const result = await changePassword(form.next);
+    setSaving(false);
+    if (result.success) {
+      setSuccess(true);
+      setTimeout(onClose, 1200);
+    } else {
+      setError(result.error || 'Failed to change password');
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Change Password" size="sm">
+      <div className="space-y-4">
+        <Input label="New password" type="password" value={form.next} onChange={e => setForm({ ...form, next: e.target.value })} disabled={saving || success} autoFocus />
+        <Input label="Confirm new password" type="password" value={form.confirm} onChange={e => setForm({ ...form, confirm: e.target.value })} disabled={saving || success} />
+        {error && <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertCircle size={12} /> {error}</p>}
+        {success && <p className="text-xs text-green-600 flex items-center gap-1.5"><CheckCircle2 size={12} /> Password updated!</p>}
+        <div className="flex gap-2 justify-end pt-1">
+          <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
+          <Btn variant="primary" onClick={handleSave} disabled={saving || success}>{saving ? 'Saving…' : 'Update password'}</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 function StatCard({ icon: Icon, label, value, color }) {
   return (
@@ -21,9 +63,15 @@ export default function TeacherProfilePage() {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [name, setName] = useState(user?.name || '');
-  const [email] = useState(user?.email || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [pwdOpen, setPwdOpen] = useState(false);
+
+  const nameChanged  = name.trim() && name.trim() !== (user?.name || '');
+  const emailChanged = email.trim() && email.trim().toLowerCase() !== (user?.email || '').toLowerCase();
+  const dirty = nameChanged || emailChanged;
 
   useEffect(() => {
     const load = async () => {
@@ -40,18 +88,23 @@ export default function TeacherProfilePage() {
   }, []);
 
   const handleSave = async () => {
-    if (!name.trim() || name === user?.name) return;
+    if (!dirty) return;
     setSaving(true);
+    setSaveError('');
     try {
-      await apiClient('/auth/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      setUser({ ...user, name: name.trim() }, user?.role);
+      const body = {};
+      if (nameChanged) body.name = name.trim();
+      if (emailChanged) body.email = email.trim().toLowerCase();
+      await apiClient('/auth/profile', { method: 'PATCH', body: JSON.stringify(body) });
+      setUser({
+        ...user,
+        ...(nameChanged ? { name: name.trim() } : {}),
+        ...(emailChanged ? { email: email.trim().toLowerCase() } : {}),
+      }, user?.role);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      console.error(e);
+      setSaveError(e?.message || 'Could not save changes.');
     } finally {
       setSaving(false);
     }
@@ -75,7 +128,7 @@ export default function TeacherProfilePage() {
           <Avatar name={user?.name} size="xl" />
           <div className="flex-1 min-w-0">
             <p className="text-lg font-semibold">{user?.name || 'Teacher'}</p>
-            <p className="text-sm text-neutral-500">{email}</p>
+            <p className="text-sm text-neutral-500">{user?.email}</p>
           </div>
         </div>
 
@@ -107,11 +160,16 @@ export default function TeacherProfilePage() {
               <Input label="Full name" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
             </div>
             <div>
-              <p className="text-xs font-medium text-neutral-600 mb-1.5">Email</p>
-              <p className="text-sm text-neutral-500 px-3 py-2 rounded-md bg-neutral-50/50 border border-white/60">{email}</p>
+              <Input label="Email (login)" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
+              {emailChanged && (
+                <p className="text-[11px] text-amber-600 mt-1.5">You'll log in with this new email after saving.</p>
+              )}
             </div>
+            {saveError && (
+              <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertCircle size={12} /> {saveError}</p>
+            )}
             <div className="flex items-center gap-2">
-              <Btn variant="primary" size="sm" icon={saved ? CheckCircle2 : Save} onClick={handleSave} disabled={saving || !name.trim() || name === user?.name}>
+              <Btn variant="primary" size="sm" icon={saved ? CheckCircle2 : Save} onClick={handleSave} disabled={saving || !dirty}>
                 {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
               </Btn>
             </div>
@@ -123,13 +181,15 @@ export default function TeacherProfilePage() {
           <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Account</p>
           <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
             <p className="text-sm text-neutral-600 mb-3">Update your login password to keep your account secure.</p>
-            <Btn variant="primary" size="sm" icon={KeyRound} onClick={() => navigate('/teacher/settings')}>
+            <Btn variant="primary" size="sm" icon={KeyRound} onClick={() => setPwdOpen(true)}>
               Change password
             </Btn>
           </div>
         </div>
 
       </div>
+
+      <ChangePasswordModal open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </div>
   );
 }

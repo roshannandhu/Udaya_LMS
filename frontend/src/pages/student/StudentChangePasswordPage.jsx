@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, UserCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../lib/auth';
+import AvatarPresetPicker from '../../components/student/AvatarPresetPicker';
 
 export default function StudentChangePasswordPage() {
   const navigate = useNavigate();
-  const { changePassword, verifyWithBackend, user, role } = useAuthStore();
+  const { changePassword, verifyWithBackend, user, role, setUser } = useAuthStore();
   const [passwords, setPasswords] = useState({ new: '', confirm: '' });
   const [showPwd, setShowPwd] = useState({ new: false, confirm: false });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Step 2 (students only): choose a profile icon right after setting the password.
+  const [step, setStep] = useState('password');          // 'password' | 'avatar'
+  const [pickedAvatar, setPickedAvatar] = useState(undefined); // undefined = untouched
+
+  const finishToApp = () => navigate(role === 'teacher' ? '/teacher' : '/student', { replace: true });
 
   const handleSubmit = async () => {
     if (!passwords.new.trim()) {
@@ -32,7 +38,10 @@ export default function StudentChangePasswordPage() {
       const result = await changePassword(passwords.new);
       if (result.success) {
         await verifyWithBackend();
-        navigate(role === 'teacher' ? '/teacher' : '/student', { replace: true });
+        // Students pick their profile icon right after the password —
+        // teachers (rare on this page) go straight in.
+        if (role === 'teacher') finishToApp();
+        else setStep('avatar');
       } else {
         setError(result.error || 'Failed to change password');
       }
@@ -53,6 +62,32 @@ export default function StudentChangePasswordPage() {
           <span className="font-semibold tracking-tight text-lg">Udaya</span>
         </div>
 
+        {step === 'avatar' ? (
+        <div className="glass-panel border border-white/60 p-8 rounded-2xl shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-2 mb-1">
+            <UserCircle2 size={18} className="text-neutral-700" />
+            <h1 className="text-xl font-semibold">Pick your profile icon</h1>
+          </div>
+          <p className="text-sm text-neutral-500 mb-6">Choose an icon for your profile. You can upload your own photo later from your Profile page.</p>
+
+          <AvatarPresetPicker
+            value={pickedAvatar === undefined ? user?.avatar_url : pickedAvatar}
+            size="lg"
+            onSaved={(url) => {
+              setPickedAvatar(url);
+              // Keep the in-memory session in sync so the top bar updates instantly.
+              if (user) setUser({ ...user, avatar_url: url }, role);
+            }}
+          />
+
+          <button
+            onClick={finishToApp}
+            className="w-full mt-8 py-2 bg-ink text-white rounded-pill font-medium hover:bg-neutral-800 transition-colors text-sm"
+          >
+            {pickedAvatar !== undefined ? 'Continue' : 'Skip for now'}
+          </button>
+        </div>
+        ) : (
         <div className="glass-panel border border-white/60 p-8 rounded-2xl shadow-lg backdrop-blur-md">
           <h1 className="text-xl font-semibold mb-1">Create New Password</h1>
           <p className="text-sm text-neutral-500 mb-6">You must change your password before continuing</p>
@@ -119,6 +154,7 @@ export default function StudentChangePasswordPage() {
             </button>
           </div>
         </div>
+        )}
 
         <p className="text-center text-xs text-neutral-400 mt-6">Udaya · A learning platform built for tuition</p>
       </div>

@@ -230,6 +230,19 @@ CREATE TABLE IF NOT EXISTS broadcast_reads (
     PRIMARY KEY (broadcast_id, student_id)
 );
 
+-- What's New: per-student per-section "last seen" markers. A section's badge
+-- counts content with created_at > seen_at; missing row falls back to
+-- students.created_at in the backend.
+CREATE TABLE IF NOT EXISTS student_seen (
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    section TEXT NOT NULL CHECK (section IN ('videos', 'tests', 'live')),
+    seen_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (student_id, section)
+);
+ALTER TABLE student_seen ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_student_seen" ON student_seen;
+CREATE POLICY "deny_anon_student_seen" ON student_seen FOR ALL TO anon, authenticated USING (false);
+
 -- Reminders (teacher personal task list)
 CREATE TABLE IF NOT EXISTS reminders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Video, Calendar, Clock, CheckCircle, XCircle, Loader2, Play } from 'lucide-react';
 import { Btn } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi, apiClient } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import { useWhatsNew, isNewSince } from '../../store';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassCard from '../../components/cards/LiveClassCard';
 
@@ -58,35 +59,47 @@ const CARD_COLORS = [
   { bg: 'bg-[#FFEBE5]', text: 'text-orange-950', badge: 'bg-orange-100 text-orange-800' }
 ];
 
-let liveClassesCache = null;
+let liveClassesCache = null; // { userId, list }
 
 export default function StudentLiveClassesPage() {
   const { user } = useAuthStore();
-  const [liveClasses, setLiveClasses] = useState(liveClassesCache || []);
-  const [loading, setLoading] = useState(!liveClassesCache);
+  // The module cache outlives logins — only trust it for the same account.
+  const cache = liveClassesCache && liveClassesCache.userId === user?.id ? liveClassesCache : null;
+  const [liveClasses, setLiveClasses] = useState(cache?.list || []);
+  const [loading, setLoading] = useState(!cache);
   const [activeJoin, setActiveJoin] = useState(null);
   const [joiningId, setJoiningId] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const fetchSeq = useRef(0);
 
   const standardId = user?.standard_id;
 
+  // NEW pills compare against the session baseline; visiting clears the nav badge.
+  const prevSeen = useWhatsNew(s => s.prevSeen);
+  useEffect(() => { useWhatsNew.getState().markSeen('live'); }, []);
+
   const fetchAll = async () => {
     if (!standardId) { setLoading(false); return; }
-    if (!liveClassesCache) setLoading(true);
+    const seq = ++fetchSeq.current; // ignore out-of-order responses
+    if (!cache) setLoading(true);
     try {
-      // Single call for all live classes in the student's standard
-      const data = await apiClient(`/live-classes?standard_id=${standardId}`).catch(() => []);
+      // Single call for all live classes in the student's standard.
+      // null = request failed — keep showing the last good list instead of
+      // flashing the "No live classes" empty state on a transient error.
+      const data = await apiClient(`/live-classes?standard_id=${standardId}`).catch(() => null);
+      if (seq !== fetchSeq.current) return;
+      if (data === null) return;
       const all = Array.isArray(data) ? data : [];
       const filtered = all
         .filter(lc => lc.status !== 'cancelled')
         .map(lc => ({ ...lc, subject: { id: lc.class_id, name: lc.class_name || '' } }));
       filtered.sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
       setLiveClasses(filtered);
-      liveClassesCache = filtered;
+      liveClassesCache = { userId: user?.id, list: filtered };
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
   };
 
@@ -168,8 +181,13 @@ export default function StudentLiveClassesPage() {
               const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
+                <div key={lc.id} className="relative">
+                  {!isEnded && isNewSince(lc.created_at, prevSeen.live) && (
+                    <span className="absolute -top-2 -right-2 z-20 bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md pointer-events-none">
+                      New
+                    </span>
+                  )}
                 <LiveClassCard
-                  key={lc.id}
                   lc={lc}
                   onClick={handleJoin}
                   joiningId={joiningId}
@@ -182,6 +200,7 @@ export default function StudentLiveClassesPage() {
                     </div>
                   }
                 />
+                </div>
               );
             })}
           </div>

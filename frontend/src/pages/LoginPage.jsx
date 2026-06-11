@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useAuthStore, ROLES } from '../lib/auth';
 import { useSettingsStore } from '../store';
 import { apiClient } from '../lib/api';
@@ -12,9 +12,20 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  // Two-step verification (teachers on new devices): { pendingId, emailMasked }
+  const [otpStage, setOtpStage] = useState(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [resendWait, setResendWait] = useState(0);
   const navigate = useNavigate();
-  const { login } = useAuthStore();
+  const { login, verifyOtp, resendOtp } = useAuthStore();
   const { lmsName, lmsLogo, applyBranding } = useSettingsStore();
+
+  // Resend cooldown ticker
+  useEffect(() => {
+    if (resendWait <= 0) return;
+    const id = setInterval(() => setResendWait(w => (w > 1 ? w - 1 : 0)), 1000);
+    return () => clearInterval(id);
+  }, [resendWait > 0]);
 
   useEffect(() => { document.title = lmsName || 'Udaya'; }, [lmsName]);
 
@@ -51,6 +62,13 @@ export default function LoginPage() {
       const result = await login(identifier.trim(), creds.pwd);
 
       if (result.success) {
+        if (result.requiresOTP) {
+          // Teacher 2FA: show the code step; tokens arrive after verifyOtp().
+          setOtpStage({ pendingId: result.pendingId, emailMasked: result.emailMasked });
+          setOtpCode('');
+          setResendWait(60);
+          return;
+        }
         // Single-device enforcement is handled by ProtectedStudentRoute on mount
         // (and its 30s poll). A separate check here would just be a redundant
         // round-trip — login() already wrote this device's fingerprint server-side.
@@ -67,6 +85,39 @@ export default function LoginPage() {
       setError('Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otpCode.trim();
+    if (code.length !== 6) { setError('Enter the 6-digit code.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const result = await verifyOtp(otpStage.pendingId, code);
+      if (result.success) {
+        navigate(result.role === ROLES.TEACHER ? '/teacher' : '/student', { replace: true });
+      } else {
+        setError(result.error || 'Verification failed');
+        // Pending entry gone (expired / too many attempts) → back to login.
+        if (/log in again/i.test(result.error || '')) { setOtpStage(null); setOtpCode(''); }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendWait > 0 || loading) return;
+    setError('');
+    const result = await resendOtp(otpStage.pendingId);
+    if (result.success) {
+      setResendWait(60);
+      setNotice('A new code has been sent.');
+      setTimeout(() => setNotice(''), 3000);
+    } else {
+      setError(result.error || 'Could not resend code');
+      if (/log in again/i.test(result.error || '')) { setOtpStage(null); setOtpCode(''); }
     }
   };
 
@@ -98,6 +149,70 @@ export default function LoginPage() {
 
         {/* Login Card */}
         <div className="bg-white/80 backdrop-blur-2xl p-8 sm:p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] border-[3px] border-white">
+          {otpStage ? (
+            <>
+              {/* ── Two-step verification step ── */}
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck size={22} className="text-green-600" />
+                <h1 className="text-[24px] font-extrabold text-neutral-900 tracking-tight">Check your email</h1>
+              </div>
+              <p className="text-[15px] text-neutral-500 mb-8 font-medium">
+                We sent a 6-digit code to <span className="font-bold text-neutral-700">{otpStage.emailMasked}</span>
+              </p>
+
+              {notice && (
+                <div className="flex items-start gap-2 p-4 mb-6 bg-[#EAF3EB]/70 border-2 border-white rounded-[20px] text-[13px] font-bold text-green-900 shadow-sm">
+                  <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-green-600" />
+                  <span>{notice}</span>
+                </div>
+              )}
+
+              <div className="space-y-5">
+                <input
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder="••••••"
+                  className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-green-500/10 outline-none text-[28px] font-extrabold tracking-[0.5em] text-center text-neutral-800 transition-all placeholder:text-neutral-300"
+                />
+
+                {error && (
+                  <div className="flex items-start gap-2 p-4 bg-[#FFEBE5] border-2 border-white rounded-[20px] text-[13px] font-bold text-red-700 shadow-sm">
+                    <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleVerifyOtp}
+                  disabled={loading || otpCode.length !== 6}
+                  className="w-full py-4 rounded-[24px] bg-neutral-900 text-white font-extrabold text-[16px] shadow-xl hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : null}
+                  {loading ? 'Verifying...' : 'Verify & sign in'}
+                </button>
+
+                <div className="flex items-center justify-between text-[13px] font-bold">
+                  <button
+                    onClick={() => { setOtpStage(null); setOtpCode(''); setError(''); }}
+                    className="flex items-center gap-1 text-neutral-500 hover:text-neutral-900 transition-colors"
+                  >
+                    <ArrowLeft size={14} /> Back to login
+                  </button>
+                  <button
+                    onClick={handleResendOtp}
+                    disabled={resendWait > 0}
+                    className="text-neutral-500 hover:text-neutral-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {resendWait > 0 ? `Resend code in ${resendWait}s` : 'Resend code'}
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+          <>
           <h1 className="text-[26px] font-extrabold mb-1 text-neutral-900 tracking-tight">Welcome back</h1>
           <p className="text-[15px] text-neutral-500 mb-8 font-medium">Sign in to continue your journey</p>
 
@@ -192,6 +307,8 @@ export default function LoginPage() {
             <div className="mt-6 p-5 rounded-[24px] bg-[#E5F2FE]/50 border-2 border-white text-[13px] font-medium text-blue-900/80 leading-relaxed text-center shadow-sm">
               Use the login details provided by your teacher to access your dashboard.
             </div>
+          )}
+          </>
           )}
         </div>
 

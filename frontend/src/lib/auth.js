@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { getApiBaseUrl, apiClient, clearApiCache } from './api';
 import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
-import { useSettingsStore, useAppCache } from '../store';
+import { useSettingsStore, useAppCache, useWhatsNew } from '../store';
 
 const API_BASE    = getApiBaseUrl();
 const ROLE_KEY    = 'tutoria_user_role';
@@ -54,38 +54,92 @@ export const useAuthStore = create((set, get) => ({
         return { success: false, error: data.detail || 'Invalid credentials' };
       }
 
-      localStorage.setItem(TOKEN_KEY, data.token);
-      if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
-      localStorage.setItem(ROLE_KEY, data.user.role);
-      localStorage.setItem(NAME_KEY, data.user.name || '');
-
-      set({
-        user: data.user,
-        role: data.user.role,
-        isLoading: false
-      });
-
-      // Fresh account → drop any data cached under a previously logged-in account
-      // (both caches are keyed by endpoint, not token, so they'd otherwise bleed
-      // across accounts — e.g. showing the wrong teacher's standards/live classes).
-      clearApiCache();
-      useAppCache.getState().reset();
-
-      // Native app: lock screen capture for students, keep open for teachers
-      if (data.user.role === 'student') {
-        enableScreenSecurity();
-      } else {
-        disableScreenSecurity();
-        // Pull server-stored settings (branding, default password, PIN, etc.)
-        useSettingsStore.getState().hydrateFromServer();
+      // Two-step verification (teachers on new devices): no tokens yet —
+      // the LoginPage shows the OTP step and calls verifyOtp() to finish.
+      if (data.requires_otp) {
+        return {
+          success: true,
+          requiresOTP: true,
+          pendingId: data.pending_id,
+          emailMasked: data.email_masked,
+        };
       }
 
-      const needsPwdChange = data.user.role === 'student' && data.user.must_change_pwd;
-      return { success: true, role: data.user.role, requiresPasswordChange: needsPwdChange };
+      return get().completeLogin(data);
 
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: error.message || 'Login failed' };
+    }
+  },
+
+  // Shared tail of every successful auth (normal login + OTP verification):
+  // persist tokens, reset per-account caches, set screen security, hydrate settings.
+  completeLogin: (data) => {
+    localStorage.setItem(TOKEN_KEY, data.token);
+    if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+    localStorage.setItem(ROLE_KEY, data.user.role);
+    localStorage.setItem(NAME_KEY, data.user.name || '');
+
+    useAuthStore.setState({
+      user: data.user,
+      role: data.user.role,
+      isLoading: false
+    });
+
+    // Fresh account → drop any data cached under a previously logged-in account
+    // (both caches are keyed by endpoint, not token, so they'd otherwise bleed
+    // across accounts — e.g. showing the wrong teacher's standards/live classes).
+    clearApiCache();
+    useAppCache.getState().reset();
+    useWhatsNew.getState().reset();
+
+    // Native app: lock screen capture for students, keep open for teachers
+    if (data.user.role === 'student') {
+      enableScreenSecurity();
+    } else {
+      disableScreenSecurity();
+      // Pull server-stored settings (branding, default password, PIN, etc.)
+      useSettingsStore.getState().hydrateFromServer();
+    }
+
+    const needsPwdChange = data.user.role === 'student' && data.user.must_change_pwd;
+    return { success: true, role: data.user.role, requiresPasswordChange: needsPwdChange };
+  },
+
+  verifyOtp: async (pendingId, code) => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pending_id: pendingId,
+          code,
+          device_fingerprint: get().deviceFingerprint,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.detail || 'Verification failed' };
+      }
+      return get().completeLogin(data);
+    } catch (error) {
+      return { success: false, error: error.message || 'Verification failed' };
+    }
+  },
+
+  resendOtp: async (pendingId) => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pending_id: pendingId }),
+      });
+      const data = await response.json();
+      if (!response.ok) return { success: false, error: data.detail || 'Could not resend code' };
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message || 'Could not resend code' };
     }
   },
 
@@ -165,6 +219,7 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem(NAME_KEY);
     clearApiCache();
     useAppCache.getState().reset();
+    useWhatsNew.getState().reset();
     disableScreenSecurity(); // always unlock on logout
     set({ user: null, role: null, isLoading: false });
   },
@@ -212,6 +267,7 @@ if (typeof window !== 'undefined') {
     localStorage.removeItem(NAME_KEY);
     clearApiCache();
     useAppCache.getState().reset();
+    useWhatsNew.getState().reset();
     useAuthStore.setState({ user: null, role: null, isLoading: false });
   });
 }

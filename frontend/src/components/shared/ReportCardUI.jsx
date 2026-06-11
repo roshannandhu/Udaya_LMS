@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { resolveAvatar } from "../ui";
 
 const PERIOD_OPTIONS = ["Weekly", "Monthly", "Overall"];
 
@@ -396,7 +397,7 @@ export default function ReportCardUI({
   const [vidPeriod, setVidPeriod] = useState("Weekly");
 
   const sName = student?.name || "Student";
-  const sAvatar = student?.avatar_url ? <img src={student.avatar_url} alt="" style={{width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover'}} /> : (sName.slice(0,2).toUpperCase());
+  const sAvatar = student?.avatar_url ? <img src={resolveAvatar(student.avatar_url)} alt="" style={{width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover'}} /> : (sName.slice(0,2).toUpperCase());
 
   const card = (children, extra = {}) => (
     <div style={{

@@ -4,9 +4,10 @@ import { motion } from 'framer-motion';
 import { useAuthStore } from '../../lib/auth';
 import { useAppCache, useSettingsStore } from '../../store';
 import { Edit2, LogOut, Target, CheckCircle2, Trophy, BookOpen, Lock, Camera, Loader2, PlayCircle, ChevronDown, ChevronUp, BarChart2, Mail, Phone, AtSign, Settings, Star, Sparkles, Activity, User, ArrowRight } from 'lucide-react';
-import { Modal, Input, Skeleton } from '../../components/ui';
+import { Modal, Input, Skeleton, resolveAvatar } from '../../components/ui';
 import { apiClient } from '../../lib/api';
 import AttendanceStudentCard from '../../components/teacher/AttendanceStudentCard';
+import AvatarPresetPicker from '../../components/student/AvatarPresetPicker';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
 
 function relTime(iso) {
@@ -148,9 +149,9 @@ export default function StudentProfilePage() {
                 
                 <div className="w-32 h-32 rounded-[2rem] overflow-hidden shadow-xl shadow-black/5 bg-white border-4 border-white flex items-center justify-center">
                   {student?.avatar_url ? (
-                    <img src={student.avatar_url} alt={name} className="w-full h-full object-cover" />
+                    <img src={resolveAvatar(student.avatar_url)} alt={name} className="w-full h-full object-cover" />
                   ) : (
-                    <img src="/default-avatar.png" alt="Default Avatar" className="w-full h-full object-cover" />
+                    <img src="/avatar-neutral.svg" alt="Default Avatar" className="w-full h-full object-cover" />
                   )}
                 </div>
                 
@@ -173,6 +174,22 @@ export default function StudentProfilePage() {
                   <span className="text-[10px] text-neutral-400 mt-1.5">Use this to log in</span>
                 </div>
               )}
+
+              {/* Quick profile-icon choice (tap the big photo above to upload your own) */}
+              <div className="w-full mb-6 pt-5 border-t border-neutral-100">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-3">Profile icon</p>
+                <AvatarPresetPicker
+                  value={student?.avatar_url}
+                  onSaved={(url) => {
+                    setStudent(prev => ({ ...prev, avatar_url: url }));
+                    const { user: authUser, role, setUser } = useAuthStore.getState();
+                    setUser({ ...authUser, avatar_url: url }, role);
+                    useAppCache.getState().invalidateStudents?.();
+                    useAppCache.getState().refreshStudents?.();
+                  }}
+                />
+                <p className="text-[10px] text-neutral-400 mt-2">or tap your picture above to upload a photo</p>
+              </div>
 
               <button
                 onClick={() => setEditOpen(true)}
