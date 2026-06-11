@@ -334,10 +334,13 @@ export default function TodayPage() {
           </motion.div>
 
           {/* ── 3. TWO-COLUMN GRID ── */}
+          {/* min-w-0 on both grid items: an auto grid track otherwise sizes to its
+              content's minimum, so one long student name blows the whole page
+              past the phone viewport (grid blowout). */}
           <div className="grid lg:grid-cols-3 gap-6">
 
             {/* ── LEFT ── */}
-            <div className="lg:col-span-2 flex flex-col gap-6">
+            <div className="lg:col-span-2 flex flex-col gap-6 min-w-0">
 
               {/* Today's schedule */}
               <motion.div variants={fadeUp}>
@@ -399,7 +402,7 @@ export default function TodayPage() {
             </div>
 
             {/* ── RIGHT SIDEBAR ── */}
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 min-w-0">
 
               {/* Quick actions */}
               <motion.div variants={fadeUp}>
@@ -464,11 +467,13 @@ export default function TodayPage() {
                       </p>
                       <div className="flex flex-col gap-2">
                         {topStudents.map((s, i) => (
-                          <div key={s.id} className="flex items-center gap-3">
-                            <span className="w-5 text-xs font-extrabold text-neutral-400 text-center">{i + 1}</span>
+                          // min-w-0 on the row + name: without it a long name's
+                          // nowrap min-content widens the whole page on phones.
+                          <div key={s.id} className="flex items-center gap-3 min-w-0">
+                            <span className="w-5 text-xs font-extrabold text-neutral-400 text-center flex-shrink-0">{i + 1}</span>
                             <Avatar name={s.name} src={s.avatar_url} size="xs" />
-                            <span className="flex-1 text-sm font-medium text-neutral-800 truncate">{s.name}</span>
-                            <span className="text-xs font-bold text-neutral-500">{s.points} pts</span>
+                            <span className="flex-1 min-w-0 text-sm font-medium text-neutral-800 truncate">{s.name}</span>
+                            <span className="text-xs font-bold text-neutral-500 flex-shrink-0">{s.points} pts</span>
                           </div>
                         ))}
                       </div>
