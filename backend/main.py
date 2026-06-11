@@ -7604,10 +7604,13 @@ async def enrich_insights_stats(req: "InsightsRequest", user: dict) -> dict:
 
 @app.post("/api/insights/generate")
 async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
-    # Read API key
+    # Read API key — Settings page value first; GEMINI_API_KEY env fallback so
+    # deploys (Render) work even though teacher_settings.json is ephemeral there.
     settings = get_teacher_settings()
     provider = settings.get("ai_provider", "gemini")
     api_key = settings.get("ai_api_key")
+    if not api_key and provider == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
@@ -7665,6 +7668,8 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
     settings = get_teacher_settings()
     provider = settings.get("ai_provider", "gemini")
     api_key = settings.get("ai_api_key")
+    if not api_key and provider == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
