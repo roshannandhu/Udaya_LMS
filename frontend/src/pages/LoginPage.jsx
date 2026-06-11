@@ -6,9 +6,11 @@ import { useSettingsStore } from '../store';
 import { apiClient } from '../lib/api';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState('teacher');
+  // One login for everyone — the backend resolves the identifier (email →
+  // auth account, otherwise Student ID → phone) and returns the role, so the
+  // UI never needs a teacher/student switch.
   const [showPwd, setShowPwd] = useState(false);
-  const [creds, setCreds] = useState({ email: '', phone: '', pwd: '' });
+  const [creds, setCreds] = useState({ identifier: '', pwd: '' });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,13 +44,12 @@ export default function LoginPage() {
     const reason = localStorage.getItem('tutoria_logout_reason');
     if (reason) {
       setNotice(reason);
-      setMode('student');
       localStorage.removeItem('tutoria_logout_reason');
     }
   }, []);
 
   const handleSubmit = async () => {
-    const identifier = mode === 'teacher' ? creds.email : creds.phone;
+    const identifier = creds.identifier;
     if (!identifier.trim() || !creds.pwd.trim()) {
       setError('Please fill in all fields.');
       return;
@@ -223,47 +224,17 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Role Toggle */}
-          <div className="flex p-1.5 bg-neutral-100/80 rounded-[24px] mb-8 shadow-inner">
-            {['teacher', 'student'].map((r) => (
-              <button
-                key={r}
-                onClick={() => { setMode(r); setError(''); }}
-                className={`flex-1 py-3 rounded-[20px] text-[14px] font-bold capitalize transition-all duration-300
-                  ${mode === r ? 'bg-white text-neutral-900 shadow-md scale-100' : 'text-neutral-500 hover:text-neutral-800 scale-95'}`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-
           <div className="space-y-5">
-            {mode === 'student' && (
-              <div>
-                <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email, phone, or Student ID</label>
-                <input
-                  value={creds.phone}
-                  onChange={(e) => setCreds({ ...creds, phone: e.target.value })}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                  placeholder="Email, phone, or Student ID"
-                  className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
-                />
-              </div>
-            )}
-
-            {mode === 'teacher' && (
-              <div>
-                <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email</label>
-                <input
-                  type="email"
-                  value={creds.email}
-                  onChange={(e) => setCreds({ ...creds, email: e.target.value })}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                  placeholder="teacher@academy.com"
-                  className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
-                />
-              </div>
-            )}
+            <div>
+              <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Email, phone, or Student ID</label>
+              <input
+                value={creds.identifier}
+                onChange={(e) => setCreds({ ...creds, identifier: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                placeholder="Email, phone, or Student ID"
+                className="w-full px-5 py-4 rounded-[20px] bg-white/60 border-0 shadow-inner focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-[15px] font-medium text-neutral-800 transition-all placeholder:text-neutral-400"
+              />
+            </div>
 
             <div>
               <label className="text-[13px] font-bold text-neutral-700 mb-2 block ml-1">Password</label>
@@ -303,11 +274,6 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {mode === 'student' && (
-            <div className="mt-6 p-5 rounded-[24px] bg-[#E5F2FE]/50 border-2 border-white text-[13px] font-medium text-blue-900/80 leading-relaxed text-center shadow-sm">
-              Use the login details provided by your teacher to access your dashboard.
-            </div>
-          )}
           </>
           )}
         </div>

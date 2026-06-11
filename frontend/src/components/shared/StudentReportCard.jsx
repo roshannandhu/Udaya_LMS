@@ -1282,7 +1282,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                       </motion.span>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {student.standard_name && <span className="text-[11px] font-extrabold bg-white/20 text-white px-2.5 py-0.5 rounded-full">{student.standard_name}</span>}
+                      {/* bg-[rgba(...)] (not bg-white/20): index.css forces .bg-white\/xx
+                          opaque white for the light pastel theme, which would render this
+                          chip white-on-white on the dark header. */}
+                      {student.standard_name && <span className="text-[11px] font-extrabold bg-[rgba(255,255,255,0.18)] text-white px-2.5 py-0.5 rounded-full">{student.standard_name}</span>}
                       {rank && (
                         <span className="text-[11px] font-extrabold text-amber-300 bg-amber-300/10 px-2.5 py-0.5 rounded-full flex items-center gap-1">
                           <Trophy size={11} /> #{rank} of {totalStudents}{percentile != null && ` · Top ${percentile}%`}
