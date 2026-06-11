@@ -431,7 +431,9 @@ function StockTrend({ testTimeline, subjects }) {
       </div>
 
       {/* subject filter chips */}
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-2 -mx-1 px-1">
+      {/* no -mx-1: a negative right margin on an overflow-x rail pokes past the
+          page edge and lets the whole page pan sideways on phones */}
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-2">
         <button onClick={() => setSelSubject('all')}
           className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-extrabold transition-colors ${selSubject === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}>
           All
@@ -617,7 +619,7 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
       </div>
 
       {/* type filter chips */}
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
         {CAL_TYPES.map(t => {
           const Icon = t.icon;
           const on = type === t.id;
@@ -1365,7 +1367,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
             {/* ── 2. INSIGHTS STRIP ── */}
             {insightChips.length > 0 && (
               <Section>
-                <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
+                <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1">
                   {insightChips.map((c, i) => {
                     const p = PASTEL[c.pastel] || PASTEL.sky;
                     const Icon = c.icon;
