@@ -256,28 +256,33 @@ export default function StudentDetailPage() {
   return (
     <div className="bg-[#FAFAF9] min-h-screen">
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-md transition-colors"><ArrowLeft size={16} /></button>
+        {/* Phone-safe header: the title side must be flex-1 min-w-0 so the name
+            truncates, and button labels collapse to icons below sm — otherwise
+            the action row forces horizontal page overflow on phones. */}
+        <div className="px-4 py-3 flex items-center justify-between gap-2 max-w-5xl mx-auto">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-md transition-colors flex-shrink-0"><ArrowLeft size={16} /></button>
             <div className="flex-1 min-w-0">
               <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Students / {standard?.name}</p>
               <h1 className="text-lg md:text-xl font-semibold truncate text-[#1A1A19]">{s.name}</h1>
               {s.student_code && <p className="text-[11px] font-mono text-neutral-500 leading-none mt-0.5 truncate">{s.student_code}</p>}
             </div>
-            {s.blocked && <Tag color="red" className="ml-2">Blocked</Tag>}
+            {s.blocked && <Tag color="red" className="ml-2 flex-shrink-0">Blocked</Tag>}
           </div>
           <div className="flex gap-2 flex-shrink-0 relative">
             {reportData && (
               <>
-                <Btn variant="default" size="sm" icon={copied ? CheckCircle2 : Share2} onClick={handleShare} className="bg-white border-[#EBEAE7] text-[#1A1A19]">
-                  {copied ? 'Copied!' : 'Share'}
+                <Btn variant="default" size="sm" icon={copied ? CheckCircle2 : Share2} onClick={handleShare} className="bg-white border-[#EBEAE7] text-[#1A1A19]" title="Share report">
+                  <span className="hidden sm:inline">{copied ? 'Copied!' : 'Share'}</span>
                 </Btn>
-                <Btn variant="default" size="sm" icon={Download} onClick={handleDownloadPDF} className="bg-white border-[#EBEAE7] text-[#1A1A19]">
-                  Export PDF
+                <Btn variant="default" size="sm" icon={Download} onClick={handleDownloadPDF} className="bg-white border-[#EBEAE7] text-[#1A1A19]" title="Export PDF">
+                  <span className="hidden sm:inline">Export PDF</span>
                 </Btn>
               </>
             )}
-            <Btn variant="default" size="sm" icon={Edit2} onClick={() => setEditOpen(true)} className="bg-white border-[#EBEAE7] text-[#1A1A19]">Edit</Btn>
+            <Btn variant="default" size="sm" icon={Edit2} onClick={() => setEditOpen(true)} className="bg-white border-[#EBEAE7] text-[#1A1A19]" title="Edit student">
+              <span className="hidden sm:inline">Edit</span>
+            </Btn>
             <Btn variant="default" size="sm" icon={MoreVertical} onClick={() => setMenuOpen(!menuOpen)} className="bg-white border-[#EBEAE7] text-[#1A1A19]" />
             {menuOpen && (
               <>

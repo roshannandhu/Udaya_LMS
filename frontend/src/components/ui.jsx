@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { popIn } from '../lib/motion';
 
-export const Btn = ({ children, variant = 'default', size = 'md', icon: Icon, onClick, className = '', disabled = false, type = 'button' }) => {
+export const Btn = ({ children, variant = 'default', size = 'md', icon: Icon, onClick, className = '', disabled = false, type = 'button', ...rest }) => {
   const variants = {
     primary:     'bg-ink text-white hover:bg-neutral-800 border border-ink',
     default:     'bg-white text-neutral-900 hover:bg-[#F4F2EF] border border-[#EFEDEA] shadow-card',
@@ -19,6 +19,7 @@ export const Btn = ({ children, variant = 'default', size = 'md', icon: Icon, on
       disabled={disabled}
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 rounded-pill font-medium transition-colors ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      {...rest}
     >
       {Icon && <Icon size={15} strokeWidth={2} />}
       {children}
