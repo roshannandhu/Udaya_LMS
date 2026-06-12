@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen, Medal } from 'lucide-react';
@@ -153,6 +153,7 @@ export default function StudentSubjectViewPage() {
         display_name={user?.name || 'Student'}
         passcode={activeJoin.passcode}
         zak={activeJoin.zak}
+        viewerRole="student"
         onLeave={() => {
           setActiveJoin(null);
           liveClassApi.getByClass(classId).catch(()=>[]).then(d => setLiveClasses(Array.isArray(d)?d.filter(l=>l.status!=='cancelled'):[]));
@@ -177,56 +178,61 @@ export default function StudentSubjectViewPage() {
   return (
     <div className="min-h-screen bg-[#F8F9FA] pb-24 font-sans selection:bg-pink-100 selection:text-pink-900">
       
-      {/* ── MASSIVE PASTEL HERO SECTION ── */}
+      {/* â”€â”€ Compact header (slim on phone AND laptop) â”€â”€ */}
       <div className="relative overflow-hidden bg-white border-b border-neutral-100 shadow-sm">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 translate-x-1/3 -translate-y-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#fce4ec] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 -translate-x-1/3 translate-y-1/3 pointer-events-none"></div>
-        
-        <div className="max-w-[1200px] mx-auto px-5 md:px-8 py-8 relative z-10 flex flex-col items-center text-center">
-          <div className="w-full flex items-center justify-between mb-8">
-            <button onClick={() => navigate('/student/subjects')} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 transition-transform">
-              <ArrowLeft size={20} />
+        <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 translate-x-1/3 -translate-y-1/2 pointer-events-none"></div>
+
+        <div className="max-w-6xl mx-auto px-5 md:px-8 pt-4 pb-3 relative z-10">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/student/subjects')} className="p-2 -ml-2 rounded-full text-neutral-500 hover:text-neutral-900 hover:bg-black/5 transition-colors shrink-0">
+              <ArrowLeft size={18} />
             </button>
-            <div className="w-10 h-10"></div> {/* Spacer for balance */}
-          </div>
-
-          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-white/60 backdrop-blur-md border-4 border-white shadow-xl flex items-center justify-center text-neutral-700 mb-6 transform hover:rotate-12 transition-transform duration-500">
-            <SubjectIcon value={subject?.emoji} size={52} />
-          </div>
-
-          <h1 className="text-3xl md:text-5xl font-extrabold text-neutral-900 tracking-tight leading-none mb-4" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-            {subject?.name || 'Subject Hub'}
-          </h1>
-          
-          <div className="flex flex-col items-center gap-2 w-full max-w-sm">
-            <div className="flex items-center justify-between w-full text-xs font-bold uppercase tracking-widest text-neutral-500">
-              <span>Overall Progress</span>
-              <span className="text-indigo-600">{progressPct}%</span>
+            <div className="w-12 h-12 rounded-2xl bg-white/70 backdrop-blur border border-neutral-100 shadow-sm flex items-center justify-center text-neutral-700 shrink-0">
+              <SubjectIcon value={subject?.emoji} size={26} />
             </div>
-            <div className="w-full h-2 rounded-full bg-black/5 overflow-hidden">
-              <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000" style={{ width: `${progressPct}%` }}></div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight leading-tight truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+                {subject?.name || 'Subject'}
+              </h1>
+              <div className="flex items-center gap-2 mt-1 max-w-xs">
+                <div className="flex-1 h-1.5 rounded-full bg-black/5 overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000" style={{ width: `${progressPct}%` }}></div>
+                </div>
+                <span className="text-[11px] font-bold text-indigo-600 tabular-nums shrink-0">{progressPct}%</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── FLOATING PILL NAVIGATION ── */}
-        <div className="max-w-[1200px] mx-auto px-5 md:px-8 pb-6 relative z-10 overflow-x-auto custom-scrollbar flex gap-3">
+        {/* â”€â”€ Tabs: wrap into rows instead of horizontal scrolling â”€â”€ */}
+        <div className="max-w-6xl mx-auto px-5 md:px-8 pb-4 relative z-10 flex flex-wrap gap-2">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`flex-shrink-0 px-6 py-3 rounded-full text-sm font-bold uppercase tracking-wider transition-all duration-300 ${tab === t ? 'bg-neutral-900 text-white shadow-lg scale-105' : 'bg-white text-neutral-500 border border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'}`}>
+              className={`px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 ${tab === t ? 'bg-neutral-900 text-white shadow-md' : 'bg-white text-neutral-500 border border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'}`}>
               {t}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── BENTO BOX CONTENT AREA ── */}
-      <div className="px-5 md:px-8 py-8 max-w-[1200px] mx-auto">
-        <motion.div variants={staggerChildren} initial="hidden" animate="show">
+      {/* â”€â”€ BENTO BOX CONTENT AREA â”€â”€ */}
+      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto overflow-x-clip">
+        {/* keyed on the tab so switching glides the new content in */}
+        <motion.div
+          key={tab}
+          variants={staggerChildren}
+          initial="hidden"
+          animate="show"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          >
 
           {tab === 'Videos' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {videos.length === 0 && <p className="col-span-full text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm">No videos yet.</p>}
+              {videos.length === 0 && <p className="col-span-full text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-2xl border border-neutral-100 shadow-sm">No videos yet.</p>}
               {videos.map(v => {
                 const isYT = v.source_type === 'youtube';
                 const thumbUrl = v.thumbnail_url || null;
@@ -239,7 +245,7 @@ export default function StudentSubjectViewPage() {
                     variants={fadeUp}
                     key={v.id}
                     onClick={() => navigate(`/student/subjects/${classId}/video/${v.id}`)}
-                    className="group text-left rounded-[2rem] overflow-hidden bg-white border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
+                    className="group text-left rounded-2xl overflow-hidden bg-white border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
                   >
                     <div className="relative overflow-hidden bg-neutral-900 w-full" style={{ aspectRatio: '16/9' }}>
                       {/* Gradient base is always rendered, so it shows through whenever the
@@ -334,7 +340,7 @@ export default function StudentSubjectViewPage() {
               const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
-                <motion.div variants={fadeUp} className={`rounded-[32px] ${theme.bg} p-5 flex flex-col hover:shadow-md transition-all hover:-translate-y-1`}>
+                <motion.div variants={fadeUp} className={`rounded-2xl ${theme.bg} p-5 flex flex-col hover:shadow-md transition-all hover:-translate-y-1`}>
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -342,7 +348,7 @@ export default function StudentSubjectViewPage() {
                         {section === 'available' && isNewSince(t.created_at, prevSeen.tests) && (
                           <span className="bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full shrink-0">New</span>
                         )}
-                        {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">−{t.penalty}</span>}
+                        {t.negative_marking && <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">âˆ’{t.penalty}</span>}
                       </div>
                       <div className="flex items-center gap-1.5 text-[12px] font-medium text-black/50 flex-wrap">
                          <span className="bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'}</span>
@@ -411,7 +417,7 @@ export default function StudentSubjectViewPage() {
               <div className="mb-8 w-full">
                 <h3 className="text-[16px] font-bold text-neutral-800 mb-4">{title} <span className="text-neutral-400 font-semibold ml-1">({list.length})</span></h3>
                 {list.length === 0 ? (
-                  <div className="text-sm text-neutral-500 font-medium text-center py-10 bg-white rounded-[32px] shadow-sm w-full">{emptyMsg}</div>
+                  <div className="text-sm text-neutral-500 font-medium text-center py-10 bg-white rounded-2xl shadow-sm w-full">{emptyMsg}</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                     {list.map((t, idx) => <TestCard key={t.id} t={t} section={section} idx={idx} />)}
@@ -423,7 +429,7 @@ export default function StudentSubjectViewPage() {
             return (
               <div className="flex flex-col w-full">
                 {tests.length === 0 ? (
-                  <div className="text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm w-full">No tests yet.</div>
+                  <div className="text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-2xl border border-neutral-100 shadow-sm w-full">No tests yet.</div>
                 ) : (
                   <>
                     <Section title="Available now" list={available} section="available" emptyMsg="No tests available right now." />
@@ -436,7 +442,7 @@ export default function StudentSubjectViewPage() {
                             const cls = subject;
                             const theme = CARD_COLORS[idx % CARD_COLORS.length];
                             return (
-                              <motion.div variants={fadeUp} key={t.id} className={`rounded-[32px] ${theme.bg} p-5 opacity-70`}>
+                              <motion.div variants={fadeUp} key={t.id} className={`rounded-2xl ${theme.bg} p-5 opacity-70`}>
                                 <div className="flex items-start justify-between gap-3 mb-2">
                                   <div className="min-w-0 flex-1">
                                     <h4 className={`font-bold text-[17px] mb-1.5 ${theme.text}`}>
@@ -445,7 +451,7 @@ export default function StudentSubjectViewPage() {
                                         <span className="ml-2 align-middle bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full">New</span>
                                       )}
                                     </h4>
-                                    <p className="text-[12px] font-medium text-black/50 bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'} · {t.duration_mins} min · {t.total_marks} marks</p>
+                                    <p className="text-[12px] font-medium text-black/50 bg-white/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><SubjectIcon value={cls?.emoji} size={12} />{cls?.name || 'Subject'} Â· {t.duration_mins} min Â· {t.total_marks} marks</p>
                                   </div>
                                   <span className="bg-black/10 text-black/60 text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0">Upcoming</span>
                                 </div>
@@ -470,7 +476,7 @@ export default function StudentSubjectViewPage() {
           {tab === 'Assignments' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {assignments.length === 0 && (
-                <div className="col-span-full text-center py-16 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm">
+                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-neutral-100 shadow-sm">
                   <ClipboardList size={32} className="mx-auto mb-4 text-neutral-300" />
                   <p className="text-sm font-bold text-neutral-500">No assignments yet.</p>
                 </div>
@@ -484,7 +490,7 @@ export default function StudentSubjectViewPage() {
                 const isPast = due && due < now;
 
                 return (
-                  <motion.button variants={fadeUp} key={a.id} onClick={() => setSelectedAssignment(a)} className="text-left bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col">
+                  <motion.button variants={fadeUp} key={a.id} onClick={() => setSelectedAssignment(a)} className="text-left bg-white p-6 rounded-2xl border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col">
                     <div className="flex items-start justify-between mb-4">
                       <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-colors">
                         <ClipboardList size={24} />
@@ -545,7 +551,7 @@ export default function StudentSubjectViewPage() {
           {tab === 'Live' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {liveClasses.length === 0 && (
-                <div className="col-span-full text-center py-16 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm">
+                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-neutral-100 shadow-sm">
                   <Radio size={32} className="mx-auto mb-4 text-neutral-300" />
                   <p className="text-sm font-bold text-neutral-500">No live classes scheduled yet.</p>
                 </div>
@@ -591,13 +597,13 @@ export default function StudentSubjectViewPage() {
           {tab === 'Notes' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {notes.length === 0 ? (
-                <div className="col-span-full text-center py-16 bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm">
+                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-neutral-100 shadow-sm">
                   <StickyNote size={32} className="mx-auto mb-4 text-neutral-300" />
                   <p className="text-sm font-bold text-neutral-500">No notes yet. Check back later.</p>
                 </div>
               ) : (
                 [...notes].sort((a,b) => (b.is_pinned?1:0)-(a.is_pinned?1:0)).map(note => (
-                  <motion.div variants={fadeUp} key={note.id} className={`rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${note.is_pinned ? 'bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200' : 'bg-white border border-neutral-100'}`}>
+                  <motion.div variants={fadeUp} key={note.id} className={`rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${note.is_pinned ? 'bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200' : 'bg-white border border-neutral-100'}`}>
                     {note.is_pinned && <div className="absolute top-0 right-0 w-16 h-16 bg-amber-200 rounded-full blur-2xl opacity-50"></div>}
                     <div className="flex items-start gap-3 mb-2 relative z-10">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${note.is_pinned ? 'bg-amber-100 text-amber-600' : 'bg-neutral-50 text-neutral-500'}`}>
@@ -621,7 +627,7 @@ export default function StudentSubjectViewPage() {
           )}
 
           {tab === 'Leaderboard' && (
-            <motion.div variants={fadeUp} className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-neutral-100">
+            <motion.div variants={fadeUp} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-neutral-100">
               {leaderboardRows.length === 0 ? (
                 <div className="text-center py-16">
                   <Trophy size={32} className="mx-auto mb-4 text-neutral-300" />
@@ -654,6 +660,7 @@ export default function StudentSubjectViewPage() {
             </motion.div>
           )}
 
+          </motion.div>
         </motion.div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, BarChart, Bar, Cell,
@@ -833,7 +833,7 @@ function ThinkingDots() {
   );
 }
 
-function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isStreaming, error }) {
+function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isStreaming, error, generatedAt }) {
   const reduce = useReducedMotion();
   const [copiedAI, setCopiedAI] = useState(false);
   const sections = useMemo(() => (suggestions ? parseMentorSections(suggestions) : []), [suggestions]);
@@ -848,7 +848,13 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
   };
 
   return (
-    <div className="relative rounded-[2rem] p-[2px] overflow-hidden">
+    <motion.div
+      className="relative rounded-[2rem] p-[2px] overflow-hidden"
+      initial={reduce ? false : { opacity: 0, y: 28, scale: 0.97 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ type: 'spring', stiffness: 90, damping: 18, mass: 0.9 }}
+    >
       {/* conic border sweep while the answer streams in */}
       {active && !reduce ? (
         <motion.div
@@ -866,7 +872,12 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
 
       <div className="relative bg-[#F8E1FB] rounded-[calc(2rem-2px)] p-5 sm:p-6 overflow-hidden">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.15, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          >
             <h3 className="text-[20px] font-black text-[#872792] leading-tight flex items-center gap-2 mb-1">
               {reduce ? <Sparkles size={20} /> : (
                 <motion.span animate={{ scale: [1, 1.18, 1], rotate: [0, 8, 0] }} transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex">
@@ -876,7 +887,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
               AI Mentor Analysis
             </h3>
             <p className="text-[12px] font-bold text-[#872792]/70 leading-snug">Personalized coaching based on your streaks, trends and weak topics.</p>
-          </div>
+          </motion.div>
           <motion.button
             onClick={onToggle}
             whileHover={reduce ? undefined : { scale: 1.08 }}
@@ -948,7 +959,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                     })}
                     {!isStreaming && !loading && (
                       <motion.div
-                        className="flex items-center gap-2 pt-1"
+                        className="flex items-center gap-2 pt-1 flex-wrap"
                         initial={reduce ? false : { opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.2 }}
@@ -962,6 +973,11 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                           {copiedAI ? <CheckCircle2 size={12} className="text-emerald-600" /> : <Copy size={12} />}
                           {copiedAI ? 'Copied' : 'Copy'}
                         </button>
+                        {generatedAt && (
+                          <span className="text-[10px] font-extrabold text-[#872792]/50 ml-0.5">
+                            Generated {timeAgo(generatedAt)}
+                          </span>
+                        )}
                       </motion.div>
                     )}
                   </motion.div>
@@ -975,7 +991,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
           )}
         </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -1014,6 +1030,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState('');
+  const [generatedAt, setGeneratedAt] = useState(null);
   const [heatmapSubject, setHeatmapSubject] = useState('all');
   const [copied, setCopied] = useState(false);
 
@@ -1149,41 +1166,49 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const testsAttempted = testTimeline.length;
   const testsMissed = Math.max(0, (data?.total_tests_in_standard || 0) - testsAttempted);
 
-  // ── AI mentor: stream a fresh analysis (richer payload than before) ──────────
+  // ── AI mentor: backend owns ALL the analysis data — the browser only says
+  // which student and which period. Stream a fresh analysis on demand.
   const runAnalysis = useCallback(async () => {
-    setSuggestionsLoading(true); setSuggestionsError(''); setSuggestions('');
-    const subjectBreakdown = subjectRadar.map(s => `${s.subject}: test ${Math.round(s.test_avg || 0)}%, attendance ${Math.round(s.attendance_pct || 0)}%, videos ${s.video_done || 0}/${s.video_total || 0}`).join(' | ') || 'No subject data';
-    const recentTests = testTimeline.slice(-5).map(t => `${t.test_title} (${t.subject || ''}) ${Math.round(t.score_pct || 0)}%${t.date ? ` on ${t.date}` : ''}`).join('; ') || 'No recent tests';
-    const weakTopicsDetail = weakestTopics.slice(0, 5).map(t => `${t.topic} — ${Math.round(t.score || 0)}% — ${t.videoStatus}`).join('; ') || 'None';
-    const stats = {
-      student_name: student.name || 'Student',
-      standard_name: student.standard_name || 'N/A',
-      period: period || 'overall',
-      standing_data: `Grade ${grade.grade} (${grade.label})${rank ? `, rank ${rank}/${totalStudents}` : ''}${percentile != null ? ` (top ${percentile}%)` : ''}, test coverage ${insights.coverage != null ? `${insights.coverage}%` : 'unknown'}, live class attendance ${Math.round(liveStats.attendance_pct || 0)}%`,
-      streak_data: `Current study streak ${insights.streak.current} day(s), best ever ${insights.streak.best} day(s)`,
-      trend_data: `${insights.improvement != null ? `Score trend ${insights.improvement > 0 ? '+' : ''}${insights.improvement}% (recent tests vs earlier ones)` : 'Not enough tests for a trend yet'}${insights.consistency ? `; consistency is ${insights.consistency.label} (±${insights.consistency.sd}%)` : ''}`,
-      best_subject: insights.bestSub ? `${insights.bestSub.subject} (${Math.round(insights.bestSub.test_avg)}% avg)` : 'N/A',
-      weakest_subject: insights.worstSub ? `${insights.worstSub.subject} (${Math.round(insights.worstSub.test_avg)}% avg)` : 'N/A',
-      attendance_data: `Attendance is ${Math.round(student.attendance_pct || 0)}%`,
-      video_progress_data: `Video completion is ${videoPct}% (${doneVids}/${totalVids} videos)`,
-      assignment_data: `Assignment average is ${assignStats.avg_marks_pct}% (submitted ${assignStats.submitted}/${assignStats.total})`,
-      test_data: `Test average is ${Math.round(student.avg_score || 0)}%, attempted ${testsAttempted}, missed ${testsMissed}`,
-      subject_breakdown: subjectBreakdown,
-      recent_tests: recentTests,
-      weak_topics_detail: weakTopicsDetail,
-    };
+    setSuggestionsLoading(true); setSuggestionsError(''); setSuggestions(''); setGeneratedAt(null);
     try {
       let acc = '';
-      await aiApi.generateInsightsStream(student.id, stats, (chunk) => { acc += chunk; setSuggestionsLoading(false); setIsStreaming(true); setSuggestions(acc); });
+      await aiApi.generateInsightsStream(student.id, { period: period || 'overall' }, (chunk) => { acc += chunk; setSuggestionsLoading(false); setIsStreaming(true); setSuggestions(acc); });
       setSuggestions(acc);
+      setGeneratedAt(new Date().toISOString());
     } catch (e) { setSuggestionsError(e.message || 'Failed to generate insights.'); } finally { setSuggestionsLoading(false); setIsStreaming(false); }
-  }, [student, period, grade, rank, totalStudents, percentile, insights, liveStats, videoPct, doneVids, totalVids, subjectRadar, testTimeline, weakestTopics, testsAttempted, testsMissed, assignStats]);
+  }, [student?.id, period]);
+
+  // Cache-first open: the backend keeps the last analysis per student+period,
+  // so most opens render instantly without an LLM call. Regenerate streams fresh.
+  const loadInsights = useCallback(async () => {
+    setSuggestionsError('');
+    try {
+      const cached = await aiApi.getCachedInsights(student.id, period || 'overall');
+      if (cached?.insights) {
+        setSuggestions(cached.insights);
+        setGeneratedAt(cached.generated_at || null);
+        return;
+      }
+    } catch { /* cache unavailable → just generate fresh */ }
+    await runAnalysis();
+  }, [student?.id, period, runAnalysis]);
 
   const handleAnalyzePerformance = useCallback(() => {
     if (showSuggestions) { setShowSuggestions(false); return; }
     setShowSuggestions(true);
-    if (!suggestions) runAnalysis();
-  }, [showSuggestions, suggestions, runAnalysis]);
+    if (!suggestions) loadInsights();
+  }, [showSuggestions, suggestions, loadInsights]);
+
+  // The cache is per-period: switching tabs must drop the old text and, if the
+  // panel is open, pull the right period's analysis.
+  const periodRef = useRef(period);
+  useEffect(() => {
+    if (periodRef.current === period) return;
+    periodRef.current = period;
+    setSuggestions(''); setGeneratedAt(null); setSuggestionsError('');
+    if (showSuggestions) loadInsights();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
 
   // ── PDF export (carried over, enriched) ───────────────────────────────────────
   const handleDownloadPDF = useCallback(async () => {
@@ -1419,6 +1444,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     loading={suggestionsLoading}
                     isStreaming={isStreaming}
                     error={suggestionsError}
+                    generatedAt={generatedAt}
                   />
                 </Section>
               </div>

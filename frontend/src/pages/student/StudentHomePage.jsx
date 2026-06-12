@@ -16,6 +16,7 @@ import SubjectIcon from '../../components/shared/SubjectIcon';
 import VideoRail from '../../components/student/VideoRail';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
+import { ShinyText } from '../../components/bits';
 import {
   Accordion, AccordionItem, AccordionTrigger, AccordionContent,
 } from '@/components/animate-ui/components/radix/accordion';
@@ -426,8 +427,8 @@ export default function StudentHomePage() {
                 <Avatar name={user?.name || '?'} src={user?.avatar_url} size="lg" />
               </motion.div>
               <div className="min-w-0">
-                <p className="text-[11px] text-neutral-500 font-extrabold uppercase tracking-widest mb-1">
-                  {greeting} {greetEmoji}
+                <p className="text-[11px] font-extrabold uppercase tracking-widest mb-1">
+                  <ShinyText base="#737373" shine="#1A1A19" duration={2.6}>{greeting}</ShinyText> {greetEmoji}
                 </p>
                 <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-900 leading-none truncate">
                   {greetWords.map((w, i) => (

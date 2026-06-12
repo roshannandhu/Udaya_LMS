@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Lock, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, UserCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../lib/auth';
 import AvatarPresetPicker from '../../components/student/AvatarPresetPicker';
 
 export default function StudentChangePasswordPage() {
   const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const { changePassword, verifyWithBackend, user, role, setUser } = useAuthStore();
   const [passwords, setPasswords] = useState({ new: '', confirm: '' });
   const [showPwd, setShowPwd] = useState({ new: false, confirm: false });
@@ -54,7 +56,13 @@ export default function StudentChangePasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-transparent">
-      <div className="w-full max-w-sm">
+      <motion.div
+        className="w-full max-w-sm"
+        key={step}
+        initial={reduce ? false : { opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 26 }}
+      >
         <div className="flex items-center gap-2 mb-10 justify-center">
           <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center">
             <Lock size={18} className="text-white" />
@@ -157,7 +165,7 @@ export default function StudentChangePasswordPage() {
         )}
 
         <p className="text-center text-xs text-neutral-400 mt-6">Udaya · A learning platform built for tuition</p>
-      </div>
+      </motion.div>
     </div>
   );
 }

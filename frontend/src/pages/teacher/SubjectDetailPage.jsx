@@ -1,598 +1,66 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Play, Plus, Upload, MoreVertical, Video, FileQuestion,
-  Shield, Loader2, ListChecks, Edit2, Eye, CheckCircle2, Clock,
-  Trash2, Users, ClipboardList, Paperclip, Star, CalendarClock,
-  Radio, StickyNote, Pin, PinOff, FileText, AlertCircle, Calendar,
-  Youtube, ExternalLink,
+  ArrowLeft, Plus, Upload, Video, FileQuestion, Shield, Edit2,
+  Trash2, Users, ClipboardList, Radio, StickyNote, ListChecks,
 } from 'lucide-react';
-import { Btn, Tag, Avatar, Modal, Input, Skeleton } from '../../components/ui';
+import { Btn, Avatar, Modal, Skeleton } from '../../components/ui';
 import { apiClient, attendanceApi, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import { useAppCache } from '../../store';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
-import LiveClassCard from '../../components/cards/LiveClassCard';
-import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
-
-/* ─── helpers shared with live-class cards ─────────── */
-function fmtDateTimeLC(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const h = d.getHours(), m = d.getMinutes();
-  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} at ${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
-}
-function statusColorLC(s) {
-  return s==='live'?'green':s==='scheduled'?'amber':s==='cancelled'?'red':'gray';
-}
-
-/* ─── ScheduleSubjectLiveModal ──────────────────────── */
-function ScheduleSubjectLiveModal({ open, onClose, classId, subjectName, onScheduled }) {
-  const [title, setTitle]       = useState('');
-  const [date, setDate]         = useState('');
-  const [time, setTime]         = useState('');
-  const [duration, setDuration] = useState(60);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState('');
-  const today = new Date().toISOString().split('T')[0];
-
-  useEffect(() => {
-    if (!open) { setTitle(''); setDate(''); setTime(''); setDuration(60); setError(''); }
-  }, [open]);
-
-  const handleSubmit = async () => {
-    if (!title.trim() || !date || !time) return;
-    setSaving(true); setError('');
-    try {
-      await liveClassApi.create({ class_id: classId, title: title.trim(), scheduled_at: `${date}T${time}:00`, duration_mins: duration });
-      onScheduled();
-      onClose();
-    } catch (err) {
-      setError(err?.message || 'Failed to schedule. Check Zoom credentials.');
-    } finally { setSaving(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={`Schedule live class — ${subjectName || ''}`} size="md">
-      <div className="space-y-4">
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
-          <input type="text" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Chapter 5 — Quadratic Equations"
-            className="w-full px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Date</label>
-            <input type="date" value={date} min={today} onChange={e=>setDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Time</label>
-            <input type="time" value={time} onChange={e=>setTime(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Duration</label>
-          <select value={duration} onChange={e=>setDuration(Number(e.target.value))}
-            className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm">
-            {[30,45,60,90,120].map(m=><option key={m} value={m}>{m} min</option>)}
-          </select>
-        </div>
-        {error && <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"><AlertCircle size={14} className="mt-0.5 flex-shrink-0"/>{error}</div>}
-        <Btn variant="primary" onClick={handleSubmit} disabled={!title.trim()||!date||!time||saving} className="w-full justify-center">
-          {saving ? 'Scheduling…' : 'Schedule class'}
-        </Btn>
-      </div>
-    </Modal>
-  );
-}
-
-/* ─── NoteFormModal ─────────────────────────────────── */
-function NoteFormModal({ open, onClose, classId, note, onSaved }) {
-  const [title, setTitle]     = useState('');
-  const [body, setBody]       = useState('');
-  const [file, setFile]       = useState(null);
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState('');
-  const fileRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setTitle(note?.title || ''); setBody(note?.body || ''); setFile(null); setError('');
-  }, [open, note]);
-
-  const handleSave = async () => {
-    if (!title.trim()) { setError('Title is required'); return; }
-    setSaving(true); setError('');
-    try {
-      let fileUrl = note?.file_url || null;
-      let fileType = note?.file_type || null;
-      let storagePath = note?.storage_path || null;
-      if (file === 'remove') {
-        // User cleared the existing attachment
-        fileUrl = null; fileType = null; storagePath = null;
-      } else if (file) {
-        const up = await notesApi.uploadFile(file, classId);
-        fileUrl = up.url; fileType = up.type; storagePath = up.path;
-      }
-      const data = { title: title.trim(), body: body.trim() || null, file_url: fileUrl, file_type: fileType, storage_path: storagePath };
-      if (note?.id) {
-        await notesApi.update(note.id, data);
-      } else {
-        await notesApi.create({ ...data, class_id: classId });
-      }
-      onSaved(); onClose();
-    } catch (err) { setError(err?.message || 'Failed to save note'); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={note ? 'Edit note' : 'New note'} size="md">
-      <div className="space-y-4">
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Title</label>
-          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Note title"
-            className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Content (optional)</label>
-          <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} placeholder="Note content…"
-            className="w-full px-3 py-2 rounded-xl bg-white border border-[#EFEDEA] focus:outline-none text-sm resize-none" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Attachment (PDF / image)</label>
-          {(note?.file_url && !file) ? (
-            <div className="flex items-center gap-2 text-sm text-neutral-600">
-              <FileText size={14}/> <span className="truncate">{note.file_url.split('/').pop()}</span>
-              <button onClick={()=>setFile('remove')} className="text-red-500 hover:text-red-700 text-xs">Remove</button>
-            </div>
-          ) : (
-            <button onClick={()=>fileRef.current?.click()}
-              className="flex items-center gap-2 px-3 py-2 rounded-md border border-dashed border-neutral-300 text-sm text-neutral-500 hover:border-neutral-500 w-full">
-              <Paperclip size={14}/>{file && file !== 'remove' ? file.name : 'Choose file'}
-            </button>
-          )}
-          <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden" onChange={e=>setFile(e.target.files[0]||null)} />
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Btn variant="primary" onClick={handleSave} disabled={saving||!title.trim()} className="w-full justify-center">
-          {saving ? 'Saving…' : note ? 'Save changes' : 'Create note'}
-        </Btn>
-      </div>
-    </Modal>
-  );
-}
 import AttendanceGrid from '../../components/teacher/AttendanceGrid';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import NewTestModal from '../../components/teacher/NewTestModal';
 import { EditVideoModal } from '../../components/teacher/Modals';
 import NewAssignmentModal from '../../components/teacher/NewAssignmentModal';
 import AssignmentSubmissionsSheet from '../../components/teacher/AssignmentSubmissionsSheet';
-import { useAppCache } from '../../store';
+import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
+import PerformancePanel from '../../components/teacher/PerformancePanel';
+import { PASTEL } from '../../components/cards/pastel';
+import VideoAddModal from '../../components/teacher/subject/VideoAddModal';
+import VideoViewersModal from '../../components/teacher/subject/VideoViewersModal';
+import NoteFormModal from '../../components/teacher/subject/NoteFormModal';
+import ScheduleSubjectLiveModal from '../../components/teacher/subject/ScheduleSubjectLiveModal';
+import VideosSection from '../../components/teacher/subject/VideosSection';
+import TestsSection from '../../components/teacher/subject/TestsSection';
+import AssignmentsSection from '../../components/teacher/subject/AssignmentsSection';
+import LiveSection from '../../components/teacher/subject/LiveSection';
+import NotesSection from '../../components/teacher/subject/NotesSection';
 
-/* ─── VideoAddModal ──────────────────────────────────────── */
+const VALID_TABS = ['learn', 'assess', 'live', 'people', 'performance'];
+// Old tab ids (bookmarks / older links) map onto the merged tabs.
+const LEGACY_TABS = {
+  videos: 'learn', notes: 'learn',
+  tests: 'assess', assignments: 'assess',
+  students: 'people', attendance: 'people',
+};
 
-function VideoAddModal({ open, onClose, classId, onAdded }) {
-  const [youtubeUrl, setYoutubeUrl]   = useState('');
-  const [ytVideoId, setYtVideoId]     = useState(null);
-  const [ytPreviewError, setYtPreviewError] = useState(null);
-  const [ytTitle, setYtTitle]         = useState('');
-  const [ytDescription, setYtDescription] = useState('');
-  const [ytAdding, setYtAdding]       = useState(false);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    if (open) {
-      setYoutubeUrl(''); setYtVideoId(null); setYtPreviewError(null);
-      setYtTitle(''); setYtDescription(''); setYtAdding(false);
-    }
-  }, [open]);
-
-  function extractYouTubeId(url) {
-    const patterns = [
-      /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
-      /youtu\.be\/([a-zA-Z0-9_-]{11})/,
-      /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-      /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
-    ];
-    for (const p of patterns) {
-      const m = url.match(p);
-      if (m) return m[1];
-    }
-    return null;
-  }
-
-  function onYoutubeUrlChange(e) {
-    const url = e.target.value;
-    setYoutubeUrl(url);
-    setYtPreviewError(null);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (!url.trim()) { setYtVideoId(null); return; }
-      const id = extractYouTubeId(url.trim());
-      if (!id) {
-        setYtVideoId(null);
-        setYtPreviewError('Invalid YouTube URL. Use youtube.com/watch?v=… or youtu.be/…');
-      } else {
-        setYtVideoId(id);
-      }
-    }, 400);
-  }
-
-  async function handleAdd() {
-    if (!ytVideoId || !ytTitle.trim() || ytAdding) return;
-    setYtAdding(true);
-    try {
-      await apiClient('/videos/youtube', {
-        method: 'POST',
-        body: JSON.stringify({
-          class_id: classId,
-          title: ytTitle.trim(),
-          description: ytDescription.trim() || null,
-          youtube_video_id: ytVideoId,
-          youtube_url: youtubeUrl,
-        }),
-      });
-      onAdded();
-      onClose();
-    } catch (err) {
-      setYtPreviewError(err?.message || 'Failed to add video.');
-    } finally {
-      setYtAdding(false);
-    }
-  }
-
+function SectionHead({ icon: Icon, title, count, action, actionLabel }) {
   return (
-    <Modal open={open} onClose={onClose} title="Add video" size="md">
-      <div className="space-y-4">
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
-          <strong>Important:</strong> Set your YouTube video to <strong>Unlisted</strong> — not Private.
-          Students watch inside this app and never see the URL.
-        </div>
-
-        {/* Quick links to YouTube (open in a new tab) */}
-        <div>
-          <div className="grid grid-cols-2 gap-2">
-            <a
-              href="https://www.youtube.com/upload"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] bg-white hover:bg-[#F4F2EF] text-sm font-medium transition-colors"
-            >
-              <Youtube size={16} className="text-red-600" /> Upload new
-              <ExternalLink size={12} className="text-neutral-400" />
-            </a>
-            <a
-              href="https://studio.youtube.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] bg-white hover:bg-[#F4F2EF] text-sm font-medium transition-colors"
-            >
-              <Youtube size={16} className="text-red-600" /> My videos
-              <ExternalLink size={12} className="text-neutral-400" />
-            </a>
-          </div>
-          <p className="text-[11px] text-neutral-500 mt-1.5 text-center">
-            Upload your video as Unlisted on YouTube, then paste its link below.
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 mb-1.5">YouTube video URL</label>
-          <input
-            type="url"
-            value={youtubeUrl}
-            onChange={onYoutubeUrlChange}
-            placeholder="https://www.youtube.com/watch?v=..."
-            className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
-          />
-        </div>
-
-        {ytPreviewError && (
-          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{ytPreviewError}</p>
-        )}
-
-        {ytVideoId && !ytPreviewError && (
-          <div className="flex gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-xl">
-            <img
-              src={`https://img.youtube.com/vi/${ytVideoId}/mqdefault.jpg`}
-              alt="preview"
-              className="w-28 flex-shrink-0 rounded-lg object-cover"
-              style={{ aspectRatio: '16/9' }}
-            />
-            <div className="flex-1 min-w-0">
-              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
-                ✓ Video detected
-              </span>
-              <p className="text-xs text-neutral-400 mt-1 font-mono break-all">{ytVideoId}</p>
-            </div>
-          </div>
-        )}
-
-        {ytVideoId && !ytPreviewError && (
-          <>
-            <div>
-              <label className="block text-xs font-medium text-neutral-500 mb-1.5">Title</label>
-              <input
-                type="text"
-                value={ytTitle}
-                onChange={e => setYtTitle(e.target.value)}
-                placeholder="e.g. Chapter 5 — Quadratic Equations"
-                className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-neutral-500 mb-1.5">Description (optional)</label>
-              <textarea
-                value={ytDescription}
-                onChange={e => setYtDescription(e.target.value)}
-                placeholder="What this video covers..."
-                rows={2}
-                className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
-              />
-            </div>
-            <Btn
-              onClick={handleAdd}
-              disabled={!ytVideoId || !ytTitle.trim() || ytAdding}
-              className="w-full justify-center"
-              variant="primary"
-            >
-              {ytAdding ? <><Loader2 size={14} className="animate-spin mr-1.5" />Adding…</> : 'Add video'}
-            </Btn>
-          </>
+    <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon size={15} className="text-neutral-400 shrink-0" />
+        <h3 className="text-sm font-bold text-neutral-800 truncate">{title}</h3>
+        {count > 0 && (
+          <span className="text-[11px] font-bold text-neutral-400 tabular-nums">({count})</span>
         )}
       </div>
-    </Modal>
-  );
-}
-
-/* ─── VideoCard ──────────────────────────────────────────── */
-
-function VideoCard({ video, thumbnail, studentsCount, onView, onMenu }) {
-  const watchedCount = video.completed_count ?? 0;
-  const watchPct = studentsCount > 0 ? Math.round((watchedCount / studentsCount) * 100) : 0;
-  const duration = video.duration_secs
-    ? `${Math.floor(video.duration_secs / 60)}:${(video.duration_secs % 60).toString().padStart(2, '0')}`
-    : null;
-
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-neutral-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 group">
-      {/* Thumbnail */}
-      <div
-        className="relative aspect-video bg-gradient-to-br from-neutral-100 to-neutral-200 overflow-hidden cursor-pointer"
-        onClick={() => onView(video)}
-      >
-        {thumbnail ? (
-          <img
-            src={thumbnail}
-            alt={video.title}
-            loading="lazy"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-white/60 flex items-center justify-center">
-              <Play size={22} className="text-neutral-500 ml-0.5" fill="currentColor" />
-            </div>
-          </div>
-        )}
-
-        {/* Hover play overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center pointer-events-none">
-          <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg">
-            <Play size={18} className="text-neutral-900 ml-0.5" fill="currentColor" />
-          </div>
-        </div>
-
-        {/* YT badge */}
-        {video.source_type === 'youtube' && (
-          <span className="absolute top-2 left-2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md leading-tight z-10">
-            YT
-          </span>
-        )}
-
-        {/* Duration */}
-        {duration && (
-          <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono leading-tight z-10">
-            {duration}
-          </span>
-        )}
-
-        {/* 3-dot button */}
-        <button
-          onClick={e => { e.stopPropagation(); onMenu(video.id, e); }}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-black/70 z-10"
-        >
-          <MoreVertical size={12} />
+      {action && (
+        <button onClick={action}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-500 hover:text-neutral-900 px-2 py-1 rounded-md hover:bg-[#F4F2EF] transition-colors shrink-0">
+          <Plus size={13} /> {actionLabel}
         </button>
-      </div>
-
-      {/* Body */}
-      <div className="p-3.5 cursor-pointer" onClick={() => onView(video)}>
-        <h4 className="text-sm font-semibold text-neutral-900 mb-2.5 line-clamp-2 leading-snug">
-          {video.title}
-        </h4>
-        {studentsCount > 0 ? (
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="flex items-center gap-1 text-neutral-500">
-                <Eye size={11} />
-                {watchedCount} / {studentsCount} watched
-              </span>
-              <span className={`font-semibold tabular-nums ${
-                watchPct >= 70 ? 'text-green-600' : watchPct >= 30 ? 'text-amber-600' : 'text-neutral-400'
-              }`}>
-                {watchPct}%
-              </span>
-            </div>
-            <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  watchPct >= 70 ? 'bg-green-500' : watchPct >= 30 ? 'bg-amber-400' : 'bg-neutral-300'
-                }`}
-                style={{ width: `${watchPct}%` }}
-              />
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-neutral-400">No students yet</p>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-/* ─── VideoViewersModal ──────────────────────────────────── */
-
-function VideoViewersModal({ video, onClose }) {
-  const [viewers, setViewers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!video) return;
-    setLoading(true);
-    setViewers([]);
-    apiClient(`/videos/${video.id}/viewers`)
-      .then(data => setViewers(Array.isArray(data) ? data : []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [video?.id]);
-
-  const watched    = viewers.filter(v => v.watched);
-  const notWatched = viewers.filter(v => !v.watched);
-  const watchPct   = viewers.length > 0 ? Math.round((watched.length / viewers.length) * 100) : 0;
-
-  const fmtTime = (iso) => {
-    if (!iso) return '';
-    const diff = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
-  };
-
-  // SVG donut params (viewBox 36×36, r=15.9, circumference ≈ 99.9)
-  const stroke = watchPct >= 70 ? '#22c55e' : watchPct >= 30 ? '#f59e0b' : '#94a3b8';
-
-  return (
-    <Modal open={!!video} onClose={onClose} title={video?.title || ''} size="md">
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="w-9 h-9 rounded-full" />
-              <div className="flex-1 space-y-1.5">
-                <Skeleton className="h-3 w-32" />
-                <Skeleton className="h-2.5 w-20" />
-              </div>
-              <Skeleton className="h-5 w-16 rounded-full" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Stats panel */}
-          <div className="flex items-center gap-4 p-4 bg-neutral-50 border border-neutral-100 rounded-2xl">
-            {/* Donut */}
-            <div className="relative w-16 h-16 flex-shrink-0">
-              <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3.2" />
-                <circle
-                  cx="18" cy="18" r="15.9" fill="none"
-                  stroke={stroke} strokeWidth="3.2"
-                  strokeDasharray={`${watchPct} ${100 - watchPct}`}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-sm font-bold text-neutral-900">{watchPct}%</span>
-              </div>
-            </div>
-            <div className="flex-1 grid grid-cols-2 gap-2">
-              <div className="bg-green-50 border border-green-100 rounded-xl p-2.5 text-center">
-                <p className="text-2xl font-bold text-green-700 leading-none mb-0.5">{watched.length}</p>
-                <p className="text-xs text-green-600 font-medium">Watched</p>
-              </div>
-              <div className="bg-white border border-neutral-200 rounded-xl p-2.5 text-center">
-                <p className="text-2xl font-bold text-neutral-500 leading-none mb-0.5">{notWatched.length}</p>
-                <p className="text-xs text-neutral-400 font-medium">Not yet</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Watched */}
-          {watched.length > 0 && (
-            <div>
-              <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-2">
-                Watched ({watched.length})
-              </p>
-              <div className="space-y-1.5">
-                {watched.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border border-neutral-100">
-                    <Avatar name={s.name} src={s.avatar_url} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name}</p>
-                      <p className="text-xs text-neutral-400">
-                        @{s.username}{s.last_watched_at ? ` · ${fmtTime(s.last_watched_at)}` : ''}
-                      </p>
-                    </div>
-                    {s.completed ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                        <CheckCircle2 size={10} /> Done
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                        <Clock size={10} /> Partial
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Not watched */}
-          {notWatched.length > 0 && (
-            <div>
-              <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-2">
-                Not yet ({notWatched.length})
-              </p>
-              <div className="space-y-1.5">
-                {notWatched.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
-                    <Avatar name={s.name} src={s.avatar_url} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate text-neutral-600">{s.name}</p>
-                      <p className="text-xs text-neutral-400">@{s.username}</p>
-                    </div>
-                    <span className="text-xs font-medium text-neutral-400 bg-neutral-100 border border-neutral-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                      Not watched
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {viewers.length === 0 && (
-            <p className="text-sm text-neutral-500 text-center py-6">No students enrolled yet.</p>
-          )}
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-/* ─── SubjectDetailPage ──────────────────────────────────── */
-
 export default function SubjectDetailPage() {
   const { standardId, classId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
 
   const allStandards  = useAppCache(s => s.standards);
@@ -609,7 +77,15 @@ export default function SubjectDetailPage() {
   const [tests, setTests]       = useState([]);
   const [lowAttendanceCount, setLowAttendanceCount] = useState(0);
   const [loading, setLoading]   = useState(!cachedSubject);
-  const [tab, setTab]           = useState('videos');
+
+  const rawTab = searchParams.get('tab');
+  const initialTab = VALID_TABS.includes(rawTab) ? rawTab : (LEGACY_TABS[rawTab] || 'learn');
+  const [tab, setTabState]      = useState(initialTab);
+  const setTab = (t) => {
+    setTabState(t);
+    setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('tab', t); return p; }, { replace: true });
+  };
+
   const [uploadOpen, setUploadOpen]   = useState(false);
   const [newTestOpen, setNewTestOpen] = useState(false);
   const [editTestId, setEditTestId]   = useState(null);
@@ -632,6 +108,20 @@ export default function SubjectDetailPage() {
   const [notes, setNotes]                       = useState([]);
   const [showNoteForm, setShowNoteForm]         = useState(false);
   const [editNote, setEditNote]                 = useState(null);
+  const deepLinkedTestRef = useRef(false);
+
+  // Deep link from the dashboard copy-suspects card: ?test=<id> opens the
+  // results sheet for that test once tests have loaded (once per mount).
+  useEffect(() => {
+    const testId = searchParams.get('test');
+    if (!testId || deepLinkedTestRef.current || tests.length === 0) return;
+    const t = tests.find(t => t.id === testId);
+    if (t) {
+      deepLinkedTestRef.current = true;
+      setSelectedTest(t);
+      setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('test'); return p; }, { replace: true });
+    }
+  }, [tests, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!videoMenuId) return;
@@ -785,14 +275,21 @@ export default function SubjectDetailPage() {
     if (standardId && classId) fetchData();
   }, [standardId, classId]);
 
+  const liveActive = liveClasses.filter(l => l.status === 'live' || l.status === 'scheduled').length;
   const TABS = [
-    { id: 'videos',      label: 'Videos',      count: videos.length },
-    { id: 'tests',       label: 'Tests',       count: tests.length },
-    { id: 'assignments', label: 'Assignments', count: assignments.length },
-    { id: 'live',        label: 'Live',        count: liveClasses.filter(l => l.status === 'live' || l.status === 'scheduled').length },
-    { id: 'notes',       label: 'Notes',       count: notes.length },
-    { id: 'students',    label: 'Students',    count: students.length },
-    { id: 'attendance',  label: 'Attendance',  count: lowAttendanceCount, alert: lowAttendanceCount > 0 },
+    { id: 'learn',       label: 'Learn',       count: videos.length + notes.length },
+    { id: 'assess',      label: 'Assess',      count: tests.length + assignments.length },
+    { id: 'live',        label: 'Live',        count: liveActive },
+    { id: 'people',      label: 'People',      count: students.length, alert: lowAttendanceCount > 0 },
+    { id: 'performance', label: 'Performance', count: 0 },
+  ];
+
+  const QUICK_ADD = [
+    { label: 'Video', icon: Upload,        pastel: 'sky',      onClick: () => setUploadOpen(true) },
+    { label: 'Test',  icon: FileQuestion,  pastel: 'mint',     onClick: () => { setEditTestId(null); setNewTestOpen(true); } },
+    { label: 'Task',  icon: ClipboardList, pastel: 'cream',    onClick: () => { setEditAssignment(null); setNewAssignOpen(true); } },
+    { label: 'Live',  icon: Radio,         pastel: 'peach',    onClick: () => setShowScheduleLive(true) },
+    { label: 'Note',  icon: StickyNote,    pastel: 'lavender', onClick: () => { setEditNote(null); setShowNoteForm(true); } },
   ];
 
   if (activeJoin) {
@@ -804,6 +301,7 @@ export default function SubjectDetailPage() {
         role={activeJoin.role ?? 0}
         display_name={user?.name || 'Teacher'}
         passcode={activeJoin.passcode}
+        viewerRole="teacher"
         onLeave={() => { setActiveJoin(null); fetchLiveClasses(); }}
       />
     );
@@ -813,15 +311,15 @@ export default function SubjectDetailPage() {
     return (
       <div>
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
             <Skeleton className="w-8 h-8" />
             <Skeleton className="h-5 w-32" />
           </div>
         </div>
-        <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+        <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
           <Skeleton className="h-10 w-64 mb-6" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[1,2,3].map(i => <Skeleton key={i} className="aspect-video rounded-2xl" />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[1,2,3,4].map(i => <Skeleton key={i} className="aspect-video rounded-2xl" />)}
           </div>
         </div>
       </div>
@@ -829,84 +327,65 @@ export default function SubjectDetailPage() {
   }
 
   return (
-    <div className="pb-28 bg-[#F8F9FA] min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900">
-      <div className="px-5 md:px-8 py-8 max-w-[1400px] mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* LEFT COLUMN: Main Learning Plan */}
-          <div className="lg:col-span-8 space-y-8">
-            
-            {/* Custom Bento Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <button onClick={() => navigate(`/teacher/standards/${standardId}`)} className="w-10 h-10 rounded-full bg-white shadow-sm border border-neutral-100 flex items-center justify-center text-neutral-600 hover:scale-110 hover:border-neutral-300 transition-all">
-                  <ArrowLeft size={18} />
+    <div className="pb-28">
+      {/* Sticky top bar — same pattern as StandardDetailPage */}
+      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
+        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
+          <button onClick={() => navigate(`/teacher/standards/${standardId}`)}
+            className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
+            <ArrowLeft size={16} />
+          </button>
+          <SubjectIcon value={subject?.emoji} size={22} className="text-neutral-700 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-neutral-400 leading-none mb-0.5 truncate">{standard?.name || 'Standard'}</p>
+            <h1 className="text-lg md:text-xl font-semibold truncate">{subject?.name || 'Subject'}</h1>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
+        {/* Quick add — one compact row on phone, lives in the right rail on laptop */}
+        <div className="flex gap-2 mb-5 lg:hidden">
+          {QUICK_ADD.map(q => {
+            const p = PASTEL[q.pastel];
+            return (
+              <button key={q.label} onClick={q.onClick}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl ${p.bg} border border-black/5 active:scale-95 transition-transform`}>
+                <q.icon size={16} style={{ color: p.fgHex }} />
+                <span className="text-[10px] font-bold" style={{ color: p.fgHex }}>{q.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 min-w-0">
+
+            {/* Tabs — wrap instead of scroll */}
+            <div className="flex flex-wrap items-center gap-1 mb-5 p-1 bg-black/5 rounded-pill w-fit">
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`relative px-4 py-1.5 text-sm rounded-pill transition-colors flex items-center gap-1.5 ${
+                    tab === t.id ? 'bg-white shadow-sm text-neutral-900 font-semibold' : 'text-neutral-500 hover:text-neutral-900'
+                  }`}>
+                  {t.label}
+                  {t.count > 0 && <span className="text-[11px] font-bold text-neutral-400 tabular-nums">{t.count}</span>}
+                  {t.alert && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
                 </button>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-[1rem] bg-white flex items-center justify-center shadow-sm border border-neutral-100">
-                    <SubjectIcon value={subject?.emoji} size={24} className="text-neutral-700" />
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-                      {subject?.name || 'Subject Hub'}
-                    </h1>
-                    <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">
-                      Standard: {standard?.name}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Content Container */}
-            <div className="bg-white rounded-[3rem] p-6 md:p-10 shadow-sm border border-neutral-100 min-h-[60vh] relative">
-              
-              {/* TABS (Floating inside content) */}
-              <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-6 border-b border-neutral-100 mb-8">
-                {TABS.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`flex-shrink-0 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${
-                      tab === t.id
-                        ? 'bg-neutral-900 text-white shadow-md scale-105'
-                        : 'bg-neutral-50 text-neutral-500 border border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900'
-                    }`}
-                  >
-                    {t.label}
-                    {t.count > 0 && (
-                      <span className={`w-5 h-5 flex items-center justify-center text-[10px] rounded-full shadow-sm ${
-                        tab === t.id
-                          ? t.alert ? 'bg-red-500 text-white' : 'bg-white/20 text-white'
-                          : t.alert ? 'bg-red-100 text-red-600' : 'bg-white text-neutral-600'
-                      }`}>
-                        {t.count}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-        {/* ══ Videos tab ══ */}
-        {tab === 'videos' && (
-          videos.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
-                <Video size={28} className="text-neutral-400" />
-              </div>
-              <h3 className="font-semibold text-neutral-800 mb-1">No videos yet</h3>
-              <p className="text-sm text-neutral-500 mb-6">Add your first YouTube video link.</p>
-              <Btn variant="primary" icon={Upload} onClick={() => setUploadOpen(true)}>Add video</Btn>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {videos.map(v => (
-                  <VideoCard
-                    key={v.id}
-                    video={v}
-                    thumbnail={thumbnailUrls[v.id]}
+            {/* ══ Learn: videos + notes ══ */}
+            {tab === 'learn' && (
+              <div className="space-y-8">
+                <div>
+                  <SectionHead icon={Video} title="Videos" count={videos.length}
+                    action={() => setUploadOpen(true)} actionLabel="Add video" />
+                  <VideosSection
+                    videos={videos}
+                    thumbnailUrls={thumbnailUrls}
                     studentsCount={students.length}
+                    onAdd={() => setUploadOpen(true)}
                     onView={setSelectedVideo}
                     onMenu={(videoId, e) => {
                       if (videoMenuId === videoId) { setVideoMenuId(null); return; }
@@ -915,379 +394,172 @@ export default function SubjectDetailPage() {
                       setVideoMenuId(videoId);
                     }}
                   />
-                ))}
-                {/* Add more card */}
-                <button
-                  onClick={() => setUploadOpen(true)}
-                  className="aspect-video rounded-2xl border-2 border-dashed border-neutral-200 hover:border-neutral-400 hover:bg-neutral-50 transition-all flex flex-col items-center justify-center gap-2 text-neutral-400 hover:text-neutral-600"
-                >
-                  <div className="w-10 h-10 rounded-full border-2 border-neutral-300 flex items-center justify-center">
-                    <Plus size={18} />
-                  </div>
-                  <span className="text-xs font-medium">Add video</span>
-                </button>
+                </div>
+                <div>
+                  <SectionHead icon={StickyNote} title="Notes & materials" count={notes.length}
+                    action={() => { setEditNote(null); setShowNoteForm(true); }} actionLabel="New note" />
+                  <NotesSection
+                    notes={notes}
+                    onCreate={() => { setEditNote(null); setShowNoteForm(true); }}
+                    onEdit={(n) => { setEditNote(n); setShowNoteForm(true); }}
+                    onDelete={handleDeleteNote}
+                    onTogglePin={handleTogglePin}
+                  />
+                </div>
               </div>
-            </>
-          )
-        )}
+            )}
 
-        {/* Fixed-position dropdown */}
-        {videoMenuId && (
-          <div
-            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
-            className="w-32 bg-white rounded-xl shadow-xl border border-neutral-100 py-1"
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              onClick={() => { setEditVideo(videos.find(v => v.id === videoMenuId) || null); setVideoMenuId(null); }}
-              className="w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 flex items-center gap-2"
-            >
-              <Edit2 size={12} /> Edit
-            </button>
-            <button
-              onClick={() => openDeleteConfirm(videoMenuId)}
-              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-            >
-              <Trash2 size={12} /> Delete
-            </button>
-          </div>
-        )}
-
-        {/* ══ Tests tab ══ */}
-        {tab === 'tests' && (
-          tests.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
-                <FileQuestion size={28} className="text-neutral-400" />
+            {/* ══ Assess: tests + assignments ══ */}
+            {tab === 'assess' && (
+              <div className="space-y-8">
+                <div>
+                  <SectionHead icon={FileQuestion} title="Tests" count={tests.length}
+                    action={() => { setEditTestId(null); setNewTestOpen(true); }} actionLabel="Create test" />
+                  <TestsSection
+                    tests={tests}
+                    onCreate={() => { setEditTestId(null); setNewTestOpen(true); }}
+                    onEdit={(t) => { setEditTestId(t.id); setNewTestOpen(true); }}
+                    onResults={setSelectedTest}
+                  />
+                </div>
+                <div>
+                  <SectionHead icon={ClipboardList} title="Assignments" count={assignments.length}
+                    action={() => { setEditAssignment(null); setNewAssignOpen(true); }} actionLabel="New assignment" />
+                  <AssignmentsSection
+                    assignments={assignments}
+                    onCreate={() => { setEditAssignment(null); setNewAssignOpen(true); }}
+                    onEdit={(a) => { setEditAssignment(a); setNewAssignOpen(true); }}
+                    onViewSubmissions={setViewSubmissionsFor}
+                    onDelete={handleDeleteAssignment}
+                  />
+                </div>
               </div>
-              <h3 className="font-semibold text-neutral-800 mb-1">No tests yet</h3>
-              <p className="text-sm text-neutral-500 mb-6">Create your first MCQ test.</p>
-              <Btn variant="primary" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }}>
-                Create test
-              </Btn>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {tests.map((t) => (
-                <div key={t.id} className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h4 className="font-semibold text-sm text-neutral-900">{t.title}</h4>
-                        {t.negative_marking && <Tag color="red">−{t.penalty}</Tag>}
-                      </div>
-                      <p className="text-xs text-neutral-500">
-                        {t.duration_mins} min · {t.total_marks} marks
+            )}
+
+            {/* ══ Live ══ */}
+            {tab === 'live' && (
+              <div>
+                <SectionHead icon={Radio} title="Live classes" count={liveClasses.length}
+                  action={() => setShowScheduleLive(true)} actionLabel="Schedule" />
+                <LiveSection
+                  liveClasses={liveClasses}
+                  joiningLiveId={joiningLiveId}
+                  onSchedule={() => setShowScheduleLive(true)}
+                  onWatch={handleWatchLive}
+                  onEnd={handleEndLive}
+                  onCancel={handleCancelLive}
+                  onDelete={handleDeleteLive}
+                  onAttendance={setAttendanceSheetId}
+                />
+              </div>
+            )}
+
+            {/* ══ People: roster + attendance ══ */}
+            {tab === 'people' && (
+              <div className="space-y-8">
+                <div>
+                  <SectionHead icon={Users} title="Students" count={students.length} />
+                  <div className="p-3.5 mb-4 rounded-2xl bg-blue-50 border border-blue-100 flex items-start gap-2.5 text-sm">
+                    <Shield size={14} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-blue-900">
+                      <p className="font-semibold text-sm">Enrollment is at standard level</p>
+                      <p className="text-xs text-blue-600 mt-0.5">
+                        Everyone in {standard?.name} is auto-enrolled in this subject.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Btn size="sm" variant="ghost" icon={Edit2} onClick={() => { setEditTestId(t.id); setNewTestOpen(true); }}>
-                        Edit
-                      </Btn>
-                      <Btn size="sm" variant="ghost" icon={ListChecks} onClick={() => setSelectedTest(t)}>
-                        Results
-                      </Btn>
-                      <Tag color={t.status === 'completed' ? 'green' : t.status === 'scheduled' ? 'amber' : 'gray'}>
-                        {t.status}
-                      </Tag>
-                    </div>
                   </div>
-                  {t.scheduled_for && (
-                    <div className="text-xs text-amber-700 pt-2 border-t border-neutral-100">
-                      Publishes on {new Date(t.scheduled_for).toLocaleDateString('en-IN', {
-                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                      })}
+                  {students.length === 0 ? (
+                    <div className="text-center py-12 glass-panel rounded-2xl">
+                      <Users size={28} className="mx-auto mb-2 text-neutral-300" />
+                      <p className="text-sm text-neutral-500">No students enrolled yet.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-neutral-100">
+                      {students.map((s, i) => (
+                        <button
+                          key={s.id}
+                          onClick={() => navigate(`/teacher/students/${s.id}`)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors text-left ${
+                            i < students.length - 1 ? 'border-b border-neutral-100' : ''
+                          }`}
+                        >
+                          <Avatar name={s.name} size="sm" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{s.name}</p>
+                            <p className="text-xs text-neutral-400 truncate">@{s.username}</p>
+                          </div>
+                          <span className="text-xs font-medium text-neutral-500 flex-shrink-0">
+                            {s.avg_score || 0}%
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-          )
-        )}
+                <div>
+                  <SectionHead icon={ListChecks} title="Attendance" count={0} />
+                  <AttendanceGrid subjectId={classId} onNavigate={(id) => navigate(`/teacher/students/${id}`)} />
+                </div>
+              </div>
+            )}
 
-        {/* ══ Assignments tab ══ */}
-        {tab === 'assignments' && (
-          assignments.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
-                <ClipboardList size={28} className="text-neutral-400" />
-              </div>
-              <h3 className="font-semibold text-neutral-800 mb-1">No assignments yet</h3>
-              <p className="text-sm text-neutral-500 mb-6">Create your first assignment for students.</p>
-              <Btn variant="primary" icon={Plus} onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }}>
-                New assignment
-              </Btn>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {assignments.map(a => {
-                const now = new Date();
-                const due = a.due_date ? new Date(a.due_date) : null;
-                const isPast = due && due < now;
-                const isNear = due && !isPast && (due - now) < 24 * 3600 * 1000;
-                const submittedCount = a.submitted_count ?? 0;
-                return (
-                  <div key={a.id} className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-4">
-                    <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
-                      <div className="min-w-0 flex-1">
-                        <h4 className="font-semibold text-sm text-neutral-900 mb-1">{a.title}</h4>
-                        {a.description && (
-                          <p className="text-xs text-neutral-500 line-clamp-2">{a.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <Btn size="sm" variant="ghost" icon={Edit2}
-                          onClick={() => { setEditAssignment(a); setNewAssignOpen(true); }}>
-                          Edit
-                        </Btn>
-                        <Btn size="sm" variant="ghost" icon={Users}
-                          onClick={() => setViewSubmissionsFor(a)}>
-                          Submissions
-                        </Btn>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {due && (
-                        <div className={`flex items-center gap-1 text-xs font-medium ${isPast ? 'text-red-600' : isNear ? 'text-amber-600' : 'text-neutral-500'}`}>
-                          <CalendarClock size={11} />
-                          Due {due.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          {isPast && <Tag color="red">Closed</Tag>}
-                        </div>
-                      )}
-                      <span className="text-xs text-neutral-400">
-                        {submittedCount} submitted
-                      </span>
-                      {(a.assignment_attachments || []).length > 0 && (
-                        <span className="flex items-center gap-1 text-xs text-neutral-400">
-                          <Paperclip size={11} />
-                          {a.assignment_attachments.length} file{a.assignment_attachments.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex justify-end mt-2">
-                      <button
-                        onClick={() => handleDeleteAssignment(a.id)}
-                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
+            {/* ══ Performance ══ */}
+            {tab === 'performance' && (
+              <PerformancePanel standardId={standardId} classId={classId} />
+            )}
 
-        {/* ══ Students tab ══ */}
-        {tab === 'students' && (
-          <div>
-            <div className="p-3.5 mb-4 rounded-2xl bg-blue-50 border border-blue-100 flex items-start gap-2.5 text-sm">
-              <Shield size={14} className="text-blue-600 mt-0.5 flex-shrink-0" />
-              <div className="text-blue-900">
-                <p className="font-semibold text-sm">Enrollment is at standard level</p>
-                <p className="text-xs text-blue-600 mt-0.5">
-                  Everyone in {standard?.name} is auto-enrolled in this subject.
-                </p>
-              </div>
-            </div>
-            {students.length === 0 ? (
-              <div className="text-center py-12 glass-panel rounded-2xl">
-                <Users size={28} className="mx-auto mb-2 text-neutral-300" />
-                <p className="text-sm text-neutral-500">No students enrolled yet.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-neutral-100">
-                {students.map((s, i) => (
-                  <button
-                    key={s.id}
-                    onClick={() => navigate(`/teacher/students/${s.id}`)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors text-left ${
-                      i < students.length - 1 ? 'border-b border-neutral-100' : ''
-                    }`}
-                  >
-                    <Avatar name={s.name} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name}</p>
-                      <p className="text-xs text-neutral-400">@{s.username}</p>
-                    </div>
-                    <span className="text-xs font-medium text-neutral-500 flex-shrink-0">
-                      {s.avg_score || 0}%
-                    </span>
-                  </button>
-                ))}
+            {/* Fixed-position video dropdown */}
+            {videoMenuId && (
+              <div
+                style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+                className="w-32 bg-white rounded-xl shadow-xl border border-neutral-100 py-1"
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => { setEditVideo(videos.find(v => v.id === videoMenuId) || null); setVideoMenuId(null); }}
+                  className="w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 flex items-center gap-2"
+                >
+                  <Edit2 size={12} /> Edit
+                </button>
+                <button
+                  onClick={() => openDeleteConfirm(videoMenuId)}
+                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
               </div>
             )}
           </div>
-        )}
 
-        {/* ══ Live tab ══ */}
-        {tab === 'live' && (
-          liveClasses.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
-                <Radio size={28} className="text-neutral-400" />
-              </div>
-              <h3 className="font-semibold text-neutral-800 mb-1">No live classes yet</h3>
-              <p className="text-sm text-neutral-500 mb-6">Schedule a Zoom live class for this subject.</p>
-              <Btn variant="primary" icon={Radio} onClick={() => setShowScheduleLive(true)}>Schedule</Btn>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {liveClasses.map((lc, idx) => {
-                const status = lc.status || 'scheduled';
-                const isLive = status === 'live';
-                const isScheduled = status === 'scheduled';
-                const isEnded = status === 'ended';
-                const isCancelled = status === 'cancelled';
-                return (
-                  <div key={lc.id} className="h-full">
-                    <LiveClassCard
-                      lc={lc}
-                      themeIndex={idx}
-                      onClick={handleWatchLive}
-                      joiningId={joiningLiveId}
-                      compact={true}
-                      actions={
-                        <>
-                          {isScheduled && (
-                            <>
-                              <button onClick={() => handleCancelLive(lc)} className="bg-white/60 hover:bg-white text-neutral-700 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all hover:-translate-y-0.5">Cancel</button>
-                            </>
-                          )}
-                          {isLive && (
-                            <>
-                              <button onClick={(e) => { e.stopPropagation(); handleWatchLive(lc); }} disabled={joiningLiveId === lc.id} className="bg-blue-600 text-white px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all hover:-translate-y-0.5 flex items-center gap-1">
-                                {joiningLiveId === lc.id ? <><Loader2 size={13} className="animate-spin"/> Opening…</> : 'Watch live'}
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); setAttendanceSheetId(lc.id); }} className="bg-white/80 hover:bg-white text-neutral-700 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm flex items-center gap-1">
-                                <Users size={12}/> {lc.attended_count ?? 0}/{lc.total_registered ?? 0}
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); handleEndLive(lc); }} className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all">End</button>
-                            </>
-                          )}
-                          {isEnded && (
-                            <button onClick={(e) => { e.stopPropagation(); setAttendanceSheetId(lc.id); }} className="bg-white/80 hover:bg-white text-neutral-700 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm flex items-center gap-1">
-                              <Users size={12}/> {lc.attended_count ?? 0}/{lc.total_registered ?? 0} attended
-                            </button>
-                          )}
-                          {!isLive && (
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteLive(lc); }} className="bg-white/60 hover:bg-white text-red-600 px-3 py-2 rounded-full text-[12px] font-bold shadow-sm transition-all flex items-center gap-1 ml-auto">
-                              <Trash2 size={12}/> Delete
-                            </button>
-                          )}
-                        </>
-                      }
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
-
-        {/* ══ Notes tab ══ */}
-        {tab === 'notes' && (
-          notes.length === 0 ? (
-            <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
-                <StickyNote size={28} className="text-neutral-400" />
-              </div>
-              <h3 className="font-semibold text-neutral-800 mb-1">No notes yet</h3>
-              <p className="text-sm text-neutral-500 mb-6">Add notes, handouts, or PDF materials for students.</p>
-              <Btn variant="primary" icon={Plus} onClick={() => { setEditNote(null); setShowNoteForm(true); }}>New note</Btn>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {[...notes].sort((a,b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map(note => (
-                <div key={note.id} className={`rounded-xl border p-4 transition-shadow hover:shadow-md ${note.is_pinned ? 'bg-amber-50 border-amber-200' : 'bg-white border-neutral-100'}`}>
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {note.is_pinned && <Pin size={12} className="text-amber-500 flex-shrink-0"/>}
-                        <h3 className="text-sm font-semibold text-neutral-900 truncate">{note.title}</h3>
-                      </div>
-                      {note.body && <p className="text-sm text-neutral-600 line-clamp-3 whitespace-pre-wrap">{note.body}</p>}
-                      {note.file_url && (
-                        <a href={note.file_url} target="_blank" rel="noopener noreferrer"
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800">
-                          <FileText size={13}/> View attachment
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => handleTogglePin(note)} title={note.is_pinned ? 'Unpin' : 'Pin'}
-                        className="p-1.5 rounded-md text-neutral-400 hover:text-amber-500 hover:bg-amber-50 transition-colors">
-                        {note.is_pinned ? <PinOff size={14}/> : <Pin size={14}/>}
-                      </button>
-                      <button onClick={() => { setEditNote(note); setShowNoteForm(true); }}
-                        className="p-1.5 rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors">
-                        <Edit2 size={14}/>
-                      </button>
-                      <button onClick={() => handleDeleteNote(note.id)}
-                        className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                        <Trash2 size={14}/>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        )}
-
-        {/* ══ Attendance tab ══ */}
-        {tab === 'attendance' && (
-          <AttendanceGrid subjectId={classId} onNavigate={(id) => navigate(`/teacher/students/${id}`)} />
-        )}
-            </div>
-          </div>
-          
-          {/* RIGHT COLUMN: My Events / Quick Actions */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-neutral-100 mb-6">
-              <h3 className="text-lg font-extrabold text-neutral-900 mb-4">Quick Add</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setUploadOpen(true)} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors group">
-                  <Upload size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
-                  <span className="text-xs font-bold">Video</span>
-                </button>
-                <button onClick={() => { setEditTestId(null); setNewTestOpen(true); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors group">
-                  <FileQuestion size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
-                  <span className="text-xs font-bold">Test</span>
-                </button>
-                <button onClick={() => { setEditAssignment(null); setNewAssignOpen(true); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors group">
-                  <ClipboardList size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
-                  <span className="text-xs font-bold">Task</span>
-                </button>
-                <button onClick={() => setShowScheduleLive(true)} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors group">
-                  <Radio size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
-                  <span className="text-xs font-bold">Live</span>
-                </button>
-                <button onClick={() => { setEditNote(null); setShowNoteForm(true); }} className="col-span-2 flex flex-col items-center justify-center p-4 rounded-2xl bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors group">
-                  <StickyNote size={24} className="mb-2 group-hover:-translate-y-1 transition-transform" />
-                  <span className="text-xs font-bold">Note</span>
-                </button>
+          {/* Right rail (laptop): quick add + overview */}
+          <div className="hidden lg:block space-y-5 lg:sticky lg:top-16 lg:self-start">
+            <div className="bg-white rounded-card p-5 border border-[#EFEDEA] shadow-soft">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-3">Quick add</p>
+              <div className="grid grid-cols-2 gap-2">
+                {QUICK_ADD.map((q, i) => {
+                  const p = PASTEL[q.pastel];
+                  return (
+                    <button key={q.label} onClick={q.onClick}
+                      className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl ${p.bg} border border-black/5 hover:-translate-y-0.5 transition-transform ${i === QUICK_ADD.length - 1 ? 'col-span-2' : ''}`}>
+                      <q.icon size={18} style={{ color: p.fgHex }} />
+                      <span className="text-xs font-bold" style={{ color: p.fgHex }}>{q.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-[2.5rem] p-6 shadow-sm border border-amber-100">
-              <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <ListChecks size={16} /> Overview
-              </h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
-                  <span className="text-sm font-medium text-neutral-700">Enrolled Students</span>
-                  <span className="font-bold text-amber-600">{students.length}</span>
-                </div>
-                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
-                  <span className="text-sm font-medium text-neutral-700">Total Videos</span>
-                  <span className="font-bold text-amber-600">{videos.length}</span>
-                </div>
-                <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl shadow-sm border border-amber-50">
-                  <span className="text-sm font-medium text-neutral-700">Assignments</span>
-                  <span className="font-bold text-amber-600">{assignments.length}</span>
-                </div>
+            <div className="bg-white rounded-card p-5 border border-[#EFEDEA] shadow-soft">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-3">Overview</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between"><span className="text-neutral-500">Students</span><span className="font-semibold tabular-nums">{students.length}</span></div>
+                <div className="flex items-center justify-between"><span className="text-neutral-500">Videos</span><span className="font-semibold tabular-nums">{videos.length}</span></div>
+                <div className="flex items-center justify-between"><span className="text-neutral-500">Tests</span><span className="font-semibold tabular-nums">{tests.length}</span></div>
+                <div className="flex items-center justify-between"><span className="text-neutral-500">Assignments</span><span className="font-semibold tabular-nums">{assignments.length}</span></div>
+                <div className="flex items-center justify-between"><span className="text-neutral-500">Notes</span><span className="font-semibold tabular-nums">{notes.length}</span></div>
+                {lowAttendanceCount > 0 && (
+                  <div className="flex items-center justify-between text-red-600"><span>Low attendance</span><span className="font-semibold tabular-nums">{lowAttendanceCount}</span></div>
+                )}
               </div>
             </div>
           </div>

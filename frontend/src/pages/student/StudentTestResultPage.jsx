@@ -1,7 +1,10 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Trophy, CheckCircle2, XCircle, MinusCircle, AlertTriangle, Star, BookOpen, PartyPopper, ThumbsUp, Flame } from 'lucide-react';
 import { Btn } from '../../components/ui';
+import { CountUp } from '../../components/shared/Animated';
+import { AnimatedPage, Item } from '../../components/bits';
 
 export default function StudentTestResultPage() {
   const navigate = useNavigate();
@@ -41,38 +44,63 @@ export default function StudentTestResultPage() {
                      { label: 'Keep trying!',  Icon: BookOpen,    color: 'text-red-700',    bg: 'bg-red-50',    border: 'border-red-200'   };
 
   const skipped = (total || 0) - (correct_count || 0) - (wrong_count || 0);
+  const reduce = useReducedMotion();
 
   return (
     <div className="min-h-screen bg-transparent flex flex-col items-center justify-center px-5 py-12">
-      <div className="w-full max-w-sm">
+      <AnimatedPage className="w-full max-w-sm">
 
         {/* Warnings */}
         {auto && (
-          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-sm mb-4">
+          <Item className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-sm mb-4">
             <AlertTriangle size={15} />
             <span>Test auto-submitted — time ran out.</span>
-          </div>
+          </Item>
         )}
         {flagged && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm mb-4">
+          <Item className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm mb-4">
             <AlertTriangle size={15} />
             <span>Your test was flagged for suspicious activity.</span>
-          </div>
+          </Item>
         )}
 
-        {/* Score hero */}
-        <div className={`${grade.bg} ${grade.border} border rounded-3xl p-8 text-center mb-5 backdrop-blur-sm`}>
-          <Trophy size={36} className={`mx-auto mb-3 ${grade.color}`} />
-          <p className="text-6xl font-bold tracking-tight mb-1">{Math.round(scorePct)}%</p>
-          <p className={`text-lg font-semibold ${grade.color} mb-1`}>{grade.label}</p>
+        {/* Score hero — the signature moment: trophy pops, score counts up */}
+        <Item className={`${grade.bg} ${grade.border} border rounded-3xl p-8 text-center mb-5 backdrop-blur-sm`}>
+          {reduce ? (
+            <Trophy size={36} className={`mx-auto mb-3 ${grade.color}`} />
+          ) : (
+            <motion.div
+              initial={{ scale: 0, rotate: -20 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 14, delay: 0.25 }}
+              className="inline-block mb-3"
+            >
+              <Trophy size={36} className={grade.color} />
+            </motion.div>
+          )}
+          <p className="text-6xl font-bold tracking-tight mb-1">
+            <CountUp value={Math.round(scorePct)} />%
+          </p>
+          {reduce ? (
+            <p className={`text-lg font-semibold ${grade.color} mb-1`}>{grade.label}</p>
+          ) : (
+            <motion.p
+              className={`text-lg font-semibold ${grade.color} mb-1`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7, duration: 0.4 }}
+            >
+              {grade.label}
+            </motion.p>
+          )}
           {testTitle && <p className="text-sm text-neutral-500 mt-1">{testTitle}</p>}
           {total_marks && (
             <p className="text-xs text-neutral-400 mt-1">{score} / {total_marks} marks</p>
           )}
-        </div>
+        </Item>
 
         {/* Breakdown */}
-        <div className="glass-panel rounded-2xl overflow-hidden mb-5">
+        <Item className="glass-panel rounded-2xl overflow-hidden mb-5">
           {[
             { icon: CheckCircle2, label: 'Correct',  value: correct_count,  color: 'text-green-600', sub: null },
             { icon: XCircle,      label: 'Wrong',    value: wrong_count,    color: 'text-red-500',   sub: marks_deducted > 0 ? `−${marks_deducted} marks deducted` : null },
@@ -85,7 +113,7 @@ export default function StudentTestResultPage() {
                 {row.sub && <p className="text-[10px] text-red-500">{row.sub}</p>}
               </div>
               <span className="font-semibold">
-                {row.value}
+                <CountUp value={row.value || 0} />
                 <span className="text-neutral-400 font-normal text-xs">{total ? `/${total}` : ''}</span>
               </span>
             </div>
@@ -93,33 +121,39 @@ export default function StudentTestResultPage() {
 
           {/* Points */}
           <div className="flex items-center gap-3 px-5 py-3.5 border-t border-white/40 bg-amber-50/60 backdrop-blur-sm">
-            <Star size={18} className="text-amber-500" />
+            {reduce ? <Star size={18} className="text-amber-500" /> : (
+              <motion.span animate={{ scale: [1, 1.2, 1], rotate: [0, 12, 0] }} transition={{ duration: 1.6, repeat: 2, delay: 0.8 }} className="inline-flex">
+                <Star size={18} className="text-amber-500" />
+              </motion.span>
+            )}
             <span className="flex-1 text-sm font-medium text-amber-900">Points earned</span>
-            <span className="font-bold text-amber-700 text-lg">+{points_earned || 0}</span>
+            <span className="font-bold text-amber-700 text-lg">+<CountUp value={points_earned || 0} /></span>
           </div>
-        </div>
+        </Item>
 
         {/* Review Answers — navigates to dedicated review page */}
         {result?.test_id && (
-          <button
-            onClick={() => navigate('/student/tests/review', { state: { source: 'result-page', test_id: result.test_id, result } })}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 glass-panel rounded-2xl text-sm font-medium hover:bg-[#F4F2EF] transition-colors mb-5"
-          >
-            <BookOpen size={15} className="text-neutral-500" />
-            Review Answers
-          </button>
+          <Item>
+            <button
+              onClick={() => navigate('/student/tests/review', { state: { source: 'result-page', test_id: result.test_id, result } })}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 glass-panel rounded-2xl text-sm font-medium hover:bg-[#F4F2EF] transition-colors mb-5"
+            >
+              <BookOpen size={15} className="text-neutral-500" />
+              Review Answers
+            </button>
+          </Item>
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <Item className="flex gap-2">
           <Btn variant="default" className="flex-1 justify-center" onClick={() => navigate('/student/tests')}>
             Back to tests
           </Btn>
           <Btn variant="primary" className="flex-1 justify-center" onClick={() => navigate('/student')}>
             Home
           </Btn>
-        </div>
-      </div>
+        </Item>
+      </AnimatedPage>
     </div>
   );
 }

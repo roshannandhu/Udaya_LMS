@@ -267,7 +267,7 @@ export default function TeacherLiveClassesPage() {
   const [joiningId, setJoiningId]       = useState(null);
   const [attendanceSheetId, setAttendanceSheetId] = useState(null);
 
-  const fetchAll = async () => {
+  const fetchAll = async (silent = false) => {
     if (!standards.length) {
       // Standards may still be loading on first paint (or a direct navigation
       // with a cold cache). Only drop the spinner once they've actually been
@@ -275,7 +275,7 @@ export default function TeacherLiveClassesPage() {
       if (standardsReady) setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);  // background polls must not flash skeletons
     try {
       // One call per standard instead of one per subject — much faster
       const results = await Promise.allSettled(
@@ -301,6 +301,16 @@ export default function TeacherLiveClassesPage() {
 
   useEffect(() => { fetchAll(); }, [standards, standardsReady]);
 
+  // Refresh every 15s so cards flip to LIVE/ENDED on their own — the host
+  // starts and ends the class from their Zoom phone app, never from here.
+  // The backend list endpoint reconciles status with Zoom on each fetch.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) fetchAll(true);
+    }, 15000);
+    return () => clearInterval(id);
+  }, [standards, standardsReady]);
+
   // Warm the Zoom SDK in the background so the first "Watch" click is instant.
   // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —
   // a detached call (`const r = window.requestIdleCallback; r(fn)`) throws
@@ -317,13 +327,16 @@ export default function TeacherLiveClassesPage() {
   }, []);
 
   // Teachers watch the owner's live feed as a view-only participant. Hosting
-  // happens only from the Zoom-credential owner's phone app.
+  // happens from the Zoom client via the Start button (host link) below.
   const handleWatchClass = async (lc) => {
     if (joiningId) return;
     setJoiningId(lc.id);
     preloadZoomSDK();                 // start the 5.6 MB SDK download NOW, in parallel with the token fetch
     try {
       const res = await liveClassApi.getJoinToken(lc.id);
+      // The token endpoint verified the meeting is live with Zoom — reflect that
+      // locally so the card shows LIVE when we return from the meeting view.
+      setLiveClasses(prev => prev.map(c => c.id === lc.id ? { ...c, status: 'live' } : c));
       setActiveJoin({ ...res, liveClass: lc });
     } catch (err) {
       alert(err?.message || 'Could not open the live class.');
@@ -372,6 +385,7 @@ export default function TeacherLiveClassesPage() {
         role={activeJoin.role ?? 0}
         display_name={user?.name || 'Teacher'}
         passcode={activeJoin.passcode}
+        viewerRole="teacher"
         onLeave={() => { setActiveJoin(null); fetchAll(); }}
       />
     );
@@ -426,19 +440,26 @@ export default function TeacherLiveClassesPage() {
                   joiningId={joiningId}
                   themeIndex={idx}
                   actions={
+                    /* stopPropagation everywhere: the card itself is clickable
+                       (join as watcher) even while scheduled. */
                     <>
                       {isScheduled && (
-                        <button onClick={() => handleCancelClass(lc)} className="bg-white/60 hover:bg-white text-neutral-700 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                        <span className="bg-white/50 text-neutral-600 px-4 py-2.5 rounded-full text-[12px] font-semibold backdrop-blur-sm border border-white/40">
+                          Goes live when you start it in your Zoom app
+                        </span>
+                      )}
+                      {isScheduled && (
+                        <button onClick={(e) => { e.stopPropagation(); handleCancelClass(lc); }} className="bg-white/60 hover:bg-white text-neutral-700 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
                           Cancel
                         </button>
                       )}
                       {isLive && (
-                        <button onClick={() => handleEndClass(lc)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                        <button onClick={(e) => { e.stopPropagation(); handleEndClass(lc); }} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
                           End Class
                         </button>
                       )}
                       {!isLive && (
-                        <button onClick={() => handleDeleteClass(lc)} className="bg-white/60 hover:bg-white text-red-600 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteClass(lc); }} className="bg-white/60 hover:bg-white text-red-600 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
                           Delete
                         </button>
                       )}

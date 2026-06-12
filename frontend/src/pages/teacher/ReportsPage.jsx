@@ -7,6 +7,8 @@ import StatCard from '../../components/cards/StatCard';
 import { apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import LeaderboardPanel from '../../components/shared/LeaderboardPanel';
+import StudentReportModal from '../../components/teacher/StudentReportModal';
 
 export default function ReportsPage() {
   const navigate = useNavigate();
@@ -19,6 +21,7 @@ export default function ReportsPage() {
   const [analytics, setAnalytics] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [reportStudentId, setReportStudentId] = useState(null);
 
   const loadingStandards = !standardsReady;
 
@@ -261,6 +264,15 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            {/* Leaderboard — weekly / monthly / all-time class rankings */}
+            <div className="glass-panel p-5 rounded-2xl border border-white/60">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1.5 bg-amber-100 text-amber-600 rounded-lg"><Trophy size={16} /></div>
+                <h2 className="font-semibold">Leaderboard</h2>
+              </div>
+              <LeaderboardPanel standardId={activeStd} onSelect={(s) => setReportStudentId(s.id)} />
+            </div>
+
             {/* Student Roster */}
             <div className="glass-panel rounded-2xl border border-white/60 overflow-hidden">
               <div className="p-5 border-b border-[#EFEDEA] flex items-center gap-2">
@@ -279,7 +291,8 @@ export default function ReportsPage() {
                   </thead>
                   <tbody className="divide-y divide-[#EFEDEA]">
                     {[...students].sort((a,b) => (b.avg_score||0) - (a.avg_score||0)).map((s) => (
-                      <tr key={s.id} className="hover:bg-white/40 transition-colors">
+                      <tr key={s.id} onClick={() => setReportStudentId(s.id)}
+                        className="hover:bg-white/40 transition-colors cursor-pointer">
                         <td className="py-3 px-5">
                           <div className="flex items-center gap-3">
                             <Avatar src={s.avatar_url} name={s.name} size="sm" />
@@ -327,6 +340,12 @@ export default function ReportsPage() {
           </>
         ) : null}
       </div>
+
+      <StudentReportModal
+        open={!!reportStudentId}
+        studentId={reportStudentId}
+        onClose={() => setReportStudentId(null)}
+      />
     </div>
   );
 }

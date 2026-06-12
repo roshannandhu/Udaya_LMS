@@ -8,10 +8,12 @@ import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, startOfMonth
 import { useAuthStore } from '../../lib/auth';
 import { apiClient, liveClassApi } from '../../lib/api';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
+import { motion, useReducedMotion } from 'framer-motion';
 
 let calendarCache = {};
 
 export default function CalendarPage() {
+  const reduce = useReducedMotion();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
@@ -160,6 +162,7 @@ export default function CalendarPage() {
         display_name={user?.name || 'Student'}
         passcode={activeJoin.passcode}
         zak={activeJoin.zak}
+        viewerRole="student"
         onLeave={() => setActiveJoin(null)}
       />
     );
@@ -333,7 +336,14 @@ export default function CalendarPage() {
                 <p className="text-sm text-neutral-500">You're all clear for this day. Enjoy your free time!</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              // Re-keyed by day so the agenda gently re-staggers on date change.
+              <motion.div
+                key={format(selectedDate, 'yyyy-MM-dd')}
+                className="space-y-4"
+                initial={reduce ? false : 'hidden'}
+                animate={reduce ? false : 'show'}
+                variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+              >
                 {selectedDateEvents.map((evt, idx) => {
                   
                   let icon = <CheckCircle2 size={20} />;
@@ -360,8 +370,11 @@ export default function CalendarPage() {
                   }
 
                   return (
-                    <div 
-                      key={`${evt.id}-${idx}`} 
+                    <motion.div
+                      key={`${evt.id}-${idx}`}
+                      variants={reduce ? undefined : { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } } }}
+                      whileHover={reduce ? undefined : { y: -2, scale: 1.005 }}
+                      whileTap={reduce ? undefined : { scale: 0.985 }}
                       className="flex gap-4 p-4 rounded-2xl border border-neutral-100 hover:shadow-md transition-shadow bg-white cursor-pointer"
                       onClick={() => handleEventClick(evt)}
                     >
@@ -389,10 +402,10 @@ export default function CalendarPage() {
                           </button>
                         )}
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
             )}
           </div>
         </div>

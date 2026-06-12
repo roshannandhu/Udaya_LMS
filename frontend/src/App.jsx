@@ -56,7 +56,7 @@ const RemindersPage           = lazyWithRetry(() => import('./pages/teacher/Remi
 const SettingsPage            = lazyWithRetry(() => import('./pages/teacher/SettingsPage'));
 const AttendancePage          = lazyWithRetry(() => import('./pages/teacher/AttendancePage'));
 const TeacherLiveClassesPage  = lazyWithRetry(() => import('./pages/teacher/TeacherLiveClassesPage'));
-const WhatsAppPage            = lazyWithRetry(() => import('./pages/teacher/WhatsAppMessageControllerPage'));
+const WhatsAppPage            = lazyWithRetry(() => import('./pages/teacher/WhatsAppCenterPage'));
 const StudentLiveClassesPage  = lazyWithRetry(() => import('./pages/student/StudentLiveClassesPage'));
 
 const StudentHomePage            = lazyWithRetry(() => import('./pages/student/StudentHomePage'));

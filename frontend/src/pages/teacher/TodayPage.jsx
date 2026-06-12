@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Users, BookOpen, FileQuestion, Calendar, AlertCircle, MessageSquare,
   UserPlus, Activity, Sparkles, Video, ClipboardCheck, Check, Plus,
-  ChevronRight, Trophy, Target, TrendingUp, X, Loader2
+  ChevronRight, Target, TrendingUp, X, Loader2
 } from 'lucide-react';
 import { Avatar, Skeleton, Btn } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
@@ -17,6 +17,11 @@ import NotificationBell from '../../components/shared/NotificationBell';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { fadeUp, staggerChildren } from '../../lib/motion';
+import CopySuspectsCard from '../../components/teacher/dashboard/CopySuspectsCard';
+import VideoEngagementCard from '../../components/teacher/dashboard/VideoEngagementCard';
+import AssignmentStatusCard from '../../components/teacher/dashboard/AssignmentStatusCard';
+import LiveAbsenteesCard from '../../components/teacher/dashboard/LiveAbsenteesCard';
+import PerformanceSnapshotCard from '../../components/teacher/dashboard/PerformanceSnapshotCard';
 
 // ── sessionStorage warm-cache (instant re-render, no skeleton flash) ──────────
 const readCache = (k) => { try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch { return null; } };
@@ -53,21 +58,6 @@ function ActionRow({ kind, eyebrow, title, meta, onClick, children }) {
   );
 }
 
-function Bar({ label, value, suffix = '%', color = '#2383E2' }) {
-  const pct = Math.max(0, Math.min(100, value || 0));
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs font-semibold text-neutral-600">{label}</span>
-        <span className="text-xs font-extrabold text-neutral-900">{Math.round(value || 0)}{suffix}</span>
-      </div>
-      <div className="h-2 rounded-full bg-neutral-100 overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
-      </div>
-    </div>
-  );
-}
-
 export default function TodayPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -81,6 +71,7 @@ export default function TodayPage() {
   const [overview, setOverview]   = useState(() => readCache('tutoria_dash_overview'));
   const [activities, setActivities] = useState(() => readCache('tutoria_dash_activity') || []);
   const [reminders, setReminders] = useState(() => readCache('tutoria_dash_reminders') || []);
+  const [insights, setInsights]   = useState(() => readCache('tutoria_dash_insights'));
   const [loading, setLoading]     = useState(!readCache('tutoria_dash_overview'));
   const [busyJoin, setBusyJoin]   = useState({});      // {requestId: true}
   const [newReminder, setNewReminder] = useState('');
@@ -112,6 +103,11 @@ export default function TodayPage() {
         setLoading(false);
       }
     })();
+    // The insights endpoint is heavier (answer-similarity etc.) — fetch it
+    // independently so the page never blocks on it.
+    dashboardApi.getInsights()
+      .then(ins => { setInsights(ins); writeCache('tutoria_dash_insights', ins); })
+      .catch(err => console.error('Insights error:', err));
   }, []);
 
   const standardIdForClass = (classId) => subjects.find(s => s.id === classId)?.standard_id;
@@ -379,6 +375,37 @@ export default function TodayPage() {
                 )}
               </motion.div>
 
+              {/* Class insights — heavier endpoint, renders independently */}
+              <motion.div variants={fadeUp} className="flex flex-col gap-6">
+                {!insights ? (
+                  <div>
+                    <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
+                      <Target size={15} /> Class insights
+                    </h2>
+                    <Skeleton className="h-40 w-full rounded-card" />
+                  </div>
+                ) : (insights.copy_suspects?.count || 0) + (insights.video_laggards?.count || 0) +
+                    (insights.cold_videos?.count || 0) + (insights.assignment_status?.count || 0) +
+                    (insights.live_absentees?.count || 0) === 0 ? (
+                  <div>
+                    <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
+                      <Target size={15} /> Class insights
+                    </h2>
+                    <Card className="py-8 text-center">
+                      <p className="font-bold text-neutral-900">All clear ✨</p>
+                      <p className="text-sm text-neutral-500 mt-1">No copying suspicions, video gaps, missing assignments or skipped live classes.</p>
+                    </Card>
+                  </div>
+                ) : (
+                  <>
+                    <CopySuspectsCard data={insights.copy_suspects} />
+                    <AssignmentStatusCard data={insights.assignment_status} />
+                    <VideoEngagementCard laggards={insights.video_laggards} coldVideos={insights.cold_videos} />
+                    <LiveAbsenteesCard data={insights.live_absentees} />
+                  </>
+                )}
+              </motion.div>
+
               {/* Recent activity */}
               <motion.div variants={fadeUp}>
                 <Card padded={false} className="overflow-hidden">
@@ -386,7 +413,7 @@ export default function TodayPage() {
                     <Activity size={14} className="text-neutral-500" />
                     <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Recent activity</span>
                   </div>
-                  {activities.length > 0 ? activities.slice(0, 6).map((a, i) => (
+                  {activities.length > 0 ? activities.slice(0, 5).map((a, i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-[#F2F1EE] last:border-0">
                       <Avatar name={a.student} size="sm" />
                       <div className="flex-1 min-w-0">
@@ -452,34 +479,9 @@ export default function TodayPage() {
                 </Card>
               </motion.div>
 
-              {/* Analytics snapshot */}
+              {/* Weekly/monthly snapshot + top students */}
               <motion.div variants={fadeUp}>
-                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
-                  <TrendingUp size={15} /> Class pulse
-                </h2>
-                <Card className="flex flex-col gap-4">
-                  <Bar label="Average score" value={perf.avg_score} color="#2383E2" />
-                  <Bar label="Average attendance" value={perf.avg_attendance} color="#0F7B6C" />
-                  {topStudents.length > 0 && (
-                    <div className="pt-1">
-                      <p className="text-[10px] font-extrabold uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-1.5">
-                        <Trophy size={12} /> Top students
-                      </p>
-                      <div className="flex flex-col gap-2">
-                        {topStudents.map((s, i) => (
-                          // min-w-0 on the row + name: without it a long name's
-                          // nowrap min-content widens the whole page on phones.
-                          <div key={s.id} className="flex items-center gap-3 min-w-0">
-                            <span className="w-5 text-xs font-extrabold text-neutral-400 text-center flex-shrink-0">{i + 1}</span>
-                            <Avatar name={s.name} src={s.avatar_url} size="xs" />
-                            <span className="flex-1 min-w-0 text-sm font-medium text-neutral-800 truncate">{s.name}</span>
-                            <span className="text-xs font-bold text-neutral-500 flex-shrink-0">{s.points} pts</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </Card>
+                <PerformanceSnapshotCard snapshot={insights?.period_snapshot} topStudents={topStudents} />
               </motion.div>
 
               {/* Your classes */}

@@ -10,6 +10,7 @@ import { Skeleton } from '../../components/ui';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { staggerChildren, fadeUp, springCard } from '../../lib/motion';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import { TiltCard, SpotlightCard } from '../../components/bits';
 
 let subjectsPageCache = null; // { userId, videoCounts, testCounts }
 
@@ -82,10 +83,13 @@ export default function StudentSubjectsPage() {
               const newCount = newVideoItems.filter(v => v.class_id === c.id).length;
               const pastel = PASTEL[pastelFor(c.name)];
               return (
-                <motion.div key={c.id} variants={fadeUp}
+                <motion.div key={c.id} variants={fadeUp}>
+                <TiltCard>
+                <SpotlightCard className="rounded-card h-full">
+                <motion.div
                   onClick={() => navigate(`/student/subjects/${c.id}`)}
-                  whileHover={{ y: -4 }} whileTap={{ scale: 0.99 }} transition={springCard}
-                  className="group rounded-card p-5 cursor-pointer border border-black/5 flex flex-col"
+                  whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} transition={springCard}
+                  className="group rounded-card p-5 cursor-pointer border border-black/5 flex flex-col h-full"
                   style={{ background: pastel.hex }}>
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center text-neutral-700 flex-shrink-0">
@@ -107,6 +111,9 @@ export default function StudentSubjectsPage() {
                     <span className="flex items-center gap-1 bg-white/60 rounded-pill px-2.5 py-1"><Play size={12} />{vc} video{vc !== 1 ? 's' : ''}</span>
                     <span className="flex items-center gap-1 bg-white/60 rounded-pill px-2.5 py-1"><FileQuestion size={12} />{tc} test{tc !== 1 ? 's' : ''}</span>
                   </div>
+                </motion.div>
+                </SpotlightCard>
+                </TiltCard>
                 </motion.div>
               );
             })}

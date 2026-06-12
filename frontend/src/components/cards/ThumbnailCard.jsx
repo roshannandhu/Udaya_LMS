@@ -1,6 +1,8 @@
 import React from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Play, Calendar, FileText, CheckCircle, Clock } from 'lucide-react';
 import { Tag } from '../ui';
+import { springCard } from '../../lib/motion';
 
 const colorMap = {
   blue: 'bg-blue-50 text-blue-600',
@@ -34,10 +36,17 @@ export default function ThumbnailCard({
   onClick 
 }) {
   const isVideo = type === 'video' || type === 'live';
-  
+  const reduce = useReducedMotion();
+
   return (
-    <div 
+    <motion.div
       onClick={onClick}
+      initial={reduce ? false : { opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-20px' }}
+      whileHover={reduce ? undefined : { y: -4, scale: 1.015 }}
+      whileTap={reduce ? undefined : { scale: 0.97 }}
+      transition={springCard}
       className="flex-shrink-0 w-64 md:w-72 bg-white rounded-3xl shadow-sm border border-neutral-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow relative group"
     >
       {/* Thumbnail Area */}
@@ -87,6 +96,6 @@ export default function ThumbnailCard({
         )}
         <h3 className="font-semibold text-neutral-800 leading-tight line-clamp-2 text-sm">{title}</h3>
       </div>
-    </div>
+    </motion.div>
   );
 }

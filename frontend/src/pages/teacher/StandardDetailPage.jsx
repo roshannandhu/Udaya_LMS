@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Search, X, Users, QrCode, UserPlus, ChevronRight, MoreVertical, Lock, Edit2, Trash2, Download, Plus, Loader2, Upload } from 'lucide-react';
+import { ArrowLeft, Search, X, Users, QrCode, UserPlus, ChevronRight, MoreVertical, Lock, Edit2, Trash2, Download, Plus, Loader2, Upload, BookOpen, Trophy, CheckCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Btn, Avatar, Tag, Divider, Modal, Input, SectionHeader, Skeleton } from '../../components/ui';
-import { apiClient } from '../../lib/api';
+import StatCard from '../../components/cards/StatCard';
+import Card from '../../components/cards/Card';
+import PerformancePanel from '../../components/teacher/PerformancePanel';
+import { staggerChildren } from '../../lib/motion';
+import { apiClient, reportApi } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
 import BulkImportModal from '../../components/teacher/BulkImportModal';
 import TerminateStandardModal from '../../components/teacher/TerminateStandardModal';
@@ -273,6 +278,17 @@ export default function StandardDetailPage() {
   const [deletingSubject, setDeletingSubject] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [terminateOpen, setTerminateOpen] = useState(false);
+  const [perfSummary, setPerfSummary] = useState(null);
+
+  useEffect(() => {
+    if (!standardId) return;
+    let ignore = false;
+    setPerfSummary(null);
+    reportApi.performance({ standardId, period: 'overall' })
+      .then(d => { if (!ignore) setPerfSummary(d?.summary || null); })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, [standardId]);
 
   useEffect(() => {
     const refresh = async () => {
@@ -345,12 +361,12 @@ export default function StandardDetailPage() {
     return (
       <div>
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
             <Skeleton className="w-8 h-8" />
             <Skeleton className="h-5 w-32" />
           </div>
         </div>
-        <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
+        <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
           <Skeleton className="h-16 w-full mb-6" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -361,7 +377,7 @@ export default function StandardDetailPage() {
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
           <button onClick={() => navigate('/teacher/standards')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
@@ -373,36 +389,37 @@ export default function StandardDetailPage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 mb-6 pb-6 border-b border-white/60">
-          <div className="flex items-center gap-6">
-            {[
-              { label: 'students', value: students.length },
-              { label: 'subjects', value: subjects.length },
-              { label: 'blocked', value: blockedIds.length },
-            ].map((s) => (
-              <div key={s.label}>
-                <p className="text-2xl font-semibold tracking-tight">{s.value}</p>
-                <p className="text-xs text-neutral-500">{s.label}</p>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Btn variant="default" size="sm" icon={QrCode} onClick={() => setInviteOpen(true)}>Invite</Btn>
-            <Btn variant="default" size="sm" icon={Upload} onClick={() => setBulkImportOpen(true)}>Bulk Import</Btn>
-            <Btn variant="primary" size="sm" icon={UserPlus} onClick={() => setAddStudentOpen(true)}>Add student</Btn>
-            <Btn variant="default" size="sm" icon={Trash2} onClick={() => setTerminateOpen(true)} className="text-red-600 border-red-200 hover:bg-red-50">Terminate</Btn>
-          </div>
+      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
+        {/* At-a-glance stats */}
+        <motion.div variants={staggerChildren} initial="hidden" animate="show"
+          className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <StatCard value={students.length} label="Students" icon={Users} color="mint" />
+          <StatCard value={subjects.length} label="Subjects" icon={BookOpen} color="lavender" />
+          <StatCard value={perfSummary ? `${perfSummary.avg_score}%` : '—'} label="Avg score" icon={Trophy} color="sky" />
+          <StatCard value={perfSummary ? `${perfSummary.avg_attendance}%` : '—'} label="Attendance" icon={CheckCircle} color="cream" />
+        </motion.div>
+
+        {/* Manage actions — compact grid on phone, right rail on laptop */}
+        <div className="grid grid-cols-2 gap-2 mb-5 lg:hidden">
+          <Btn variant="default" size="sm" icon={QrCode} onClick={() => setInviteOpen(true)} className="w-full justify-center">Invite</Btn>
+          <Btn variant="primary" size="sm" icon={UserPlus} onClick={() => setAddStudentOpen(true)} className="w-full justify-center">Add student</Btn>
+          <Btn variant="default" size="sm" icon={Upload} onClick={() => setBulkImportOpen(true)} className="w-full justify-center">Bulk Import</Btn>
+          <Btn variant="default" size="sm" icon={Trash2} onClick={() => setTerminateOpen(true)} className="w-full justify-center text-red-600 border-red-200 hover:bg-red-50">Terminate</Btn>
         </div>
 
-        <div className="inline-flex items-center gap-1 mb-5 p-1 bg-black/5 rounded-pill">
-          {['subjects', 'students'].map((t) => (
+        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 min-w-0">
+
+        <div className="flex flex-wrap items-center gap-1 mb-5 p-1 bg-black/5 rounded-pill w-fit">
+          {['subjects', 'students', 'performance'].map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-1.5 text-sm rounded-pill capitalize transition-colors ${tab === t ? 'bg-white shadow-sm text-neutral-900 font-semibold' : 'text-neutral-500 hover:text-neutral-900'}`}>
-              {t === 'students' ? `Students (${students.length})` : `Subjects (${subjects.length})`}
+              {t === 'students' ? `Students (${students.length})` : t === 'subjects' ? `Subjects (${subjects.length})` : 'Performance'}
             </button>
           ))}
         </div>
+
+        {tab === 'performance' && <PerformancePanel standardId={standardId} />}
 
         {tab === 'students' && (
           <>
@@ -508,6 +525,31 @@ export default function StandardDetailPage() {
             </div>
           </div>
         )}
+
+        </div>
+
+        {/* Right rail (laptop): manage actions + quick facts */}
+        <div className="hidden lg:block space-y-5 lg:sticky lg:top-16 lg:self-start">
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-3">Manage</p>
+            <div className="space-y-2">
+              <Btn variant="primary" size="sm" icon={UserPlus} onClick={() => setAddStudentOpen(true)} className="w-full justify-center">Add student</Btn>
+              <Btn variant="default" size="sm" icon={QrCode} onClick={() => setInviteOpen(true)} className="w-full justify-center">Invite link</Btn>
+              <Btn variant="default" size="sm" icon={Upload} onClick={() => setBulkImportOpen(true)} className="w-full justify-center">Bulk import</Btn>
+              <Btn variant="default" size="sm" icon={Trash2} onClick={() => setTerminateOpen(true)} className="w-full justify-center text-red-600 border-red-200 hover:bg-red-50">Terminate standard</Btn>
+            </div>
+          </Card>
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-3">Quick facts</p>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between"><span className="text-neutral-500">Blocked students</span><span className="font-semibold tabular-nums">{blockedIds.length}</span></div>
+              <div className="flex items-center justify-between"><span className="text-neutral-500">Tests held</span><span className="font-semibold tabular-nums">{perfSummary ? perfSummary.tests_count : '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-neutral-500">Video completion</span><span className="font-semibold tabular-nums">{perfSummary ? `${perfSummary.video_completion_pct}%` : '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-neutral-500">Assignments done</span><span className="font-semibold tabular-nums">{perfSummary ? `${perfSummary.assignment_completion_pct}%` : '—'}</span></div>
+            </div>
+          </Card>
+        </div>
+        </div>
       </div>
 
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} standardId={standardId} />

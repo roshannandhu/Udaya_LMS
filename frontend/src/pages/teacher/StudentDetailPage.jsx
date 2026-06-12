@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle, Share2 } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle, Share2, Trophy } from 'lucide-react';
 import { Btn, Tag, Divider, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, reportApi } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
@@ -254,7 +254,7 @@ export default function StudentDetailPage() {
   const s = student || {};
 
   return (
-    <div className="bg-[#FAFAF9] min-h-screen">
+    <div className="bg-[#FAFAF9] min-h-screen overflow-x-clip">
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         {/* Phone-safe header: the title side must be flex-1 min-w-0 so the name
             truncates, and button labels collapse to icons below sm — otherwise
@@ -314,8 +314,26 @@ export default function StudentDetailPage() {
         ) : reportData ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between px-4 md:px-6 pt-5 pb-2 flex-wrap gap-3">
-              <h2 className="text-sm font-bold text-neutral-500 uppercase tracking-widest">Performance Report</h2>
-              <div className="flex items-center gap-0.5 p-1">
+              <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                <h2 className="text-sm font-bold text-neutral-500 uppercase tracking-widest">Performance Report</h2>
+                {reportData.rank && reportData.total_students > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-full flex-shrink-0">
+                    <Trophy size={11} /> #{reportData.rank} of {reportData.total_students}
+                    {` · Top ${Math.max(1, Math.round((reportData.rank / reportData.total_students) * 100))}%`}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-0.5 p-1 bg-neutral-100/80 rounded-xl flex-shrink-0">
+                {[
+                  { id: 'weekly',  label: 'Weekly'  },
+                  { id: 'monthly', label: 'Monthly' },
+                  { id: 'overall', label: 'Overall' },
+                ].map(p => (
+                  <button key={p.id} onClick={() => setReportPeriod(p.id)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${reportPeriod === p.id ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}>
+                    {p.label}
+                  </button>
+                ))}
               </div>
             </div>
             <StudentReportCard

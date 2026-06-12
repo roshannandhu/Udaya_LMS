@@ -29,7 +29,8 @@ export default function PendingActions({ onReview, onSent }) {
     setBusy(exam.test_id);
     try {
       const r = await whatsappApi.sendReports(examResultsPayload(exam.test_id));
-      setDone(d => ({ ...d, [exam.test_id]: `Sent ${r.sent}/${r.results.length}` }));
+      // Large sends are queued server-side and continue in the background.
+      setDone(d => ({ ...d, [exam.test_id]: r.queued ? `Sending to ${r.total}…` : `Sent ${r.sent}/${r.results.length}` }));
       onSent?.();
       await load();
     } catch (e) { alert(e.message); } finally { setBusy(null); }

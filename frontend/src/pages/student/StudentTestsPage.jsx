@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   FileQuestion, Clock, CheckCircle2, Loader2, Trophy,
   CalendarClock, BookOpen, ClipboardList, Star, Paperclip, Play, ArrowRight, Activity
@@ -11,6 +12,14 @@ import { useAppCache, useWhatsNew, isNewSince } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import { AnimatedPage, Item, SpotlightCard } from '../../components/bits';
+
+// Shared staggered card grid for tests / assignments / upcoming sections.
+const CardGrid = ({ children }) => (
+  <AnimatedPage className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {children}
+  </AnimatedPage>
+);
 
 const CARD_COLORS = [
   { bg: 'bg-[#F8E1FB]', text: 'text-[#872792]', badge: 'bg-[#872792]/10 text-[#872792]' },
@@ -24,6 +33,7 @@ let testsPageCache = null; // { userId, allTests, myAttempts, assignments }
 export default function StudentTestsPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const reduce = useReducedMotion();
   // The module cache outlives logins — only trust it for the same account.
   const cache = testsPageCache && testsPageCache.userId === user?.id ? testsPageCache : null;
 
@@ -129,7 +139,7 @@ export default function StudentTestsPage() {
     const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
     return (
-      <div className={`relative rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 flex flex-col hover:shadow-xl transition-all duration-500 hover:-translate-y-2 group border border-black/5`}>
+      <div className={`relative rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 flex flex-col h-full hover:shadow-xl transition-all duration-500 hover:-translate-y-2 group border border-black/5`}>
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -219,9 +229,15 @@ export default function StudentTestsPage() {
           <p className="text-neutral-500 font-bold text-lg">{emptyMsg}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tests.map((t, idx) => <TestCard key={t.id} t={t} section={section} idx={idx} />)}
-        </div>
+        <CardGrid>
+          {tests.map((t, idx) => (
+            <Item key={t.id} className="h-full">
+              <SpotlightCard className="rounded-[2.5rem] h-full">
+                <TestCard t={t} section={section} idx={idx} />
+              </SpotlightCard>
+            </Item>
+          ))}
+        </CardGrid>
       )}
     </div>
   );
@@ -309,9 +325,15 @@ export default function StudentTestsPage() {
           <p className="text-neutral-500 font-bold text-lg">{emptyMsg}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {list.map((a, idx) => <AssignmentCard key={a.id} a={a} idx={idx} />)}
-        </div>
+        <CardGrid>
+          {list.map((a, idx) => (
+            <Item key={a.id} className="h-full">
+              <SpotlightCard className="rounded-[2.5rem] h-full">
+                <AssignmentCard a={a} idx={idx} />
+              </SpotlightCard>
+            </Item>
+          ))}
+        </CardGrid>
       )}
     </div>
   );
@@ -343,6 +365,13 @@ export default function StudentTestsPage() {
         </div>
 
         {/* ── Tests tab ── */}
+        {/* keyed wrapper: tab switches glide in instead of snapping */}
+        <motion.div
+          key={activeTab}
+          initial={reduce ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        >
         {activeTab === 'tests' && (
           loading ? (
             <div className="space-y-3">
@@ -358,12 +387,12 @@ export default function StudentTestsPage() {
                     <div className="p-2 bg-black/5 rounded-xl"><CalendarClock size={20} className="text-black/60" /></div>
                     <h3 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">Upcoming <span className="text-neutral-400 font-semibold ml-2 text-lg">({upcoming.length})</span></h3>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <CardGrid>
                     {upcoming.map((t, idx) => {
                       const cls = subjects.find(c => String(c.id) === String(t.class_id));
                       const theme = CARD_COLORS[idx % CARD_COLORS.length];
                       return (
-                        <div key={t.id} className={`rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 opacity-70 border border-black/5`}>
+                        <Item key={t.id} className={`rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 opacity-70 border border-black/5`}>
                           <div className="flex items-start justify-between gap-3 mb-4">
                             <div className="min-w-0 flex-1">
                               <h4 className={`font-extrabold text-[22px] sm:text-[24px] leading-[1.15] text-neutral-900 mb-3`}>
@@ -379,10 +408,10 @@ export default function StudentTestsPage() {
                           <div className="flex items-center gap-1.5 text-[14px] font-extrabold text-amber-700 pt-5 border-t border-black/5 mt-auto">
                             <CalendarClock size={16} /> Opens {fmtDate(t.scheduled_for)}
                           </div>
-                        </div>
+                        </Item>
                       );
                     })}
-                  </div>
+                  </CardGrid>
                 </div>
               )}
               
@@ -406,6 +435,7 @@ export default function StudentTestsPage() {
             </>
           )
         )}
+        </motion.div>
       </div>
 
       {/* ── Assignment detail sheet ── */}

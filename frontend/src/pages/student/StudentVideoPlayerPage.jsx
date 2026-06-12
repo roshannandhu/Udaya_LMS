@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2,
 import { Btn, Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import { Reveal } from '../../components/bits';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import {
@@ -927,12 +928,14 @@ export default function StudentVideoPlayerPage() {
           )}
 
           {video.description && (
-            <p className="text-sm text-neutral-600 mb-5 leading-relaxed">{video.description}</p>
+            <Reveal>
+              <p className="text-sm text-neutral-600 mb-5 leading-relaxed">{video.description}</p>
+            </Reveal>
           )}
 
           {/* Chapters */}
           {video?.chapters?.length > 0 && (
-            <div className="mb-5">
+            <Reveal className="mb-5">
               <div className="flex items-center gap-2 mb-2">
                 <Clock size={13} className="text-neutral-400" />
                 <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Chapters</p>
@@ -957,7 +960,7 @@ export default function StudentVideoPlayerPage() {
                   </button>
                 ))}
               </div>
-            </div>
+            </Reveal>
           )}
 
           {!completed && isOnline && (

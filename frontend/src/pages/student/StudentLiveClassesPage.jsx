@@ -7,6 +7,7 @@ import { useAuthStore } from '../../lib/auth';
 import { useWhatsNew, isNewSince } from '../../store';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassCard from '../../components/cards/LiveClassCard';
+import { AnimatedPage, Item } from '../../components/bits';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -134,6 +135,9 @@ export default function StudentLiveClassesPage() {
     preloadZoomSDK();                 // start the 5.6 MB SDK download NOW, in parallel with the token fetch
     try {
       const res = await liveClassApi.getJoinToken(lc.id);
+      // Token issued ⇒ Zoom confirmed the meeting is live; reflect locally so the
+      // card shows LIVE when the student leaves the meeting view.
+      setLiveClasses(prev => prev.map(c => c.id === lc.id ? { ...c, status: 'live' } : c));
       setActiveJoin({ ...res, liveClass: lc });
     } catch (err) {
       alert(err?.message || 'Failed to join class.');
@@ -152,6 +156,7 @@ export default function StudentLiveClassesPage() {
         display_name={user?.name || 'Student'}
         passcode={activeJoin.passcode}
         zak={activeJoin.zak}
+        viewerRole="student"
         onLeave={() => { setActiveJoin(null); fetchAll(); }}
       />
     );
@@ -173,7 +178,7 @@ export default function StudentLiveClassesPage() {
             <p className="text-sm text-neutral-500">Live classes from your teachers will appear here.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatedPage className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {liveClasses.map((lc, idx) => {
               const isLive = lc.status === 'live';
               const isScheduled = lc.status === 'scheduled';
@@ -181,7 +186,7 @@ export default function StudentLiveClassesPage() {
               const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
-                <div key={lc.id} className="relative">
+                <Item key={lc.id} className="relative">
                   {!isEnded && isNewSince(lc.created_at, prevSeen.live) && (
                     <span className="absolute -top-2 -right-2 z-20 bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md pointer-events-none">
                       New
@@ -200,10 +205,10 @@ export default function StudentLiveClassesPage() {
                     </div>
                   }
                 />
-                </div>
+                </Item>
               );
             })}
-          </div>
+          </AnimatedPage>
         )}
       </div>
     </div>

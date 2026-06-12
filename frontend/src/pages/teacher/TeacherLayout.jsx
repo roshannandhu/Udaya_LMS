@@ -47,7 +47,10 @@ export default function TeacherLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav type="teacher" />
-      <div className="flex-1 flex flex-col pb-28 lg:pb-0">
+      {/* overflow-x-clip (not -hidden: that would break position:sticky headers)
+          stops any inner element that pokes past the viewport from letting the
+          page pan sideways under the fixed bottom dock on phones. */}
+      <div className="flex-1 flex flex-col pb-28 lg:pb-0 overflow-x-clip">
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
           <Outlet />
         </Suspense>

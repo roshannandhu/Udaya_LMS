@@ -76,11 +76,16 @@ export default function LiveClassCard({
 
   const minHeight = compact ? 'min-h-[220px]' : 'min-h-[260px] sm:min-h-[300px]';
 
+  // Scheduled cards must stay clickable: the backend join-token endpoint is the
+  // only thing that flips status to "live" (it asks Zoom directly), so gating the
+  // click on isLive makes a started class unjoinable for everyone.
+  const clickable = !!onClick && !isEnded && status !== 'cancelled';
+
   return (
-    <div 
-      onClick={() => (isLive && onClick) ? onClick(lc) : null}
-      className={`relative rounded-[2.5rem] p-6 sm:p-8 flex flex-col justify-between ${minHeight} transition-all duration-500 overflow-hidden group 
-      ${isLive ? `cursor-pointer hover:-translate-y-2 hover:scale-[1.02] shadow-2xl ${theme.shadow} ring-4 ${theme.ring}` : 'shadow-lg hover:shadow-xl hover:-translate-y-1 border border-white/50'} 
+    <div
+      onClick={() => clickable ? onClick(lc) : null}
+      className={`relative rounded-[2.5rem] p-6 sm:p-8 flex flex-col justify-between ${minHeight} transition-all duration-500 overflow-hidden group
+      ${isLive ? `cursor-pointer hover:-translate-y-2 hover:scale-[1.02] shadow-2xl ${theme.shadow} ring-4 ${theme.ring}` : `${clickable ? 'cursor-pointer' : ''} shadow-lg hover:shadow-xl hover:-translate-y-1 border border-white/50`}
       ${hasThumb ? 'bg-black' : theme.bg} ${className}`}
     >
       {/* Thumbnail & Cinematic Overlays */}

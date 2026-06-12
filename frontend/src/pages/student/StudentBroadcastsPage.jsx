@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { MessageSquare, Pin, FileText, Loader2, Search, X, Copy } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
@@ -13,6 +14,7 @@ const formatChatDate = fmtChatDate;
 
 export default function StudentBroadcastsPage() {
   const { user } = useAuthStore();
+  const reduce = useReducedMotion();
   const [standard, setStandard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [broadcasts, setBroadcasts] = useState([]);
@@ -234,7 +236,13 @@ export default function StudentBroadcastsPage() {
                       </div>
                     )}
 
-                    <div className="flex flex-col max-w-[85%] md:max-w-[70%] self-start mb-1.5 relative group">
+                    <motion.div
+                      className="flex flex-col max-w-[85%] md:max-w-[70%] self-start mb-1.5 relative group"
+                      initial={reduce ? false : { opacity: 0, y: 14, scale: 0.98 }}
+                      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                      viewport={{ once: true, margin: '-20px' }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 26 }}
+                    >
                       <div className="relative px-3 py-2 shadow-sm bg-white rounded-2xl rounded-tl-sm">
                         
                         {/* Pinned Indicator */}
@@ -317,7 +325,11 @@ export default function StudentBroadcastsPage() {
 
                       {/* Reaction + Copy Popup */}
                       {emojiPickerId === b.id && (
-                        <div className="absolute top-0 -right-2 transform translate-x-full bg-white/95 backdrop-blur-sm border border-neutral-200 shadow-xl rounded-2xl px-2 py-1.5 z-20 flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <motion.div
+                          initial={reduce ? false : { opacity: 0, scale: 0.85, x: '100%' }}
+                          animate={{ opacity: 1, scale: 1, x: '100%' }}
+                          transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+                          className="absolute top-0 -right-2 bg-white/95 backdrop-blur-sm border border-neutral-200 shadow-xl rounded-2xl px-2 py-1.5 z-20 flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           {QUICK_EMOJIS.map(emoji => (
                             <button key={emoji} onClick={() => handleReaction(b.id, emoji)}
                               className={`text-xl hover:scale-125 transition-transform px-1 ${myEmojis.includes(emoji) ? 'opacity-50' : ''}`}>
@@ -331,10 +343,10 @@ export default function StudentBroadcastsPage() {
                             title="Copy">
                             <Copy size={13} />
                           </button>
-                        </div>
+                        </motion.div>
                       )}
 
-                    </div>
+                    </motion.div>
                   </React.Fragment>
                 );
               })}

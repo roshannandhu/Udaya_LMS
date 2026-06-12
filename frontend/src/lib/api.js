@@ -219,8 +219,13 @@ export const testApi = {
 };
 
 export const leaderboardApi = {
-  get: (standardId) =>
-    apiClient(`/leaderboard${standardId ? `?standard_id=${standardId}` : ''}`),
+  get: (standardId, period = 'overall') => {
+    const params = new URLSearchParams();
+    if (standardId) params.set('standard_id', standardId);
+    if (period && period !== 'overall') params.set('period', period);
+    const qs = params.toString();
+    return apiClient(`/leaderboard${qs ? `?${qs}` : ''}`);
+  },
   getLeaderboard: (classId) =>
     apiClient(`/leaderboard?class_id=${classId}`),
 };
@@ -359,6 +364,7 @@ export const dashboardApi = {
   getStats:    () => apiClient('/dashboard/stats'),
   getActivity: () => apiClient('/dashboard/activity'),
   getOverview: () => apiClient('/dashboard/overview'),
+  getInsights: () => apiClient('/dashboard/insights'),
 };
 
 export const joinRequestApi = {
@@ -380,6 +386,9 @@ export const reportApi = {
   // Student fetches their own report (uses 'me' alias resolved server-side)
   getMy: (period = 'overall') =>
     apiClient(`/students/me/report/v2?period=${period}`),
+  // Teacher: per-student performance for a standard (or one subject within it)
+  performance: ({ standardId, classId, period = 'overall' }) =>
+    apiClient(`/reports/performance?standard_id=${standardId}${classId ? `&class_id=${classId}` : ''}&period=${period}`),
 };
 
 export const assignmentApi = {
@@ -459,6 +468,10 @@ export const assignmentApi = {
 export const aiApi = {
   generateInsights: (studentId, stats) =>
     apiClient('/insights/generate', { method: 'POST', body: JSON.stringify({ student_id: studentId, stats }) }),
+
+  // Last generated analysis for this student+period — instant, no LLM call.
+  getCachedInsights: (studentId, period = 'overall') =>
+    apiClient(`/insights/cached/${studentId}?period=${period}`),
 
   // Streams coaching insights token-by-token. Calls onChunk(textDelta) as text
   // arrives; resolves when the stream closes. Throws on HTTP/stream errors.
@@ -546,6 +559,9 @@ export const whatsappApi = {
   // Reports + criteria
   previewCriteria: (data) => apiClient('/teacher/whatsapp/preview-criteria', { method: 'POST', body: JSON.stringify(data) }),
   sendReports:     (data) => apiClient('/teacher/whatsapp/send-reports',     { method: 'POST', body: JSON.stringify(data) }),
+
+  // Background batch send progress (large sends are queued server-side)
+  getBatch: (batchId) => apiClient(`/teacher/whatsapp/batches/${batchId}`),
 
   // Pending Actions (auto-detected exam-result notifications)
   getPending:     ()       => apiClient('/teacher/whatsapp/pending'),

@@ -73,13 +73,15 @@ export default function HistoryTab() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
+                  {/* px-2 below sm + Cost hidden on phones: Recipient/Type/Status
+                      must fit a 390px screen without forcing horizontal scroll. */}
                   <tr className="bg-[#F8F7F5] border-b border-[#EFEDEA]">
-                    <th className="py-2.5 px-4 text-xs font-semibold text-neutral-500">Recipient</th>
-                    <th className="py-2.5 px-4 text-xs font-semibold text-neutral-500 hidden sm:table-cell">Class</th>
-                    <th className="py-2.5 px-4 text-xs font-semibold text-neutral-500">Type</th>
-                    <th className="py-2.5 px-4 text-xs font-semibold text-neutral-500 hidden md:table-cell">Sent</th>
-                    <th className="py-2.5 px-4 text-xs font-semibold text-neutral-500 text-right">Cost</th>
-                    <th className="py-2.5 px-4 text-xs font-semibold text-neutral-500 text-right">Status</th>
+                    <th className="py-2.5 px-2 sm:px-4 text-xs font-semibold text-neutral-500">Recipient</th>
+                    <th className="py-2.5 px-2 sm:px-4 text-xs font-semibold text-neutral-500 hidden sm:table-cell">Class</th>
+                    <th className="py-2.5 px-2 sm:px-4 text-xs font-semibold text-neutral-500">Type</th>
+                    <th className="py-2.5 px-2 sm:px-4 text-xs font-semibold text-neutral-500 hidden md:table-cell">Sent</th>
+                    <th className="py-2.5 px-2 sm:px-4 text-xs font-semibold text-neutral-500 text-right hidden sm:table-cell">Cost</th>
+                    <th className="py-2.5 px-2 sm:px-4 text-xs font-semibold text-neutral-500 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EFEDEA]">
@@ -87,7 +89,7 @@ export default function HistoryTab() {
                     const st = STATUS[m.status] || STATUS.queued;
                     return (
                       <tr key={m.id} className="hover:bg-white/40 transition-colors">
-                        <td className="py-2.5 px-4">
+                        <td className="py-2.5 px-2 sm:px-4">
                           <div className="flex items-center gap-2.5">
                             <Avatar name={m.student_name || m.to_phone} size="xs" />
                             <div className="min-w-0">
@@ -97,11 +99,11 @@ export default function HistoryTab() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-2.5 px-4 text-sm text-neutral-600 hidden sm:table-cell">{m.standard_name || '—'}</td>
-                        <td className="py-2.5 px-4"><Tag color="gray">{msgType(m)}</Tag></td>
-                        <td className="py-2.5 px-4 text-xs text-neutral-500 hidden md:table-cell">{fmtDate(m.created_at)}</td>
-                        <td className="py-2.5 px-4 text-right text-xs text-neutral-500">₹{Number(m.cost_amount || 0).toFixed(2)}</td>
-                        <td className="py-2.5 px-4 text-right"><Tag color={st.c}>{st.l}</Tag></td>
+                        <td className="py-2.5 px-2 sm:px-4 text-sm text-neutral-600 hidden sm:table-cell">{m.standard_name || '—'}</td>
+                        <td className="py-2.5 px-2 sm:px-4"><Tag color="gray">{msgType(m)}</Tag></td>
+                        <td className="py-2.5 px-2 sm:px-4 text-xs text-neutral-500 hidden md:table-cell">{fmtDate(m.created_at)}</td>
+                        <td className="py-2.5 px-2 sm:px-4 text-right text-xs text-neutral-500 hidden sm:table-cell">₹{Number(m.cost_amount || 0).toFixed(2)}</td>
+                        <td className="py-2.5 px-2 sm:px-4 text-right"><Tag color={st.c}>{st.l}</Tag></td>
                       </tr>
                     );
                   })}

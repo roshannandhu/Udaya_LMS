@@ -20,6 +20,10 @@ broadcasts.json
 # teacher Settings page if they want the AI mentorship feature.
 teacher_settings.json
 
+# ai_insights_cache.json is the server-side AI mentor response cache —
+# regenerated data, never committed.
+ai_insights_cache.json
+
 # whatsapp_config.json holds the WhatsApp provider (WANotifier) API key + sender
 # number — server-only secret, NOT committed. Each teacher adds their own key in
 # the WhatsApp → Settings tab.

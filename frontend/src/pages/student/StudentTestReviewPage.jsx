@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Loader2 } from 'lucide-react';
 import { testApi } from '../../lib/api';
+import { Reveal } from '../../components/bits';
 
 export default function StudentTestReviewPage() {
   const navigate = useNavigate();
@@ -114,8 +115,8 @@ export default function StudentTestReviewPage() {
                 const isSkipped = !answered;
 
                 return (
+                  <Reveal key={q.id}>
                   <div
-                    key={q.id}
                     className={`rounded-2xl overflow-hidden border ${
                       isCorrect  ? 'border-green-200' :
                       isSkipped  ? 'border-neutral-200' :
@@ -198,6 +199,7 @@ export default function StudentTestReviewPage() {
                       })}
                     </div>
                   </div>
+                  </Reveal>
                 );
               })}
             </div>

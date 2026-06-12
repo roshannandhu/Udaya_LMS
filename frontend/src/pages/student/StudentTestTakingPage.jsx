@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Flag, Clock, AlertTriangle, ChevronLeft, ChevronRight, Maximize2, Loader2 } from 'lucide-react';
 import { Btn } from '../../components/ui';
 import { testApi } from '../../lib/api';
@@ -25,6 +26,7 @@ function fmt(secs) {
 export default function StudentTestTakingPage() {
   const { testId } = useParams();
   const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const user = useAuthStore(s => s.user);
   
   const [test, setTest] = useState(null);
@@ -331,38 +333,49 @@ export default function StudentTestTakingPage() {
         </div>
       )}
 
-      {/* Question */}
+      {/* Question — slides between questions (kept light: this is the anti-cheat page) */}
       {q && (
-        <div className="flex-1 px-5 md:px-8 py-6 max-w-3xl mx-auto w-full">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-xs text-neutral-400 font-mono">Q{current + 1} of {questions.length}</span>
-            <button onClick={() => setFlagged((prev) => {
-              const next = new Set(prev);
-              next.has(q.id) ? next.delete(q.id) : next.add(q.id);
-              return next;
-            })} className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${flagged.has(q.id) ? 'text-amber-600 bg-amber-50' : 'text-neutral-400 hover:text-neutral-700'}`}>
-              <Flag size={12} />{flagged.has(q.id) ? 'Flagged' : 'Flag'}
-            </button>
-          </div>
-
-          <p className="text-base font-medium mb-6 leading-relaxed">{q.question}</p>
-
-          <div className="space-y-2.5">
-            {q.options.map((opt, i) => {
-              const selected = answers[q.id] === i;
-              return (
-                <button key={i} onClick={() => setAnswers({ ...answers, [q.id]: i })}
-                  className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${selected ? 'border-neutral-900 bg-neutral-900 text-white shadow-md' : 'border-white/60 bg-white/50 hover:bg-[#F4F2EF]'}`}>
-                  <span className={`font-mono text-xs mr-2 ${selected ? 'text-neutral-300' : 'text-neutral-500'}`}>{String.fromCharCode(65 + i)}.</span>
-                  {opt}
+        <div className="flex-1 px-5 md:px-8 py-6 max-w-3xl mx-auto w-full overflow-x-clip">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={q.id}
+              initial={reduce ? false : { opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reduce ? undefined : { opacity: 0, x: -24 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs text-neutral-400 font-mono">Q{current + 1} of {questions.length}</span>
+                <button onClick={() => setFlagged((prev) => {
+                  const next = new Set(prev);
+                  next.has(q.id) ? next.delete(q.id) : next.add(q.id);
+                  return next;
+                })} className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${flagged.has(q.id) ? 'text-amber-600 bg-amber-50' : 'text-neutral-400 hover:text-neutral-700'}`}>
+                  <Flag size={12} />{flagged.has(q.id) ? 'Flagged' : 'Flag'}
                 </button>
-              );
-            })}
-          </div>
+              </div>
 
-          {test.negative_marking && (
-            <p className="text-xs text-red-500 mt-3">Negative marking: −{test.penalty} for wrong answers.</p>
-          )}
+              <p className="text-base font-medium mb-6 leading-relaxed">{q.question}</p>
+
+              <div className="space-y-2.5">
+                {q.options.map((opt, i) => {
+                  const selected = answers[q.id] === i;
+                  return (
+                    <motion.button key={i} onClick={() => setAnswers({ ...answers, [q.id]: i })}
+                      whileTap={reduce ? undefined : { scale: 0.985 }}
+                      className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${selected ? 'border-neutral-900 bg-neutral-900 text-white shadow-md' : 'border-white/60 bg-white/50 hover:bg-[#F4F2EF]'}`}>
+                      <span className={`font-mono text-xs mr-2 ${selected ? 'text-neutral-300' : 'text-neutral-500'}`}>{String.fromCharCode(65 + i)}.</span>
+                      {opt}
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              {test.negative_marking && (
+                <p className="text-xs text-red-500 mt-3">Negative marking: −{test.penalty} for wrong answers.</p>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       )}
 
@@ -400,7 +413,11 @@ export default function StudentTestTakingPage() {
       {/* Confirm submit overlay */}
       {confirmSubmit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-6">
-          <div className="glass-panel border border-white/60 rounded-2xl shadow-xl p-6 w-full max-w-sm">
+          <motion.div
+            initial={reduce ? false : { opacity: 0, scale: 0.94, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+            className="glass-panel border border-white/60 rounded-2xl shadow-xl p-6 w-full max-w-sm">
             <h3 className="font-semibold mb-1">Submit test?</h3>
             <p className="text-sm text-neutral-500 mb-1">Answered: {answered} / {questions.length}</p>
             {flagged.size > 0 && <p className="text-sm text-amber-600 mb-4">{flagged.size} question{flagged.size > 1 ? 's' : ''} flagged for review.</p>}
@@ -410,7 +427,7 @@ export default function StudentTestTakingPage() {
                 {isSubmitting ? 'Submitting...' : 'Submit now'}
               </Btn>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>

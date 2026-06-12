@@ -695,25 +695,24 @@ async def zoom_ensure_joinable(meeting_id: str) -> None:
 
 
 # Short cache of "is this meeting live?" so the frequently-polled class list
-# doesn't hammer the Zoom API. meeting_id -> (is_live_bool, expires_at).
+# doesn't hammer the Zoom API. meeting_id -> (True|False|None, expires_at).
 _zoom_live_cache: dict = {}
 _ZOOM_LIVE_TTL = 60.0
 
 
-async def zoom_is_meeting_live(meeting_id: str) -> bool:
-    """Ask Zoom directly whether the meeting has been started by the host.
-
-    This is the source of truth for "go live" so we don't depend on the
-    meeting.started webhook reaching us (it can't reach localhost). Zoom's
-    Get-a-Meeting endpoint returns status 'waiting' (not started) or 'started'.
-    Cached briefly. Never raises."""
+async def zoom_meeting_live_state(meeting_id: str):
+    """Tri-state liveness from Zoom's Get-a-Meeting endpoint: True (started),
+    False (definitively not running — actual 200 response), None (API error /
+    unknown). Auto-END decisions must only act on a definitive False; a
+    transient API failure must never end a running class. Cached briefly.
+    Never raises."""
     import httpx
     if not meeting_id:
         return False
     hit = _zoom_live_cache.get(meeting_id)
     if hit and time_module.time() < hit[1]:
         return hit[0]
-    is_live = False
+    state = None
     try:
         token = await zoom_get_token()
         async with httpx.AsyncClient() as client:
@@ -723,11 +722,50 @@ async def zoom_is_meeting_live(meeting_id: str) -> bool:
                 timeout=10.0,
             )
         if resp.status_code == 200:
-            is_live = resp.json().get("status") == "started"
+            state = resp.json().get("status") == "started"
     except Exception as e:
-        print(f"[!] Zoom live-status check failed (treated as not live): {e}")
-    _zoom_live_cache[meeting_id] = (is_live, time_module.time() + _ZOOM_LIVE_TTL)
-    return is_live
+        print(f"[!] Zoom live-status check failed (state unknown): {e}")
+    _zoom_live_cache[meeting_id] = (state, time_module.time() + _ZOOM_LIVE_TTL)
+    return state
+
+
+async def zoom_is_meeting_live(meeting_id: str) -> bool:
+    """True only when Zoom definitively reports the meeting started."""
+    return (await zoom_meeting_live_state(meeting_id)) is True
+
+
+# "Only the host can share their screen" — enforced at the Zoom account level so
+# even someone joining from a native Zoom app (outside our web client, which
+# already hides the Share button for students) cannot share. Best-effort, once
+# per process; a failure only means the in-app lockdown stands alone.
+_zoom_share_lock_done = False
+
+
+async def zoom_enforce_host_only_share() -> None:
+    global _zoom_share_lock_done
+    import httpx
+    if _zoom_share_lock_done:
+        return
+    try:
+        token = await zoom_get_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.patch(
+                "https://api.zoom.us/v2/users/me/settings",
+                json={"in_meeting": {
+                    "screen_sharing": True,
+                    "who_can_share_screen": "host",
+                    "who_can_share_screen_when_someone_is_sharing": "host",
+                }},
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=10.0,
+            )
+        if resp.status_code in (200, 204):
+            _zoom_share_lock_done = True
+            print("[*] Zoom: who_can_share_screen locked to host")
+        else:
+            print(f"[!] Zoom host-only-share PATCH returned {resp.status_code} (ignored): {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Zoom host-only-share enforcement failed (ignored): {e}")
 
 
 async def zoom_get_participants(meeting_id: str) -> list:
@@ -1607,6 +1645,394 @@ async def get_dashboard_overview(user = Depends(verify_token)):
         "low_attendance": {"count": len(low), "items": low_items},
     }
 
+def _parse_answers(raw):
+    """test_attempts.answers JSONB → dict (supabase-py may return a JSON string)."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+def _detect_copy_suspects(tests, questions_by_test, attempts_by_test, student_name_map,
+                          subject_name, class_std):
+    """Deterministic answer-similarity check: for each recent test, compare every
+    non-topper attempt against the test's top-3 scorers. The load-bearing signal
+    is IDENTICAL WRONG answers — two students independently getting the same
+    questions wrong with the same wrong option is unlikely; combined with the
+    anti-cheat events recorded at submit time it yields a suspicion score.
+    Never flags a topper against themselves. Returns at most 10 items."""
+    suspects = []
+    for t in tests:
+        qs = questions_by_test.get(t["id"], [])
+        attempts = attempts_by_test.get(t["id"], [])
+        if len(attempts) < 3 or len(qs) < 5:
+            continue
+        correct = {str(q["id"]): q.get("correct_idx") for q in qs}
+
+        parsed = []
+        for a in attempts:
+            answers = {str(k): v for k, v in _parse_answers(a.get("answers")).items()
+                       if v is not None}
+            if len(answers) < 5:
+                continue
+            parsed.append({**a, "_answers": answers})
+        if len(parsed) < 3:
+            continue
+
+        parsed.sort(key=lambda a: (a.get("score") or 0), reverse=True)
+        toppers = parsed[:3]
+        topper_ids = {a["student_id"] for a in toppers}
+
+        for a in parsed:
+            if a["student_id"] in topper_ids:
+                continue
+            best = None
+            for top in toppers:
+                if top["student_id"] == a["student_id"]:
+                    continue
+                common = [q for q in a["_answers"] if q in top["_answers"]]
+                if len(common) < 5:
+                    continue
+                identical = sum(1 for q in common if str(a["_answers"][q]) == str(top["_answers"][q]))
+                wrong_overlap = sum(
+                    1 for q in common
+                    if str(a["_answers"][q]) == str(top["_answers"][q])
+                    and str(a["_answers"][q]) != str(correct.get(q)))
+                a_wrong = sum(1 for q in common if str(a["_answers"][q]) != str(correct.get(q)))
+                overlap_pct = identical / len(common)
+                cand = (wrong_overlap, overlap_pct, top, a_wrong)
+                if best is None or (cand[0], cand[1]) > (best[0], best[1]):
+                    best = cand
+            if not best:
+                continue
+            wrong_overlap, overlap_pct, top, a_wrong = best
+            cheat_events = a.get("cheat_events") or []
+            if isinstance(cheat_events, str):
+                try: cheat_events = json.loads(cheat_events)
+                except Exception: cheat_events = []
+            score = 0
+            if overlap_pct >= 0.90: score += 2
+            if a_wrong >= 3 and wrong_overlap / a_wrong >= 0.8: score += 3
+            score += min(2, len(cheat_events))
+            if a.get("flagged"): score += 1
+            if score < 2:
+                continue
+            suspects.append({
+                "test_id": t["id"],
+                "test_title": t.get("title"),
+                "subject": subject_name.get(t.get("class_id"), ""),
+                "class_id": t.get("class_id"),
+                "standard_id": class_std.get(t.get("class_id")),
+                "student_id": a["student_id"],
+                "student_name": student_name_map.get(a["student_id"], "Student"),
+                "score": a.get("score"),
+                "overlap_pct": round(overlap_pct * 100),
+                "wrong_overlap": wrong_overlap,
+                "wrong_count": a_wrong,
+                "matched_with": student_name_map.get(top["student_id"], "Topper"),
+                "cheat_event_count": len(cheat_events),
+                "flagged": bool(a.get("flagged")),
+                "suspicion": "high" if score >= 4 else "medium",
+                "_score": score,
+                "submitted_at": a.get("submitted_at"),
+            })
+    suspects.sort(key=lambda s: s["_score"], reverse=True)
+    for s in suspects:
+        s.pop("_score", None)
+    return suspects[:10]
+
+@app.get("/api/dashboard/insights")
+async def get_dashboard_insights(user = Depends(verify_token)):
+    """Heavier companion to /dashboard/overview: actionable class insights —
+    suspected answer-copying vs test toppers, students behind on videos, videos
+    nobody watches, assignment submission gaps, live-class absentees, and a
+    weekly/monthly activity snapshot. Computed on request from existing tables;
+    teacher only, never includes student contact info."""
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    teacher_id = user["teacher_id"]
+    now = datetime.now(timezone.utc)
+    d7 = (now - timedelta(days=7)).isoformat()
+    d30 = (now - timedelta(days=30)).isoformat()
+
+    empty = {
+        "copy_suspects": {"count": 0, "items": []},
+        "video_laggards": {"count": 0, "items": []},
+        "cold_videos": {"count": 0, "items": []},
+        "assignment_status": {"count": 0, "items": []},
+        "live_absentees": {"count": 0, "items": []},
+        "period_snapshot": {
+            "weekly":  {"avg_score": 0, "attempts": 0, "attendance_pct": 0, "videos_completed": 0, "assignments_submitted": 0},
+            "monthly": {"avg_score": 0, "attempts": 0, "attendance_pct": 0, "videos_completed": 0, "assignments_submitted": 0},
+        },
+        "computed_at": now.isoformat(),
+    }
+
+    stds_res = await asyncio.to_thread(lambda: service_supabase.table("standards").select(
+        "id, name").eq("teacher_id", teacher_id).execute())
+    standards = stds_res.data or []
+    if not standards:
+        return empty
+    standard_ids = [s["id"] for s in standards]
+    std_name = {s["id"]: s.get("name", "") for s in standards}
+
+    def fetch_subs(): return service_supabase.table("subject_classes").select(
+        "id, name, standard_id").in_("standard_id", standard_ids).execute()
+    def fetch_studs(): return service_supabase.table("students").select(
+        "id, name, standard_id, avatar_url").in_("standard_id", standard_ids).execute()
+    subs_res, studs_res = await asyncio.gather(
+        asyncio.to_thread(fetch_subs), asyncio.to_thread(fetch_studs))
+    subjects = subs_res.data or []
+    students = studs_res.data or []
+    if not subjects or not students:
+        return empty
+
+    class_ids = [c["id"] for c in subjects]
+    subject_name = {c["id"]: c.get("name", "") for c in subjects}
+    class_std = {c["id"]: c.get("standard_id") for c in subjects}
+    student_ids = [s["id"] for s in students]
+    roster_ids = set(student_ids)
+    student_name_map = {s["id"]: s.get("name", "Student") for s in students}
+    # Students per standard — denominators for video/assignment/live coverage.
+    std_rosters: dict = {}
+    for s in students:
+        std_rosters.setdefault(s.get("standard_id"), []).append(s["id"])
+
+    def fetch_tests(): return service_supabase.table("tests").select(
+        "id, title, class_id, created_at").in_("class_id", class_ids).order(
+        "created_at", desc=True).limit(10).execute()
+    def fetch_videos(): return service_supabase.table("videos").select(
+        "id, title, class_id, created_at").in_("class_id", class_ids).execute()
+    def fetch_assignments(): return service_supabase.table("assignments").select(
+        "id, title, class_id, due_date, created_at").in_("class_id", class_ids).order(
+        "created_at", desc=True).limit(10).execute()
+    def fetch_live(): return service_supabase.table("live_classes").select(
+        "id, title, class_id, scheduled_at").in_("class_id", class_ids).eq(
+        "status", "ended").gte("scheduled_at", d30).order(
+        "scheduled_at", desc=True).limit(20).execute()
+    def fetch_att_30(): return service_supabase.table("attendance_records").select(
+        "student_id, status, date").in_("subject_class_id", class_ids).gte(
+        "date", d30[:10]).execute()
+    def fetch_attempts_30(): return service_supabase.table("test_attempts").select(
+        "student_id, score, submitted_at, tests!inner(class_id, total_marks)").in_(
+        "student_id", student_ids).gte("submitted_at", d30).execute()
+    def fetch_subm_30(): return service_supabase.table("assignment_submissions").select(
+        "student_id, submitted_at").in_("student_id", student_ids).gte(
+        "submitted_at", d30).execute()
+
+    (tests_res, videos_res, asg_res, live_res,
+     att30_res, atm30_res, sub30_res) = await asyncio.gather(
+        asyncio.to_thread(fetch_tests), asyncio.to_thread(fetch_videos),
+        asyncio.to_thread(fetch_assignments), asyncio.to_thread(fetch_live),
+        asyncio.to_thread(fetch_att_30), asyncio.to_thread(fetch_attempts_30),
+        asyncio.to_thread(fetch_subm_30))
+
+    tests = tests_res.data or []
+    videos = videos_res.data or []
+    assignments = asg_res.data or []
+    live_classes = live_res.data or []
+
+    test_ids = [t["id"] for t in tests]
+    video_ids = [v["id"] for v in videos]
+    assignment_ids = [a["id"] for a in assignments]
+    live_ids = [lc["id"] for lc in live_classes]
+
+    def fetch_questions():
+        if not test_ids: return None
+        return service_supabase.table("questions").select(
+            "id, test_id, correct_idx").in_("test_id", test_ids).execute()
+    def fetch_test_attempts():
+        if not test_ids: return None
+        return service_supabase.table("test_attempts").select(
+            "test_id, student_id, score, answers, flagged, cheat_events, submitted_at").in_(
+            "test_id", test_ids).execute()
+    def fetch_video_progress():
+        if not video_ids: return None
+        return service_supabase.table("video_progress").select(
+            "video_id, student_id, completed, last_watched_at").in_("video_id", video_ids).execute()
+    def fetch_submissions():
+        if not assignment_ids: return None
+        return service_supabase.table("assignment_submissions").select(
+            "assignment_id, student_id").in_("assignment_id", assignment_ids).execute()
+    def fetch_live_att():
+        if not live_ids: return None
+        return service_supabase.table("live_class_attendance").select(
+            "live_class_id, student_id, attended").in_("live_class_id", live_ids).execute()
+
+    (q_res, ta_res, vp_res, asub_res, la_res) = await asyncio.gather(
+        asyncio.to_thread(fetch_questions), asyncio.to_thread(fetch_test_attempts),
+        asyncio.to_thread(fetch_video_progress), asyncio.to_thread(fetch_submissions),
+        asyncio.to_thread(fetch_live_att))
+
+    questions = (q_res.data or []) if q_res else []
+    attempts = (ta_res.data or []) if ta_res else []
+    video_progress = (vp_res.data or []) if vp_res else []
+    submissions = (asub_res.data or []) if asub_res else []
+    live_att = (la_res.data or []) if la_res else []
+
+    # ── 1. Copy suspects ──────────────────────────────────────────────────────
+    questions_by_test: dict = {}
+    for q in questions:
+        questions_by_test.setdefault(q["test_id"], []).append(q)
+    attempts_by_test: dict = {}
+    for a in attempts:
+        if a.get("student_id") in roster_ids:
+            attempts_by_test.setdefault(a["test_id"], []).append(a)
+    copy_suspects = _detect_copy_suspects(
+        tests, questions_by_test, attempts_by_test, student_name_map, subject_name, class_std)
+
+    # ── 2. Video laggards + cold videos ───────────────────────────────────────
+    videos_per_std: dict = {}
+    for v in videos:
+        sid_std = class_std.get(v.get("class_id"))
+        if sid_std:
+            videos_per_std.setdefault(sid_std, []).append(v["id"])
+    watched_by_student: dict = {}
+    watchers_by_video: dict = {}
+    for vp in video_progress:
+        sid = vp.get("student_id")
+        if sid not in roster_ids:
+            continue
+        watched_by_student.setdefault(sid, set()).add(vp.get("video_id"))
+        watchers_by_video.setdefault(vp.get("video_id"), set()).add(sid)
+
+    video_laggards = []
+    for s in students:
+        std_vids = videos_per_std.get(s.get("standard_id"), [])
+        if len(std_vids) < 3:
+            continue
+        watched = len(watched_by_student.get(s["id"], set()) & set(std_vids))
+        pct = round(watched / len(std_vids) * 100)
+        if pct < 40:
+            video_laggards.append({
+                "student_id": s["id"], "name": s.get("name"),
+                "standard_name": std_name.get(s.get("standard_id"), ""),
+                "videos_watched": watched, "videos_total": len(std_vids),
+                "completion_pct": pct,
+            })
+    video_laggards.sort(key=lambda x: x["completion_pct"])
+    laggard_count = len(video_laggards)
+    video_laggards = video_laggards[:8]
+
+    cold_videos = []
+    cutoff_48h = now - timedelta(hours=48)
+    for v in sorted(videos, key=lambda v: v.get("created_at") or "", reverse=True)[:6]:
+        created = _parse_ts(v.get("created_at"))
+        if created and created > cutoff_48h:
+            continue  # too new to judge
+        std = class_std.get(v.get("class_id"))
+        total = len(std_rosters.get(std, []))
+        if not total:
+            continue
+        watched = len(watchers_by_video.get(v["id"], set()))
+        pct = round(watched / total * 100)
+        if pct < 50:
+            cold_videos.append({
+                "video_id": v["id"], "title": v.get("title"),
+                "subject": subject_name.get(v.get("class_id"), ""),
+                "class_id": v.get("class_id"), "standard_id": std,
+                "watched": watched, "total": total, "watch_pct": pct,
+                "created_at": v.get("created_at"),
+            })
+    cold_videos.sort(key=lambda x: x["watch_pct"])
+    cold_videos = cold_videos[:6]
+
+    # ── 3. Assignment submission status ───────────────────────────────────────
+    submitted_by_asg: dict = {}
+    for sub in submissions:
+        if sub.get("student_id") in roster_ids:
+            submitted_by_asg.setdefault(sub["assignment_id"], set()).add(sub["student_id"])
+    assignment_status = []
+    for a in assignments:
+        std = class_std.get(a.get("class_id"))
+        roster = std_rosters.get(std, [])
+        if not roster:
+            continue
+        done = submitted_by_asg.get(a["id"], set())
+        missing = [sid for sid in roster if sid not in done]
+        if not missing:
+            continue
+        due = _parse_ts(a.get("due_date"))
+        assignment_status.append({
+            "assignment_id": a["id"], "title": a.get("title"),
+            "subject": subject_name.get(a.get("class_id"), ""),
+            "class_id": a.get("class_id"), "standard_id": std,
+            "due_date": a.get("due_date"),
+            "overdue": bool(due and due < now),
+            "submitted": len(done), "total": len(roster),
+            "missing_count": len(missing),
+            "missing_preview": [student_name_map.get(sid, "Student") for sid in missing[:3]],
+        })
+    assignment_status.sort(key=lambda x: (not x["overdue"], x["due_date"] or "9999"))
+    asg_count = len(assignment_status)
+    assignment_status = assignment_status[:8]
+
+    # ── 4. Live class absentees ───────────────────────────────────────────────
+    live_by_std: dict = {}
+    for lc in live_classes:
+        std = class_std.get(lc.get("class_id"))
+        if std:
+            live_by_std.setdefault(std, []).append(lc)
+    attended_set = {(r["live_class_id"], r["student_id"])
+                    for r in live_att if r.get("attended")}
+    live_absentees = []
+    for s in students:
+        classes = live_by_std.get(s.get("standard_id"), [])
+        if not classes:
+            continue
+        missed = [lc for lc in classes if (lc["id"], s["id"]) not in attended_set]
+        total = len(classes)
+        miss_pct = round(len(missed) / total * 100)
+        if len(missed) >= 2 or (total >= 2 and miss_pct >= 50):
+            live_absentees.append({
+                "student_id": s["id"], "name": s.get("name"),
+                "standard_name": std_name.get(s.get("standard_id"), ""),
+                "missed": len(missed), "total": total, "miss_pct": miss_pct,
+                "last_missed_title": missed[0].get("title") if missed else None,
+            })
+    live_absentees.sort(key=lambda x: (-x["missed"], -x["miss_pct"]))
+    absentee_count = len(live_absentees)
+    live_absentees = live_absentees[:8]
+
+    # ── 5. Weekly / monthly snapshot (fetch 30d once, split in Python) ────────
+    def snapshot(start_iso):
+        scores = []
+        for a in (atm30_res.data or []):
+            if (a.get("submitted_at") or "") < start_iso:
+                continue
+            t = a.get("tests") or {}
+            tm = t.get("total_marks")
+            if a.get("score") is not None and tm:
+                scores.append(a["score"] / tm * 100)
+        att_rows = [r for r in (att30_res.data or [])
+                    if (r.get("date") or "") >= start_iso[:10] and r.get("student_id") in roster_ids]
+        att_ok = sum(1 for r in att_rows if r.get("status") in ("present", "late"))
+        vids = sum(1 for vp in video_progress
+                   if vp.get("completed") and (vp.get("last_watched_at") or "") >= start_iso
+                   and vp.get("student_id") in roster_ids)
+        subs = sum(1 for r in (sub30_res.data or []) if (r.get("submitted_at") or "") >= start_iso)
+        return {
+            "avg_score": round(sum(scores) / len(scores)) if scores else 0,
+            "attempts": len(scores),
+            "attendance_pct": round(att_ok / len(att_rows) * 100) if att_rows else 0,
+            "videos_completed": vids,
+            "assignments_submitted": subs,
+        }
+
+    return {
+        "copy_suspects": {"count": len(copy_suspects), "items": copy_suspects},
+        "video_laggards": {"count": laggard_count, "items": video_laggards},
+        "cold_videos": {"count": len(cold_videos), "items": cold_videos},
+        "assignment_status": {"count": asg_count, "items": assignment_status},
+        "live_absentees": {"count": absentee_count, "items": live_absentees},
+        "period_snapshot": {"weekly": snapshot(d7), "monthly": snapshot(d30)},
+        "computed_at": now.isoformat(),
+    }
+
 # Standards CRUD
 def _claim_orphan_standards(teacher_id):
     """Assign any orphaned (teacher_id IS NULL) standards to this teacher.
@@ -2081,6 +2507,264 @@ def get_standard_analytics(standard_id: str, user = Depends(verify_token)):
         "subject_performance": subject_performance,
         "recent_tests": recent_tests,
         "students": students,
+    }
+
+def _parse_ts(value):
+    """Best-effort ISO timestamp parse → aware UTC datetime (None on failure)."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+@app.get("/api/reports/performance")
+async def get_period_performance(standard_id: str, class_id: Optional[str] = None,
+                                 period: str = "overall", user = Depends(verify_token)):
+    """Per-student performance for a standard — or a single subject within it —
+    over a weekly / monthly / overall window: avg test score, attendance,
+    video + assignment completion, a bucketed trend line, and a score delta vs
+    the previous window. Powers the Performance tab on the standard/subject
+    detail pages (shared PerformancePanel). Teacher only — never exposes
+    student contact info."""
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    if period not in ("weekly", "monthly", "overall"):
+        period = "overall"
+
+    std_check = await asyncio.to_thread(lambda: service_supabase.table("standards").select(
+        "teacher_id").eq("id", standard_id).single().execute())
+    if not std_check.data or std_check.data.get("teacher_id") != user["teacher_id"]:
+        raise HTTPException(status_code=403, detail="Not your standard")
+
+    def fetch_roster(): return service_supabase.table("students").select(
+        "id, name, avatar_url, points").eq("standard_id", standard_id).execute()
+    def fetch_subjects(): return service_supabase.table("subject_classes").select(
+        "id, name").eq("standard_id", standard_id).execute()
+    roster_res, subs_res = await asyncio.gather(
+        asyncio.to_thread(fetch_roster), asyncio.to_thread(fetch_subjects))
+    roster = roster_res.data or []
+    subjects = subs_res.data or []
+
+    if class_id:
+        if not any(s["id"] == class_id for s in subjects):
+            raise HTTPException(status_code=404, detail="Subject not in this standard")
+        subject_ids = [class_id]
+    else:
+        subject_ids = [s["id"] for s in subjects]
+
+    now = datetime.now(timezone.utc)
+    window_days = {"weekly": 7, "monthly": 30}.get(period)
+    period_start = now - timedelta(days=window_days) if window_days else None
+    # Fetch back to the PREVIOUS window too so delta_score needs no second query.
+    fetch_floor = now - timedelta(days=2 * window_days) if window_days else None
+
+    # Trend buckets: weekly → 7 daily, monthly → 4 weekly, overall → last 8 weekly.
+    if period == "weekly":
+        bucket_starts = [now - timedelta(days=d) for d in range(6, -1, -1)]
+        bucket_starts = [b.replace(hour=0, minute=0, second=0, microsecond=0) for b in bucket_starts]
+        bucket_len = timedelta(days=1)
+        labels = [b.strftime("%a %d") for b in bucket_starts]
+    else:
+        n = 4 if period == "monthly" else 8
+        bucket_len = timedelta(days=7)
+        first = (now - bucket_len * n).replace(hour=0, minute=0, second=0, microsecond=0)
+        bucket_starts = [first + bucket_len * i for i in range(n)]
+        labels = [b.strftime("%d %b") for b in bucket_starts]
+
+    def bucket_idx(dt):
+        if not dt or dt < bucket_starts[0]:
+            return None
+        i = int((dt - bucket_starts[0]) / bucket_len)
+        return i if i < len(bucket_starts) else len(bucket_starts) - 1
+
+    empty_summary = {"avg_score": 0, "avg_attendance": 0, "tests_count": 0,
+                     "video_completion_pct": 0, "assignment_completion_pct": 0, "active_students": 0}
+    if not roster or not subject_ids:
+        return {"period": period, "standard_id": standard_id, "class_id": class_id,
+                "summary": empty_summary, "trend": [], "students": []}
+
+    roster_ids = {s["id"] for s in roster}
+
+    def fetch_tests(): return service_supabase.table("tests").select(
+        "id, class_id, total_marks").in_("class_id", subject_ids).execute()
+    def fetch_videos(): return service_supabase.table("videos").select(
+        "id").in_("class_id", subject_ids).execute()
+    def fetch_assignments(): return service_supabase.table("assignments").select(
+        "id, created_at").in_("class_id", subject_ids).execute()
+    tests_res, videos_res, asg_res = await asyncio.gather(
+        asyncio.to_thread(fetch_tests), asyncio.to_thread(fetch_videos),
+        asyncio.to_thread(fetch_assignments))
+
+    tests = tests_res.data or []
+    test_marks = {t["id"]: t.get("total_marks") for t in tests}
+    test_ids = list(test_marks.keys())
+    video_ids = [v["id"] for v in (videos_res.data or [])]
+    assignments = asg_res.data or []
+    if period_start:
+        assignments_in_window = [a for a in assignments
+                                 if (_parse_ts(a.get("created_at")) or now) >= period_start]
+    else:
+        assignments_in_window = assignments
+    assignment_ids = [a["id"] for a in assignments]
+
+    floor_iso = fetch_floor.isoformat() if fetch_floor else None
+
+    def fetch_attempts():
+        if not test_ids: return None
+        q = service_supabase.table("test_attempts").select(
+            "test_id, student_id, score, submitted_at").in_("test_id", test_ids)
+        if floor_iso: q = q.gte("submitted_at", floor_iso)
+        return q.execute()
+    def fetch_attendance():
+        q = service_supabase.table("attendance_records").select(
+            "student_id, status, date").in_("subject_class_id", subject_ids)
+        if fetch_floor: q = q.gte("date", fetch_floor.date().isoformat())
+        return q.execute()
+    def fetch_video_progress():
+        if not video_ids: return None
+        q = service_supabase.table("video_progress").select(
+            "video_id, student_id, last_watched_at").in_("video_id", video_ids).eq("completed", True)
+        if period_start: q = q.gte("last_watched_at", period_start.isoformat())
+        return q.execute()
+    def fetch_submissions():
+        if not assignment_ids: return None
+        q = service_supabase.table("assignment_submissions").select(
+            "assignment_id, student_id, submitted_at").in_("assignment_id", assignment_ids)
+        if period_start: q = q.gte("submitted_at", period_start.isoformat())
+        return q.execute()
+
+    att_res, attd_res, vp_res, subm_res = await asyncio.gather(
+        asyncio.to_thread(fetch_attempts), asyncio.to_thread(fetch_attendance),
+        asyncio.to_thread(fetch_video_progress), asyncio.to_thread(fetch_submissions))
+
+    attempts = (att_res.data or []) if att_res else []
+    attendance = (attd_res.data or []) if attd_res else []
+    video_done = (vp_res.data or []) if vp_res else []
+    submissions = (subm_res.data or []) if subm_res else []
+
+    # ── Tests: current vs previous window score lists per student ─────────────
+    cur_scores: dict = {}; prev_scores: dict = {}
+    cur_test_ids = set(); tests_taken: dict = {}
+    trend_scores = [[] for _ in bucket_starts]
+    for a in attempts:
+        sid = a.get("student_id")
+        tm = test_marks.get(a.get("test_id"))
+        score = a.get("score")
+        if sid not in roster_ids or score is None or not tm:
+            continue
+        pct = (score / tm) * 100
+        ts = _parse_ts(a.get("submitted_at"))
+        in_current = (period_start is None) or (ts is not None and ts >= period_start)
+        if in_current:
+            cur_scores.setdefault(sid, []).append(pct)
+            tests_taken[sid] = tests_taken.get(sid, 0) + 1
+            cur_test_ids.add(a["test_id"])
+        elif window_days:
+            prev_scores.setdefault(sid, []).append(pct)
+        bi = bucket_idx(ts)
+        if bi is not None and in_current is not False:
+            trend_scores[bi].append(pct)
+
+    # ── Attendance: attended = present + late (same as attendance_summary) ────
+    cur_att: dict = {}   # sid -> [attended, total]
+    trend_att = [[0, 0] for _ in bucket_starts]
+    for r in attendance:
+        sid = r.get("student_id")
+        if sid not in roster_ids:
+            continue
+        d = _parse_ts(f'{r.get("date")}T00:00:00+00:00')
+        in_current = (period_start is None) or (d is not None and d >= period_start)
+        attended = 1 if r.get("status") in ("present", "late") else 0
+        if in_current:
+            ent = cur_att.setdefault(sid, [0, 0])
+            ent[0] += attended; ent[1] += 1
+        bi = bucket_idx(d)
+        if bi is not None and in_current:
+            trend_att[bi][0] += attended; trend_att[bi][1] += 1
+
+    # ── Videos / assignments completion in window ─────────────────────────────
+    vids_watched: dict = {}
+    for v in video_done:
+        sid = v.get("student_id")
+        if sid in roster_ids:
+            vids_watched.setdefault(sid, set()).add(v.get("video_id"))
+    asg_submitted: dict = {}
+    for s in submissions:
+        sid = s.get("student_id")
+        if sid in roster_ids:
+            asg_submitted.setdefault(sid, set()).add(s.get("assignment_id"))
+
+    videos_total = len(video_ids)
+    asg_total = len(assignments_in_window)
+
+    students_out = []
+    for s in roster:
+        sid = s["id"]
+        sc = cur_scores.get(sid)
+        at = cur_att.get(sid)
+        pv = prev_scores.get(sid)
+        watched = len(vids_watched.get(sid, ()))
+        submitted = len(asg_submitted.get(sid, ()))
+        avg_cur = round(sum(sc) / len(sc), 1) if sc else None
+        avg_prev = round(sum(pv) / len(pv), 1) if pv else None
+        students_out.append({
+            "student_id": sid,
+            "name": s.get("name"),
+            "avatar_url": s.get("avatar_url"),
+            "avg_score": avg_cur if avg_cur is not None else 0,
+            "has_tests": bool(sc),
+            "tests_taken": tests_taken.get(sid, 0),
+            "attendance_pct": round(at[0] / at[1] * 100, 1) if at and at[1] else 0,
+            "has_attendance": bool(at and at[1]),
+            "videos_watched": watched,
+            "videos_total": videos_total,
+            "video_pct": min(100, round(watched / videos_total * 100)) if videos_total else 0,
+            "assignments_submitted": submitted,
+            "assignments_total": asg_total,
+            "assignment_pct": min(100, round(submitted / asg_total * 100)) if asg_total else 0,
+            "points": int(s.get("points") or 0),
+            "delta_score": (round(avg_cur - avg_prev, 1)
+                            if window_days and avg_cur is not None and avg_prev is not None else None),
+        })
+    students_out.sort(key=lambda x: x["avg_score"], reverse=True)
+
+    scored = [x["avg_score"] for x in students_out if x["has_tests"]]
+    attended_l = [x["attendance_pct"] for x in students_out if x["has_attendance"]]
+    active = {sid for sid in roster_ids
+              if cur_scores.get(sid) or vids_watched.get(sid) or asg_submitted.get(sid)}
+
+    trend = []
+    for i, label in enumerate(labels):
+        sc_list = trend_scores[i]
+        att_n, att_d = trend_att[i]
+        trend.append({
+            "label": label,
+            "avg_score": round(sum(sc_list) / len(sc_list)) if sc_list else None,
+            "attendance_pct": round(att_n / att_d * 100) if att_d else None,
+        })
+
+    return {
+        "period": period,
+        "standard_id": standard_id,
+        "class_id": class_id,
+        "summary": {
+            "avg_score": round(sum(scored) / len(scored)) if scored else 0,
+            "avg_attendance": round(sum(attended_l) / len(attended_l)) if attended_l else 0,
+            "tests_count": len(cur_test_ids),
+            "video_completion_pct": (min(100, round(sum(len(v) for v in vids_watched.values())
+                                                    / (videos_total * len(roster)) * 100))
+                                     if videos_total and roster else 0),
+            "assignment_completion_pct": (min(100, round(sum(len(v) for v in asg_submitted.values())
+                                                         / (asg_total * len(roster)) * 100))
+                                          if asg_total and roster else 0),
+            "active_students": len(active),
+        },
+        "trend": trend,
+        "students": students_out,
     }
 
 @app.get("/api/students/{student_id}/report")
@@ -5103,22 +5787,74 @@ def get_attempt_review(test_id: str, user = Depends(verify_token)):
         "answers": raw_answers
     }
 
-# Get leaderboard for a standard
+# Get leaderboard for a standard.
+# period=overall ranks by cumulative students.points; weekly/monthly recompute
+# window points from the timestamped events that award them (test attempts,
+# assignment submissions, video completions at 10 pts each — same windows as
+# the report-v2 period filter).
 @app.get("/api/leaderboard")
-def get_leaderboard(standard_id: Optional[str] = None, user = Depends(verify_token)):
+def get_leaderboard(standard_id: Optional[str] = None, period: str = "overall", user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    if standard_id:
-        students = service_supabase.table("students").select("id, name, username, points, avatar_url").eq("standard_id", standard_id).order("points", desc=True).execute()
-    else:
-        students = service_supabase.table("students").select("id, name, username, points, avatar_url").order("points", desc=True).limit(50).execute()
+    if period not in ("overall", "weekly", "monthly"):
+        period = "overall"
 
+    if period == "overall":
+        if standard_id:
+            students = service_supabase.table("students").select("id, name, username, points, avatar_url").eq("standard_id", standard_id).order("points", desc=True).execute()
+        else:
+            students = service_supabase.table("students").select("id, name, username, points, avatar_url").order("points", desc=True).limit(50).execute()
+        return {
+            "leaderboard": [
+                {"rank": i + 1, **s}
+                for i, s in enumerate(students.data or [])
+            ],
+            "period": period,
+        }
+
+    days = 7 if period == "weekly" else 30
+    period_start = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    roster_q = service_supabase.table("students").select("id, name, username, avatar_url")
+    if standard_id:
+        roster_q = roster_q.eq("standard_id", standard_id)
+    roster = roster_q.execute().data or []
+    ids = [s["id"] for s in roster]
+    window_points = {sid: 0 for sid in ids}
+
+    if ids:
+        try:
+            attempts = service_supabase.table("test_attempts").select("student_id, points_earned") \
+                .in_("student_id", ids).gte("submitted_at", period_start).execute()
+            for a in (attempts.data or []):
+                window_points[a["student_id"]] = window_points.get(a["student_id"], 0) + int(a.get("points_earned") or 0)
+        except Exception as e:
+            print(f"[!] leaderboard window tests failed (ignored): {e}")
+        try:
+            subs = service_supabase.table("assignment_submissions").select("student_id, points_earned") \
+                .in_("student_id", ids).gte("submitted_at", period_start).execute()
+            for s in (subs.data or []):
+                window_points[s["student_id"]] = window_points.get(s["student_id"], 0) + int(s.get("points_earned") or 0)
+        except Exception as e:
+            print(f"[!] leaderboard window assignments failed (ignored): {e}")
+        try:
+            vids = service_supabase.table("video_progress").select("student_id") \
+                .in_("student_id", ids).eq("completed", True).gte("last_watched_at", period_start).execute()
+            for v in (vids.data or []):
+                window_points[v["student_id"]] = window_points.get(v["student_id"], 0) + 10
+        except Exception as e:
+            print(f"[!] leaderboard window videos failed (ignored): {e}")
+
+    ranked = sorted(roster, key=lambda s: window_points.get(s["id"], 0), reverse=True)
+    if not standard_id:
+        ranked = ranked[:50]
     return {
         "leaderboard": [
-            {"rank": i + 1, **s}
-            for i, s in enumerate(students.data or [])
-        ]
+            {"rank": i + 1, **s, "points": window_points.get(s["id"], 0)}
+            for i, s in enumerate(ranked)
+        ],
+        "period": period,
     }
 
 # Video completion points
@@ -6042,6 +6778,77 @@ def import_from_question_bank(req: QuestionBankImport, user=Depends(verify_token
 
 # --- Live Classes ---
 
+def _lc_parse_when(lc: dict):
+    """(start_dt, end_dt) of a class's plausible window, tz-aware, or (None, None)."""
+    raw = lc.get("scheduled_at")
+    if not raw:
+        return None, None
+    try:
+        start = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None, None
+    end = start + timedelta(minutes=int(lc.get("duration_mins") or 60))
+    return start, end
+
+
+async def _sync_live_class_statuses(classes: list) -> None:
+    """Reconcile DB status with Zoom's reality, so cards go LIVE/ENDED on their
+    own — the host runs the class from the Zoom phone app and never touches the
+    portal. zoom_is_meeting_live is 60s-cached per meeting, and we only look at
+    classes inside their plausible time window, so the 15s page polls stay cheap.
+    Fully best-effort: a Zoom hiccup must never break the class list."""
+    GRACE = timedelta(minutes=30)
+    MAX_CHECKS = 5
+    now = datetime.now(timezone.utc)
+    checks = 0
+    try:
+        for lc in classes:
+            if checks >= MAX_CHECKS:
+                break
+            status = lc.get("status")
+            mid = lc.get("zoom_meeting_id")
+            if not mid or status not in ("scheduled", "live"):
+                continue
+            start, end = _lc_parse_when(lc)
+            if not start:
+                continue
+
+            if status == "scheduled":
+                # Host may start a bit early; stop checking once the window is long over.
+                if not (start - timedelta(minutes=10) <= now <= end + GRACE):
+                    continue
+                checks += 1
+                if await zoom_is_meeting_live(mid):
+                    lc["status"] = "live"
+                    await asyncio.to_thread(lambda i=lc["id"]: service_supabase.table("live_classes")
+                        .update({"status": "live"}).eq("id", i).execute())
+            else:  # live — the host hanging up on their phone IS the end of class
+                # Small safety margin after start so a just-started meeting that
+                # Zoom hasn't registered yet can't be insta-ended.
+                if now < start + timedelta(minutes=5):
+                    continue
+                checks += 1
+                # Tri-state: only a DEFINITIVE "not running" (real Zoom 200) may
+                # end the class — an API hiccup (None) must never kick a live
+                # class to ended (join-token would then refuse new joiners).
+                if (await zoom_meeting_live_state(mid)) is False:
+                    lc["status"] = "ended"
+                    await asyncio.to_thread(lambda i=lc["id"]: service_supabase.table("live_classes")
+                        .update({"status": "ended"}).eq("id", i).execute())
+
+                    # Finalize attendance in the background (absent rows + Zoom durations).
+                    async def _finalize_bg(row=dict(lc)):
+                        try:
+                            await _finalize_live_class_attendance(row)
+                        except Exception as e:
+                            print(f"[!] auto-end attendance finalize failed (ignored): {e}")
+                    asyncio.create_task(_finalize_bg())
+    except Exception as e:
+        print(f"[!] live-class status sync failed (ignored): {e}")
+
+
 @app.get("/api/live-classes")
 async def get_live_classes(class_id: Optional[str] = None, standard_id: Optional[str] = None, user=Depends(verify_token)):
     # ── Fast path: fetch ALL live classes for a standard in one shot ──────────
@@ -6095,6 +6902,12 @@ async def get_live_classes(class_id: Optional[str] = None, standard_id: Optional
 
         lc_result = await asyncio.to_thread(fetch_classes)
         classes = lc_result.data or []
+
+        # Reconcile scheduled/live with Zoom before zoom_meeting_id is stripped:
+        # the host starts & ends the class from their phone app, so this poll is
+        # the only way cards go LIVE/ENDED (and attendance finalizes) on their own.
+        await _sync_live_class_statuses(classes)
+
         ids = [lc["id"] for lc in classes]
 
         att_by_class: dict = {}
@@ -6173,8 +6986,9 @@ async def get_live_classes(class_id: Optional[str] = None, standard_id: Optional
     except Exception:
         pass
 
-    # Status is updated to "live" by the join-token endpoint when the teacher
-    # starts the meeting. No Zoom polling here — keeps the list endpoint fast.
+    # Reconcile with Zoom (host starts/ends from the phone app): flips
+    # scheduled→live and live→ended automatically, finalizing attendance.
+    await _sync_live_class_statuses(classes)
 
     att_by_class: dict = {}
     ids = [lc["id"] for lc in classes]
@@ -6224,6 +7038,8 @@ async def create_live_class(data: LiveClassCreate, user=Depends(verify_token)):
         start_time=data.scheduled_at,
         duration_mins=data.duration_mins,
     )
+    # Account-level "only host can share" — once per process, best-effort.
+    asyncio.create_task(zoom_enforce_host_only_share())
 
     db_scheduled_at = data.scheduled_at
     if len(db_scheduled_at) == 19 and "+" not in db_scheduled_at and "Z" not in db_scheduled_at:
@@ -6313,8 +7129,10 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
 
         # Deterministic attendance: the authenticated student is joining now. This is
         # the source of truth (independent of Zoom's report API / name matching).
-        # Fire-and-forget so the token returns immediately (no DB round-trip on the
-        # click path); best-effort, errors are swallowed.
+        # Intentionally marked at token issuance — "opened the class" counts as
+        # attended (no false negatives); the end-of-class finalize pass enriches
+        # real durations from Zoom's report. Fire-and-forget so the token returns
+        # immediately; best-effort, errors are swallowed.
         async def _record_attendance():
             try:
                 await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance").upsert({
@@ -6350,34 +7168,55 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
     }
 
 
-@app.post("/api/live-classes/{live_class_id}/end")
-async def end_live_class(live_class_id: str, user=Depends(verify_token)):
+@app.get("/api/live-classes/{live_class_id}/host-link")
+async def get_host_link(live_class_id: str, user=Depends(verify_token)):
+    """Zoom start_url for the owning teacher only — lets them start the class from
+    the web portal (opens the Zoom client as host). Students never see this; the
+    list endpoints keep stripping zoom_start_url from every response."""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
 
     lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
-        .select("*").eq("id", live_class_id).single().execute())
+        .select("id, class_id, status, zoom_start_url").eq("id", live_class_id).single().execute())
     if not lc_result.data:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="Live class not found")
     lc = lc_result.data
 
-    await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
-        .update({"status": "ended"}).eq("id", live_class_id).execute())
+    if lc["status"] in ("ended", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"This class has {lc['status']}")
+    if not lc.get("zoom_start_url"):
+        raise HTTPException(status_code=400, detail="No Zoom start link for this class")
 
+    class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
+        .select("standard_id").eq("id", lc["class_id"]).single().execute())
+    required_std = class_result.data["standard_id"] if class_result.data else None
+    std_check = await asyncio.to_thread(lambda: service_supabase.table("standards") \
+        .select("id").eq("id", required_std).eq("teacher_id", user["teacher_id"]).single().execute())
+    if not std_check.data:
+        raise HTTPException(status_code=403, detail="Not your class")
+
+    return {"start_url": lc["zoom_start_url"]}
+
+
+async def _finalize_live_class_attendance(lc: dict) -> dict:
+    """Final attendance pass for a finished live class: merge Zoom's participant
+    report over the join-time records (which are the source of truth — never
+    downgrade a student who actually joined), write absent rows for everyone
+    else. Shared by the End-Class button and the automatic ended-detection in
+    the list endpoint."""
+    live_class_id = lc["id"]
     participants = await zoom_get_participants(lc.get("zoom_meeting_id", ""))
 
     class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
         .select("standard_id").eq("id", lc["class_id"]).single().execute())
     if not class_result.data:
-        return {"message": "ended", "attended": 0, "absent": 0}
+        return {"attended": 0, "absent": 0, "total": 0}
 
     students_result = await asyncio.to_thread(lambda: service_supabase.table("students") \
         .select("id, name, email") \
         .eq("standard_id", class_result.data["standard_id"]).execute())
     all_students = students_result.data or []
 
-    # Join-time attendance is the source of truth — load it so we never downgrade a
-    # student who actually joined to "absent" just because Zoom's report is empty/late.
     existing = await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance") \
         .select("student_id, attended, joined_at").eq("live_class_id", live_class_id).execute())
     already = {r["student_id"]: r for r in (existing.data or [])}
@@ -6423,7 +7262,25 @@ async def end_live_class(live_class_id: str, user=Depends(verify_token)):
         await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance") \
             .upsert(rows, on_conflict="live_class_id,student_id").execute())
 
-    return {"message": "Class ended", "attended": attended_count, "absent": absent_count, "total": len(all_students)}
+    return {"attended": attended_count, "absent": absent_count, "total": len(all_students)}
+
+
+@app.post("/api/live-classes/{live_class_id}/end")
+async def end_live_class(live_class_id: str, user=Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+
+    lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
+        .select("*").eq("id", live_class_id).single().execute())
+    if not lc_result.data:
+        raise HTTPException(status_code=404, detail="Not found")
+    lc = lc_result.data
+
+    await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
+        .update({"status": "ended"}).eq("id", live_class_id).execute())
+
+    summary = await _finalize_live_class_attendance(lc)
+    return {"message": "Class ended", **summary}
 
 
 @app.post("/api/live-classes/{live_class_id}/cancel")
@@ -7565,10 +8422,21 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
     best_sub = max(tested, key=lambda r: r.get("test_avg") or 0) if tested else None
     worst_sub = min(tested, key=lambda r: r.get("test_avg") or 0) if len(tested) > 1 else None
 
+    # These two prompt fields used to arrive only from the browser payload; the
+    # prompt must stay fully server-fed now that client stats are ignored.
+    vid_total = sum(r.get("video_total") or 0 for r in radar)
+    vid_done = sum(r.get("video_done") or 0 for r in radar)
+    attendance_data = f"Attendance is {round(s.get('attendance_pct') or 0)}%"
+    video_progress_data = (
+        f"Video completion is {round(vid_done / vid_total * 100) if vid_total else 0}% ({vid_done}/{vid_total} videos)"
+    )
+
     return {
         "student_name": s.get("name") or "Student",
         "standard_name": s.get("standard_name") or "N/A",
         "period": period,
+        "attendance_data": attendance_data,
+        "video_progress_data": video_progress_data,
         "profile": profile,
         "subjects_detail": subjects_detail,
         "test_history": test_history,
@@ -7584,26 +8452,93 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
     }
 
 
-async def enrich_insights_stats(req: "InsightsRequest", user: dict) -> dict:
-    """Server-side deep analysis: fetch the student's full report + upcoming week
-    and merge over the client-sent stats. Falls back to the client stats alone if
-    anything fails, so the mentor never hard-errors."""
+def _insights_period(req: "InsightsRequest") -> str:
+    """The ONLY thing the client controls about mentor input is the period tab."""
     period = (req.stats or {}).get("period", "overall")
+    return period if period in ("weekly", "monthly", "overall") else "overall"
+
+
+def _assert_insights_access(user: dict, student_id: str):
+    """Students may only generate/read their own analysis. Must run BEFORE any
+    enrichment — get_student_report_v2's own 403 used to be swallowed by the
+    old fallback, letting tampered browser stats reach the prompt."""
+    if user.get("role") == "student" and user.get("student_id") != student_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
+async def enrich_insights_stats(req: "InsightsRequest", user: dict) -> dict:
+    """All mentor data is assembled server-side from the student's real record.
+    Client-sent stats never reach the prompt (a tampered browser could inject
+    fake numbers); on failure we error out instead of trusting the client."""
+    period = _insights_period(req)
     try:
         report = await asyncio.to_thread(get_student_report_v2, req.student_id, period, user)
         radar = sorted(report.get("subject_radar") or [], key=lambda r: r.get("test_avg") if (r.get("test_count") or 0) > 0 else 101)
         weak_subject_ids = [r.get("subject_id") for r in radar if r.get("subject_id")]
         standard_id = (report.get("student") or {}).get("standard_id")
         upcoming = await asyncio.to_thread(fetch_upcoming_for_student, req.student_id, standard_id, weak_subject_ids)
-        digest = compose_student_analysis(report, upcoming, period)
-        return {**(req.stats or {}), **digest}
+        return compose_student_analysis(report, upcoming, period)
+    except HTTPException:
+        raise
     except Exception as exc:
-        print(f"Insights server-side enrichment failed, using client stats: {exc}")
-        return req.stats or {}
+        print(f"[!] Insights server-side enrichment failed: {exc}")
+        raise HTTPException(status_code=503, detail="Could not load the student's data for analysis. Please try again.")
+
+
+# ─── AI MENTOR: response cache + load guards (one API key, ~300 students) ────
+# Cache: JSON file beside teacher_settings.json (same pattern). Most mentor
+# opens are then served instantly with zero LLM calls; only Regenerate and
+# first-ever opens hit the provider. Losing the file on redeploy is fine.
+INSIGHTS_CACHE_FILE = Path(__file__).resolve().parent / "ai_insights_cache.json"
+
+def _load_insights_cache() -> dict:
+    if INSIGHTS_CACHE_FILE.exists():
+        try:
+            return json.loads(INSIGHTS_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+_insights_cache: dict = _load_insights_cache()
+
+def _store_insights(cache_key: str, text: str):
+    _insights_cache[cache_key] = {
+        "text": text,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        INSIGHTS_CACHE_FILE.write_text(json.dumps(_insights_cache, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[!] insights cache save failed (ignored): {e}")
+
+# At most this many upstream LLM streams at once — a class-wide burst queues
+# here instead of opening hundreds of connections on one API key.
+_AI_SEMAPHORE = asyncio.Semaphore(3)
+# Single-flight: one generation per student:period at a time.
+_insights_inflight: set = set()
+# Cooldown: regenerate-spamming within this window replays the cached text.
+_insights_last_gen: dict = {}
+INSIGHTS_COOLDOWN_SECS = 30
+
+AI_BUSY_MSG = "The AI is busy right now — please try again in a minute."
+
+
+@app.get("/api/insights/cached/{student_id}")
+async def get_cached_insights(student_id: str, period: str = "overall", user: dict = Depends(get_current_user)):
+    """Last generated mentor analysis for this student+period (no LLM call)."""
+    _assert_insights_access(user, student_id)
+    if period not in ("weekly", "monthly", "overall"):
+        period = "overall"
+    entry = _insights_cache.get(f"{student_id}:{period}")
+    return {
+        "insights": entry.get("text") if entry else None,
+        "generated_at": entry.get("generated_at") if entry else None,
+    }
 
 
 @app.post("/api/insights/generate")
 async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
+    _assert_insights_access(user, req.student_id)
     # Read API key — Settings page value first; GEMINI_API_KEY env fallback so
     # deploys (Render) work even though teacher_settings.json is ephemeral there.
     settings = get_teacher_settings()
@@ -7615,6 +8550,7 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
 
+    cache_key = f"{req.student_id}:{_insights_period(req)}"
     stats = await enrich_insights_stats(req, user)
     prompt = build_insights_prompt(stats, user.get("role", "student"))
 
@@ -7652,6 +8588,8 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
 
             # For the new conversational prompt, we just return the raw text
             text = text.strip()
+            if text:
+                _store_insights(cache_key, text)
             return {"insights": text}
     except Exception as e:
         print(f"[!] AI Generation Error: {e}")
@@ -7664,7 +8602,13 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
 
     Emits `data: {"text": "<delta>"}` events as the model generates, and a final
     `data: {"error": "..."}` event if the upstream call fails mid-stream.
+
+    Scale guards (one shared API key, hundreds of students): completed analyses
+    are cached per student:period; a cooldown replays the cache instead of
+    re-billing the key; single-flight stops duplicate generations; a global
+    semaphore caps concurrent upstream streams.
     """
+    _assert_insights_access(user, req.student_id)
     settings = get_teacher_settings()
     provider = settings.get("ai_provider", "gemini")
     api_key = settings.get("ai_api_key")
@@ -7674,11 +8618,34 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
 
-    stats = await enrich_insights_stats(req, user)
-    prompt = build_insights_prompt(stats, user.get("role", "student"))
-
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
+
+    def sse_response(gen):
+        return StreamingResponse(
+            gen,
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    cache_key = f"{req.student_id}:{_insights_period(req)}"
+
+    # Cooldown: regenerate within the window replays the cached text — no LLM hit.
+    cached = _insights_cache.get(cache_key)
+    if cached and (time_module.time() - _insights_last_gen.get(cache_key, 0)) < INSIGHTS_COOLDOWN_SECS:
+        async def replay():
+            yield sse({"text": cached["text"]})
+            yield sse({"done": True, "cached": True})
+        return sse_response(replay())
+
+    # Single-flight: one generation per student:period.
+    if cache_key in _insights_inflight:
+        async def busy():
+            yield sse({"error": "Analysis is already being generated — try again in a few seconds."})
+        return sse_response(busy())
+
+    stats = await enrich_insights_stats(req, user)
+    prompt = build_insights_prompt(stats, user.get("role", "student"))
 
     async def gemini_stream():
         payload = {
@@ -7697,9 +8664,12 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                         # 404 on the first model → retry with the fallback model name
                         if resp.status_code == 404 and idx == 0:
                             continue
+                        if resp.status_code == 429:
+                            yield {"error": AI_BUSY_MSG}
+                            return
                         if resp.status_code >= 400:
                             body = (await resp.aread()).decode("utf-8", "ignore")
-                            yield sse({"error": f"Gemini API error: {body[:400]}"})
+                            yield {"error": f"Gemini API error: {body[:400]}"}
                             return
                         async for line in resp.aiter_lines():
                             if not line or not line.startswith("data:"):
@@ -7712,13 +8682,13 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                                 parts = obj["candidates"][0]["content"]["parts"]
                                 delta = "".join(p.get("text", "") for p in parts)
                                 if delta:
-                                    yield sse({"text": delta})
+                                    yield {"text": delta}
                             except (KeyError, IndexError, json.JSONDecodeError):
                                 continue
-                        yield sse({"done": True})
+                        yield {"done": True}
                         return
                 except httpx.HTTPError as e:
-                    yield sse({"error": f"Connection error: {e}"})
+                    yield {"error": f"Connection error: {e}"}
                     return
 
     async def openai_stream():
@@ -7733,9 +8703,12 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
         async with httpx.AsyncClient(timeout=60) as client:
             try:
                 async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                    if resp.status_code == 429:
+                        yield {"error": AI_BUSY_MSG}
+                        return
                     if resp.status_code >= 400:
                         body = (await resp.aread()).decode("utf-8", "ignore")
-                        yield sse({"error": f"OpenAI API error: {body[:400]}"})
+                        yield {"error": f"OpenAI API error: {body[:400]}"}
                         return
                     async for line in resp.aiter_lines():
                         if not line or not line.startswith("data:"):
@@ -7747,27 +8720,35 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                             obj = json.loads(chunk)
                             delta = obj["choices"][0]["delta"].get("content")
                             if delta:
-                                yield sse({"text": delta})
+                                yield {"text": delta}
                         except (KeyError, IndexError, json.JSONDecodeError):
                             continue
-                    yield sse({"done": True})
+                    yield {"done": True}
             except httpx.HTTPError as e:
-                yield sse({"error": f"Connection error: {e}"})
+                yield {"error": f"Connection error: {e}"}
 
     async def event_generator():
+        _insights_inflight.add(cache_key)
+        _insights_last_gen[cache_key] = time_module.time()
+        acc, finished = "", False
         try:
-            gen = openai_stream() if provider == "openai" else gemini_stream()
-            async for evt in gen:
-                yield evt
+            async with _AI_SEMAPHORE:
+                gen = openai_stream() if provider == "openai" else gemini_stream()
+                async for obj in gen:
+                    if obj.get("text"):
+                        acc += obj["text"]
+                    if obj.get("done"):
+                        finished = True
+                    yield sse(obj)
         except Exception as e:  # noqa: BLE001 — surface to client instead of hanging
             print(f"[!] AI Stream Error: {e}")
             yield sse({"error": str(e)})
+        finally:
+            _insights_inflight.discard(cache_key)
+        if finished and acc.strip():
+            _store_insights(cache_key, acc.strip())
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return sse_response(event_generator())
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -8523,6 +9504,62 @@ def _wa_missing_manual(body: str, manual_values: Optional[dict]) -> list:
     return missing
 
 # ── Send (manual) ─────────────────────────────────────────────────────────────
+# ── Background batch sends ─────────────────────────────────────────────────
+# Evolution throttles ~2.5s between messages, so a class-wide send to hundreds
+# of parents takes many minutes — far past any HTTP timeout. Above this
+# threshold the send endpoints enqueue a background task and return a batch_id
+# the client polls; below it they stay synchronous (instant result alert).
+WA_BATCH_THRESHOLD = 10
+_wa_batches: dict = {}  # batch_id -> progress dict (in-memory; messages table is the audit trail)
+
+
+def _wa_new_batch(total: int, kind: str) -> str:
+    batch_id = uuid.uuid4().hex[:12]
+    _wa_batches[batch_id] = {
+        "id": batch_id, "kind": kind, "total": total, "sent": 0, "failed": 0,
+        "total_cost": 0.0, "done": False,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    # Bounded registry: drop the oldest finished entries past 200.
+    if len(_wa_batches) > 200:
+        for k in [k for k, v in list(_wa_batches.items()) if v.get("done")][:-100]:
+            _wa_batches.pop(k, None)
+    return batch_id
+
+
+def _wa_batch_track(batch_id: Optional[str], result: dict):
+    b = _wa_batches.get(batch_id) if batch_id else None
+    if not b:
+        return
+    if result.get("status") in ("failed", "not_configured"):
+        b["failed"] += 1
+    else:
+        b["sent"] += 1
+    b["total_cost"] = round(b["total_cost"] + (result.get("cost") or 0), 2)
+
+
+async def _wa_run_batch(runner, batch_id: str):
+    """Background wrapper: a crashed worker must still mark the batch done so
+    the client's progress poll terminates."""
+    try:
+        await runner(batch_id)
+    except Exception as e:
+        print(f"[wa] batch {batch_id} crashed: {e}")
+    finally:
+        b = _wa_batches.get(batch_id)
+        if b:
+            b["done"] = True
+
+
+@app.get("/api/teacher/whatsapp/batches/{batch_id}")
+def wa_batch_status(batch_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    b = _wa_batches.get(batch_id)
+    if not b:
+        raise HTTPException(status_code=404, detail="Batch not found (server may have restarted — check Sent history)")
+    return b
+
+
 @app.post("/api/teacher/whatsapp/send")
 async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
@@ -8578,17 +9615,28 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     if not recips:
         raise HTTPException(status_code=400, detail="No recipients with a phone number")
 
-    results = []
-    for idx, r in enumerate(recips):
-        if idx > 0 and provider.name == "evolution":
-            await asyncio.sleep(2.5)
+    async def run(batch_id=None):
+        results = []
+        for idx, r in enumerate(recips):
+            if idx > 0 and provider.name == "evolution":
+                await asyncio.sleep(2.5)
+            res = await _wa_send_and_log(
+                provider, teacher_id, r, mode=data.mode, template_name=data.template_name,
+                body_text=free_body, manual_values=data.manual_values,
+                template_body=template_body, meta_approved=meta_approved,
+                media_url=data.media_url,
+                media_type=data.media_type, category=data.category, language=data.language)
+            results.append(res)
+            _wa_batch_track(batch_id, res)
+        return results
 
-        results.append(await _wa_send_and_log(
-            provider, teacher_id, r, mode=data.mode, template_name=data.template_name,
-            body_text=free_body, manual_values=data.manual_values,
-            template_body=template_body, meta_approved=meta_approved,
-            media_url=data.media_url,
-            media_type=data.media_type, category=data.category, language=data.language))
+    if len(recips) > WA_BATCH_THRESHOLD:
+        batch_id = _wa_new_batch(len(recips), "send")
+        asyncio.create_task(_wa_run_batch(run, batch_id))
+        return {"queued": True, "batch_id": batch_id, "total": len(recips),
+                "configured": provider.configured}
+
+    results = await run()
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
     return {"results": results, "sent": sent, "total_cost": round(sum(x["cost"] for x in results), 2),
             "configured": provider.configured}
@@ -8964,46 +10012,60 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     lms = _wa_branding_name()
     rows = _wa_build_report_rows(teacher_id, data.standard_ids, data.included_student_ids,
                                  data.test_id, data.period, data.criteria)
-    results = []
-    for idx, r in enumerate(rows):
-        if idx > 0 and provider.name == "evolution":
-            await asyncio.sleep(2.5)
-        if not r["phone"]:
-            continue
+    # Pre-filter to actually-sendable rows so batch progress totals are honest.
+    sendable = [
+        r for r in rows
+        if r["phone"]
         # Exam mode: only students who actually took THIS exam get a result.
-        if data.test_id and r["score"] is None:
-            continue
-        band = r["band"] or {}
-        if data.criteria and not r["band"]:
-            continue  # no matching band → skip
-        msg = band.get("message") or data.default_message or ""
-        attach = band.get("attach_report", True)
-        template_name = band.get("template_name") or data.template_name
-        media_url = media_type = None
-        body_text = msg
+        and not (data.test_id and r["score"] is None)
+        and not (data.criteria and not r["band"])  # no matching band → skip
+    ]
 
-        report = r["_report"]
-        try:
-            if attach and data.report_format == "pdf":
-                pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms, data.test_id)
-                media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf")
-                media_type = "application/pdf"
-            elif attach and data.report_format == "image":
-                png = await asyncio.to_thread(wa.build_report_image, report, lms, data.test_id)
-                media_url = await _wa_upload_bytes(png, ".png", "image/png")
-                media_type = "image/png"
-            elif data.report_format == "text":
-                txt = wa.build_report_text(report, lms, data.test_id)
-                body_text = (txt + ("\n\n" + msg if msg else "")).strip()
-        except Exception as e:
-            print(f"[wa] report artifact build failed for {r['id']}: {e}")
+    async def run(batch_id=None):
+        results = []
+        for idx, r in enumerate(sendable):
+            if idx > 0 and provider.name == "evolution":
+                await asyncio.sleep(2.5)
+            band = r["band"] or {}
+            msg = band.get("message") or data.default_message or ""
+            attach = band.get("attach_report", True)
+            template_name = band.get("template_name") or data.template_name
+            media_url = media_type = None
+            body_text = msg
 
-        mode = "template" if template_name else "freeform"
-        results.append(await _wa_send_and_log(
-            provider, teacher_id, r, mode=mode, template_name=template_name,
-            body_text=body_text, media_url=media_url,
-            media_type=media_type, category=data.category, standard_id=r["standard_id"],
-            test_id=data.test_id))
+            report = r["_report"]
+            try:
+                if attach and data.report_format == "pdf":
+                    pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms, data.test_id)
+                    media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf")
+                    media_type = "application/pdf"
+                elif attach and data.report_format == "image":
+                    png = await asyncio.to_thread(wa.build_report_image, report, lms, data.test_id)
+                    media_url = await _wa_upload_bytes(png, ".png", "image/png")
+                    media_type = "image/png"
+                elif data.report_format == "text":
+                    txt = wa.build_report_text(report, lms, data.test_id)
+                    body_text = (txt + ("\n\n" + msg if msg else "")).strip()
+            except Exception as e:
+                print(f"[wa] report artifact build failed for {r['id']}: {e}")
+
+            mode = "template" if template_name else "freeform"
+            res = await _wa_send_and_log(
+                provider, teacher_id, r, mode=mode, template_name=template_name,
+                body_text=body_text, media_url=media_url,
+                media_type=media_type, category=data.category, standard_id=r["standard_id"],
+                test_id=data.test_id)
+            results.append(res)
+            _wa_batch_track(batch_id, res)
+        return results
+
+    if len(sendable) > WA_BATCH_THRESHOLD:
+        batch_id = _wa_new_batch(len(sendable), "reports")
+        asyncio.create_task(_wa_run_batch(run, batch_id))
+        return {"queued": True, "batch_id": batch_id, "total": len(sendable),
+                "configured": provider.configured}
+
+    results = await run()
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
     return {"results": results, "sent": sent,
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
@@ -9177,21 +10239,36 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     except Exception:
         pass
     creds = _wa_fetch_credentials([r["id"] for r in recips if r.get("id")]) if data.include_credentials else {}
-    results = []
-    for r in recips:
-        if data.message:
-            body = data.message
-        elif data.include_credentials:
-            c = creds.get(r["id"], {})
-            pwd = (c.get("plain_password") or "").strip() or default_pwd
-            body = _wa_credentials_body(r["name"], c.get("student_code") or r.get("student_code"), pwd, lms)
-        else:
-            body = (f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
-                    f"Student ID: {r['student_code']}.")
-        mode = "template" if template_name else "freeform"
-        results.append(await _wa_send_and_log(
-            provider, teacher_id, r, mode=mode, template_name=template_name,
-            body_text=body, category=data.category, standard_id=r["standard_id"]))
+
+    async def run(batch_id=None):
+        results = []
+        for idx, r in enumerate(recips):
+            if idx > 0 and provider.name == "evolution":
+                await asyncio.sleep(2.5)
+            if data.message:
+                body = data.message
+            elif data.include_credentials:
+                c = creds.get(r["id"], {})
+                pwd = (c.get("plain_password") or "").strip() or default_pwd
+                body = _wa_credentials_body(r["name"], c.get("student_code") or r.get("student_code"), pwd, lms)
+            else:
+                body = (f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
+                        f"Student ID: {r['student_code']}.")
+            mode = "template" if template_name else "freeform"
+            res = await _wa_send_and_log(
+                provider, teacher_id, r, mode=mode, template_name=template_name,
+                body_text=body, category=data.category, standard_id=r["standard_id"])
+            results.append(res)
+            _wa_batch_track(batch_id, res)
+        return results
+
+    if len(recips) > WA_BATCH_THRESHOLD:
+        batch_id = _wa_new_batch(len(recips), "welcome")
+        asyncio.create_task(_wa_run_batch(run, batch_id))
+        return {"queued": True, "batch_id": batch_id, "total": len(recips),
+                "configured": provider.configured}
+
+    results = await run()
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
     return {"results": results, "sent": sent,
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}

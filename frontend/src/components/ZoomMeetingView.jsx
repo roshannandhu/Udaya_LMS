@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, AlertCircle, Loader } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Loader, Video } from 'lucide-react';
 import { WatermarkLayer } from './shared/ScreenshotGuard';
 
 /**
@@ -73,7 +73,7 @@ export function preloadZoomSDK() {
   try { loadZoomClientView().catch(() => {}); } catch { /* best-effort */ }
 }
 
-export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, display_name, passcode, zak, onLeave }) {
+export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, display_name, passcode, zak, onLeave, viewerRole }) {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState(null);
   const [showPrintWarn, setShowPrintWarn] = useState(false);
@@ -81,7 +81,10 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   const startedRef = useRef(false);
   const printTimerRef = useRef(null);
 
-  const isStudent = role === 0;
+  // role is 0 for ALL portal watchers (teachers watch view-only too), so the
+  // student lockdowns key off the explicit viewerRole prop from the caller.
+  // Default to the strict student treatment when the prop is missing.
+  const isStudent = viewerRole ? viewerRole === 'student' : role === 0;
 
   // Student-only PrintScreen deterrent
   useEffect(() => {
@@ -97,6 +100,38 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
     };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey); if (printTimerRef.current) clearTimeout(printTimerRef.current); };
+  }, [isStudent]);
+
+  // Students must only ever watch the host: block every pin path inside Zoom's
+  // UI. Double-click and right-click pin are stopped in capture phase; the CSS
+  // below hides the tile ellipsis menus, the participants-row menus and the
+  // gallery/speaker View switcher (everyone but the host is muted + camera-off,
+  // so Speaker view always shows the host). Selectors target the pinned SDK
+  // version (ZOOM_VERSION) — the JS guards are the hard backstop.
+  useEffect(() => {
+    if (!isStudent) return;
+    const root = document.getElementById('zmmtg-root');
+    if (!root) return;
+    const block = (e) => { e.stopPropagation(); e.preventDefault(); };
+    root.addEventListener('dblclick', block, true);
+    root.addEventListener('contextmenu', block, true);
+
+    const style = document.createElement('style');
+    style.id = 'zoom-student-lockdown';
+    style.textContent = `
+      #zmmtg-root [class*="video-avatar__avatar-action"],
+      #zmmtg-root [class*="more-button"],
+      #zmmtg-root [class*="full-screen-widget"] button[aria-label*="View" i],
+      #zmmtg-root button[title*="View" i][class*="full-screen"],
+      #zmmtg-root .participants-item__buttons { display: none !important; }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      root.removeEventListener('dblclick', block, true);
+      root.removeEventListener('contextmenu', block, true);
+      document.getElementById('zoom-student-lockdown')?.remove();
+    };
   }, [isStudent]);
 
   useEffect(() => {
@@ -134,6 +169,14 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
         patchJsMedia: true,
         // Default to speaker view so the host (owner) fills the screen.
         defaultView: 'speaker',
+        // No one in the web view may copy/share the meeting link. Zoom's own UI
+        // otherwise exposes it twice: the Invite button and the meeting-info
+        // panel (invite link + meeting ID + passcode with a Copy action).
+        disableInvite: true,
+        meetingInfo: ['topic', 'host'],
+        // Students can never share their screen or rearrange tiles — only the
+        // host's (phone) share should ever be visible to the class.
+        ...(isStudent ? { screenShare: false, videoDrag: false } : {}),
         success: () => {
           ZoomMtg.join({
             meetingNumber: String(meeting_id).replace(/\s/g, ''),
