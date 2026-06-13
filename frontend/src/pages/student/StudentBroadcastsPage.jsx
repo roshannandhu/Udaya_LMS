@@ -224,7 +224,6 @@ export default function StudentBroadcastsPage() {
 
                 const msgReactions = reactions[b.id] || {};
                 const myEmojis = myReactions[b.id] || [];
-                const isReceiver = true; // Student view is always receiver
 
                 return (
                   <React.Fragment key={b.id}>
@@ -237,13 +236,13 @@ export default function StudentBroadcastsPage() {
                     )}
 
                     <motion.div
-                      className="flex flex-col max-w-[85%] md:max-w-[70%] self-start mb-1.5 relative group"
+                      className="flex flex-col max-w-[85%] md:max-w-[70%] self-start items-start mb-1.5 relative group"
                       initial={reduce ? false : { opacity: 0, y: 14, scale: 0.98 }}
                       whileInView={{ opacity: 1, y: 0, scale: 1 }}
                       viewport={{ once: true, margin: '-20px' }}
                       transition={{ type: 'spring', stiffness: 300, damping: 26 }}
                     >
-                      <div className="relative px-3 py-2 shadow-sm bg-white rounded-2xl rounded-tl-sm">
+                      <div className="relative w-fit max-w-full px-3 py-2 shadow-sm bg-white rounded-2xl rounded-tl-sm">
                         
                         {/* Pinned Indicator */}
                         {b.pinned && (
@@ -313,17 +312,27 @@ export default function StudentBroadcastsPage() {
 
                       </div>
 
-                      {/* Reactions below bubble */}
-                      {Object.keys(msgReactions).length > 0 && (
-                         <div className={`flex flex-wrap gap-1 mt-0.5 ${isSender ? 'justify-end' : 'justify-start'} max-w-full self-start w-max`}>
-                          {Object.entries(msgReactions).map(([emoji, count]) => (
-                            <button key={emoji} onClick={() => handleReaction(b.id, emoji)}
-                              className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs shadow-sm transition-colors ${myEmojis.includes(emoji) ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50'}`}>
-                              {emoji} <span className="text-[10px]">{count}</span>
+                      {/* Reactions below bubble — WhatsApp-style: distinct emojis grouped
+                          into ONE compact pill with a total count, so 3+ reactions never
+                          widen the message. Tap re-opens the picker to add/remove. Student
+                          view is always the receiver, so the pill left-aligns under the
+                          bubble. (Previously rendered N pills referencing an undeclared
+                          `isSender` → crashed the page the moment a message had a reaction.) */}
+                      {Object.keys(msgReactions).length > 0 && (() => {
+                        const total = Object.values(msgReactions).reduce((sum, n) => sum + n, 0);
+                        const iReacted = myEmojis.length > 0;
+                        return (
+                          <div className="flex mt-0.5 max-w-full justify-start">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === b.id ? null : b.id); }}
+                              title="Reactions"
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-sm shadow-sm border max-w-full transition-colors ${iReacted ? 'bg-blue-50 border-blue-200' : 'bg-white border-neutral-200 hover:bg-neutral-50'}`}>
+                              <span className="leading-none">{Object.keys(msgReactions).join('')}</span>
+                              {total > 1 && <span className="text-[11px] text-neutral-500 tabular-nums">{total}</span>}
                             </button>
-                          ))}
-                        </div>
-                      )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Inline Reaction Picker Toggle */}
                       <div className="absolute top-1/2 -translate-y-1/2 -right-8 w-6 h-6 opacity-0 group-hover:opacity-100 transition-opacity">

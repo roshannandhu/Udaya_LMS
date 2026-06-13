@@ -394,6 +394,39 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
               // To mimic WhatsApp: outgoing messages on the right
               const isSender = true; // Teacher is always the sender in this view
 
+              // Time + ticks row, reused both inline (media-only) and absolutely
+              // positioned over the last text line (with a reserved spacer).
+              const metaRow = (
+                <span className="inline-flex items-center gap-1 text-[10px] text-neutral-500 leading-none select-none">
+                  {isFutureScheduled && (
+                    <span className="flex items-center gap-0.5 text-amber-600 bg-amber-50 px-1 rounded border border-amber-200">
+                      <Clock size={8} />
+                      <span>{fmtShortDateTime(b.scheduled_for)}</span>
+                    </span>
+                  )}
+                  {b.edited && <span className="italic">edited</span>}
+                  <span>{b.time}</span>
+                  {isSender && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReadDetailsModal(b.id);
+                        setReadDetailsTab('read');
+                        setReadDetailsData({ loading: true, read_by: [], not_read_by: [] });
+                        broadcastApi.getReadDetails(b.id)
+                          .then(res => setReadDetailsData({ loading: false, read_by: res.read_by || [], not_read_by: res.not_read_by || [] }))
+                          .catch(() => setReadDetailsData({ loading: false, read_by: [], not_read_by: [] }));
+                      }}
+                      className="flex items-center hover:opacity-70 transition-opacity"
+                      title={`${reads}/${studentCount} read`}
+                    >
+                      {/* WhatsApp-group parity: delivered = double grey, all read = double blue */}
+                      <CheckCheck size={14} className={allRead ? 'text-[#34B7F1]' : 'text-neutral-400'} />
+                    </button>
+                  )}
+                </span>
+              );
+
               return (
                 <React.Fragment key={b.id}>
                   {showDate && (
@@ -404,9 +437,9 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                     </div>
                   )}
 
-                  <div className={`flex flex-col max-w-[80%] md:max-w-[70%] group relative mb-1.5 ${isSender ? 'self-end' : 'self-start'}`}>
-                    <div 
-                      className={`relative px-3 py-2 shadow-sm ${isFutureScheduled ? 'bg-neutral-100/60 opacity-75' : isSender ? 'bg-[#dcf8c6]' : 'bg-white'} ${isSender ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm'}`}
+                  <div className={`flex flex-col max-w-[80%] md:max-w-[70%] group relative mb-1.5 ${isSender ? 'self-end items-end' : 'self-start items-start'}`}>
+                    <div
+                      className={`relative w-fit max-w-full px-3 py-2 shadow-sm ${isFutureScheduled ? 'bg-neutral-100/60 opacity-75' : isSender ? 'bg-[#dcf8c6]' : 'bg-white'} ${isSender ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm'}`}
                     >
                       {/* Pinned Indicator */}
                       {b.pinned && (
@@ -447,56 +480,56 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         </div>
                       )}
 
-                      {/* Message Text */}
-                      <div className="flex items-end justify-between gap-3">
-                        <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
-                          {b.text}
-                        </p>
-                      </div>
+                      {/* Message text + time. The transparent inline spacer reserves room
+                          on the last line so the absolutely-positioned time/ticks can never
+                          sit on top of the words (they wrap to their own line if the text
+                          fills the width). Widen the gap for "edited"/scheduled badges. */}
+                      {b.text && (
+                        <div className="relative min-w-0">
+                          <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
+                            {b.text}
+                            <span aria-hidden="true" className="inline-block align-bottom" style={{ width: 64 + (b.edited ? 34 : 0) + (isFutureScheduled ? 112 : 0) }} />
+                          </p>
+                          <span className="absolute bottom-0 right-0">{metaRow}</span>
+                        </div>
+                      )}
 
-                      {/* Meta Info: Time, Ticks, Scheduled */}
-                      <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[10px] text-neutral-500">
-                        {isFutureScheduled && (
-                          <div className="flex items-center gap-0.5 text-amber-600 bg-amber-50 px-1 rounded border border-amber-200">
-                            <Clock size={8} />
-                            <span>{fmtShortDateTime(b.scheduled_for)}</span>
-                          </div>
-                        )}
-                        {b.edited && <span className="italic">edited</span>}
-                        <span>{b.time}</span>
-                        {isSender && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReadDetailsModal(b.id);
-                              setReadDetailsTab('read');
-                              setReadDetailsData({ loading: true, read_by: [], not_read_by: [] });
-                              broadcastApi.getReadDetails(b.id)
-                                .then(res => setReadDetailsData({ loading: false, read_by: res.read_by || [], not_read_by: res.not_read_by || [] }))
-                                .catch(() => setReadDetailsData({ loading: false, read_by: [], not_read_by: [] }));
-                            }}
-                            className="flex items-center hover:opacity-70 transition-opacity"
-                            title={`${reads}/${studentCount} read`}
-                          >
-                            {/* WhatsApp-group parity: delivered = double grey, all read = double blue */}
-                            <CheckCheck size={14} className={allRead ? 'text-[#34B7F1]' : 'text-neutral-400'} />
-                          </button>
-                        )}
-                      </div>
+                      {/* Media-only message: no text to wrap around, so the time sits on
+                          its own right-aligned line under the attachment. */}
+                      {!b.text && (
+                        <div className="flex items-center justify-end mt-0.5">{metaRow}</div>
+                      )}
 
                     </div>
 
-                    {/* Reactions below bubble */}
-                    {Object.keys(msgReactions).length > 0 && (
-                      <div className={`flex flex-wrap gap-1 mt-0.5 ${isSender ? 'justify-end' : 'justify-start'} max-w-full self-start w-max`}>
-                        {Object.entries(msgReactions).map(([emoji, count]) => (
-                          <button key={emoji} onClick={() => handleReaction(b.id, emoji)}
-                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs shadow-sm transition-colors ${myEmojis.includes(emoji) ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50'}`}>
-                            {emoji} <span className="text-[10px]">{count}</span>
+                    {/* Reactions below bubble — WhatsApp-style: distinct emojis grouped
+                        into ONE compact pill with a total count, so 3+ reactions never
+                        widen the message. Tap opens the menu (emoji row) to add/remove. */}
+                    {Object.keys(msgReactions).length > 0 && (() => {
+                      const total = Object.values(msgReactions).reduce((sum, n) => sum + n, 0);
+                      const iReacted = myEmojis.length > 0;
+                      return (
+                        <div className={`flex mt-0.5 max-w-full ${isSender ? 'justify-end' : 'justify-start'}`}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              let rightPos = window.innerWidth - rect.right - 10;
+                              if (rightPos < 10) rightPos = 10;
+                              let topPos = rect.bottom + 4;
+                              let bottomPos = 'auto';
+                              if (topPos + 280 > window.innerHeight) { topPos = 'auto'; bottomPos = window.innerHeight - rect.top + 4; }
+                              setMenuPos({ top: topPos, bottom: bottomPos, right: rightPos });
+                              setMenuId(b.id);
+                            }}
+                            title="Reactions"
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-sm shadow-sm border max-w-full transition-colors ${iReacted ? 'bg-blue-50 border-blue-200' : 'bg-white border-neutral-200 hover:bg-neutral-50'}`}>
+                            <span className="leading-none">{Object.keys(msgReactions).join('')}</span>
+                            {total > 1 && <span className="text-[11px] text-neutral-500 tabular-nums">{total}</span>}
                           </button>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Actions (Context Menu & Reply) - Always visible on mobile, hover on desktop */}
                     <div className={`absolute top-0 -left-[56px] md:-left-[68px] bottom-0 w-[56px] md:w-[68px] opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end px-1 gap-1`}>
