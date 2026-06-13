@@ -3832,6 +3832,7 @@ def mark_student_seen(request: MarkSeenRequest, user = Depends(verify_token)):
 UPLOAD_MAX_MB = 50
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
 DOC_EXTS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt"}
+VIDEO_EXTS = {"mp4", "mov", "webm", "mkv", "m4v"}
 _UPLOAD_MIME_OK = {
     "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
     "application/msword",
@@ -3841,6 +3842,7 @@ _UPLOAD_MIME_OK = {
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "text/plain", "application/octet-stream",
+    "video/mp4", "video/quicktime", "video/webm", "video/x-matroska",
 }
 
 def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: int = UPLOAD_MAX_MB):
@@ -3941,6 +3943,7 @@ async def upload_teacher_thumbnail(
 
     if file is not None:
         file_bytes = await file.read()
+        validate_upload(file.filename or "thumb.jpg", file_bytes, IMAGE_EXTS, max_mb=10)
         file_ext = os.path.splitext(file.filename or "thumb.jpg")[1] or ".jpg"
         file_name = f"thumbnails/{user['teacher_id']}{file_ext}"
         try:
@@ -3988,6 +3991,7 @@ async def upload_teacher_profile_photo(
     public_url = None
     if file is not None:
         file_bytes = await file.read()
+        validate_upload(file.filename or "photo.jpg", file_bytes, IMAGE_EXTS, max_mb=10)
         file_ext = os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg"
         file_name = f"profile-photos/{user['teacher_id']}{file_ext}"
         try:
@@ -4361,6 +4365,7 @@ async def upload_video(
             raise HTTPException(status_code=503, detail="Database not available")
 
         file_bytes = await file.read()
+        validate_upload(file.filename or "video.mp4", file_bytes, VIDEO_EXTS, max_mb=2048)
         safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'video.mp4')
         storage_path = f"{class_id}/{uuid.uuid4()}_{safe_name}"
 
@@ -4412,6 +4417,7 @@ async def upload_video(
         return db_resp.data[0]
 
     file_bytes = await file.read()
+    validate_upload(file.filename or "video.mp4", file_bytes, VIDEO_EXTS, max_mb=2048)
     allow_dl = allow_download.lower() not in ("false", "0", "no")
 
     async with httpx.AsyncClient(timeout=300.0) as client:
@@ -6623,6 +6629,7 @@ async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(..
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
     path = f"{class_id}/{uuid.uuid4()}.{ext}"
     contents = await file.read()
+    validate_upload(file.filename, contents, IMAGE_EXTS | DOC_EXTS)
     await asyncio.to_thread(lambda: service_supabase.storage.from_("notes").upload(path, contents, {"content-type": file.content_type or "application/octet-stream"}))
     url = service_supabase.storage.from_("notes").get_public_url(path)
     return {"url": url, "path": path, "type": file.content_type or "application/octet-stream"}
@@ -6637,6 +6644,7 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
         raise HTTPException(status_code=503, detail="Database not available")
 
     file_bytes = await file.read()
+    validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
     file_ext = os.path.splitext(file.filename)[1]
     file_name = f"{uuid.uuid4()}{file_ext}"
 
@@ -7570,6 +7578,7 @@ async def create_assignment(
             file_bytes = await f.read()
             if not file_bytes:
                 continue
+            validate_upload(f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
             safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f.filename)
             storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
             ct = f.content_type or "application/octet-stream"
@@ -7700,6 +7709,7 @@ async def add_assignment_attachments(
         file_bytes = await f.read()
         if not file_bytes:
             continue
+        validate_upload(f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
         safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f.filename)
         storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
         ct = f.content_type or "application/octet-stream"
