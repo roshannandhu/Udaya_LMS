@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMotionValue } from 'framer-motion';
 import { MdKeyboardArrowDown, MdLogout, MdSearch } from 'react-icons/md';
 import DockItem from './DockItem';
-import { useSettingsStore } from '../../store';
+import { useSettingsStore, DEFAULT_LMS_LOGO } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import { Avatar, resolveAvatar } from '../ui';
 import NotificationBell from './NotificationBell';
@@ -47,9 +47,7 @@ const TopNav = memo(function TopNav({ type = 'teacher', badges }) {
       <nav className="nav-dark max-w-6xl mx-auto px-4 py-2 flex items-center justify-between rounded-[28px]">
         {/* Brand */}
         <Link to={type === 'teacher' ? '/teacher' : '/student'} className="flex items-center gap-3 w-48 flex-shrink-0">
-          <div className="w-9 h-9 rounded-[10px] bg-[#8B5CF6] flex items-center justify-center flex-shrink-0">
-            <div className="w-3.5 h-3.5 border-[2.5px] border-white rounded-[3px] rotate-45" />
-          </div>
+          <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-9 h-9 rounded-[10px] object-cover flex-shrink-0 bg-white" />
           <span className="font-bold text-[22px] tracking-tight text-white truncate"
             style={{ fontFamily: '"Fraunces", Georgia, serif', letterSpacing: '-0.02em' }}>
             {lmsName || 'Udaya'}

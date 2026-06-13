@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdVisibility, MdVisibilityOff, MdAddPhotoAlternate, MdClose, MdPeople, MdGppBad, MdDelete, MdLoop, MdPersonAdd, MdCheck, MdCheckCircle, MdFavorite } from 'react-icons/md';
 import { Toggle, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
-import { useSettingsStore } from '../../store';
+import { useSettingsStore, DEFAULT_LMS_LOGO } from '../../store';
 import { teacherApi } from '../../lib/api';
 import LiveClassCard from '../../components/cards/LiveClassCard';
 
@@ -422,15 +422,13 @@ export default function SettingsPage() {
             {/* Logo upload */}
             <div>
               <p className="text-sm font-medium mb-0.5">App logo</p>
-              <p className="text-xs text-neutral-500 mb-3">Shown on the login page and sidebar. Square image recommended.</p>
+              <p className="text-xs text-neutral-500 mb-3">Shown on the login page, sidebar and top bar. Defaults to the Udaya logo — upload a square image to override.</p>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => logoInputRef.current?.click()}
                   className="w-14 h-14 rounded-xl border-2 border-dashed border-[#D8D6D2] bg-white/30 hover:bg-[#F4F2EF] flex items-center justify-center overflow-hidden transition-colors flex-shrink-0"
                 >
-                  {lmsLogo
-                    ? <img src={lmsLogo} alt="logo" className="w-full h-full object-cover" />
-                    : <MdAddPhotoAlternate className="w-5 h-5 text-neutral-400" />}
+                  <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-full h-full object-cover bg-white" />
                 </button>
                 <div className="flex flex-col gap-1.5">
                   <Btn variant="default" size="sm" onClick={() => logoInputRef.current?.click()}>

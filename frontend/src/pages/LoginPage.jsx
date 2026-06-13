@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useAuthStore, ROLES } from '../lib/auth';
-import { useSettingsStore } from '../store';
+import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
 import { apiClient } from '../lib/api';
 
 export default function LoginPage() {
@@ -134,13 +134,7 @@ export default function LoginPage() {
         
         {/* Branding */}
         <div className="flex flex-col items-center gap-5 mb-10 justify-center">
-          {lmsLogo
-            ? <img src={lmsLogo} alt="logo" className="w-20 h-20 rounded-[24px] object-cover shadow-md border-[4px] border-white" />
-            : <div className="w-20 h-20 rounded-[24px] bg-white shadow-md border-[4px] border-white flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-[#F8E1FB] to-[#EAF3EB] opacity-50" />
-                <GraduationCap size={36} className="text-neutral-800 drop-shadow-sm relative z-10" />
-              </div>
-          }
+          <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-20 h-20 rounded-[24px] object-cover shadow-md border-[4px] border-white bg-white" />
           <span 
             className="font-extrabold text-[40px] tracking-tight text-neutral-900 text-center drop-shadow-sm leading-none"
           >

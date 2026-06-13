@@ -8,6 +8,10 @@ export function useAppSelector(selector) {
   return useAppCache(useShallow(selector));
 }
 
+// Udaya's default brand logo (the Buddha mark in /public). Shown wherever no
+// custom teacher logo is set, so the app is never logo-less.
+export const DEFAULT_LMS_LOGO = '/udaya-logo.png';
+
 /* ─── Teacher settings store ─────────────────────────────────────
    localStorage is only an instant cache so the UI doesn't flash defaults
    on reload. The BACKEND (teacher_settings.json via /teacher/settings) is the

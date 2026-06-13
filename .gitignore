@@ -36,6 +36,11 @@ screenshots/
 *.jpg
 *.jpeg
 
+# ...but the app's own brand/icon assets in public/ MUST ship to Vercel
+!frontend/public/*.png
+!frontend/public/*.jpg
+!frontend/public/*.jpeg
+
 # Test tokens & scripts
 .test_token
 verify_run.mjs

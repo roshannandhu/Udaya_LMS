@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useSettingsStore } from '../../store';
+import { useSettingsStore, DEFAULT_LMS_LOGO } from '../../store';
 
 import { TEACHER_NAV, STUDENT_NAV } from './nav-items';
 
@@ -38,12 +38,7 @@ const Sidebar = memo(function Sidebar({ type = 'teacher' }) {
     <aside className="hidden lg:flex flex-col w-[220px] fixed top-4 bottom-4 left-4 glass-nav rounded-2xl shadow-card z-50 overflow-hidden">
       <div className="p-5 flex flex-col h-full overflow-y-auto">
         <div className="flex items-center gap-3 mb-10 mt-2 px-1">
-          {lmsLogo
-            ? <img src={lmsLogo} alt="logo" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-sm border border-neutral-200" />
-            : <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <div className="w-4 h-4 border-2 border-white/90 rounded-sm rotate-45" />
-              </div>
-          }
+          <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-sm border border-neutral-200 bg-white" />
           <span
             className="font-bold text-2xl tracking-tight text-neutral-900 truncate"
             style={{ fontFamily: '"Fraunces", Georgia, serif' }}
