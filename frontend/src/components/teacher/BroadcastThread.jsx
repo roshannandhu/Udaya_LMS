@@ -8,8 +8,6 @@ import { PASTEL, pastelFor } from '../cards/pastel';
 import { resolveAvatar } from '../ui';
 import { fmtTime, fmtChatDate, fmtShortDateTime } from '../../lib/datetime';
 
-const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-
 const formatChatDate = fmtChatDate;
 
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
@@ -23,8 +21,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [uploading, setUploading] = useState(false);
   const [readCounts, setReadCounts] = useState({});
   const [replyTo, setReplyTo] = useState(null);
-  const [reactions, setReactions] = useState({});
-  const [myReactions, setMyReactions] = useState({});
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [readDetailsModal, setReadDetailsModal] = useState(null);
@@ -58,22 +54,11 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     }
   };
 
-  const fetchReactions = () => {
-    if (!std?.id) return;
-    broadcastApi.getReactions(std.id)
-      .then(data => {
-        setReactions(data?.counts || {});
-        setMyReactions(data?.mine || {});
-      })
-      .catch(() => {});
-  };
-
   useEffect(() => {
     if (!std?.id) return;
     broadcastApi.getReadCounts(std.id)
       .then(counts => setReadCounts(counts || {}))
       .catch(() => {});
-    fetchReactions();
   }, [std?.id, broadcasts.length]);
 
   useEffect(() => {
@@ -110,8 +95,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       } else if (data.type === 'edit_broadcast') {
         const b = data.data;
         if (b) onUpdate((list) => list.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
-      } else if (data.type === 'reaction_update') {
-        fetchReactions();
       } else if (data.type === 'read_receipt_update') {
         // Fetch latest read counts and merge with existing state to preserve other counts
         broadcastApi.getReadCounts(std.id)
@@ -281,32 +264,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     }
   };
 
-  const handleReaction = async (broadcastId, emoji) => {
-    const mine = myReactions[broadcastId] || [];
-    const alreadyReacted = mine.includes(emoji);
-    setReactions(prev => {
-      const updated = { ...prev };
-      updated[broadcastId] = { ...(prev[broadcastId] || {}) };
-      if (alreadyReacted) {
-        updated[broadcastId][emoji] = Math.max(0, (updated[broadcastId][emoji] || 1) - 1);
-        if (updated[broadcastId][emoji] === 0) delete updated[broadcastId][emoji];
-      } else {
-        updated[broadcastId][emoji] = (updated[broadcastId][emoji] || 0) + 1;
-      }
-      return updated;
-    });
-    setMyReactions(prev => {
-      const mine2 = prev[broadcastId] || [];
-      return { ...prev, [broadcastId]: alreadyReacted ? mine2.filter(e => e !== emoji) : [...mine2, emoji] };
-    });
-    try {
-      if (alreadyReacted) await broadcastApi.removeReaction(broadcastId, emoji);
-      else await broadcastApi.addReaction(broadcastId, emoji);
-    } catch (err) {
-      fetchReactions();
-    }
-  };
-
   const visibleBroadcasts = broadcasts.filter(b => {
     if (b.deleted) return false;
     if (searchQuery.trim()) return b.text?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -383,8 +340,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
               const showDate = msgGroup !== currentGroup;
               if (showDate) currentGroup = msgGroup;
 
-              const msgReactions = reactions[b.id] || {};
-              const myEmojis = myReactions[b.id] || [];
               const isFutureScheduled = b.scheduled_for && new Date(b.scheduled_for) > new Date();
               const expiresIn = b.expires_at ? Math.round((new Date(b.expires_at) - Date.now()) / 3600000) : null;
               
@@ -502,35 +457,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
                     </div>
 
-                    {/* Reactions below bubble — WhatsApp-style: distinct emojis grouped
-                        into ONE compact pill with a total count, so 3+ reactions never
-                        widen the message. Tap opens the menu (emoji row) to add/remove. */}
-                    {Object.keys(msgReactions).length > 0 && (() => {
-                      const total = Object.values(msgReactions).reduce((sum, n) => sum + n, 0);
-                      const iReacted = myEmojis.length > 0;
-                      return (
-                        <div className={`flex mt-0.5 max-w-full ${isSender ? 'justify-end' : 'justify-start'}`}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              let rightPos = window.innerWidth - rect.right - 10;
-                              if (rightPos < 10) rightPos = 10;
-                              let topPos = rect.bottom + 4;
-                              let bottomPos = 'auto';
-                              if (topPos + 280 > window.innerHeight) { topPos = 'auto'; bottomPos = window.innerHeight - rect.top + 4; }
-                              setMenuPos({ top: topPos, bottom: bottomPos, right: rightPos });
-                              setMenuId(b.id);
-                            }}
-                            title="Reactions"
-                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-sm shadow-sm border max-w-full transition-colors ${iReacted ? 'bg-blue-50 border-blue-200' : 'bg-white border-neutral-200 hover:bg-neutral-50'}`}>
-                            <span className="leading-none">{Object.keys(msgReactions).join('')}</span>
-                            {total > 1 && <span className="text-[11px] text-neutral-500 tabular-nums">{total}</span>}
-                          </button>
-                        </div>
-                      );
-                    })()}
-
                     {/* Actions (Context Menu & Reply) - Always visible on mobile, hover on desktop */}
                     <div className={`absolute top-0 -left-[56px] md:-left-[68px] bottom-0 w-[56px] md:w-[68px] opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end px-1 gap-1`}>
                       <button onClick={() => { setReplyTo(b); inputRef.current?.focus(); }} className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Reply">
@@ -608,13 +534,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                   <button onClick={() => { onUpdate((list) => list.map((x) => x.id === b.id ? { ...x, pinned: !x.pinned } : x)); setMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-neutral-50 text-left text-neutral-700">
                     <Pin size={14} /> {b.pinned ? 'Unpin' : 'Pin'}
                   </button>
-                  <div className="flex items-center justify-between px-4 py-2 border-t border-neutral-100">
-                    {QUICK_EMOJIS.map(emoji => (
-                      <button key={emoji} onClick={() => { handleReaction(b.id, emoji); setMenuId(null); }} className="text-lg hover:scale-125 transition-transform">
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
                   <button onClick={async () => {
                       setMenuId(null);
                       try {

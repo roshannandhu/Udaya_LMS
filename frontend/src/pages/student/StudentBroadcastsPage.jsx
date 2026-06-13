@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { MessageSquare, Pin, FileText, Loader2, Search, X, Copy } from 'lucide-react';
+import { MessageSquare, Pin, FileText, Loader2, Search, X } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
 import { broadcastApi, getApiBaseUrl } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { fmtTime, fmtChatDate } from '../../lib/datetime';
-
-const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 const formatChatDate = fmtChatDate;
 
@@ -18,11 +16,8 @@ export default function StudentBroadcastsPage() {
   const [standard, setStandard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [broadcasts, setBroadcasts] = useState([]);
-  const [reactions, setReactions] = useState({});
-  const [myReactions, setMyReactions] = useState({});
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [emojiPickerId, setEmojiPickerId] = useState(null);
   const wsRef = useRef(null);
   const markedReadRef = useRef(new Set());
   const chatBottomRef = useRef(null);
@@ -32,12 +27,6 @@ export default function StudentBroadcastsPage() {
     if (standardId) setStandard({ id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || 'graduation' });
     setLoading(false);
   }, [user?.standard_id, user?.standard_name, user?.standard_emoji]);
-
-  const fetchReactions = (stdId) => {
-    broadcastApi.getReactions(stdId || standard?.id)
-      .then(data => { setReactions(data?.counts || {}); setMyReactions(data?.mine || {}); })
-      .catch(() => {});
-  };
 
   useEffect(() => {
     if (chatBottomRef.current) {
@@ -66,7 +55,6 @@ export default function StudentBroadcastsPage() {
           broadcastApi.markRead(unseen).catch(() => {});
           unseen.forEach(id => markedReadRef.current.add(id));
         }
-        fetchReactions(standard.id);
       } else if (data.type === 'new_broadcast') {
         const b = data.data;
         if (b.deleted) return;
@@ -85,8 +73,6 @@ export default function StudentBroadcastsPage() {
       } else if (data.type === 'edit_broadcast') {
         const b = data.data;
         setBroadcasts(prev => prev.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
-      } else if (data.type === 'reaction_update') {
-        fetchReactions(standard.id);
       }
     };
 
@@ -107,31 +93,6 @@ export default function StudentBroadcastsPage() {
       reply_to_text: b.reply_to_text || null,
     };
   }
-
-  const handleReaction = async (broadcastId, emoji) => {
-    const mine = myReactions[broadcastId] || [];
-    const alreadyReacted = mine.includes(emoji);
-    setReactions(prev => {
-      const updated = { ...prev };
-      updated[broadcastId] = { ...(prev[broadcastId] || {}) };
-      if (alreadyReacted) {
-        updated[broadcastId][emoji] = Math.max(0, (updated[broadcastId][emoji] || 1) - 1);
-        if (updated[broadcastId][emoji] === 0) delete updated[broadcastId][emoji];
-      } else {
-        updated[broadcastId][emoji] = (updated[broadcastId][emoji] || 0) + 1;
-      }
-      return updated;
-    });
-    setMyReactions(prev => {
-      const mine2 = prev[broadcastId] || [];
-      return { ...prev, [broadcastId]: alreadyReacted ? mine2.filter(e => e !== emoji) : [...mine2, emoji] };
-    });
-    setEmojiPickerId(null);
-    try {
-      if (alreadyReacted) await broadcastApi.removeReaction(broadcastId, emoji);
-      else await broadcastApi.addReaction(broadcastId, emoji);
-    } catch { fetchReactions(); }
-  };
 
   const visibleBroadcasts = broadcasts.filter(b => {
     if (searchQuery.trim()) return b.text?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -202,7 +163,7 @@ export default function StudentBroadcastsPage() {
           </div>
         )}
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full" onClick={() => setEmojiPickerId(null)}>
+      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full">
           {broadcasts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="bg-[#fff9c4] text-[#8a7e00] px-4 py-2 rounded-xl text-xs shadow-sm max-w-[280px]">
@@ -221,9 +182,6 @@ export default function StudentBroadcastsPage() {
                 const msgGroup = formatChatDate(b.created_at);
                 const showDate = msgGroup !== currentGroup;
                 if (showDate) currentGroup = msgGroup;
-
-                const msgReactions = reactions[b.id] || {};
-                const myEmojis = myReactions[b.id] || [];
 
                 return (
                   <React.Fragment key={b.id}>
@@ -311,61 +269,6 @@ export default function StudentBroadcastsPage() {
                         )}
 
                       </div>
-
-                      {/* Reactions below bubble — WhatsApp-style: distinct emojis grouped
-                          into ONE compact pill with a total count, so 3+ reactions never
-                          widen the message. Tap re-opens the picker to add/remove. Student
-                          view is always the receiver, so the pill left-aligns under the
-                          bubble. (Previously rendered N pills referencing an undeclared
-                          `isSender` → crashed the page the moment a message had a reaction.) */}
-                      {Object.keys(msgReactions).length > 0 && (() => {
-                        const total = Object.values(msgReactions).reduce((sum, n) => sum + n, 0);
-                        const iReacted = myEmojis.length > 0;
-                        return (
-                          <div className="flex mt-0.5 max-w-full justify-start">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === b.id ? null : b.id); }}
-                              title="Reactions"
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-sm shadow-sm border max-w-full transition-colors ${iReacted ? 'bg-blue-50 border-blue-200' : 'bg-white border-neutral-200 hover:bg-neutral-50'}`}>
-                              <span className="leading-none">{Object.keys(msgReactions).join('')}</span>
-                              {total > 1 && <span className="text-[11px] text-neutral-500 tabular-nums">{total}</span>}
-                            </button>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Inline Reaction Picker Toggle */}
-                      <div className="absolute top-1/2 -translate-y-1/2 -right-8 w-6 h-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === b.id ? null : b.id); }}
-                          className="w-full h-full rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-400 hover:text-neutral-700"
-                        >
-                          <span className="text-lg leading-none">+</span>
-                        </button>
-                      </div>
-
-                      {/* Reaction + Copy Popup */}
-                      {emojiPickerId === b.id && (
-                        <motion.div
-                          initial={reduce ? false : { opacity: 0, scale: 0.85, x: '100%' }}
-                          animate={{ opacity: 1, scale: 1, x: '100%' }}
-                          transition={{ type: 'spring', stiffness: 380, damping: 24 }}
-                          className="absolute top-0 -right-2 bg-white/95 backdrop-blur-sm border border-neutral-200 shadow-xl rounded-2xl px-2 py-1.5 z-20 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          {QUICK_EMOJIS.map(emoji => (
-                            <button key={emoji} onClick={() => handleReaction(b.id, emoji)}
-                              className={`text-xl hover:scale-125 transition-transform px-1 ${myEmojis.includes(emoji) ? 'opacity-50' : ''}`}>
-                              {emoji}
-                            </button>
-                          ))}
-                          <div className="w-px h-5 bg-neutral-200 mx-0.5" />
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(b.text || ''); setEmojiPickerId(null); }}
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
-                            title="Copy">
-                            <Copy size={13} />
-                          </button>
-                        </motion.div>
-                      )}
 
                     </motion.div>
                   </React.Fragment>
