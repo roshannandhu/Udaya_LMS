@@ -4717,15 +4717,6 @@ def update_test(test_id: str, updates: TestUpdate, user = Depends(verify_token))
     if has_content_change:
         if edata.get("status") not in ("draft", "scheduled"):
             raise HTTPException(status_code=403, detail="Cannot edit a test that is already active or completed")
-        if edata.get("scheduled_for"):
-            try:
-                sched = datetime.fromisoformat(edata["scheduled_for"].replace("Z", "+00:00"))
-                if datetime.now(timezone.utc) >= sched:
-                    raise HTTPException(status_code=403, detail="Cannot edit a test after the scheduled start time")
-            except HTTPException:
-                raise
-            except Exception:
-                pass
 
     update_data = incoming
     if update_data:
@@ -5558,15 +5549,6 @@ def update_test_full(test_id: str, data: TestUpdateFull, background_tasks: Backg
     edata = existing.data
     if edata.get("status") not in ("draft", "scheduled"):
         raise HTTPException(status_code=403, detail="Cannot edit a test that is already active or completed")
-    if edata.get("scheduled_for"):
-        try:
-            sched = datetime.fromisoformat(edata["scheduled_for"].replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) >= sched:
-                raise HTTPException(status_code=403, detail="Cannot edit a test after the scheduled start time")
-        except HTTPException:
-            raise
-        except Exception:
-            pass
 
     # Update test metadata
     test_data = {
@@ -6731,6 +6713,11 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
             student_code = assign_student_code(auth_user_id, s.standard_id, seq_cache=seq_cache)
 
             created.append({
+                # id + standard_id let the in-grid "Add students" flow merge the
+                # new rows in place (id is needed for later inline PATCH edits)
+                # without a full refetch. The file-import modal ignores them.
+                "id": auth_user_id,
+                "standard_id": s.standard_id,
                 "name": s.name,
                 "username": s.username,
                 "student_code": student_code,

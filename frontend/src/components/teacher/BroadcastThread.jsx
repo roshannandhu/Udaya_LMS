@@ -181,7 +181,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     if (!msg.trim() && attachments.length === 0) return;
     if (editingId) {
       const savedMsg = msg;
-      setEditingId(null); setMsg(''); setAttachments([]);
+      // keep picker open for multiple reactions setMsg(''); setAttachments([]);
       try {
         await apiClient(`/broadcasts/${editingId}`, { method: 'PATCH', body: JSON.stringify({ message: savedMsg }) });
         onUpdate((list) => list.map((b) => b.id !== editingId ? b : { ...b, text: savedMsg, edited: true }));
@@ -451,8 +451,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                       <div className="flex items-end justify-between gap-3">
                         <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                           {b.text}
-                          {/* Invisible spacer to push time/ticks below text nicely if it wraps */}
-                          <span className="inline-block w-16" />
                         </p>
                       </div>
 
@@ -490,7 +488,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
                     {/* Reactions below bubble */}
                     {Object.keys(msgReactions).length > 0 && (
-                      <div className={`flex flex-wrap gap-1 mt-0.5 ${isSender ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex flex-wrap gap-1 mt-0.5 ${isSender ? 'justify-end' : 'justify-start'} max-w-full self-start w-max`}>
                         {Object.entries(msgReactions).map(([emoji, count]) => (
                           <button key={emoji} onClick={() => handleReaction(b.id, emoji)}
                             className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs shadow-sm transition-colors ${myEmojis.includes(emoji) ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50'}`}>

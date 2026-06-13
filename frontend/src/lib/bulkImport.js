@@ -34,7 +34,7 @@ function normalizeStandardName(str) {
     .trim();
 }
 
-function generatePassword() {
+export function generatePassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   let pwd = '';
   const randomValues = new Uint32Array(8);
@@ -45,7 +45,7 @@ function generatePassword() {
   return pwd;
 }
 
-function generateUsername(rawName, existingUsernames, localSet) {
+export function generateUsername(rawName, existingUsernames, localSet) {
   const nameParts = rawName.toLowerCase().trim().split(/\s+/);
   let base = nameParts[0];
   if (nameParts.length > 1) {

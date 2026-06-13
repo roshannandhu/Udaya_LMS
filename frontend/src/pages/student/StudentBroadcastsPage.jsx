@@ -284,26 +284,38 @@ export default function StudentBroadcastsPage() {
                           </div>
                         )}
 
-                        {/* Message Text */}
-                        <div className="flex items-end justify-between gap-3">
-                          <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
-                            {b.text}
-                            {/* Invisible spacer to push time/ticks below text nicely if it wraps */}
-                            <span className="inline-block w-12" />
-                          </p>
-                        </div>
+                        {/* Message text + WhatsApp-style time.
+                            The transparent inline spacer after the text reserves room
+                            on the LAST line so the absolutely-positioned time can never
+                            sit on top of the words (it wraps to its own line if the
+                            text fills the width). Widen the gap when "edited" shows. */}
+                        {b.text && (
+                          <div className="relative min-w-0">
+                            <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
+                              {b.text}
+                              <span aria-hidden="true" className="inline-block align-bottom" style={{ width: b.edited ? 78 : 46 }} />
+                            </p>
+                            <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none">
+                              {b.edited && <span className="italic">edited</span>}
+                              <span>{b.time}</span>
+                            </span>
+                          </div>
+                        )}
 
-                        {/* Meta Info: Time */}
-                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[10px] text-neutral-500">
-                          {b.edited && <span className="italic">edited</span>}
-                          <span>{b.time}</span>
-                        </div>
+                        {/* Media-only message: no text to wrap around, so the time
+                            sits on its own right-aligned line under the attachment. */}
+                        {!b.text && (
+                          <div className="flex items-center justify-end gap-1 text-[10px] text-neutral-400 leading-none select-none mt-0.5">
+                            {b.edited && <span className="italic">edited</span>}
+                            <span>{b.time}</span>
+                          </div>
+                        )}
 
                       </div>
 
                       {/* Reactions below bubble */}
                       {Object.keys(msgReactions).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-0.5 justify-start">
+                         <div className={`flex flex-wrap gap-1 mt-0.5 ${isSender ? 'justify-end' : 'justify-start'} max-w-full self-start w-max`}>
                           {Object.entries(msgReactions).map(([emoji, count]) => (
                             <button key={emoji} onClick={() => handleReaction(b.id, emoji)}
                               className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs shadow-sm transition-colors ${myEmojis.includes(emoji) ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50'}`}>
