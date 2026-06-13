@@ -87,10 +87,15 @@ def signed_url_dict(supa, bucket: str, path: str, expires: int = 3600) -> dict:
     return supa.storage.from_(bucket).create_signed_url(path, expires)
 
 
-def remove(supa, bucket: str, path: str, public: bool = True):
-    """Delete an object from R2 (public/private bucket) or Supabase Storage."""
+def remove(supa, bucket: str, paths, public: bool = True):
+    """Delete one or many objects from R2 (public/private bucket) or Supabase.
+    `paths` may be a single key string or a list of keys. Best-effort."""
+    keys = [paths] if isinstance(paths, str) else [p for p in (paths or []) if p]
+    if not keys:
+        return
     if is_r2_enabled():
         target = os.environ["R2_PUBLIC_BUCKET"] if public else os.environ["R2_PRIVATE_BUCKET"]
-        _r2().delete_object(Bucket=target, Key=path)
+        for k in keys:
+            _r2().delete_object(Bucket=target, Key=k)
         return
-    supa.storage.from_(bucket).remove([path])
+    supa.storage.from_(bucket).remove(keys)

@@ -267,7 +267,7 @@ async def _ensure_notes_and_broadcast_columns():
 
 async def _ensure_notes_bucket():
     """Create the public 'notes' storage bucket if it doesn't exist."""
-    if not service_supabase:
+    if not service_supabase or filestore.is_r2_enabled():
         return
     try:
         buckets = await asyncio.to_thread(lambda: service_supabase.storage.list_buckets())
@@ -2225,7 +2225,7 @@ async def delete_standard(standard_id: str, pin: Optional[str] = None, user = De
 
         if storage_video_paths:
             try:
-                await asyncio.to_thread(lambda: service_supabase.storage.from_("videos").remove(storage_video_paths))
+                await asyncio.to_thread(lambda: filestore.remove(service_supabase, "videos", storage_video_paths, public=True))
             except Exception as e:
                 print(f"Storage video delete failed: {e}")
 
@@ -2256,7 +2256,7 @@ async def delete_standard(standard_id: str, pin: Optional[str] = None, user = De
         avatar_paths = [url.split("/object/public/avatars/")[-1] for url in student_avatar_urls if "/object/public/avatars/" in url]
         if avatar_paths:
             try:
-                await asyncio.to_thread(lambda: service_supabase.storage.from_("avatars").remove(avatar_paths))
+                await asyncio.to_thread(lambda: filestore.remove(service_supabase, "avatars", avatar_paths, public=True))
             except Exception as e:
                 print(f"Storage avatar delete failed: {e}")
 
@@ -3881,19 +3881,17 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
     file_name = f"avatars/{user['user_id']}{file_ext}"
 
     try:
-        try:
-            await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("avatars"))
-        except:
-            await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("avatars", options={"public": True}))
-        try:
-            await asyncio.to_thread(lambda: service_supabase.storage.from_("avatars").remove([file_name]))
-        except:
-            pass
-        await asyncio.to_thread(
-            lambda: service_supabase.storage.from_("avatars").upload(file_name, file_bytes, {"content-type": file.content_type or "image/jpeg"})
-        )
+        if not filestore.is_r2_enabled():
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("avatars"))
+            except:
+                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("avatars", options={"public": True}))
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.from_("avatars").remove([file_name]))
+            except:
+                pass
         public_url = await asyncio.to_thread(
-            lambda: service_supabase.storage.from_("avatars").get_public_url(file_name)
+            lambda: filestore.upload_public(service_supabase, "avatars", file_name, file_bytes, file.content_type or "image/jpeg")
         )
         # The storage path is the same on every re-upload, so the URL is identical
         # and browsers serve the cached OLD image. Append a version so each upload
@@ -3950,21 +3948,17 @@ async def upload_teacher_thumbnail(
         file_ext = os.path.splitext(file.filename or "thumb.jpg")[1] or ".jpg"
         file_name = f"thumbnails/{user['teacher_id']}{file_ext}"
         try:
-            try:
-                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("thumbnails"))
-            except Exception:
-                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("thumbnails", options={"public": True}))
-            try:
-                await asyncio.to_thread(lambda: service_supabase.storage.from_("thumbnails").remove([file_name]))
-            except Exception:
-                pass
-            await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("thumbnails").upload(
-                    file_name, file_bytes, {"content-type": file.content_type or "image/jpeg"}
-                )
-            )
+            if not filestore.is_r2_enabled():
+                try:
+                    await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("thumbnails"))
+                except Exception:
+                    await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("thumbnails", options={"public": True}))
+                try:
+                    await asyncio.to_thread(lambda: service_supabase.storage.from_("thumbnails").remove([file_name]))
+                except Exception:
+                    pass
             public_url = await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("thumbnails").get_public_url(file_name)
+                lambda: filestore.upload_public(service_supabase, "thumbnails", file_name, file_bytes, file.content_type or "image/jpeg")
             )
         except Exception as e:
             print("Thumbnail upload error:", e)
@@ -3998,21 +3992,17 @@ async def upload_teacher_profile_photo(
         file_ext = os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg"
         file_name = f"profile-photos/{user['teacher_id']}{file_ext}"
         try:
-            try:
-                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("profile-photos"))
-            except Exception:
-                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("profile-photos", options={"public": True}))
-            try:
-                await asyncio.to_thread(lambda: service_supabase.storage.from_("profile-photos").remove([file_name]))
-            except Exception:
-                pass
-            await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("profile-photos").upload(
-                    file_name, file_bytes, {"content-type": file.content_type or "image/jpeg"}
-                )
-            )
+            if not filestore.is_r2_enabled():
+                try:
+                    await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("profile-photos"))
+                except Exception:
+                    await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("profile-photos", options={"public": True}))
+                try:
+                    await asyncio.to_thread(lambda: service_supabase.storage.from_("profile-photos").remove([file_name]))
+                except Exception:
+                    pass
             public_url = await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("profile-photos").get_public_url(file_name)
+                lambda: filestore.upload_public(service_supabase, "profile-photos", file_name, file_bytes, file.content_type or "image/jpeg")
             )
         except Exception as e:
             print("Profile photo upload error:", e)
@@ -4373,31 +4363,21 @@ async def upload_video(
         storage_path = f"{class_id}/{uuid.uuid4()}_{safe_name}"
 
         # Auto-create bucket in thread (sync I/O must not block event loop)
-        try:
-            await asyncio.to_thread(
-                lambda: service_supabase.storage.create_bucket("videos", options={"public": True})
-            )
-        except Exception:
-            pass  # Already exists
-
-        # Upload file in thread
-        try:
-            await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("videos").upload(
-                    storage_path, file_bytes,
-                    {"content-type": file.content_type or "video/mp4"}
+        if not filestore.is_r2_enabled():
+            try:
+                await asyncio.to_thread(
+                    lambda: service_supabase.storage.create_bucket("videos", options={"public": True})
                 )
+            except Exception:
+                pass  # Already exists
+
+        # Upload file (R2 when configured, else Supabase) + get its public URL
+        try:
+            public_url = await asyncio.to_thread(
+                lambda: filestore.upload_public(service_supabase, "videos", storage_path, file_bytes, file.content_type or "video/mp4")
             )
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Storage upload failed: {e}")
-
-        # Get public URL in thread
-        try:
-            public_url = await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("videos").get_public_url(storage_path)
-            )
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Could not get video URL: {e}")
 
         allow_dl = allow_download.lower() not in ("false", "0", "no")
         try:
@@ -4521,7 +4501,7 @@ async def delete_video(video_id: str, user=Depends(verify_token)):
             if marker in cf_id:
                 storage_path = cf_id.split(marker, 1)[1]
                 await asyncio.to_thread(
-                    lambda: service_supabase.storage.from_("videos").remove([storage_path])
+                    lambda: filestore.remove(service_supabase, "videos", storage_path, public=True)
                 )
         except Exception as e:
             print(f"Supabase Storage delete failed: {e}")
@@ -6617,7 +6597,7 @@ async def delete_note(note_id: str, user = Depends(verify_token)):
         row = await asyncio.to_thread(lambda: service_supabase.table("notes").select("storage_path").eq("id", note_id).single().execute())
         path = row.data.get("storage_path") if row.data else None
         if path:
-            await asyncio.to_thread(lambda: service_supabase.storage.from_("notes").remove([path]))
+            await asyncio.to_thread(lambda: filestore.remove(service_supabase, "notes", path, public=True))
     except Exception as e:
         print(f"Note file delete failed (ignored): {e}")
     await asyncio.to_thread(lambda: service_supabase.table("notes").delete().eq("id", note_id).execute())
@@ -7747,7 +7727,7 @@ async def delete_assignment_attachment(assignment_id: str, attachment_id: str, u
         try:
             path = att_res.data["storage_path"]
             await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("assignments").remove([path])
+                lambda: filestore.remove(service_supabase, "assignments", path, public=False)
             )
         except Exception:
             pass
@@ -7786,7 +7766,7 @@ async def delete_assignment(assignment_id: str, user = Depends(verify_token)):
     if paths:
         try:
             await asyncio.to_thread(
-                lambda: service_supabase.storage.from_("assignments").remove(paths)
+                lambda: filestore.remove(service_supabase, "assignments", paths, public=False)
             )
         except Exception:
             pass
@@ -7968,7 +7948,7 @@ async def teacher_delete_submission(
     sp = sub.get("storage_path")
     if sp:
         try:
-            await asyncio.to_thread(lambda: service_supabase.storage.from_("assignments").remove([sp]))
+            await asyncio.to_thread(lambda: filestore.remove(service_supabase, "assignments", sp, public=False))
         except Exception:
             pass
 
@@ -8004,7 +7984,7 @@ async def student_delete_own_submission(
     sp = sub.get("storage_path")
     if sp:
         try:
-            await asyncio.to_thread(lambda: service_supabase.storage.from_("assignments").remove([sp]))
+            await asyncio.to_thread(lambda: filestore.remove(service_supabase, "assignments", sp, public=False))
         except Exception:
             pass
 
@@ -9292,6 +9272,8 @@ def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=N
 
 
 async def _wa_ensure_bucket():
+    if filestore.is_r2_enabled():
+        return
     try:
         await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("whatsapp"))
     except Exception:
@@ -9301,10 +9283,8 @@ async def _wa_ensure_bucket():
 
 async def _wa_upload_bytes(data: bytes, ext: str, content_type: str) -> str:
     await _wa_ensure_bucket()
-    fname = f"{uuid.uuid4()}{ext}"
-    await asyncio.to_thread(lambda: service_supabase.storage.from_("whatsapp").upload(
-        fname, data, {"content-type": content_type}))
-    return await asyncio.to_thread(lambda: service_supabase.storage.from_("whatsapp").get_public_url(fname))
+    fname = f"whatsapp/{uuid.uuid4()}{ext}"
+    return await asyncio.to_thread(lambda: filestore.upload_public(service_supabase, "whatsapp", fname, data, content_type))
 
 
 _WA_MESSAGES_TEST_ID_OK = False
