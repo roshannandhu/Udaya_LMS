@@ -5,6 +5,17 @@
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* App-like: no grey flash on tap */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  /* Native-app feel for the phone build (Capacitor): no pinch/double-tap zoom,
+     no iOS auto text-resize, no rubber-band/pull-to-refresh bounce. Pairs with
+     the `user-scalable=no` viewport in index.html. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
 }
 
 body {
