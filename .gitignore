@@ -50,3 +50,11 @@ subjects_page_redesign.html
 *.timestamp-*.mjs
 
 .vercel
+
+# Android signing & Firebase — NEVER commit.
+# Losing the keystore (or committing it) means you can never update the app again.
+*.jks
+*.keystore
+google-services.json
+android/app/build/
+android/.gradle/
