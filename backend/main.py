@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 
 import whatsapp as wa
+import storage as filestore
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
@@ -3833,6 +3834,7 @@ UPLOAD_MAX_MB = 50
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
 DOC_EXTS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt"}
 VIDEO_EXTS = {"mp4", "mov", "webm", "mkv", "m4v"}
+AUDIO_EXTS = {"mp3", "m4a", "ogg", "oga", "wav", "aac", "weba", "webm"}
 _UPLOAD_MIME_OK = {
     "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
     "application/msword",
@@ -3843,6 +3845,7 @@ _UPLOAD_MIME_OK = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "text/plain", "application/octet-stream",
     "video/mp4", "video/quicktime", "video/webm", "video/x-matroska",
+    "audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/webm", "audio/aac", "audio/x-wav",
 }
 
 def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: int = UPLOAD_MAX_MB):
@@ -6629,10 +6632,10 @@ async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(..
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
     path = f"{class_id}/{uuid.uuid4()}.{ext}"
     contents = await file.read()
-    validate_upload(file.filename, contents, IMAGE_EXTS | DOC_EXTS)
-    await asyncio.to_thread(lambda: service_supabase.storage.from_("notes").upload(path, contents, {"content-type": file.content_type or "application/octet-stream"}))
-    url = service_supabase.storage.from_("notes").get_public_url(path)
-    return {"url": url, "path": path, "type": file.content_type or "application/octet-stream"}
+    validate_upload(file.filename, contents, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
+    ct = file.content_type or "application/octet-stream"
+    url = await asyncio.to_thread(lambda: filestore.upload_public(service_supabase, "notes", path, contents, ct))
+    return {"url": url, "path": path, "type": ct}
 
 
 @app.post("/api/upload")
@@ -6644,21 +6647,19 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
         raise HTTPException(status_code=503, detail="Database not available")
 
     file_bytes = await file.read()
-    validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
+    validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
     file_ext = os.path.splitext(file.filename)[1]
     file_name = f"{uuid.uuid4()}{file_ext}"
 
     try:
-        try:
-            await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("broadcasts"))
-        except:
-            await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("broadcasts", options={"public": True}))
+        if not filestore.is_r2_enabled():
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("broadcasts"))
+            except:
+                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("broadcasts", options={"public": True}))
 
-        await asyncio.to_thread(
-            lambda: service_supabase.storage.from_("broadcasts").upload(file_name, file_bytes, {"content-type": file.content_type})
-        )
         public_url = await asyncio.to_thread(
-            lambda: service_supabase.storage.from_("broadcasts").get_public_url(file_name)
+            lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, file.content_type or "application/octet-stream")
         )
         return {"url": public_url, "type": file.content_type, "filename": file.filename}
     except Exception as e:
@@ -7583,12 +7584,10 @@ async def create_assignment(
             storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
             ct = f.content_type or "application/octet-stream"
             await asyncio.to_thread(
-                lambda path=storage_path, b=file_bytes, c=ct: service_supabase.storage.from_("assignments").upload(
-                    path, b, {"content-type": c}
-                )
+                lambda path=storage_path, b=file_bytes, c=ct: filestore.upload_private(service_supabase, "assignments", path, b, c)
             )
             public_url = await asyncio.to_thread(
-                lambda path=storage_path: service_supabase.storage.from_("assignments").get_public_url(path)
+                lambda path=storage_path: filestore.signed_url(service_supabase, "assignments", path, 3600)
             )
             att_row = service_supabase.table("assignment_attachments").insert({
                 "assignment_id": assignment_id,
@@ -7623,7 +7622,7 @@ async def list_assignments(class_id: str, user = Depends(verify_token)):
                 continue
             try:
                 signed = await asyncio.to_thread(
-                    lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                    lambda p=sp: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
                 )
                 url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
                 if url:
@@ -7648,7 +7647,7 @@ async def list_assignments(class_id: str, user = Depends(verify_token)):
                     if sp:
                         try:
                             signed = await asyncio.to_thread(
-                                lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                                lambda p=sp: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
                             )
                             url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
                             if url:
@@ -7714,12 +7713,10 @@ async def add_assignment_attachments(
         storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
         ct = f.content_type or "application/octet-stream"
         await asyncio.to_thread(
-            lambda path=storage_path, b=file_bytes, c=ct: service_supabase.storage.from_("assignments").upload(
-                path, b, {"content-type": c}
-            )
+            lambda path=storage_path, b=file_bytes, c=ct: filestore.upload_private(service_supabase, "assignments", path, b, c)
         )
         public_url = await asyncio.to_thread(
-            lambda path=storage_path: service_supabase.storage.from_("assignments").get_public_url(path)
+            lambda path=storage_path: filestore.signed_url(service_supabase, "assignments", path, 3600)
         )
         att_row = service_supabase.table("assignment_attachments").insert({
             "assignment_id": assignment_id,
@@ -7835,12 +7832,10 @@ async def submit_assignment(
     await _ensure_assignments_bucket()
     ct = file.content_type or "application/octet-stream"
     await asyncio.to_thread(
-        lambda: service_supabase.storage.from_("assignments").upload(
-            storage_path, file_bytes, {"content-type": ct}
-        )
+        lambda: filestore.upload_private(service_supabase, "assignments", storage_path, file_bytes, ct)
     )
     public_url = await asyncio.to_thread(
-        lambda: service_supabase.storage.from_("assignments").get_public_url(storage_path)
+        lambda: filestore.signed_url(service_supabase, "assignments", storage_path, 3600)
     )
 
     row = service_supabase.table("assignment_submissions").insert({
@@ -7876,7 +7871,7 @@ async def get_assignment_submissions(assignment_id: str, user = Depends(verify_t
         if sp:
             try:
                 signed = await asyncio.to_thread(
-                    lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                    lambda p=sp: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
                 )
                 url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL") or (signed or {}).get("signed_url")
                 if url:
@@ -8055,7 +8050,7 @@ async def get_all_student_assignments(user = Depends(verify_token)):
                 continue
             try:
                 signed = await asyncio.to_thread(
-                    lambda p=sp: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                    lambda p=sp: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
                 )
                 url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
                 if url:
@@ -8075,7 +8070,7 @@ async def get_all_student_assignments(user = Depends(verify_token)):
         if sp2:
             try:
                 signed2 = await asyncio.to_thread(
-                    lambda p=sp2: service_supabase.storage.from_("assignments").create_signed_url(p, 3600)
+                    lambda p=sp2: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
                 )
                 url2 = (signed2 or {}).get("signedUrl") or (signed2 or {}).get("signedURL")
                 if url2:
