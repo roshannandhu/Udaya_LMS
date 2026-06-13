@@ -24,6 +24,20 @@ import whatsapp as wa
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
+# Error monitoring (Sentry) — dormant unless SENTRY_DSN is set in the host env.
+# Guarded so a missing package/DSN can never block startup (e.g. local dev).
+try:
+    _sentry_dsn = os.getenv("SENTRY_DSN", "")
+    if _sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            traces_sample_rate=0.1,
+            environment=os.getenv("ENVIRONMENT", "production"),
+        )
+except Exception as _e:
+    print(f"[sentry] init skipped: {_e}")
+
 app = FastAPI(title="Tutoria LMS API")
 
 app.add_middleware(
@@ -1054,8 +1068,39 @@ class ResendOtpRequest(BaseModel):
     pending_id: str
 
 
+# ── Login rate limiting (Cloudflare-aware, in-memory sliding window) ──
+# Keyed on the real client IP (CF-Connecting-IP behind Cloudflare, not the socket
+# address). Fails OPEN on any internal error so a bug can never lock users out.
+# OTP endpoints already cap attempts/resends separately.
+_login_attempts: dict = {}
+LOGIN_RL_MAX = 8
+LOGIN_RL_WINDOW = 300  # seconds
+
+def _client_ip(request: Request) -> str:
+    return (request.headers.get("cf-connecting-ip")
+            or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+            or (request.client.host if request.client else "unknown"))
+
+def login_rate_limit(request: Request):
+    try:
+        ip = _client_ip(request)
+        now = time_module.time()
+        hits = [t for t in _login_attempts.get(ip, []) if now - t < LOGIN_RL_WINDOW]
+        if len(hits) >= LOGIN_RL_MAX:
+            raise HTTPException(status_code=429, detail="Too many login attempts. Please wait a few minutes and try again.")
+        hits.append(now)
+        _login_attempts[ip] = hits
+        if len(_login_attempts) > 5000:  # bound memory
+            stale = [k for k, v in _login_attempts.items() if not any(now - t < LOGIN_RL_WINDOW for t in v)]
+            for k in stale:
+                _login_attempts.pop(k, None)
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # fail open
+
 @app.post("/api/auth/login")
-def login(request: LoginRequest):
+def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
     if not supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -3781,6 +3826,43 @@ def mark_student_seen(request: MarkSeenRequest, user = Depends(verify_token)):
         print(f"student_seen upsert failed: {e}")
     return {"message": "ok"}
 
+# ── Upload validation (size + extension + lazy MIME sniff) ──
+# `magic` is imported lazily so local dev without libmagic still runs (degrades
+# to extension + size checks); the Docker image ships libmagic1 for full sniffing.
+UPLOAD_MAX_MB = 50
+IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
+DOC_EXTS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt"}
+_UPLOAD_MIME_OK = {
+    "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain", "application/octet-stream",
+}
+
+def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: int = UPLOAD_MAX_MB):
+    """Reject empty/oversize files, disallowed extensions, and (when libmagic is
+    present) disallowed sniffed MIME types. Raises HTTPException(400/422)."""
+    if not content:
+        raise HTTPException(status_code=422, detail="File is empty.")
+    if len(content) > max_mb * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File too large. Max {max_mb} MB.")
+    ext = (filename or "").rsplit(".", 1)[-1].lower() if "." in (filename or "") else ""
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"File type '.{ext or '?'}' not allowed.")
+    try:
+        import magic
+        mime = magic.from_buffer(content[:2048], mime=True)
+        if mime not in _UPLOAD_MIME_OK and not mime.startswith("image/"):
+            raise HTTPException(status_code=400, detail=f"File content '{mime}' not allowed.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # libmagic unavailable → extension + size check only
+
 @app.post("/api/students/me/avatar")
 async def upload_student_avatar(file: UploadFile = File(...), user = Depends(verify_token)):
     if user["role"] != "student":
@@ -3789,6 +3871,7 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
         raise HTTPException(status_code=503, detail="Database not available")
 
     file_bytes = await file.read()
+    validate_upload(file.filename or "avatar.jpg", file_bytes, IMAGE_EXTS, max_mb=10)
     file_ext = os.path.splitext(file.filename or "avatar.jpg")[1] or ".jpg"
     file_name = f"avatars/{user['user_id']}{file_ext}"
 
@@ -7734,6 +7817,7 @@ async def submit_assignment(
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=422, detail="File is empty")
+    validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
 
     safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in file.filename)
     storage_path = f"submissions/{assignment_id}/{student_id}_{uuid.uuid4()}_{safe_name}"

@@ -84,6 +84,19 @@ CLOUDFLARE (DNS + free SSL + CDN + DDoS — front of everything)
 
 ---
 
+## ✅ Implemented this session (in-repo, verified)
+
+Done locally — these carry over to Coolify/Pages automatically on deploy:
+- **Sentry (env-gated)** — backend `main.py` guarded init + frontend `main.jsx` (`@sentry/react`). Dormant until `SENTRY_DSN` / `VITE_SENTRY_DSN` are set.
+- **Login rate limiting** — Cloudflare-aware in-memory limiter (8 / 5 min per real client IP via `CF-Connecting-IP`) on `/api/auth/login`; fails open so it can never lock users out. (OTP routes already cap attempts.)
+- **File validation** — `validate_upload()` (size + extension + lazy `magic` MIME sniff) wired into the untrusted **student** uploads (avatar, assignment submission). *Teacher uploads (video/note/broadcast/thumbnail/assignment) not yet wired — trusted uploader, lower risk; follow-up.*
+- **DB backup script** — `backend/scripts/backup_db.py` (`pg_dump → gzip → R2`); standalone, schedule as a Coolify cron once R2 creds exist.
+- **Deps/infra** — `Dockerfile` ships `postgresql-client` + `libmagic1`; `requirements.txt` adds `sentry-sdk[fastapi]`, `python-magic`, `boto3`. All new imports are lazy/guarded so local dev (no libmagic) and the test backend keep working.
+
+Verified: `py -m py_compile main.py scripts/backup_db.py`, `py -c "import main"`, and `npm run build` all pass.
+
+---
+
 ## 2. PHASE A — Security first (Day 1, non-negotiable)
 
 ### A1. Make GitHub repo private immediately
