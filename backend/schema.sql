@@ -553,6 +553,18 @@ CREATE TABLE IF NOT EXISTS teacher_branding (
   updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Global app/teacher settings (durable home for what used to live only in the
+-- ephemeral teacher_settings.json: branding name + logo URL, default student
+-- password, termination PIN, AI provider key, security/notification prefs).
+CREATE TABLE IF NOT EXISTS app_settings (
+  id         TEXT PRIMARY KEY,                 -- single 'global' row (one institution)
+  data       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_app_settings" ON app_settings;
+CREATE POLICY "deny_all_app_settings" ON app_settings FOR ALL USING (false);
+
 -- ── Migration 3: Create live_class_attendance table ───────────────────────────
 
 CREATE TABLE IF NOT EXISTS live_class_attendance (

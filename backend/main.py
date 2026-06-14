@@ -209,6 +209,7 @@ async def _ensure_notes_and_broadcast_columns():
         service_supabase.table("broadcast_reactions").select("broadcast_id").limit(1).execute()
         service_supabase.table("broadcasts").select("expires_at").limit(1).execute()
         service_supabase.table("standards").select("broadcast_ttl_hours").limit(1).execute()
+        service_supabase.table("app_settings").select("id").limit(1).execute()
         return
     except Exception:
         pass
@@ -250,6 +251,14 @@ async def _ensure_notes_and_broadcast_columns():
         ALTER TABLE broadcast_reactions ENABLE ROW LEVEL SECURITY;
         DROP POLICY IF EXISTS "deny_all_reactions" ON broadcast_reactions;
         CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id         TEXT PRIMARY KEY,
+            data       JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ DEFAULT now()
+        );
+        ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "deny_all_app_settings" ON app_settings;
+        CREATE POLICY "deny_all_app_settings" ON app_settings FOR ALL USING (false);
     """
     try:
         async with httpx.AsyncClient(timeout=8) as client:
@@ -7188,9 +7197,11 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
         )
         return {"url": public_url, "type": file.content_type, "filename": file.filename}
     except Exception as e:
+        # Never embed the file as a base64 data: URL — that would store a large
+        # binary inside the broadcasts table. Fail loudly so the file genuinely
+        # lands in file storage (the teacher can retry).
         print("Upload error:", e)
-        b64 = base64.b64encode(file_bytes).decode('utf-8')
-        return {"url": f"data:{file.content_type};base64,{b64}", "type": file.content_type, "filename": file.filename}
+        raise HTTPException(status_code=502, detail="File storage upload failed. Please try again.")
 
 # --- Bulk Student Import ---
 
@@ -8621,17 +8632,74 @@ async def get_all_student_assignments(user = Depends(verify_token)):
 # ─── TEACHER SETTINGS (AI API KEYS) ────────────────────────────────────────
 
 SETTINGS_FILE = Path(__file__).resolve().parent / "teacher_settings.json"
+_SETTINGS_ROW_ID = "global"  # single-institution: one global settings row
+
+def _load_settings_from_db():
+    """Durable settings copy from the app_settings table (None if unavailable)."""
+    if not service_supabase:
+        return None
+    try:
+        row = service_supabase.table("app_settings").select("data").eq("id", _SETTINGS_ROW_ID).limit(1).execute()
+        if row.data:
+            return row.data[0].get("data") or {}
+    except Exception:
+        return None
+    return None
 
 def get_teacher_settings():
+    # Fast path: on-disk cache (rewritten on every save). On Render the disk is
+    # ephemeral, so a redeploy wipes this file — fall back to the durable DB copy
+    # and rehydrate the cache (same self-healing pattern as broadcast history).
     if SETTINGS_FILE.exists():
         try:
             return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
         except Exception:
-            return {}
+            pass
+    db = _load_settings_from_db()
+    if db is not None:
+        try:
+            SETTINGS_FILE.write_text(json.dumps(db, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        return db
     return {}
 
 def save_teacher_settings(data: dict):
-    SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    # Write-through: the DB is the durable source of truth; the file is the cache.
+    if service_supabase:
+        try:
+            service_supabase.table("app_settings").upsert(
+                {"id": _SETTINGS_ROW_ID, "data": data, "updated_at": datetime.now(timezone.utc).isoformat()},
+                on_conflict="id").execute()
+        except Exception as e:
+            print(f"[settings] DB persist failed (file-only until migration runs): {e}")
+    try:
+        SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _store_branding_logo(data_url: str) -> Optional[str]:
+    """Move an inline base64 logo (data: URL) into file storage; return its public
+    URL. Keeps large images out of the settings record / DB. None on failure."""
+    if not service_supabase:
+        return None
+    try:
+        header, b64 = data_url.split(",", 1)
+        ctype = header.split(":", 1)[1].split(";", 1)[0] or "image/png"
+        ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg",
+               "image/webp": ".webp", "image/svg+xml": ".svg", "image/gif": ".gif"}.get(ctype, ".png")
+        raw = base64.b64decode(b64)
+        if not filestore.is_r2_enabled():
+            try:
+                service_supabase.storage.get_bucket("branding")
+            except Exception:
+                service_supabase.storage.create_bucket("branding", options={"public": True})
+        path = f"logo-{uuid.uuid4().hex[:8]}{ext}"
+        return filestore.upload_public(service_supabase, "branding", path, raw, ctype)
+    except Exception as e:
+        print(f"[branding] logo storage failed, keeping inline: {e}")
+        return None
 
 class TeacherSettingsInput(BaseModel):
     ai_provider: Optional[str] = None
@@ -8672,6 +8740,13 @@ def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current
     # caller clear a value by sending "" (omitted fields are left untouched).
     for key, value in data.model_dump(exclude_unset=True).items():
         settings[key] = value
+    # A logo arrives as a base64 data: URL — store the image in file storage and
+    # keep only its URL, so the settings record never carries a large inline blob.
+    logo = settings.get("lms_logo")
+    if isinstance(logo, str) and logo.startswith("data:"):
+        stored = _store_branding_logo(logo)
+        if stored:
+            settings["lms_logo"] = stored
     save_teacher_settings(settings)
     return {"success": True}
 

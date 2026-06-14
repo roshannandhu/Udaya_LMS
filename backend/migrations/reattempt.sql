@@ -1,5 +1,5 @@
 -- ============================================================================
--- Re-attempt feature migration (EXAMS + ASSIGNMENTS)
+-- Migration: re-attempt (EXAMS + ASSIGNMENTS) + durable app_settings
 -- Run this ONCE in the Supabase SQL Editor (Dashboard → SQL Editor → New query
 -- → paste → Run). The app's auto-migration does NOT work on hosted Supabase,
 -- so this must be applied manually. Safe to re-run (idempotent).
@@ -42,3 +42,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_reattempt_pending
 ALTER TABLE assignment_reattempt_requests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_all_assignment_reattempt" ON assignment_reattempt_requests;
 CREATE POLICY "deny_all_assignment_reattempt" ON assignment_reattempt_requests FOR ALL USING (false);
+
+-- ── Durable global settings (was ephemeral teacher_settings.json) ───────────
+-- Holds branding name + logo URL, default student password, termination PIN,
+-- AI key, security/notification prefs. Survives redeploys (ephemeral disk).
+CREATE TABLE IF NOT EXISTS app_settings (
+    id         TEXT PRIMARY KEY,
+    data       JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_app_settings" ON app_settings;
+CREATE POLICY "deny_all_app_settings" ON app_settings FOR ALL USING (false);
