@@ -147,8 +147,9 @@ export default function BroadcastsPage() {
 
   return (
     <div className="flex flex-col flex-1 h-full bg-[#f0f2f5] lg:p-4 lg:pb-6" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
-      {/* Mobile TopBar */}
-      <div className="md:hidden flex-shrink-0">
+      {/* Mobile/tablet TopBar — the desktop TopNav only appears at lg, so keep the
+          page header until then (was md:hidden → vanished on iPad with no replacement). */}
+      <div className="lg:hidden flex-shrink-0">
         <TopBar
           title={showThread && std ? std.name : 'Inbox'}
           subtitle={showThread && std ? `${studentCounts[std.id] || 0} students` : 'Class broadcasts'}
@@ -156,7 +157,7 @@ export default function BroadcastsPage() {
         />
       </div>
 
-      <div className="flex flex-1 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 h-[calc(100dvh-160px)] md:h-[calc(100vh-120px)]">
+      <div className="flex flex-1 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 h-[calc(100dvh-160px)] lg:h-[calc(100vh-120px)]">
 
         {/* Standards list pane (Sidebar) */}
         <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-[350px] lg:w-[400px] bg-white border-r border-neutral-200 flex-shrink-0`}>

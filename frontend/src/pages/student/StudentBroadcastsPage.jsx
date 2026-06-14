@@ -104,8 +104,8 @@ export default function StudentBroadcastsPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 md:pb-0 h-[calc(100dvh-160px)] md:h-[calc(100vh-64px)]">
-        <div className="md:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 lg:pb-0 h-[calc(100dvh-160px)] lg:h-[calc(100vh-64px)]">
+        <div className="lg:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin text-neutral-400" size={24} />
         </div>
@@ -115,8 +115,8 @@ export default function StudentBroadcastsPage() {
 
   if (!standard) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 md:pb-0 h-[calc(100dvh-160px)] md:h-[calc(100vh-64px)]">
-        <div className="md:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 lg:pb-0 h-[calc(100dvh-160px)] lg:h-[calc(100vh-64px)]">
+        <div className="lg:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
         <div className="px-5 py-16 text-center">
           <MessageSquare size={32} className="mx-auto mb-3 text-neutral-400" />
           <p className="text-sm text-neutral-500">No broadcasts available yet.</p>
@@ -128,8 +128,8 @@ export default function StudentBroadcastsPage() {
   let currentGroup = null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] md:pb-0 h-[calc(100dvh-160px)] md:h-[calc(100vh-64px)]">
-      <div className="md:hidden flex-shrink-0"><TopBar title="Class Updates" showSearch={false} /></div>
+    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] lg:pb-0 h-[calc(100dvh-160px)] lg:h-[calc(100vh-64px)]">
+      <div className="lg:hidden flex-shrink-0"><TopBar title="Class Updates" showSearch={false} /></div>
       <div className="flex flex-1 w-full max-w-[1000px] mx-auto bg-[#efeae2] md:border-x md:border-black/5 shadow-sm relative flex-col min-h-0">
         
         {/* Unified WhatsApp-style Header */}

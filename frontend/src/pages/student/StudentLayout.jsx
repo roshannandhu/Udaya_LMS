@@ -71,7 +71,9 @@ export default function StudentLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav type="student" badges={badges} />
-      <div className="flex-1 flex flex-col pb-28 lg:pb-0">
+      {/* overflow-x-clip: stop any inner element that pokes past the viewport from
+          letting the page pan sideways on tablet/phone (parity with TeacherLayout). */}
+      <div className="flex-1 flex flex-col pb-28 lg:pb-0 overflow-x-clip">
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>
