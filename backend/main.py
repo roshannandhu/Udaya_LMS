@@ -2080,6 +2080,13 @@ async def get_dashboard_insights(user = Depends(verify_token)):
     }
 
 # Standards CRUD
+# Orphans only ever appear from a one-time DB/migration seed, so claiming them
+# once per teacher per process is enough — re-querying Supabase on every
+# /standards and /subjects request added a redundant round-trip (~hundreds of ms
+# each) to the app's hot boot path. A process restart (every deploy) re-runs it,
+# preserving the self-healing behaviour.
+_orphans_claimed_for = set()
+
 def _claim_orphan_standards(teacher_id):
     """Assign any orphaned (teacher_id IS NULL) standards to this teacher.
     Such standards come from DB/migration seeds; without an owner they are
@@ -2088,12 +2095,13 @@ def _claim_orphan_standards(teacher_id):
     like "students see subjects the teacher can't". This is a single-primary-
     teacher app, so claiming is safe and self-healing, mirroring the claim-on-
     write already done in standard update/delete. Idempotent + best-effort."""
-    if not service_supabase or not teacher_id:
+    if not service_supabase or not teacher_id or teacher_id in _orphans_claimed_for:
         return
     try:
         orphans = service_supabase.table("standards").select("id").is_("teacher_id", "null").execute()
         if orphans.data:
             service_supabase.table("standards").update({"teacher_id": teacher_id}).is_("teacher_id", "null").execute()
+        _orphans_claimed_for.add(teacher_id)
     except Exception:
         pass
 
@@ -6083,12 +6091,20 @@ async def websocket_endpoint(websocket: WebSocket, standard_id: str, token: Opti
     if not token:
         await websocket.close(code=4001)
         return
-    try:
-        user_response = supabase.auth.get_user(token)
-        if not user_response.user:
-            await websocket.close(code=4001)
-            return
-    except Exception:
+    # Reuse verify_token's short-TTL auth cache: the broadcast page just made
+    # authenticated HTTP calls, so this token is almost always warm — skipping a
+    # blocking Supabase Auth round-trip that was the main "broadcast loading"
+    # delay. On a cache miss, validate OFF the event loop so it doesn't stall
+    # other connections.
+    cached = _auth_cache.get(token)
+    valid = bool(cached and cached["expires_at"] > time_module.time())
+    if not valid:
+        try:
+            ur = await asyncio.to_thread(lambda: supabase.auth.get_user(token))
+            valid = bool(ur and ur.user)
+        except Exception:
+            valid = False
+    if not valid:
         await websocket.close(code=4001)
         return
     await manager.connect(websocket, standard_id)
