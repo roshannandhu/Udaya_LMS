@@ -265,6 +265,57 @@ async def _ensure_notes_and_broadcast_columns():
         print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
 
 
+async def _ensure_reattempt_table():
+    """Auto-add the test_reattempt_requests table + test_attempts.reattempt_allowed
+    column if missing (student exam re-attempt request → teacher approval flow)."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
+        return
+    # Probe first — fast path if everything already exists
+    try:
+        service_supabase.table("test_reattempt_requests").select("id").limit(1).execute()
+        service_supabase.table("test_attempts").select("reattempt_allowed").limit(1).execute()
+        return
+    except Exception:
+        pass
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+    ddl = """
+        ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS reattempt_allowed BOOLEAN DEFAULT false;
+        CREATE TABLE IF NOT EXISTS test_reattempt_requests (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            test_id     UUID NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+            student_id  UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            reason      TEXT,
+            status      TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','completed')),
+            old_score   NUMERIC,
+            created_at  TIMESTAMPTZ DEFAULT now(),
+            resolved_at TIMESTAMPTZ,
+            resolved_by UUID
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_reattempt_pending
+            ON test_reattempt_requests(test_id, student_id) WHERE status = 'pending';
+        ALTER TABLE test_reattempt_requests ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "deny_all_reattempt" ON test_reattempt_requests;
+        CREATE POLICY "deny_all_reattempt" ON test_reattempt_requests FOR ALL USING (false);
+    """
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
+            )
+            if resp.is_success:
+                print("[*] Auto-migrated: test_reattempt_requests table + reattempt_allowed column")
+            else:
+                raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Could not auto-migrate re-attempt table: {e}")
+        print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
+
+
 async def _ensure_notes_bucket():
     """Create the public 'notes' storage bucket if it doesn't exist."""
     if not service_supabase or filestore.is_r2_enabled():
@@ -325,6 +376,7 @@ async def _deferred_startup_migrations():
     starts, where this delay was added to every wake-up)."""
     try:
         await _ensure_notes_and_broadcast_columns()
+        await _ensure_reattempt_table()
         await _ensure_notes_bucket()
     except Exception as e:
         print(f"[!] deferred startup migrations error (ignored): {e}")
@@ -5413,6 +5465,9 @@ class SubmitTestRequest(BaseModel):
     answers: dict  # {question_id: selected_idx}
     cheat_events: List[dict] = []
 
+class ReattemptRequest(BaseModel):
+    reason: Optional[str] = None
+
 # Test attempt for results
 @app.post("/api/tests/with-questions")
 def create_test_with_questions(data: TestWithQuestions, user = Depends(verify_token)):
@@ -5614,12 +5669,19 @@ def get_test_for_taking(test_id: str, user = Depends(verify_token)):
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    if test.data.get("expires_at"):
+    # A teacher-granted re-attempt may re-open a test whose deadline has passed.
+    granted = False
+    if user.get("student_id"):
+        att = service_supabase.table("test_attempts").select("reattempt_allowed").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+        granted = bool(att.data and att.data[0].get("reattempt_allowed"))
+
+    if test.data.get("expires_at") and not granted:
         try:
-            from datetime import datetime, timezone
             expires = datetime.fromisoformat(test.data["expires_at"].replace("Z", "+00:00"))
             if datetime.now(timezone.utc) > expires:
                 raise HTTPException(status_code=403, detail="Test has expired")
+        except HTTPException:
+            raise
         except Exception as e:
             print("Error parsing expires_at:", e)
 
@@ -5673,9 +5735,12 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    # Check if already attempted
-    existing = service_supabase.table("test_attempts").select("id").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
-    if existing.data:
+    # Check if already attempted. A teacher-granted re-attempt (reattempt_allowed)
+    # lets the student submit again — the new attempt OVERWRITES the old row.
+    existing = service_supabase.table("test_attempts").select("id, points_earned, reattempt_allowed").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+    prior = existing.data[0] if existing.data else None
+    is_reattempt = bool(prior and prior.get("reattempt_allowed"))
+    if prior and not is_reattempt:
         raise HTTPException(status_code=400, detail="Test already attempted")
 
     # Get questions with correct answers
@@ -5721,7 +5786,7 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     else:
         points_earned = 10
 
-    # Insert attempt
+    # Write attempt
     attempt_data = {
         "test_id": test_id,
         "student_id": user["student_id"],
@@ -5736,12 +5801,25 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
         "started_at": datetime.now(timezone.utc).isoformat(),
         "submitted_at": datetime.now(timezone.utc).isoformat()
     }
-    result = service_supabase.table("test_attempts").insert(attempt_data).execute()
+    if is_reattempt:
+        # Overwrite the prior attempt; consume the one-shot grant.
+        attempt_data["reattempt_allowed"] = False
+        result = service_supabase.table("test_attempts").update(attempt_data).eq("id", prior["id"]).execute()
+        # Close out the approved request so it leaves the teacher's pending list.
+        try:
+            service_supabase.table("test_reattempt_requests").update({"status": "completed"}) \
+                .eq("test_id", test_id).eq("student_id", user["student_id"]).eq("status", "approved").execute()
+        except Exception:
+            pass
+    else:
+        result = service_supabase.table("test_attempts").insert(attempt_data).execute()
 
-    # Update student points
+    # Update student points. On a re-attempt, apply only the DELTA vs the old attempt
+    # (which already contributed its points) so totals/leaderboard stay correct.
+    points_delta = points_earned - (prior.get("points_earned") or 0) if is_reattempt else points_earned
     student = service_supabase.table("students").select("points").eq("id", user["student_id"]).single().execute()
     if student.data:
-        new_points = (student.data.get("points") or 0) + points_earned
+        new_points = (student.data.get("points") or 0) + points_delta
         service_supabase.table("students").update({"points": new_points}).eq("id", user["student_id"]).execute()
 
     # Update avg_score (stored as percentage)
@@ -5848,6 +5926,182 @@ def get_attempt_review(test_id: str, user = Depends(verify_token)):
         "questions": questions.data or [],
         "answers": raw_answers
     }
+
+
+# ── Test re-attempt requests (student asks → teacher approves) ──────────────────
+
+# Student requests to re-attempt a test they already submitted.
+@app.post("/api/tests/{test_id}/reattempt-request")
+def request_reattempt(test_id: str, req: ReattemptRequest, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    if not user.get("student_id"):
+        raise HTTPException(status_code=400, detail="Student record not found. Contact your teacher.")
+
+    # Must have an attempt to re-attempt; can't request if a grant is already open.
+    existing = service_supabase.table("test_attempts").select("score, reattempt_allowed").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+    if not existing.data:
+        raise HTTPException(status_code=400, detail="You haven't attempted this test yet.")
+    if existing.data[0].get("reattempt_allowed"):
+        raise HTTPException(status_code=400, detail="A re-attempt is already approved — just open the test again.")
+
+    # Block a second pending request (partial unique index also guards this).
+    pending = service_supabase.table("test_reattempt_requests").select("id").eq("test_id", test_id).eq("student_id", user["student_id"]).eq("status", "pending").execute()
+    if pending.data:
+        raise HTTPException(status_code=400, detail="You already have a pending request for this test.")
+
+    try:
+        service_supabase.table("test_reattempt_requests").insert({
+            "test_id": test_id,
+            "student_id": user["student_id"],
+            "reason": (req.reason or "").strip()[:500] or None,
+            "status": "pending",
+            "old_score": existing.data[0].get("score"),
+        }).execute()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Could not submit request. Please try again.")
+
+    # Best-effort: notify the teacher who owns the test (never blocks the request).
+    try:
+        test = service_supabase.table("tests").select("title, created_by").eq("id", test_id).single().execute()
+        teacher_id = (test.data or {}).get("created_by")
+        if teacher_id:
+            student = service_supabase.table("students").select("name").eq("id", user["student_id"]).single().execute()
+            sname = (student.data or {}).get("name") or "A student"
+            ttitle = (test.data or {}).get("title") or "a test"
+            service_supabase.table("notifications").insert({
+                "recipient_id": teacher_id,
+                "recipient_type": "teacher",
+                "type": "reattempt_request",
+                "title": "Re-attempt requested",
+                "body": f"{sname} asked to re-attempt “{ttitle}”.",
+                "data": {"test_id": test_id, "student_id": user["student_id"]},
+                "read": False,
+            }).execute()
+    except Exception as e:
+        print(f"Re-attempt teacher notification failed: {e}")
+
+    return {"status": "pending"}
+
+
+# Teacher lists pending re-attempt requests (optionally for one test).
+@app.get("/api/reattempt-requests")
+def list_reattempt_requests(test_id: Optional[str] = None, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    q = service_supabase.table("test_reattempt_requests").select(
+        "*, students(name, username, avatar_url), tests(title)"
+    ).eq("status", "pending")
+    if test_id:
+        q = q.eq("test_id", test_id)
+    rows = q.order("created_at", desc=True).execute()
+    return rows.data or []
+
+
+# Teacher approves a re-attempt → grants the student one overwrite-attempt.
+@app.patch("/api/reattempt-requests/{request_id}/approve")
+def approve_reattempt(request_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    request = service_supabase.table("test_reattempt_requests").select("*").eq("id", request_id).single().execute()
+    if not request.data:
+        raise HTTPException(status_code=404, detail="Request not found")
+    r = request.data
+
+    # Grant the one-shot re-take on the student's existing attempt row.
+    service_supabase.table("test_attempts").update({"reattempt_allowed": True}) \
+        .eq("test_id", r["test_id"]).eq("student_id", r["student_id"]).execute()
+
+    service_supabase.table("test_reattempt_requests").update({
+        "status": "approved",
+        "resolved_at": datetime.now(timezone.utc).isoformat(),
+        "resolved_by": user["user_id"],
+    }).eq("id", request_id).execute()
+
+    # Best-effort: tell the student they can re-take.
+    try:
+        test = service_supabase.table("tests").select("title").eq("id", r["test_id"]).single().execute()
+        ttitle = (test.data or {}).get("title") or "your test"
+        service_supabase.table("notifications").insert({
+            "recipient_id": r["student_id"],
+            "recipient_type": "student",
+            "type": "reattempt_approved",
+            "title": "Re-attempt approved",
+            "body": f"You can now re-take “{ttitle}”.",
+            "data": {"test_id": r["test_id"]},
+            "read": False,
+        }).execute()
+    except Exception as e:
+        print(f"Re-attempt student notification failed: {e}")
+
+    return {"status": "approved"}
+
+
+# Teacher rejects a re-attempt request.
+@app.patch("/api/reattempt-requests/{request_id}/reject")
+def reject_reattempt(request_id: str, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    request = service_supabase.table("test_reattempt_requests").select("*").eq("id", request_id).single().execute()
+    if not request.data:
+        raise HTTPException(status_code=404, detail="Request not found")
+    r = request.data
+
+    service_supabase.table("test_reattempt_requests").update({
+        "status": "rejected",
+        "resolved_at": datetime.now(timezone.utc).isoformat(),
+        "resolved_by": user["user_id"],
+    }).eq("id", request_id).execute()
+
+    try:
+        test = service_supabase.table("tests").select("title").eq("id", r["test_id"]).single().execute()
+        ttitle = (test.data or {}).get("title") or "your test"
+        service_supabase.table("notifications").insert({
+            "recipient_id": r["student_id"],
+            "recipient_type": "student",
+            "type": "reattempt_rejected",
+            "title": "Re-attempt not approved",
+            "body": f"Your re-attempt request for “{ttitle}” was declined.",
+            "data": {"test_id": r["test_id"]},
+            "read": False,
+        }).execute()
+    except Exception as e:
+        print(f"Re-attempt reject notification failed: {e}")
+
+    return {"status": "rejected"}
+
+
+# Student's own re-attempt request status per test ({test_id: status}).
+@app.get("/api/student/reattempt-requests")
+def my_reattempt_requests(user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        return {}
+    if not user.get("student_id"):
+        return {}
+    try:
+        rows = service_supabase.table("test_reattempt_requests").select("test_id, status, created_at") \
+            .eq("student_id", user["student_id"]).order("created_at", desc=True).execute()
+        # Keep the latest status per test (rows already newest-first).
+        out: Dict[str, str] = {}
+        for row in (rows.data or []):
+            out.setdefault(row["test_id"], row["status"])
+        return out
+    except Exception:
+        return {}
+
 
 # Get leaderboard for a standard.
 # period=overall ranks by cumulative students.points; weekly/monthly recompute

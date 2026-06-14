@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2 } from 'lucide-react';
+import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Sheet, Avatar, Tag, Btn, Skeleton, Input } from '../ui';
 import { testApi, apiClient, whatsappApi } from '../../lib/api';
 import { examResultsPayload } from './whatsapp/reportDefaults';
@@ -16,6 +16,8 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [notify, setNotify] = useState('idle'); // idle | sending | sent | later
+  const [reattempts, setReattempts] = useState([]); // pending re-attempt requests
+  const [reattemptBusy, setReattemptBusy] = useState(null); // request id being processed
 
   useEffect(() => {
     if (open && test?.id) {
@@ -65,12 +67,31 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
   const fetchResults = async () => {
     setLoading(true);
     try {
-      const data = await testApi.getTestResults(test.id);
+      const [data, reqs] = await Promise.all([
+        testApi.getTestResults(test.id),
+        testApi.getReattemptRequests(test.id).catch(() => []),
+      ]);
       setResults(data);
+      setReattempts(Array.isArray(reqs) ? reqs : []);
     } catch (err) {
       console.error('Error fetching results:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReattempt = async (reqId, action) => {
+    setReattemptBusy(reqId);
+    try {
+      if (action === 'approve') await testApi.approveReattempt(reqId);
+      else await testApi.rejectReattempt(reqId);
+      setReattempts(prev => prev.filter(r => r.id !== reqId));
+      // The student's attempt was reset (approve) — refresh the results list.
+      if (action === 'approve') fetchResults();
+    } catch (err) {
+      alert(err?.message || 'Action failed. Please try again.');
+    } finally {
+      setReattemptBusy(null);
     }
   };
 
@@ -291,6 +312,15 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                   className={`px-3 py-1.5 text-sm rounded-md ${activeTab === 'stats' ? 'bg-white/50 font-medium' : 'text-neutral-500'}`}>
                   Stats
                 </button>
+                <button onClick={() => setActiveTab('reattempts')}
+                  className={`px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 ${activeTab === 'reattempts' ? 'bg-white/50 font-medium' : 'text-neutral-500'}`}>
+                  Re-attempts
+                  {reattempts.length > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center text-[10px] font-bold text-white bg-amber-500 rounded-full">
+                      {reattempts.length}
+                    </span>
+                  )}
+                </button>
               </div>
 
               {activeTab === 'attempts' && (
@@ -373,6 +403,51 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                     </div>
                   );
                 })()}
+
+              {activeTab === 'reattempts' && (
+                reattempts.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-neutral-500">
+                    No re-attempt requests.
+                    <p className="text-xs text-neutral-400 mt-1">When a student asks to re-take this test, it shows here.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {reattempts.map(r => {
+                      const student = r.students || {};
+                      const totalM = test.total_marks || test.totalMarks || 100;
+                      const oldPct = r.old_score != null ? ((r.old_score / totalM) * 100).toFixed(0) : null;
+                      const busy = reattemptBusy === r.id;
+                      return (
+                        <div key={r.id} className="p-3 rounded-md bg-white border border-amber-100">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Avatar name={student.name} size="sm" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{student.name || 'Student'}</p>
+                              {oldPct != null && <p className="text-[11px] text-neutral-500">Previous score: {oldPct}%</p>}
+                            </div>
+                            <RotateCcw size={15} className="text-amber-500 shrink-0" />
+                          </div>
+                          {r.reason && (
+                            <p className="text-xs text-neutral-700 bg-neutral-50 border border-neutral-100 rounded-md px-3 py-2 mb-2.5 whitespace-pre-wrap">
+                              “{r.reason}”
+                            </p>
+                          )}
+                          <div className="flex gap-2">
+                            <Btn variant="primary" icon={busy ? Loader2 : Check} disabled={busy}
+                              onClick={() => handleReattempt(r.id, 'approve')} className="flex-1">
+                              Approve
+                            </Btn>
+                            <Btn variant="default" icon={X} disabled={busy}
+                              onClick={() => handleReattempt(r.id, 'reject')} className="flex-1">
+                              Reject
+                            </Btn>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
             </>
           ) : (
             <div className="text-center py-8 text-sm text-neutral-500">Failed to load results</div>

@@ -216,6 +216,17 @@ export const testApi = {
     apiClient(`/tests/${testId}`, { method: 'DELETE' }),
   getAttemptReview: (testId) =>
     apiClient(`/tests/${testId}/attempt-review`),
+  // Re-attempt request flow
+  requestReattempt: (testId, reason) =>
+    apiClient(`/tests/${testId}/reattempt-request`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  getMyReattemptRequests: () =>
+    apiClient('/student/reattempt-requests'),
+  getReattemptRequests: (testId) =>
+    apiClient(`/reattempt-requests${testId ? `?test_id=${testId}` : ''}`),
+  approveReattempt: (id) =>
+    apiClient(`/reattempt-requests/${id}/approve`, { method: 'PATCH' }),
+  rejectReattempt: (id) =>
+    apiClient(`/reattempt-requests/${id}/reject`, { method: 'PATCH' }),
 };
 
 export const leaderboardApi = {

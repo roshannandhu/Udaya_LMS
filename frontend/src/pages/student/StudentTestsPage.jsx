@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   FileQuestion, Clock, CheckCircle2, Loader2, Trophy,
-  CalendarClock, BookOpen, ClipboardList, Star, Paperclip, Play, ArrowRight, Activity
+  CalendarClock, BookOpen, ClipboardList, Star, Paperclip, Play, ArrowRight, Activity,
+  RotateCcw, X
 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Tag, Skeleton } from '../../components/ui';
@@ -40,6 +41,10 @@ export default function StudentTestsPage() {
   // ── Tests state ──────────────────────────────────────────────────
   const [allTests, setAllTests]   = useState(cache?.allTests || []);
   const [myAttempts, setMyAttempts] = useState(cache?.myAttempts || {});
+  const [reattemptStatus, setReattemptStatus] = useState(cache?.reattemptStatus || {}); // {test_id: 'pending'|'rejected'|'completed'}
+  const [reattemptModal, setReattemptModal] = useState(null); // the test being requested
+  const [reattemptReason, setReattemptReason] = useState('');
+  const [reattemptBusy, setReattemptBusy] = useState(false);
   const [loading, setLoading]     = useState(!cache);
   const subjects = useAppCache(s => s.subjects);
   // NEW pills compare against the session baseline; visiting clears the nav badge.
@@ -57,9 +62,10 @@ export default function StudentTestsPage() {
     const fetchData = async () => {
       if (!cache) setLoading(true);
       try {
-        const [testsRes, historyRes] = await Promise.all([
+        const [testsRes, historyRes, reattemptRes] = await Promise.all([
           testApi.getTests(),
           testApi.getStudentTestHistory(),
+          testApi.getMyReattemptRequests().catch(() => ({})),
         ]);
         const testsData = Array.isArray(testsRes) ? testsRes : [];
         setAllTests(testsData);
@@ -68,8 +74,10 @@ export default function StudentTestsPage() {
           attemptsMap[a.test_id] = a;
         });
         setMyAttempts(attemptsMap);
-        
-        testsPageCache = { ...(cache || {}), userId: user?.id, allTests: testsData, myAttempts: attemptsMap };
+        const reattemptMap = (reattemptRes && typeof reattemptRes === 'object') ? reattemptRes : {};
+        setReattemptStatus(reattemptMap);
+
+        testsPageCache = { ...(cache || {}), userId: user?.id, allTests: testsData, myAttempts: attemptsMap, reattemptStatus: reattemptMap };
       } catch (err) {
         console.error(err);
       } finally {
@@ -102,6 +110,9 @@ export default function StudentTestsPage() {
   // ── Test helpers ──────────────────────────────────────────────────
   const attemptedIds = new Set(Object.keys(myAttempts));
   const now = new Date();
+  // A teacher-approved re-attempt re-opens a test the student already took
+  // (even past its deadline) — surface it under "Available" so Start works.
+  const isGranted = (t) => !!myAttempts[t.id]?.reattempt_allowed;
 
   const isOpen = (t) => {
     if (t.status === 'completed') return false;
@@ -110,14 +121,31 @@ export default function StudentTestsPage() {
     return true;
   };
 
-  const available = allTests.filter(t => isOpen(t) && !attemptedIds.has(String(t.id)));
+  const available = allTests.filter(t => isGranted(t) || (isOpen(t) && !attemptedIds.has(String(t.id))));
   const upcoming  = allTests.filter(t =>
     t.status === 'scheduled' && t.scheduled_for && new Date(t.scheduled_for) > now && !attemptedIds.has(String(t.id))
   );
-  const completed = allTests.filter(t => attemptedIds.has(String(t.id)));
+  const completed = allTests.filter(t => attemptedIds.has(String(t.id)) && !isGranted(t));
   const missed    = allTests.filter(t =>
     (t.status === 'completed' || (t.expires_at && new Date(t.expires_at) <= now)) && !attemptedIds.has(String(t.id))
   );
+
+  const submitReattempt = async () => {
+    if (!reattemptModal) return;
+    setReattemptBusy(true);
+    try {
+      await testApi.requestReattempt(reattemptModal.id, reattemptReason.trim());
+      const next = { ...reattemptStatus, [reattemptModal.id]: 'pending' };
+      setReattemptStatus(next);
+      if (testsPageCache?.userId === user?.id) testsPageCache = { ...testsPageCache, reattemptStatus: next };
+      setReattemptModal(null);
+      setReattemptReason('');
+    } catch (err) {
+      alert(err?.message || 'Could not send request. Please try again.');
+    } finally {
+      setReattemptBusy(false);
+    }
+  };
 
   function fmtDate(d) {
     if (!d) return 'Active';
@@ -157,7 +185,11 @@ export default function StudentTestsPage() {
                <span className="flex items-center gap-1.5 bg-white/40 px-3 py-1 rounded-lg"><Trophy size={14}/>{t.total_marks} marks</span>
             </div>
           </div>
-          {section === 'available' && <span className="bg-amber-100 text-amber-800 text-[12px] font-extrabold px-3 py-1.5 rounded-full shadow-sm shrink-0 uppercase tracking-widest">Open</span>}
+          {section === 'available' && (
+            isGranted(t)
+              ? <span className="bg-indigo-100 text-indigo-700 text-[12px] font-extrabold px-3 py-1.5 rounded-full shadow-sm shrink-0 uppercase tracking-widest flex items-center gap-1"><RotateCcw size={12} /> Re-attempt</span>
+              : <span className="bg-amber-100 text-amber-800 text-[12px] font-extrabold px-3 py-1.5 rounded-full shadow-sm shrink-0 uppercase tracking-widest">Open</span>
+          )}
           {section === 'completed' && scorePct !== null && (
             <span className={`text-[13px] font-extrabold px-3 py-1.5 rounded-full shadow-sm shrink-0 ${scorePct >= 75 ? 'bg-green-500 text-white' : scorePct >= 50 ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'}`}>{scorePct}%</span>
           )}
@@ -209,6 +241,20 @@ export default function StudentTestsPage() {
             >
               <Activity size={18} /> Detailed Report
             </button>
+
+            {/* Re-attempt request — for when a student couldn't finish (call, cut off, etc.) */}
+            {reattemptStatus[t.id] === 'pending' ? (
+              <div className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200">
+                <Clock size={16} /> Re-attempt requested
+              </div>
+            ) : (
+              <button
+                onClick={() => { setReattemptReason(''); setReattemptModal(t); }}
+                className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-neutral-600 bg-transparent hover:bg-white/60 transition-all border border-black/10"
+              >
+                <RotateCcw size={15} /> Request re-attempt
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -437,6 +483,49 @@ export default function StudentTestsPage() {
         )}
         </motion.div>
       </div>
+
+      {/* ── Re-attempt request modal ── */}
+      {reattemptModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm" onClick={() => !reattemptBusy && setReattemptModal(null)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 sm:p-7" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0"><RotateCcw size={20} /></div>
+                <div>
+                  <h3 className="text-[18px] font-extrabold text-neutral-900 leading-tight">Request re-attempt</h3>
+                  <p className="text-[13px] text-neutral-500 line-clamp-1">{reattemptModal.title}</p>
+                </div>
+              </div>
+              <button onClick={() => !reattemptBusy && setReattemptModal(null)} className="p-1.5 -mr-1 text-neutral-400 hover:text-neutral-700 rounded-full hover:bg-neutral-100">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-[13px] text-neutral-600 mt-3 mb-2 leading-relaxed">
+              Tell your teacher why you need another attempt. They'll review and approve it.
+            </p>
+            <textarea
+              autoFocus
+              value={reattemptReason}
+              onChange={e => setReattemptReason(e.target.value)}
+              maxLength={500}
+              rows={4}
+              placeholder="e.g. My call disconnected and the test auto-submitted before I could finish."
+              className="w-full text-[14px] rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 outline-none focus:border-indigo-400 focus:bg-white resize-none placeholder:text-neutral-400"
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setReattemptModal(null)} disabled={reattemptBusy}
+                className="flex-1 py-3 rounded-full text-[14px] font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={submitReattempt} disabled={reattemptBusy || !reattemptReason.trim()}
+                className="flex-1 py-3 rounded-full text-[14px] font-bold text-white bg-black hover:bg-neutral-800 transition-colors disabled:opacity-40 flex items-center justify-center gap-2">
+                {reattemptBusy ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                Send request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Assignment detail sheet ── */}
       <StudentAssignmentSheet
