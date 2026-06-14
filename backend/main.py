@@ -9527,7 +9527,12 @@ def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=N
     target = [sid for sid in (standard_ids or list(std_name.keys())) if sid in std_name]
     if not target:
         return []
-    inc = set(included_student_ids) if included_student_ids else None
+    # Distinguish "not provided" (None → no per-student filter, e.g. exam reports
+    # scoped by standard) from "explicitly empty" ([] → the teacher selected nobody).
+    # A falsy `[]` used to collapse to None here and silently message EVERYONE.
+    inc = set(included_student_ids) if included_student_ids is not None else None
+    if inc is not None and not inc:
+        return []  # explicit empty selection → no recipients (never "everyone")
     out = []
     events = _wa_fetch_standard_events(target)
     for r in _wa_fetch_students(target):
