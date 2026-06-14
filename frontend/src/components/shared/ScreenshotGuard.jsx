@@ -23,55 +23,8 @@ function unpatchDisplayMedia() {
   navigator.mediaDevices.getDisplayMedia = _originalGetDisplayMedia;
 }
 
-/* ─── Tiled diagonal watermark ─────────────────────────────────── */
-export function WatermarkLayer({ label }) {
-  const tiles = [];
-  for (let row = 0; row < 7; row++) {
-    for (let col = 0; col < 6; col++) {
-      tiles.push(
-        <span
-          key={`${row}-${col}`}
-          style={{
-            position: 'absolute',
-            top: `${row * 15}%`,
-            left: `${col * 18}%`,
-            transform: 'rotate(-30deg)',
-            opacity: 0.08,
-            fontSize: '11px',
-            fontWeight: 700,
-            letterSpacing: '0.06em',
-            color: '#000',
-            whiteSpace: 'nowrap',
-            fontFamily: 'monospace',
-          }}
-        >
-          {label}
-        </span>
-      );
-    }
-  }
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        touchAction: 'none',
-        zIndex: 50,
-      }}
-    >
-      {tiles}
-    </div>
-  );
-}
-
 /**
  * ScreenshotGuard — wraps protected content with:
- *  - Tiled diagonal watermark with student label
  *  - PrintScreen key detection → clears clipboard + warning toast
  *  - getDisplayMedia interception (blocks browser screen-share)
  *  - Right-click / long-press context menu disable
@@ -166,8 +119,6 @@ export default function ScreenshotGuard({
       style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
     >
       {children}
-
-      {label && <WatermarkLayer label={label} />}
 
       {/* PrintScreen toast */}
       {showPrintWarning && (

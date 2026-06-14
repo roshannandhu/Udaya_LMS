@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, AlertCircle, Loader, Video } from 'lucide-react';
-import { WatermarkLayer } from './shared/ScreenshotGuard';
 
 /**
  * Zoom **Client View** loaded from Zoom's CDN (global `window.ZoomMtg`).
@@ -217,9 +216,6 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   // adds the loading/error overlay, the student watermark, and a Leave button.
   return (
     <div className="fixed inset-0 z-[100] pointer-events-none">
-      {/* Watermark only for students — teachers/admins watch unobstructed */}
-      {isStudent && <WatermarkLayer label={display_name || 'student'} />}
-
       {/* PrintScreen warning — students only */}
       {isStudent && showPrintWarn && (
         <div style={{

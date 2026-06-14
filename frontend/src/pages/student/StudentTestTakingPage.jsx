@@ -5,7 +5,6 @@ import { Flag, Clock, AlertTriangle, ChevronLeft, ChevronRight, Maximize2, Loade
 import { Btn } from '../../components/ui';
 import { testApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
-import { WatermarkLayer } from '../../components/shared/ScreenshotGuard';
 
 function useTimer(seconds, onExpire) {
   const [remaining, setRemaining] = useState(seconds);
@@ -287,10 +286,6 @@ export default function StudentTestTakingPage() {
       className="min-h-screen bg-transparent flex flex-col select-none relative"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }} // Crucial for iOS Safari
     >
-      {/* Watermark — student identity visible in any screenshot */}
-      {hasStarted && (
-        <WatermarkLayer label={user?.username || user?.name || 'student'} />
-      )}
 
       {/* Distraction/Focus lost overlay */}
       {!isFocused && !submitted && hasStarted && (
