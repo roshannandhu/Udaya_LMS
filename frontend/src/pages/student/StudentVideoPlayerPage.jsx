@@ -23,6 +23,36 @@ function toMmSs(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// Robust singleton loader for the YouTube IFrame API. The old per-mount loader
+// appended the <script> every time and OVERWROTE window.onYouTubeIframeAPIReady
+// — but YouTube fires that callback exactly ONCE, so a second mount (or fast
+// navigation) orphaned the first waiter and its player never initialised (the
+// "stuck on the loading spinner" bug). This loads the script at most once,
+// queues all waiters, and polls as a fallback in case the global callback was
+// already consumed by an earlier page load.
+let _ytApiPromise = null;
+function loadYouTubeApi() {
+  if (window.YT?.Player) return Promise.resolve();
+  if (_ytApiPromise) return _ytApiPromise;
+  _ytApiPromise = new Promise((resolve) => {
+    const done = () => resolve();
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { try { prev && prev(); } catch {} done(); };
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+    }
+    // Fallback poll — covers the case where the ready callback already fired.
+    const started = Date.now();
+    const poll = setInterval(() => {
+      if (window.YT?.Player) { clearInterval(poll); done(); }
+      else if (Date.now() - started > 15000) { clearInterval(poll); done(); }
+    }, 150);
+  });
+  return _ytApiPromise;
+}
+
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
@@ -53,6 +83,7 @@ export default function StudentVideoPlayerPage() {
   const [ytError, setYtError]         = useState(null);
   const ytPlayerRef   = useRef(null);
   const ytProgressRef = useRef(null);
+  const ytMountRef    = useRef(null); // stable wrapper; a fresh child is mounted per init
   const [chapterActive, setChapterActive] = useState(-1);
   const [isPlaying,          setIsPlaying]          = useState(false);
   const [duration,           setDuration]           = useState(0);
@@ -214,21 +245,21 @@ export default function StudentVideoPlayerPage() {
   // Load YouTube IFrame API and init player when token is ready
   useEffect(() => {
     if (!ytToken) return;
+    let cancelled = false;
+    setYtPlayerReady(false);
 
-    function loadYTApi() {
-      return new Promise(resolve => {
-        if (window.YT?.Player) { resolve(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://www.youtube.com/iframe_api';
-        document.head.appendChild(s);
-        window.onYouTubeIframeAPIReady = resolve;
-        // Immediate resolve if already loaded
-        if (window.YT?.Player) resolve();
-      });
-    }
+    loadYouTubeApi().then(() => {
+      if (cancelled || !ytMountRef.current) return;
+      // Mount into a FRESH child element each time. YT.Player.destroy() removes
+      // the iframe it created, leaving no node to mount into on the next video —
+      // which broke navigating between two YouTube videos. A new child per init
+      // always gives the constructor a clean target.
+      ytMountRef.current.innerHTML = '';
+      const mountEl = document.createElement('div');
+      mountEl.className = 'w-full h-full';
+      ytMountRef.current.appendChild(mountEl);
 
-    loadYTApi().then(() => {
-      ytPlayerRef.current = new window.YT.Player('yt-player-mount', {
+      ytPlayerRef.current = new window.YT.Player(mountEl, {
         videoId: ytToken,
         playerVars: {
           controls: 0,
@@ -270,8 +301,10 @@ export default function StudentVideoPlayerPage() {
     });
 
     return () => {
+      cancelled = true;
       stopYtProgress();
-      ytPlayerRef.current?.destroy?.();
+      try { ytPlayerRef.current?.destroy?.(); } catch {}
+      ytPlayerRef.current = null;
     };
   }, [ytToken]);
 
@@ -529,8 +562,10 @@ export default function StudentVideoPlayerPage() {
           onKeyDown={handleKeyDown}
           onMouseMove={showControlsTemporarily}
         >
-          {/* Empty div — YT.Player constructor injects controlled iframe here */}
-          <div id="yt-player-mount" className="w-full h-full" />
+          {/* Stable wrapper — the init effect injects a fresh child div here for
+              YT.Player to take over, so re-navigating between videos always has a
+              clean mount target. */}
+          <div ref={ytMountRef} className="w-full h-full" />
 
           {/* Transparent click interceptor — blocks YouTube overlay UI and handles
               tap gestures: single-center=play/pause, double-left=−10s,
@@ -812,9 +847,8 @@ export default function StudentVideoPlayerPage() {
               Loading video...
             </div>
           )}
-          {showYouTubePlayer && (
-            <div id="yt-player-mount" className="w-full h-full" />
-          )}
+          {/* YouTube renders via the dedicated early-return player above (ytMountRef);
+              no mount here — avoids a duplicate yt-player-mount the SDK could grab. */}
           {showOfflinePlayer && (
             <video
               ref={videoRef}
