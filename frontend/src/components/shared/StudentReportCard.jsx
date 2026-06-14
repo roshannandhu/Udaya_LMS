@@ -229,13 +229,14 @@ function SkillRadar({ data, hasClass, classCount }) {
                   transition={{ delay: 0.5, duration: 0.5 }}
                 />
               )}
-              {/* ambient glow fill (slow pulse) */}
+              {/* ambient glow fill — static opacity (a looping opacity pulse here
+                  reads as a flicker on the report card, esp. on mobile GPUs) */}
               <motion.path
                 d={pointsToPath(studentPts)} fill="url(#youGlowSvg)" stroke="none"
                 initial={reduce ? { opacity: 0.7 } : { scale: 0.5, opacity: 0 }}
-                whileInView={reduce ? { opacity: 0.7 } : { scale: 1, opacity: [0.55, 0.95, 0.55] }}
+                whileInView={{ scale: 1, opacity: 0.7 }}
                 viewport={{ once: true }}
-                transition={reduce ? undefined : { scale: { type: 'spring', stiffness: 150, damping: 18, delay: 0.45 }, opacity: { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 0.45 } }}
+                transition={reduce ? undefined : { type: 'spring', stiffness: 150, damping: 18, delay: 0.45 }}
                 style={{ transformOrigin: `${cx}px ${cy}px` }}
               />
               {/* student outline */}
