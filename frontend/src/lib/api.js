@@ -474,6 +474,18 @@ export const assignmentApi = {
     apiClient(`/assignments/${assignmentId}/my-submission`, { method: 'DELETE' }),
 
   getAllMyAssignments: () => apiClient('/student/assignments'),
+
+  // Re-attempt (re-do a GRADED assignment): request → teacher approves → grade
+  // cleared → student retracts + resubmits via the normal flow.
+  requestReattempt: (assignmentId, reason) =>
+    apiClient(`/assignments/${assignmentId}/reattempt-request`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  getMyReattemptRequests: () => apiClient('/student/assignment-reattempt-requests'),
+  getReattemptRequests: (assignmentId) =>
+    apiClient(`/assignment-reattempt-requests${assignmentId ? `?assignment_id=${assignmentId}` : ''}`),
+  approveReattempt: (id) =>
+    apiClient(`/assignment-reattempt-requests/${id}/approve`, { method: 'PATCH' }),
+  rejectReattempt: (id) =>
+    apiClient(`/assignment-reattempt-requests/${id}/reject`, { method: 'PATCH' }),
 };
 
 export const aiApi = {

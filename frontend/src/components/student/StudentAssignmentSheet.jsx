@@ -16,12 +16,17 @@ function formatBytes(bytes) {
 
 export default function StudentAssignmentSheet({
   open, onClose, assignment, onSubmitted, onDeleted,
+  reattemptStatus, onReattemptRequested,
 }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl]     = useState(null);
   const [submitting, setSubmitting]     = useState(false);
   const [deleting, setDeleting]         = useState(false);
   const [error, setError]               = useState('');
+  const [redoOpen, setRedoOpen]         = useState(false);
+  const [redoReason, setRedoReason]     = useState('');
+  const [redoBusy, setRedoBusy]         = useState(false);
+  const [redoSent, setRedoSent]         = useState(false);
   const cameraRef = useRef(null);
   const fileRef   = useRef(null);
 
@@ -86,7 +91,27 @@ export default function StudentAssignmentSheet({
     }
   };
 
-  const handleClose = () => { clearFile(); onClose(); };
+  const submitRedo = async () => {
+    setRedoBusy(true);
+    setError('');
+    try {
+      await assignmentApi.requestReattempt(assignment.id, redoReason.trim());
+      setRedoSent(true);
+      setRedoOpen(false);
+      setRedoReason('');
+      onReattemptRequested?.(assignment.id);
+    } catch (err) {
+      // Treat an existing pending request as "already requested" rather than an error.
+      if (/already have a pending/i.test(err?.message || '')) { setRedoSent(true); setRedoOpen(false); }
+      else setError(err.message || 'Could not send request. Please try again.');
+    } finally {
+      setRedoBusy(false);
+    }
+  };
+
+  const redoRequested = redoSent || reattemptStatus === 'pending';
+
+  const handleClose = () => { clearFile(); setRedoOpen(false); setRedoReason(''); onClose(); };
 
   if (!assignment) return null;
 
@@ -170,6 +195,35 @@ export default function StudentAssignmentSheet({
                 View your submission: {sub.file_name}
                 <ExternalLink size={12} />
               </a>
+
+              {/* Re-do request — for when the student wants another attempt at a
+                  graded assignment. Teacher approval clears the grade so they can
+                  retract + resubmit. */}
+              {redoRequested ? (
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  <Clock size={13} /> Re-do requested — waiting for teacher approval
+                </div>
+              ) : redoOpen ? (
+                <div className="space-y-2">
+                  <textarea
+                    autoFocus value={redoReason} onChange={e => setRedoReason(e.target.value)}
+                    maxLength={500} rows={3}
+                    placeholder="Why do you need to redo this? (e.g. I uploaded the wrong file)"
+                    className="w-full text-sm rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 outline-none focus:border-amber-400 focus:bg-white resize-none placeholder:text-neutral-400"
+                  />
+                  <div className="flex gap-2">
+                    <Btn variant="ghost" onClick={() => { setRedoOpen(false); setRedoReason(''); }} disabled={redoBusy} className="flex-1">Cancel</Btn>
+                    <Btn variant="primary" onClick={submitRedo} disabled={redoBusy || !redoReason.trim()} className="flex-1">
+                      {redoBusy ? <Loader2 size={14} className="animate-spin mr-1" /> : null} Send request
+                    </Btn>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setRedoOpen(true)}
+                  className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800 transition-colors">
+                  <AlertTriangle size={12} /> Request to re-do this assignment
+                </button>
+              )}
             </div>
           )}
 

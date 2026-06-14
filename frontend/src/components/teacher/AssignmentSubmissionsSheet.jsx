@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Paperclip, ExternalLink, Loader2, Star, Trash2, AlertCircle } from 'lucide-react';
+import { Paperclip, ExternalLink, Loader2, Star, Trash2, AlertCircle, RotateCcw, Check, X } from 'lucide-react';
 import { Sheet, Btn, Avatar, Tag } from '../ui';
 import { assignmentApi } from '../../lib/api';
 
@@ -13,12 +13,15 @@ export default function AssignmentSubmissionsSheet({
   const [gradeError, setGradeError]   = useState('');
   const [saving, setSaving]           = useState(false);
   const [deletingId, setDeletingId]   = useState(null);
+  const [reattempts, setReattempts]   = useState([]);
+  const [reattemptBusy, setReattemptBusy] = useState(null);
 
   useEffect(() => {
     if (open && assignment?.id) {
       loadSubmissions();
     } else {
       setSubmissions([]);
+      setReattempts([]);
       setGradingId(null);
       setGradeInput('');
       setGradeError('');
@@ -28,12 +31,30 @@ export default function AssignmentSubmissionsSheet({
   const loadSubmissions = async () => {
     setLoading(true);
     try {
-      const data = await assignmentApi.getSubmissions(assignment.id);
+      const [data, reqs] = await Promise.all([
+        assignmentApi.getSubmissions(assignment.id),
+        assignmentApi.getReattemptRequests(assignment.id).catch(() => []),
+      ]);
       setSubmissions(data.submissions || []);
+      setReattempts(Array.isArray(reqs) ? reqs : []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReattempt = async (reqId, action) => {
+    setReattemptBusy(reqId);
+    try {
+      if (action === 'approve') await assignmentApi.approveReattempt(reqId);
+      else await assignmentApi.rejectReattempt(reqId);
+      setReattempts(prev => prev.filter(r => r.id !== reqId));
+      if (action === 'approve') loadSubmissions(); // grade was cleared — refresh
+    } catch (err) {
+      alert(err?.message || 'Action failed. Please try again.');
+    } finally {
+      setReattemptBusy(null);
     }
   };
 
@@ -97,6 +118,39 @@ export default function AssignmentSubmissionsSheet({
               <span className="text-amber-600 font-medium">{pendingCount} pending</span>
             )}
           </div>
+
+          {/* Re-do requests — approving clears the grade so the student can resubmit */}
+          {reattempts.length > 0 && (
+            <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
+              <p className="text-xs font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
+                <RotateCcw size={13} /> Re-do requests ({reattempts.length})
+              </p>
+              {reattempts.map(r => {
+                const st = r.students || {};
+                const busy = reattemptBusy === r.id;
+                return (
+                  <div key={r.id} className="bg-white rounded-xl border border-amber-100 p-3">
+                    <div className="flex items-center gap-2.5 mb-1.5">
+                      <Avatar name={st.name || '?'} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{st.name || 'Student'}</p>
+                        {r.old_marks != null && <p className="text-[11px] text-neutral-500">Current grade: {r.old_marks}/100</p>}
+                      </div>
+                    </div>
+                    {r.reason && (
+                      <p className="text-xs text-neutral-700 bg-neutral-50 border border-neutral-100 rounded-lg px-2.5 py-1.5 mb-2 whitespace-pre-wrap">“{r.reason}”</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Btn size="sm" variant="primary" icon={busy ? Loader2 : Check} disabled={busy}
+                        onClick={() => handleReattempt(r.id, 'approve')} className="flex-1">Approve</Btn>
+                      <Btn size="sm" variant="ghost" icon={X} disabled={busy}
+                        onClick={() => handleReattempt(r.id, 'reject')} className="flex-1">Reject</Btn>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {submissions.length === 0 && (
             <div className="text-center py-12 text-sm text-neutral-400">

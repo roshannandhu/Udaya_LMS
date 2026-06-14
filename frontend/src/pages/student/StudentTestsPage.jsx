@@ -56,6 +56,7 @@ export default function StudentTestsPage() {
   const [assignments, setAssignments]     = useState(cache?.assignments || []);
   const [assignLoading, setAssignLoading] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [assignReattempt, setAssignReattempt] = useState({}); // {assignment_id: 'pending'|'rejected'}
 
   // Fetch tests on mount
   useEffect(() => {
@@ -93,9 +94,13 @@ export default function StudentTestsPage() {
       const fetchAssignments = async () => {
         if (!cache?.assignments) setAssignLoading(true);
         try {
-          const data = await assignmentApi.getAllMyAssignments();
+          const [data, redo] = await Promise.all([
+            assignmentApi.getAllMyAssignments(),
+            assignmentApi.getMyReattemptRequests().catch(() => ({})),
+          ]);
           const list = data?.assignments || [];
           setAssignments(list);
+          setAssignReattempt((redo && typeof redo === 'object') ? redo : {});
           testsPageCache = { ...(testsPageCache?.userId === user?.id ? testsPageCache : {}), userId: user?.id, assignments: list };
         } catch (err) {
           console.error(err);
@@ -542,6 +547,8 @@ export default function StudentTestsPage() {
           setAssignments(prev => prev.map(a => a.id === selectedAssignment?.id ? updated : a));
           setSelectedAssignment(updated);
         }}
+        reattemptStatus={selectedAssignment ? assignReattempt[selectedAssignment.id] : undefined}
+        onReattemptRequested={(id) => setAssignReattempt(prev => ({ ...prev, [id]: 'pending' }))}
       />
     </div>
   );
