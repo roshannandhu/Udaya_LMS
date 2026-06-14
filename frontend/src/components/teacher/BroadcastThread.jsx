@@ -10,6 +10,30 @@ import { fmtTime, fmtChatDate, fmtShortDateTime } from '../../lib/datetime';
 
 const formatChatDate = fmtChatDate;
 
+// Pick an audio format the browser can actually record. iOS Safari can't do
+// webm (it records mp4), so the old hardcoded 'audio/webm' produced a file whose
+// bytes, extension and MIME all disagreed → upload/playback failures. Negotiate
+// the real format so voice notes work on every device, like WhatsApp.
+function pickAudioMime() {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/ogg'];
+  if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported) {
+    for (const c of candidates) {
+      if (MediaRecorder.isTypeSupported(c)) return c;
+    }
+  }
+  return '';
+}
+function mimeToExt(mime) {
+  const m = (mime || '').toLowerCase();
+  if (m.includes('webm')) return 'webm';
+  if (m.includes('mp4'))  return 'm4a';
+  if (m.includes('ogg'))  return 'ogg';
+  if (m.includes('mpeg')) return 'mp3';
+  if (m.includes('wav'))  return 'wav';
+  if (m.includes('aac'))  return 'aac';
+  return 'webm';
+}
+
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
   const [msg, setMsg] = useState('');
   const [attachments, setAttachments] = useState([]);
@@ -39,6 +63,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
+  const recordStartRef = useRef(0);
 
   const handleEmojiChange = async (emoji) => {
     setShowEmojiPicker(false);
@@ -194,23 +219,32 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      const chosenMime = pickAudioMime();
+      mediaRecorderRef.current = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined);
       audioChunksRef.current = [];
-      
+
       mediaRecorderRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      
+
       mediaRecorderRef.current.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        // Label the blob/filename/type with the ACTUAL recorded format so bytes,
+        // extension and MIME all agree (works on every browser, incl. iOS Safari).
+        const actualType = mediaRecorderRef.current?.mimeType || chosenMime || 'audio/webm';
+        const ext = mimeToExt(actualType);
+        const blob = new Blob(audioChunksRef.current, { type: actualType });
         stream.getTracks().forEach(track => track.stop());
         clearInterval(timerRef.current);
         setRecording(false);
         setRecordDuration(0);
 
+        // Discard a too-short / empty tap, like WhatsApp ignoring a quick tap.
+        const elapsedMs = Date.now() - (recordStartRef.current || Date.now());
+        if (blob.size < 1024 || elapsedMs < 1000) return;
+
         setUploading(true);
         const formData = new FormData();
-        formData.append('file', blob, 'voicenote.webm');
+        formData.append('file', blob, `voicenote.${ext}`);
         try {
           const token = localStorage.getItem('tutoria_token');
           const apiBase = getApiBaseUrl();
@@ -219,12 +253,13 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
             headers: { Authorization: `Bearer ${token}` },
             body: formData,
           });
+          if (!res.ok) throw new Error('upload failed');
           const data = await res.json();
           const payload = {
             standard_id: std.id,
             message: '',
             attachment_url: data.url,
-            attachment_type: data.type,
+            attachment_type: data.type || actualType,
             reply_to: replyTo?.id || null,
           };
           setReplyTo(null);
@@ -235,8 +270,9 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
           setUploading(false);
         }
       };
-      
+
       mediaRecorderRef.current.start();
+      recordStartRef.current = Date.now();
       setRecording(true);
       setRecordDuration(0);
       timerRef.current = setInterval(() => setRecordDuration(d => d + 1), 1000);

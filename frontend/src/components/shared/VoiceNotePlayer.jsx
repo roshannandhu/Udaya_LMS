@@ -8,23 +8,45 @@ export default function VoiceNotePlayer({ src, isSender = false, duration = null
   const [totalTime, setTotalTime] = useState(duration || '0:00');
   const audioRef = useRef(null);
 
+  const resolvingRef = useRef(false);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    const setDur = () => {
+      if (audio.duration && audio.duration !== Infinity) {
+        setTotalTime(formatTime(audio.duration));
+      }
+    };
+
     const updateTime = () => {
+      if (resolvingRef.current) return; // ignore the seek-trick blip below
       setProgress((audio.currentTime / audio.duration) * 100 || 0);
       setCurrentTime(formatTime(audio.currentTime));
     };
 
     const handleLoadedMetadata = () => {
-      if (!duration || duration === '0:00') {
-        if (audio.duration && audio.duration !== Infinity) {
-          setTotalTime(formatTime(audio.duration));
-        }
+      // MediaRecorder webm/opus files report duration = Infinity until the file
+      // is seeked to the end. Force the browser to resolve the real length so the
+      // timer and scrubber work — otherwise the voice note looks frozen at 0:00.
+      if (audio.duration === Infinity) {
+        resolvingRef.current = true;
+        const onSeek = () => {
+          audio.removeEventListener('timeupdate', onSeek);
+          resolvingRef.current = false;
+          audio.currentTime = 0;
+          setDur();
+        };
+        audio.addEventListener('timeupdate', onSeek);
+        audio.currentTime = 1e101; // jump past the end → browser computes duration
+      } else if (!duration || duration === '0:00') {
+        setDur();
       }
     };
 
+    const onPlay  = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
     const handleEnded = () => {
       setIsPlaying(false);
       setProgress(0);
@@ -33,24 +55,32 @@ export default function VoiceNotePlayer({ src, isSender = false, duration = null
 
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('durationchange', setDur);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('durationchange', setDur);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [duration]);
+  }, [duration, src]);
 
+  // Pause any OTHER voice note when this one starts (WhatsApp plays one at a time).
   const togglePlay = (e) => {
     e.stopPropagation();
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      document.querySelectorAll('audio').forEach(a => { if (a !== audio) a.pause(); });
+      audio.play().catch(() => {});   // state is driven by the 'play'/'pause' events
     } else {
-      audioRef.current.play();
+      audio.pause();
     }
-    setIsPlaying(!isPlaying);
   };
 
   const formatTime = (seconds) => {
