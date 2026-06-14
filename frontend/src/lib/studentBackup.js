@@ -145,7 +145,14 @@ export async function exportStudentsBackup(students, standards, { filenamePrefix
     sheets.push({ name, aoa: [FULL_HEADER, ...rows] });
     flatRows.push(...rows);
   }
-  if (sheets.length === 0) sheets.push({ name: 'Students', aoa: [FULL_HEADER] });
+
+  // First sheet is a combined "All Students" view (every class, with a Standard
+  // column) so opening the file shows everyone at once — the per-standard sheets
+  // follow. This prevents the "only one class was backed up" confusion that
+  // happens when a teacher doesn't notice the extra sheet tabs.
+  const outSheets = flatRows.length > 0
+    ? [{ name: 'All Students', aoa: [FULL_HEADER, ...flatRows] }, ...sheets]
+    : [{ name: 'Students', aoa: [FULL_HEADER] }];
 
   const filename = `${safeFilePart(filenamePrefix)}_Students_Backup_${todayStamp()}`;
 
@@ -153,7 +160,7 @@ export async function exportStudentsBackup(students, standards, { filenamePrefix
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     const used = new Set();
-    for (const { name, aoa } of sheets) {
+    for (const { name, aoa } of outSheets) {
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = FULL_COLS;
       XLSX.utils.book_append_sheet(wb, ws, uniqueSheetName(name, used));

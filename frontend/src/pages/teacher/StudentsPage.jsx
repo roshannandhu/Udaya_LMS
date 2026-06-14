@@ -47,13 +47,10 @@ export default function StudentsPage() {
         if (Array.isArray(fresh) && fresh.length) all = fresh;
       } catch { /* offline — use cached students */ }
 
-      if (stdFilter !== 'all') {
-        const std = standards.find(s => String(s.id) === String(stdFilter));
-        const only = all.filter(s => String(s.standard_id) === String(stdFilter));
-        await exportStudentsBackup(only, standards, { filenamePrefix: std?.name || lmsName });
-      } else {
-        await exportStudentsBackup(all, standards, { filenamePrefix: lmsName });
-      }
+      // Always back up EVERY student. The on-screen standard filter only affects
+      // what's listed; "Backup" is an all-students action (one sheet per standard
+      // plus a combined sheet), so it must not be scoped by the current filter.
+      await exportStudentsBackup(all, standards, { filenamePrefix: lmsName });
       setBackedUp(true);
       setTimeout(() => setBackedUp(false), 2500);
     } catch (err) {

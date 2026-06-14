@@ -46,6 +46,8 @@ export default function StudentTestTakingPage() {
   const [hasStarted, setHasStarted] = useState(false);
   const [isFocused, setIsFocused] = useState(true); // Track window focus
   const cheatEvents = useRef([]);
+  const lastWarnRef = useRef(0); // de-dupe: one leave-screen action fires both
+                                 // visibilitychange AND blur — count it once.
 
   useEffect(() => {
     const fetchTest = async () => {
@@ -127,6 +129,12 @@ export default function StudentTestTakingPage() {
     const handleFocus = () => setIsFocused(true);
 
     const triggerWarning = () => {
+      // Switching tab/window fires visibilitychange + blur back-to-back; collapse
+      // them (and any rapid repeats) into a single warning so the first offence
+      // shows "1/3", not "2/3".
+      const now = Date.now();
+      if (now - lastWarnRef.current < 1000) return;
+      lastWarnRef.current = now;
       setShowWarn(true);
       setWarnCount((w) => w + 1);
     };

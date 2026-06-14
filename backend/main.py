@@ -6419,21 +6419,53 @@ class EditBroadcastRequest(BaseModel):
 async def edit_broadcast(broadcast_id: str, req: EditBroadcastRequest, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
-    found = False
+
+    # Persist to the DB FIRST — it's the source of truth. Previously the edit only
+    # touched the in-memory history (+ a JSON file), both of which are wiped on
+    # every backend restart/redeploy. So the DB kept the old text, and any student
+    # reconnecting (or after a server restart) saw the OLD message loaded from the
+    # DB. Also both `message` and `text` columns are coalesced on read, so update
+    # both to be safe.
+    std_id = None
+    if service_supabase:
+        try:
+            res = await asyncio.to_thread(lambda: service_supabase.table("broadcasts").update(
+                {"message": req.message, "text": req.message, "edited": True}
+            ).eq("id", broadcast_id).execute())
+            if res.data:
+                std_id = res.data[0].get("standard_id")
+        except Exception:
+            # Some DBs may not have a `text` column — retry message-only.
+            try:
+                res = await asyncio.to_thread(lambda: service_supabase.table("broadcasts").update(
+                    {"message": req.message, "edited": True}
+                ).eq("id", broadcast_id).execute())
+                if res.data:
+                    std_id = res.data[0].get("standard_id")
+            except Exception as e:
+                print(f"[!] broadcast edit DB update failed: {e}")
+
+    # Update the in-memory snapshot used for the WS history-on-connect.
     updated_b = None
     for b in manager.broadcast_history:
         if b.get("id") == broadcast_id:
             b["message"] = req.message
+            b["text"] = req.message
             b["edited"] = True
             updated_b = b
-            found = True
+            std_id = std_id or b.get("standard_id")
             break
-    if not found:
-        raise HTTPException(status_code=404, detail="Broadcast not found")
     manager.save_history()
+
+    if std_id is None:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    if updated_b is None:
+        # Not in the in-memory snapshot (e.g. after a restart) — still push a
+        # minimal payload so live clients update immediately.
+        updated_b = {"id": broadcast_id, "message": req.message, "edited": True, "standard_id": std_id}
+
     # Notify connected clients in real-time
-    std_id = updated_b.get("standard_id") if updated_b else None
-    if std_id and std_id in manager.active_connections:
+    if std_id in manager.active_connections:
         dead = []
         for conn in manager.active_connections[std_id]:
             try:
