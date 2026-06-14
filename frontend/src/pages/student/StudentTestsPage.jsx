@@ -117,7 +117,9 @@ export default function StudentTestsPage() {
   const now = new Date();
   // A teacher-approved re-attempt re-opens a test the student already took
   // (even past its deadline) — surface it under "Available" so Start works.
-  const isGranted = (t) => !!myAttempts[t.id]?.reattempt_allowed;
+  // The grant signal is the request's 'approved' status (source of truth in the
+  // test_reattempt_requests table), NOT a DB column that may not exist.
+  const isGranted = (t) => reattemptStatus[t.id] === 'approved';
 
   const isOpen = (t) => {
     if (t.status === 'completed') return false;

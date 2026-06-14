@@ -345,22 +345,35 @@ async def _ensure_reattempt_table():
 _REATTEMPT_OK = None
 
 def _reattempt_enabled() -> bool:
-    """True once test_reattempt_requests + test_attempts.reattempt_allowed exist.
-    Probed once and cached (self-heals after the migration is applied). Lets all
-    the exam re-attempt code degrade gracefully — and, critically, never crash
-    core test-taking/submission — when the migration hasn't been run yet."""
+    """True once the test_reattempt_requests table exists. The grant is tracked
+    by that table's row status ('approved'), NOT by a test_attempts.reattempt_allowed
+    column — hosted Supabase doesn't expose the pg-meta API the auto-migration used,
+    so that column can never be added programmatically. Keying off the table (which
+    DOES exist) makes the whole feature work with no manual migration."""
     global _REATTEMPT_OK
     if _REATTEMPT_OK:
         return True
     if not service_supabase:
         return False
     try:
-        service_supabase.table("test_attempts").select("reattempt_allowed").limit(1).execute()
         service_supabase.table("test_reattempt_requests").select("id").limit(1).execute()
         _REATTEMPT_OK = True
     except Exception:
         _REATTEMPT_OK = False
     return bool(_REATTEMPT_OK)
+
+
+def _has_approved_reattempt(test_id: str, student_id: str) -> bool:
+    """A teacher-approved-but-not-yet-consumed re-attempt grant lives as an
+    'approved' row in test_reattempt_requests (source of truth — no DB column)."""
+    if not service_supabase:
+        return False
+    try:
+        r = service_supabase.table("test_reattempt_requests").select("id") \
+            .eq("test_id", test_id).eq("student_id", student_id).eq("status", "approved").limit(1).execute()
+        return bool(r.data)
+    except Exception:
+        return False
 
 
 _ASSIGN_REATTEMPT_OK = None
@@ -5735,14 +5748,9 @@ def get_test_for_taking(test_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Test not found")
 
     # A teacher-granted re-attempt may re-open a test whose deadline has passed.
-    # Guarded: if the migration hasn't run, treat as "not granted" (never crash).
-    granted = False
-    if user.get("student_id") and _reattempt_enabled():
-        try:
-            att = service_supabase.table("test_attempts").select("reattempt_allowed").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
-            granted = bool(att.data and att.data[0].get("reattempt_allowed"))
-        except Exception:
-            granted = False
+    # The grant is an 'approved' row in test_reattempt_requests (no DB column).
+    granted = bool(user.get("student_id") and _reattempt_enabled()
+                   and _has_approved_reattempt(test_id, user["student_id"]))
 
     if test.data.get("expires_at") and not granted:
         try:
@@ -5804,15 +5812,13 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    # Check if already attempted. A teacher-granted re-attempt (reattempt_allowed)
-    # lets the student submit again — the new attempt OVERWRITES the old row.
-    # Guarded: only read the reattempt_allowed column when the migration exists,
-    # so a missing column never blocks normal first-time submission.
-    ra_on = _reattempt_enabled()
-    cols = "id, points_earned, reattempt_allowed" if ra_on else "id"
-    existing = service_supabase.table("test_attempts").select(cols).eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+    # Check if already attempted. A teacher-approved re-attempt lets the student
+    # submit again — the new attempt OVERWRITES the old row. The grant is an
+    # 'approved' row in test_reattempt_requests (source of truth), so this never
+    # depends on a DB column that may not exist.
+    existing = service_supabase.table("test_attempts").select("id, points_earned").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
     prior = existing.data[0] if existing.data else None
-    is_reattempt = bool(ra_on and prior and prior.get("reattempt_allowed"))
+    is_reattempt = bool(prior and _reattempt_enabled() and _has_approved_reattempt(test_id, user["student_id"]))
     if prior and not is_reattempt:
         raise HTTPException(status_code=400, detail="Test already attempted")
 
@@ -5875,10 +5881,9 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
         "submitted_at": datetime.now(timezone.utc).isoformat()
     }
     if is_reattempt:
-        # Overwrite the prior attempt; consume the one-shot grant.
-        attempt_data["reattempt_allowed"] = False
+        # Overwrite the prior attempt; consume the one-shot grant by marking the
+        # approved request 'completed' (that status IS the grant — no DB column).
         result = service_supabase.table("test_attempts").update(attempt_data).eq("id", prior["id"]).execute()
-        # Close out the approved request so it leaves the teacher's pending list.
         try:
             service_supabase.table("test_reattempt_requests").update({"status": "completed"}) \
                 .eq("test_id", test_id).eq("student_id", user["student_id"]).eq("status", "approved").execute()
@@ -6016,10 +6021,10 @@ def request_reattempt(test_id: str, req: ReattemptRequest, user = Depends(verify
         raise HTTPException(status_code=503, detail="Re-attempt isn't enabled yet. Please ask your teacher to finish setup.")
 
     # Must have an attempt to re-attempt; can't request if a grant is already open.
-    existing = service_supabase.table("test_attempts").select("score, reattempt_allowed").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+    existing = service_supabase.table("test_attempts").select("id").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
     if not existing.data:
         raise HTTPException(status_code=400, detail="You haven't attempted this test yet.")
-    if existing.data[0].get("reattempt_allowed"):
+    if _has_approved_reattempt(test_id, user["student_id"]):
         raise HTTPException(status_code=400, detail="A re-attempt is already approved — just open the test again.")
 
     # Block a second pending request (partial unique index also guards this).
@@ -6091,10 +6096,9 @@ def approve_reattempt(request_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Request not found")
     r = request.data
 
-    # Grant the one-shot re-take on the student's existing attempt row.
-    service_supabase.table("test_attempts").update({"reattempt_allowed": True}) \
-        .eq("test_id", r["test_id"]).eq("student_id", r["student_id"]).execute()
-
+    # Grant the one-shot re-take by marking the request 'approved' — that status
+    # IS the grant (read by _has_approved_reattempt). No test_attempts column write,
+    # which would fail on DBs where the reattempt_allowed column was never added.
     service_supabase.table("test_reattempt_requests").update({
         "status": "approved",
         "resolved_at": datetime.now(timezone.utc).isoformat(),
