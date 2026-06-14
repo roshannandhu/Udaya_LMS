@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Paperclip, ExternalLink, Loader2, CheckCircle2, Clock,
   Star, CalendarClock, Camera, FolderOpen, X, FileText,
-  FileImage, Trash2, AlertTriangle,
+  FileImage, Trash2, AlertTriangle, RotateCcw,
 } from 'lucide-react';
 import { Sheet, Btn, Tag } from '../ui';
 import { assignmentApi } from '../../lib/api';
@@ -109,7 +109,9 @@ export default function StudentAssignmentSheet({
     }
   };
 
-  const redoRequested = redoSent || reattemptStatus === 'pending';
+  const redoPending  = redoSent || reattemptStatus === 'pending';
+  const redoRejected = reattemptStatus === 'rejected';
+  const redoApproved = reattemptStatus === 'approved';
 
   const handleClose = () => { clearFile(); setRedoOpen(false); setRedoReason(''); onClose(); };
 
@@ -199,9 +201,19 @@ export default function StudentAssignmentSheet({
               {/* Re-do request — for when the student wants another attempt at a
                   graded assignment. Teacher approval clears the grade so they can
                   retract + resubmit. */}
-              {redoRequested ? (
+              {redoPending ? (
                 <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                   <Clock size={13} /> Re-do requested — waiting for teacher approval
+                </div>
+              ) : redoRejected ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    <X size={13} /> Your re-do request was declined.
+                  </div>
+                  <button onClick={() => setRedoOpen(true)}
+                    className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800 transition-colors">
+                    <AlertTriangle size={12} /> Request again
+                  </button>
                 </div>
               ) : redoOpen ? (
                 <div className="space-y-2">
@@ -230,6 +242,16 @@ export default function StudentAssignmentSheet({
           {/* Submitted, awaiting grade */}
           {isSubmitted && !isGraded && (
             <div className="space-y-3">
+              {/* Approval clears the grade and lands the student here — explain why,
+                  and point them at the remove-and-re-upload action below. */}
+              {redoApproved && (
+                <div className="flex items-start gap-2.5 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                  <RotateCcw size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-semibold text-emerald-800">
+                    Re-do approved — remove your current submission below and upload a new one.
+                  </p>
+                </div>
+              )}
               <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
                 <Clock size={22} className="text-blue-600 flex-shrink-0" />
                 <div>

@@ -112,6 +112,30 @@ export default function StudentTestsPage() {
     }
   }, [activeTab]);
 
+  // Re-fetch re-attempt statuses when the student returns to the tab, so a
+  // teacher's approve/reject shows up without a manual reload (a granted test
+  // then jumps to "Available"; a granted assignment shows "approved").
+  useEffect(() => {
+    const refresh = () => {
+      if (document.hidden) return;
+      testApi.getMyReattemptRequests().then(m => {
+        if (m && typeof m === 'object') {
+          setReattemptStatus(m);
+          if (testsPageCache?.userId === user?.id) testsPageCache = { ...testsPageCache, reattemptStatus: m };
+        }
+      }).catch(() => {});
+      assignmentApi.getMyReattemptRequests().then(m => {
+        if (m && typeof m === 'object') setAssignReattempt(m);
+      }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [user?.id]);
+
   // ── Test helpers ──────────────────────────────────────────────────
   const attemptedIds = new Set(Object.keys(myAttempts));
   const now = new Date();

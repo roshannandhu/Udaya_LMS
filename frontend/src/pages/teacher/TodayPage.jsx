@@ -18,6 +18,7 @@ import SubjectIcon from '../../components/shared/SubjectIcon';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 import CopySuspectsCard from '../../components/teacher/dashboard/CopySuspectsCard';
+import PendingReattemptsCard from '../../components/teacher/PendingReattemptsCard';
 import VideoEngagementCard from '../../components/teacher/dashboard/VideoEngagementCard';
 import AssignmentStatusCard from '../../components/teacher/dashboard/AssignmentStatusCard';
 import LiveAbsenteesCard from '../../components/teacher/dashboard/LiveAbsenteesCard';
@@ -249,6 +250,9 @@ export default function TodayPage() {
             <StatCard value={counts.scheduled_tests ?? 0} label="Tests scheduled" icon={FileQuestion} color="cream" />
             <StatCard value={perf.avg_score != null ? `${Math.round(perf.avg_score)}%` : '—'} label="Class avg score" icon={Target} color="sky" />
           </motion.div>
+
+          {/* Pending re-attempt requests (tests + assignments) — self-hides when none */}
+          <PendingReattemptsCard />
 
           {/* ── 2. ACTION CENTER ── */}
           <motion.div variants={fadeUp}>

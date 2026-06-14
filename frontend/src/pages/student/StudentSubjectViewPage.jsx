@@ -42,6 +42,7 @@ export default function StudentSubjectViewPage() {
   const [tests, setTests] = useState([]);
   const [assignments, setAssignments]           = useState([]);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [assignReattempt, setAssignReattempt]   = useState({}); // {assignment_id: status}
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
   const [myAttempts, setMyAttempts] = useState({});
@@ -120,14 +121,30 @@ export default function StudentSubjectViewPage() {
     finally { setJoiningLiveId(null); }
   };
 
-  // Refresh assignments every time the Assignments tab is opened so grades
-  // set by the teacher are immediately visible without a page reload.
+  // Refresh assignments + re-attempt statuses every time the Assignments tab is
+  // opened so grades and teacher approvals are visible without a page reload.
+  const loadAssignReattempt = () =>
+    assignmentApi.getMyReattemptRequests().then(setAssignReattempt).catch(() => {});
+
   useEffect(() => {
     if (tab !== 'Assignments') return;
     assignmentApi.getByClass(classId)
       .then(data => setAssignments(data?.assignments || []))
       .catch(() => {});
+    loadAssignReattempt();
   }, [tab, classId]);
+
+  // Re-fetch re-attempt status when the student returns to the tab, so a
+  // teacher's approve/reject shows up without a manual reload.
+  useEffect(() => {
+    const onFocus = () => { if (!document.hidden) loadAssignReattempt(); };
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
 
   // Lazy-load leaderboard only when that tab is opened
   useEffect(() => {
@@ -544,6 +561,8 @@ export default function StudentSubjectViewPage() {
                   setAssignments(prev => prev.map(a => a.id === selectedAssignment?.id ? updated : a));
                   setSelectedAssignment(updated);
                 }}
+                reattemptStatus={selectedAssignment ? assignReattempt[selectedAssignment.id] : undefined}
+                onReattemptRequested={(id) => setAssignReattempt(prev => ({ ...prev, [id]: 'pending' }))}
               />
             </div>
           )}
