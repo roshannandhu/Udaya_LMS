@@ -15,7 +15,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [attachments, setAttachments] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [menuId, setMenuId] = useState(null);
-  const [menuPos, setMenuPos] = useState({ top: 0, bottom: 'auto', right: 0 });
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduledFor, setScheduledFor] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -466,20 +466,20 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         onClick={(e) => {
                           e.stopPropagation();
                           if (menuId === b.id) { setMenuId(null); return; }
+                          // Anchor the menu to the 3-dots button, then clamp it fully
+                          // inside the viewport (both axes) so it's never pushed
+                          // off-screen / hidden, no matter how tall the message is.
                           const rect = e.currentTarget.getBoundingClientRect();
-                          let rightPos = window.innerWidth - rect.right - 10;
-                          if (rightPos < 10) rightPos = 10; // Prevent clipping off the right edge
-                          
-                          let topPos = rect.bottom + 4;
-                          let bottomPos = 'auto';
-                          const menuHeight = 280; // Estimated max menu height
-                          
-                          if (topPos + menuHeight > window.innerHeight) {
-                            topPos = 'auto';
-                            bottomPos = window.innerHeight - rect.top + 4;
+                          const MENU_W = 192, MENU_H = 248, M = 8;
+                          let left = Math.min(rect.right - MENU_W, window.innerWidth - MENU_W - M);
+                          if (left < M) left = M;
+                          let top = rect.bottom + 4;
+                          if (top + MENU_H > window.innerHeight - M) {
+                            top = rect.top - MENU_H - 4;                       // flip above the button
+                            if (top < M) top = window.innerHeight - MENU_H - M; // still tight → pin near bottom
+                            if (top < M) top = M;
                           }
-                          
-                          setMenuPos({ top: topPos, bottom: bottomPos, right: rightPos });
+                          setMenuPos({ top, left });
                           setMenuId(b.id);
                         }}
                         className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-500 hover:text-neutral-800" title="Menu">
@@ -501,8 +501,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         <>
           <div className="fixed inset-0 z-[9998]" onClick={() => setMenuId(null)} />
           <div
-            style={{ position: 'fixed', top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}
-            className="w-48 py-1 z-[9999] rounded-xl bg-white border border-neutral-200 shadow-2xl"
+            style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+            className="w-48 py-1 z-[9999] rounded-xl bg-white border border-neutral-200 shadow-2xl max-h-[85vh] overflow-y-auto"
           >
             {(() => {
               const b = broadcasts.find(x => x.id === menuId);

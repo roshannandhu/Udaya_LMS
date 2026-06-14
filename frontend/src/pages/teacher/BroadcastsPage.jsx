@@ -89,6 +89,29 @@ export default function BroadcastsPage() {
     refreshStudents();
   }, []);
 
+  // WhatsApp-style back: opening a class thread on mobile pushes a history entry
+  // so the device/browser Back button returns to the standards list instead of
+  // leaving the Broadcasts page. The in-app back arrow routes through the same
+  // path (history.back) so history stays consistent either way.
+  const isMobile = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+
+  const openThread = (id) => {
+    setActiveStdId(id);
+    setPaneView('thread');
+    if (isMobile()) window.history.pushState({ tBroadcastThread: true }, '');
+  };
+
+  const closeThread = () => {
+    if (window.history.state?.tBroadcastThread) window.history.back(); // fires popstate → list
+    else setPaneView('list');
+  };
+
+  useEffect(() => {
+    const onPop = () => setPaneView('list');
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const studentCounts = {};
   students.forEach(s => {
     studentCounts[s.standard_id] = (studentCounts[s.standard_id] || 0) + 1;
@@ -148,7 +171,7 @@ export default function BroadcastsPage() {
               const lastMsg = broadcasts[broadcasts.length - 1];
               const isActive = s.id === activeStdId;
               return (
-                <div key={s.id} className={`flex items-center gap-3 px-4 py-3 border-b border-neutral-100 cursor-pointer transition-colors ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`} onClick={() => { setActiveStdId(s.id); setPaneView('thread'); }}>
+                <div key={s.id} className={`flex items-center gap-3 px-4 py-3 border-b border-neutral-100 cursor-pointer transition-colors ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`} onClick={() => openThread(s.id)}>
                   <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-neutral-700 overflow-hidden"
                     style={{ background: PASTEL[pastelFor(s.name)].hex }}>
                     <SubjectIcon value={s.emoji} size={24} fallback="graduation" />
@@ -187,7 +210,7 @@ export default function BroadcastsPage() {
               std={std}
               broadcasts={broadcastsByStandard[std.id] || []}
               onUpdate={updater => updateBroadcasts(std.id, updater)}
-              onBack={() => setPaneView('list')}
+              onBack={closeThread}
               showBackBtn={showThread}
               studentCount={studentCounts[std.id] || 0}
             />
