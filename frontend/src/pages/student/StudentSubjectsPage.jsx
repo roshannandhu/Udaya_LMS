@@ -21,7 +21,14 @@ export default function StudentSubjectsPage() {
   const cache = subjectsPageCache && subjectsPageCache.userId === user?.id ? subjectsPageCache : null;
   const [videoCounts, setVideoCounts] = useState(cache?.videoCounts || {});
   const [testCounts, setTestCounts] = useState(cache?.testCounts || {});
+  const [doneCounts, setDoneCounts] = useState(cache?.doneCounts || {});
   const [loading, setLoading] = useState(!cache);
+  // Subject progress bars fill from 0 → value on first paint (staggered per card).
+  const [barReady, setBarReady] = useState(false);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setBarReady(true));
+    return () => cancelAnimationFrame(r);
+  }, []);
   const subjects = useAppCache(s => s.subjects);
   // New-video chips per subject; visiting this page clears the nav badge.
   const newVideoItems = useWhatsNew(s => s.data?.videos?.items) || [];
@@ -36,12 +43,15 @@ export default function StudentSubjectsPage() {
           testApi.getTests(),
         ]);
 
-        // count videos per subject
+        // count videos (and completed videos) per subject
         const vc = {};
+        const dc = {};
         (Array.isArray(vids) ? vids : []).forEach(v => {
           vc[v.class_id] = (vc[v.class_id] || 0) + 1;
+          if (v.completed || v.my_completed) dc[v.class_id] = (dc[v.class_id] || 0) + 1;
         });
         setVideoCounts(vc);
+        setDoneCounts(dc);
 
         // count active/scheduled tests per subject
         const tc = {};
@@ -52,7 +62,7 @@ export default function StudentSubjectsPage() {
           });
         setTestCounts(tc);
         
-        subjectsPageCache = { userId: user?.id, videoCounts: vc, testCounts: tc };
+        subjectsPageCache = { userId: user?.id, videoCounts: vc, testCounts: tc, doneCounts: dc };
       } catch (err) {
         console.error(err);
       } finally {
@@ -77,9 +87,11 @@ export default function StudentSubjectsPage() {
         ) : (
           <motion.div variants={staggerChildren} initial="hidden" animate="show"
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {subjects.map(c => {
+            {subjects.map((c, idx) => {
               const vc = videoCounts[c.id] || 0;
               const tc = testCounts[c.id] || 0;
+              const done = doneCounts[c.id] || 0;
+              const pct = vc ? Math.round((done / vc) * 100) : 0;
               const newCount = newVideoItems.filter(v => v.class_id === c.id).length;
               const pastel = PASTEL[pastelFor(c.name)];
               return (
@@ -111,6 +123,25 @@ export default function StudentSubjectsPage() {
                     <span className="flex items-center gap-1 bg-white/60 rounded-pill px-2.5 py-1"><Play size={12} />{vc} video{vc !== 1 ? 's' : ''}</span>
                     <span className="flex items-center gap-1 bg-white/60 rounded-pill px-2.5 py-1"><FileQuestion size={12} />{tc} test{tc !== 1 ? 's' : ''}</span>
                   </div>
+                  {/* Subject completion — fills on mount, staggered per card */}
+                  {vc > 0 && (
+                    <div className="mt-auto pt-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: pastel.fgHex, opacity: 0.7 }}>Progress</span>
+                        <span className="text-[10px] font-bold" style={{ color: pastel.fgHex }}>{pct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/50 overflow-hidden">
+                        <div
+                          className="bar-fill h-full rounded-full"
+                          style={{
+                            width: barReady ? `${pct}%` : '0%',
+                            background: pastel.fgHex,
+                            transitionDelay: `${idx * 110}ms`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
                 </SpotlightCard>
                 </TiltCard>

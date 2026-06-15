@@ -16,7 +16,7 @@ import SubjectIcon from '../../components/shared/SubjectIcon';
 import VideoRail from '../../components/student/VideoRail';
 import { PASTEL, pastelFor } from '../../components/cards/pastel';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
-import { ShinyText } from '../../components/bits';
+import { ShinyText, TiltCard } from '../../components/bits';
 import {
   Accordion, AccordionItem, AccordionTrigger, AccordionContent,
 } from '@/components/animate-ui/components/radix/accordion';
@@ -32,11 +32,10 @@ function StatTile({ icon: Icon, label, value, display, pastel, ringPct, onClick 
     <motion.button
       type="button"
       onClick={onClick}
-      variants={fadeUp}
       whileHover={{ y: -4, scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
       transition={springCard}
-      className="rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card border border-black/5 text-left"
+      className="w-full h-full rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card border border-black/5 text-left"
       style={{ background: p.hex }}
     >
       {ringPct != null ? (
@@ -139,6 +138,12 @@ export default function StudentHomePage() {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [videoThumbnails, setVideoThumbnails] = useState({});
+  // XP bar fills from 0 → value on first paint (via the `.bar-fill` CSS transition).
+  const [barReady, setBarReady] = useState(false);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setBarReady(true));
+    return () => cancelAnimationFrame(r);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -397,6 +402,8 @@ export default function StudentHomePage() {
 
   const greetWords = `${greeting}, ${displayName}!`.split(' ');
   const completedVideos = videos.filter(v => v.completed).length;
+  // Course progress = % of lessons completed — drives the XP bar under the greeting.
+  const videoPct = videos.length ? Math.round((completedVideos / videos.length) * 100) : 0;
 
   if (loading) {
     return (
@@ -434,7 +441,7 @@ export default function StudentHomePage() {
                   {greetWords.map((w, i) => (
                     <motion.span
                       key={`${w}-${i}`}
-                      className="inline-block mr-[0.28em]"
+                      className="aurora-name inline-block mr-[0.28em]"
                       initial={reduceMotion ? false : { opacity: 0, y: 22, rotate: 3 }}
                       animate={{ opacity: 1, y: 0, rotate: 0 }}
                       transition={{ delay: 0.08 + i * 0.07, type: 'spring', stiffness: 260, damping: 20 }}
@@ -453,26 +460,55 @@ export default function StudentHomePage() {
             </div>
           </motion.div>
 
+          {/* ── 1b. XP / COURSE-PROGRESS BAR ── */}
+          <motion.div variants={fadeUp} className="-mt-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-neutral-500">
+                <Zap size={13} className="text-indigo-500" /> Course progress
+              </span>
+              <span className="text-[11px] font-extrabold text-neutral-700">
+                {completedVideos}/{videos.length} lessons · {videoPct}%
+              </span>
+            </div>
+            <div className="h-2.5 rounded-full bg-black/5 overflow-hidden">
+              <div
+                className="bar-fill h-full rounded-full"
+                style={{
+                  width: barReady ? `${videoPct}%` : '0%',
+                  background: 'linear-gradient(90deg,#818cf8,#f472b6,#22d3ee)',
+                }}
+              />
+            </div>
+          </motion.div>
+
           {/* ── 2. GAMIFIED STAT TILES ── */}
           <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatTile
-              icon={ListChecks} label={tasksPending === 1 ? 'Task pending' : 'Tasks pending'} value={tasksPending} pastel="mint"
-              onClick={() => document.getElementById('whats-next')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            />
-            <StatTile
-              icon={FileQuestion} label="Tests open" value={availableTests.length} pastel="sky"
-              onClick={() => navigate('/student/tests')}
-            />
-            <StatTile
-              icon={Video} label="Live today" value={liveNow.length + futureLives.length} pastel="peach"
-              onClick={() => navigate('/student/live-classes')}
-            />
-            <StatTile
-              icon={Target} label="Avg score" pastel="lavender"
-              ringPct={user?.avg_score != null ? Math.round(user.avg_score) : 0}
-              display={user?.avg_score != null ? <><CountUp value={Math.round(user.avg_score)} />%</> : '—'}
-              onClick={() => navigate('/student/leaderboard')}
-            />
+            <TiltCard variants={fadeUp} className="h-full">
+              <StatTile
+                icon={ListChecks} label={tasksPending === 1 ? 'Task pending' : 'Tasks pending'} value={tasksPending} pastel="mint"
+                onClick={() => document.getElementById('whats-next')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              />
+            </TiltCard>
+            <TiltCard variants={fadeUp} className="h-full">
+              <StatTile
+                icon={FileQuestion} label="Tests open" value={availableTests.length} pastel="sky"
+                onClick={() => navigate('/student/tests')}
+              />
+            </TiltCard>
+            <TiltCard variants={fadeUp} className="h-full">
+              <StatTile
+                icon={Video} label="Live today" value={liveNow.length + futureLives.length} pastel="peach"
+                onClick={() => navigate('/student/live-classes')}
+              />
+            </TiltCard>
+            <TiltCard variants={fadeUp} className="h-full">
+              <StatTile
+                icon={Target} label="Avg score" pastel="lavender"
+                ringPct={user?.avg_score != null ? Math.round(user.avg_score) : 0}
+                display={user?.avg_score != null ? <><CountUp value={Math.round(user.avg_score)} />%</> : '—'}
+                onClick={() => navigate('/student/leaderboard')}
+              />
+            </TiltCard>
           </motion.div>
 
           {/* ── 2b. WHILE YOU WERE AWAY ── */}

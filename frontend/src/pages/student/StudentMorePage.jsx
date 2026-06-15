@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MdAssignment, MdEmojiEvents, MdBarChart, MdChevronRight } from 'react-icons/md';
 import TopBar from '../../components/shared/TopBar';
 import { AnimatedPage, Item, Pressable, SpotlightCard } from '../../components/bits';
+import ThemeToggle from '../../components/shared/ThemeToggle';
 
 export default function StudentMorePage() {
   const navigate = useNavigate();
@@ -34,6 +35,16 @@ export default function StudentMorePage() {
             </SpotlightCard>
           </Item>
         ))}
+
+        <Item>
+          <div className="glass-panel flex items-center justify-between px-4 py-3 rounded-card">
+            <div>
+              <p className="font-semibold text-sm text-neutral-800">Appearance</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Switch between light and dark</p>
+            </div>
+            <ThemeToggle showLabel className="border border-[#EFEDEA]" />
+          </div>
+        </Item>
       </AnimatedPage>
     </div>
   );

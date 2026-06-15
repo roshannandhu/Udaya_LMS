@@ -4,7 +4,9 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import LoginPage from './pages/LoginPage';
 import { useAuthStore, ROLES } from './lib/auth';
 import { useAppCache } from './store';
+import { useTheme } from './lib/theme';
 import ErrorBoundary from './components/ErrorBoundary';
+import AuroraBackground from './components/aurora/AuroraBackground';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
@@ -199,8 +201,11 @@ function RoutedBoundary({ children }) {
 }
 
 export default function App() {
+  // Apply the saved/system theme as early as possible (sets html.dark).
+  useEffect(() => { useTheme.getState().init(); }, []);
   return (
     <BrowserRouter>
+      <AuroraBackground />
       <AuthHandler />
       <RoutedBoundary>
       <Routes>

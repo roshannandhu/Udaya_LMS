@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Trophy, CheckCircle2, XCircle, MinusCircle, AlertTriangle, Star, BookOpen, PartyPopper, ThumbsUp, Flame } from 'lucide-react';
 import { Btn } from '../../components/ui';
 import { CountUp } from '../../components/shared/Animated';
 import { AnimatedPage, Item } from '../../components/bits';
+import { burst } from '../../utils/confetti';
 
 export default function StudentTestResultPage() {
   const navigate = useNavigate();
@@ -46,6 +47,14 @@ export default function StudentTestResultPage() {
 
   const skipped = (total || 0) - (correct_count || 0) - (wrong_count || 0);
   const reduce = useReducedMotion();
+
+  // Celebrate a strong result — pastel confetti for 90%+ (not when terminated).
+  useEffect(() => {
+    if (!cancelled && scorePct >= 90) {
+      const t = setTimeout(() => burst(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [cancelled, scorePct]);
 
   return (
     <div className="min-h-screen bg-transparent flex flex-col items-center justify-center px-5 py-12">

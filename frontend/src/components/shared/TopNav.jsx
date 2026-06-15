@@ -7,6 +7,7 @@ import { useSettingsStore, DEFAULT_LMS_LOGO } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import { Avatar, resolveAvatar } from '../ui';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 import SearchPalette from './SearchPalette';
 import { TEACHER_NAV, STUDENT_NAV, activeNavId } from './nav-items';
 
@@ -94,6 +95,7 @@ const TopNav = memo(function TopNav({ type = 'teacher', badges }) {
             className="p-1.5 text-neutral-400 hover:text-white transition-colors">
             <MdSearch className="w-5 h-5" />
           </button>
+          <ThemeToggle onDark />
           <NotificationBell dark />
           <div className="relative" ref={menuRef}>
             <button onClick={() => setMenuOpen(o => !o)}

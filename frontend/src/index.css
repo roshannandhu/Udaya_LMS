@@ -32,10 +32,13 @@ h1, h2, h3 {
 
 /* ── Soft rounded surfaces (formerly glassmorphism / flat) ───────────────
    Class names are kept so the ~150 existing usages adopt the new look with
-   no JSX edits: larger radius + soft ambient shadow. */
+   no JSX edits: larger radius + soft ambient shadow. Background is now a faint
+   translucent white so the aurora behind faintly bleeds through (faux glass —
+   NO backdrop-filter, so zero blur cost on weak devices). Note: we intentionally
+   do NOT add overflow:hidden here — many cards have badges that poke outside. */
 .glass,
 .glass-panel {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.72);
   border: 1px solid #EFEDEA;
   border-radius: 1.5rem;
   box-shadow: 0 4px 20px rgba(17, 24, 39, 0.06);
@@ -113,9 +116,119 @@ h1, h2, h3 {
   border-color: #EFEDEA !important;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   AURORA SOFT FUTURISM — additive visual layer (light + dark)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Aurora background blobs (rendered by AuroraBackground.jsx, mounted in App). */
+.aurora-blob { opacity: 0.35; will-change: transform; }
+.aurora-blob-1 { animation: blobFloat1 11s ease-in-out infinite alternate; }
+.aurora-blob-2 { animation: blobFloat2 13s ease-in-out infinite alternate; }
+.aurora-blob-3 { animation: blobFloat3 12s ease-in-out infinite alternate; }
+.aurora-blob-4 { animation: blobFloat4 14s ease-in-out infinite alternate; }
+
+@keyframes blobFloat1 { from { transform: translate(0, 0) scale(1); } to { transform: translate(60px, 40px) scale(1.12); } }
+@keyframes blobFloat2 { from { transform: translate(0, 0) scale(1.05); } to { transform: translate(-50px, 50px) scale(0.95); } }
+@keyframes blobFloat3 { from { transform: translate(0, 0) scale(1); } to { transform: translate(40px, -45px) scale(1.1); } }
+@keyframes blobFloat4 { from { transform: translate(0, 0) scale(0.98); } to { transform: translate(-55px, -35px) scale(1.08); } }
+
+/* Confetti particle fall (utils/confetti.js). */
+@keyframes floatUp { to { transform: translateY(110vh) rotate(900deg); opacity: 0; } }
+
+/* Flowing gradient text — student name / headline accents. */
+@keyframes gradText { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+.aurora-name {
+  background: linear-gradient(270deg, #f472b6, #818cf8, #22d3ee, #f472b6);
+  background-size: 400% 400%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: gradText 8s ease infinite;
+}
+
+/* Generic page fade-slide for non-Framer spots. */
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+.fade-slide { animation: fadeSlide 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Load-fill progress bars (XP + per-subject). Set width 0 then to target on mount. */
+.bar-fill { transition: width 1.6s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Holographic glass card (faux — no backdrop-filter). Used by GlassCard. */
+.glass-card {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(129, 140, 248, 0.12);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.glass-card:hover { transform: translateY(-5px); box-shadow: 0 16px 44px rgba(129, 140, 248, 0.20); }
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.8s ease;
+  pointer-events: none;
+}
+.glass-card:hover::after { transform: translateX(120%); }
+
+/* ── Whole-app dark mode (html.dark). Additive overrides of the dominant
+   surface/text/border utilities + pastel tokens. Light mode untouched. ── */
+html.dark { color-scheme: dark; }
+html.dark body { background-color: #080818; color: #e5e7eb; }
+html.dark .aurora-blob { opacity: 0.14; }
+
+/* Surfaces → deep navy translucent */
+html.dark .glass,
+html.dark .glass-panel,
+html.dark .glass-card { background: rgba(255, 255, 255, 0.06) !important; border-color: rgba(255, 255, 255, 0.10) !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important; }
+html.dark .glass-nav,
+html.dark .glass-btn,
+html.dark .glass-toggle-track { background: #11122a !important; border-color: rgba(255, 255, 255, 0.10) !important; }
+html.dark .bg-white { background-color: #11122a !important; }
+html.dark .bg-canvas { background-color: #080818 !important; }
+html.dark .bg-\[\#F4F7F6\],
+html.dark .bg-\[\#FAFAF9\],
+html.dark .bg-\[\#f0f2f5\],
+html.dark .bg-\[\#efeae2\],
+html.dark .bg-\[\#F8F9FA\] { background-color: #0c0c1f !important; }
+html.dark .bg-neutral-50,
+html.dark .bg-neutral-100 { background-color: #1a1b33 !important; }
+html.dark .bg-neutral-900 { background-color: #05050f !important; }
+
+/* Text → light greys */
+html.dark .text-neutral-900,
+html.dark .text-neutral-800,
+html.dark .text-black { color: #f1f3f8 !important; }
+html.dark .text-neutral-700,
+html.dark .text-neutral-600 { color: #c9cfdb !important; }
+html.dark .text-neutral-500,
+html.dark .text-neutral-400 { color: #9aa4b2 !important; }
+
+/* Borders → faint white */
+html.dark .border-\[\#EFEDEA\],
+html.dark .border-\[\#EBEAE7\],
+html.dark .border-\[\#E4E2DF\],
+html.dark .border-neutral-100,
+html.dark .border-neutral-200,
+html.dark .border-black\/5 { border-color: rgba(255, 255, 255, 0.08) !important; }
+
+/* Pastel tiles → dimmed dark-tinted so they read on a dark canvas */
+html.dark .bg-pastel-mint     { background-color: #16302a !important; }
+html.dark .bg-pastel-pink     { background-color: #2e1c2a !important; }
+html.dark .bg-pastel-lavender { background-color: #221d33 !important; }
+html.dark .bg-pastel-cream    { background-color: #2b2616 !important; }
+html.dark .bg-pastel-sky      { background-color: #14233a !important; }
+html.dark .bg-pastel-peach    { background-color: #2e1d16 !important; }
+
 /* ── Motion is now enabled (Framer Motion + Tailwind transitions).
    Honor the OS "reduce motion" setting by disabling decorative transitions
-   and animations for users who ask for it. */
+   and animations for users who ask for it. (This block already neutralizes
+   the aurora/gradient/confetti keyframes above via animation-duration.) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition: none !important;

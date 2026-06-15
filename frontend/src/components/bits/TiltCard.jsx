@@ -7,7 +7,7 @@ const canHover = () =>
 // Gentle 3D tilt following the pointer (ReactBits "Tilted Card"), capped at a
 // few degrees so pastel cards feel like paper lifting, not a gimmick.
 // Touch devices / reduced motion render children flat.
-export default function TiltCard({ children, className = '', max = 6 }) {
+export default function TiltCard({ children, className = '', max = 6, ...rest }) {
   const reduce = useReducedMotion();
   const ref = useRef(null);
   const px = useMotionValue(0.5);
@@ -15,7 +15,9 @@ export default function TiltCard({ children, className = '', max = 6 }) {
   const rotateX = useSpring(useTransform(py, [0, 1], [max, -max]), { stiffness: 250, damping: 22 });
   const rotateY = useSpring(useTransform(px, [0, 1], [-max, max]), { stiffness: 250, damping: 22 });
 
-  if (reduce || !canHover()) return <div className={className}>{children}</div>;
+  // Reduced motion / touch → render flat, but still forward motion props (e.g.
+  // `variants`) so the card keeps its place in a parent stagger sequence.
+  if (reduce || !canHover()) return <motion.div className={className} {...rest}>{children}</motion.div>;
 
   return (
     <motion.div
@@ -29,6 +31,7 @@ export default function TiltCard({ children, className = '', max = 6 }) {
         py.set((e.clientY - r.top) / r.height);
       }}
       onMouseLeave={() => { px.set(0.5); py.set(0.5); }}
+      {...rest}
     >
       {children}
     </motion.div>
