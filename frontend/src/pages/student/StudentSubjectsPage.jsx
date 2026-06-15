@@ -23,12 +23,14 @@ export default function StudentSubjectsPage() {
   const [testCounts, setTestCounts] = useState(cache?.testCounts || {});
   const [doneCounts, setDoneCounts] = useState(cache?.doneCounts || {});
   const [loading, setLoading] = useState(!cache);
-  // Subject progress bars fill from 0 → value on first paint (staggered per card).
+  // Subject progress bars fill from 0 → value once loaded (staggered per card).
+  // Gated on `loading` so they animate on a cold first load, not just cached nav.
   const [barReady, setBarReady] = useState(false);
   useEffect(() => {
+    if (loading) return;
     const r = requestAnimationFrame(() => setBarReady(true));
     return () => cancelAnimationFrame(r);
-  }, []);
+  }, [loading]);
   const subjects = useAppCache(s => s.subjects);
   // New-video chips per subject; visiting this page clears the nav badge.
   const newVideoItems = useWhatsNew(s => s.data?.videos?.items) || [];

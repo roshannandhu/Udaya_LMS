@@ -138,12 +138,15 @@ export default function StudentHomePage() {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [videoThumbnails, setVideoThumbnails] = useState({});
-  // XP bar fills from 0 → value on first paint (via the `.bar-fill` CSS transition).
+  // XP bar fills from 0 → value once content is ready (via the `.bar-fill` CSS
+  // transition). Gated on `loading` so it also animates on a cold first load,
+  // not just cached navigations.
   const [barReady, setBarReady] = useState(false);
   useEffect(() => {
+    if (loading) return;
     const r = requestAnimationFrame(() => setBarReady(true));
     return () => cancelAnimationFrame(r);
-  }, []);
+  }, [loading]);
 
   useEffect(() => {
     const load = async () => {
