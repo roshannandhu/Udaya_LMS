@@ -8,6 +8,7 @@ import {
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Input, Skeleton, Tag } from '../../components/ui';
 import { whatsappApi } from '../../lib/api';
+import { useTheme } from '../../lib/theme';
 
 import SendWizard, { TASKS } from '../../components/teacher/whatsapp/SendWizard';
 import PendingActions from '../../components/teacher/whatsapp/PendingActions';
@@ -23,11 +24,11 @@ import AutomationTab from '../../components/teacher/whatsapp/AutomationTab';
 // behind quick links. Phone-first: single column, no tabs console.
 
 const TASK_CARDS = [
-  { id: 'credentials',  color: '#0F7B6C', bg: '#DFF5EC' },
-  { id: 'exam',         color: '#2383E2', bg: '#E3EFFB' },
-  { id: 'weekly',       color: '#0B6E3E', bg: '#E7FDDE' },
-  { id: 'monthly',      color: '#6940A5', bg: '#EAE4F2' },
-  { id: 'announcement', color: '#B7791F', bg: '#FBF1D9' },
+  { id: 'credentials',  color: '#0F7B6C', bg: '#DFF5EC', dcolor: '#6ee7b7', dbg: '#16302a' },
+  { id: 'exam',         color: '#2383E2', bg: '#E3EFFB', dcolor: '#93c5fd', dbg: '#14233a' },
+  { id: 'weekly',       color: '#0B6E3E', bg: '#E7FDDE', dcolor: '#86efac', dbg: '#0f2417' },
+  { id: 'monthly',      color: '#6940A5', bg: '#EAE4F2', dcolor: '#c4b5fd', dbg: '#221d33' },
+  { id: 'announcement', color: '#B7791F', bg: '#FBF1D9', dcolor: '#fcd34d', dbg: '#2b2616' },
 ];
 
 const SCREENS = {
@@ -156,6 +157,7 @@ export default function WhatsAppCenterPage() {
 
 /* ── Home: connection → pending → task cards, with a laptop right rail ──────── */
 function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, onReviewExam, onSent, currency }) {
+  const dark = useTheme(s => s.dark);
   return (
     <div className="space-y-5">
       {/* Connection banner */}
@@ -189,13 +191,13 @@ function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, on
           <div>
             <h2 className="text-sm font-bold text-neutral-500 uppercase tracking-widest mb-3">What do you want to send?</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 lg:gap-3">
-              {TASK_CARDS.map(({ id, color, bg }) => {
+              {TASK_CARDS.map(({ id, color, bg, dcolor, dbg }) => {
                 const t = TASKS[id];
                 const Icon = t.icon;
                 return (
                   <button key={id} onClick={() => onTask(id)}
                     className="flex items-center gap-3.5 p-4 lg:p-5 rounded-2xl bg-white border border-[#EBEAE7] hover:border-neutral-300 hover:shadow-sm transition-all text-left">
-                    <span className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg, color }}>
+                    <span className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: dark ? dbg : bg, color: dark ? dcolor : color }}>
                       <Icon size={20} />
                     </span>
                     <span className="flex-1 min-w-0">

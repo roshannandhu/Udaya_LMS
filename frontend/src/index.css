@@ -213,6 +213,7 @@ html.dark .bg-neutral-900 { background-color: #05050f !important; }
    translucent light on the now-dark tile so their contents stay legible. */
 html.dark .bg-white\/80,
 html.dark .bg-white\/70,
+html.dark .bg-white\/65,
 html.dark .bg-white\/60,
 html.dark .bg-white\/50,
 html.dark .bg-white\/40 { background-color: rgba(255, 255, 255, 0.12) !important; }
@@ -363,6 +364,22 @@ html.dark .border-red-100, html.dark .border-red-200, html.dark .border-amber-10
 html.dark .border-green-100, html.dark .border-green-200, html.dark .border-emerald-200,
 html.dark .border-blue-100, html.dark .border-blue-200, html.dark .border-sky-200,
 html.dark .border-indigo-200, html.dark .border-purple-200, html.dark .border-orange-200 { border-color: rgba(255, 255, 255, 0.10) !important; }
+
+/* Light gradient cards → flat dark tint. The from-/to- utilities only set CSS
+   variables, so the bg-* rules above can't reach them — override the vars here. */
+html.dark .from-\[\#FFF4E5\] { --tw-gradient-from: #2b2316 var(--tw-gradient-from-position) !important; }
+html.dark .to-\[\#FFE8CC\]   { --tw-gradient-to: #2b2316 var(--tw-gradient-to-position) !important; }
+html.dark .from-emerald-50  { --tw-gradient-from: #16302a var(--tw-gradient-from-position) !important; }
+html.dark .to-teal-100      { --tw-gradient-to: #16302a var(--tw-gradient-to-position) !important; }
+html.dark .from-indigo-50   { --tw-gradient-from: #1d1b33 var(--tw-gradient-from-position) !important; }
+html.dark .to-purple-100    { --tw-gradient-to: #221d33 var(--tw-gradient-to-position) !important; }
+html.dark .from-amber-50    { --tw-gradient-from: #2b2316 var(--tw-gradient-from-position) !important; }
+html.dark .to-orange-100,
+html.dark .to-orange-50     { --tw-gradient-to: #2b2316 var(--tw-gradient-to-position) !important; }
+html.dark .from-blue-50     { --tw-gradient-from: #14233a var(--tw-gradient-from-position) !important; }
+html.dark .to-sky-100       { --tw-gradient-to: #14233a var(--tw-gradient-to-position) !important; }
+html.dark .from-rose-50     { --tw-gradient-from: #2e1c2a var(--tw-gradient-from-position) !important; }
+html.dark .to-pink-100      { --tw-gradient-to: #2e1c2a var(--tw-gradient-to-position) !important; }
 
 /* ── Motion is now enabled (Framer Motion + Tailwind transitions).
    Honor the OS "reduce motion" setting by disabling decorative transitions

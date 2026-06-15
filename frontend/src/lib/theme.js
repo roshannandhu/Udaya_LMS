@@ -22,7 +22,10 @@ function initialDark() {
 }
 
 export const useTheme = create((set, get) => ({
-  dark: false,
+  // Seed from the class the inline <head> script already applied (mirrors
+  // initialDark()), so the first render — including the toggle icon — matches
+  // the painted theme and there's no flash or icon flicker on load.
+  dark: typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
   initialized: false,
   init: () => {
     if (get().initialized) return;

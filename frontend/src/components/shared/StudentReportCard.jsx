@@ -720,6 +720,13 @@ const MENTOR_SECTIONS = [
   { title: 'Weekly Timetable', icon: Calendar, hex: '#6940A5' },
   { title: 'Mentor Message', icon: Heart, hex: '#AD1A72' },
 ];
+// Light variants of the mentor section colours, used in dark mode (the originals
+// are dark and applied inline, so CSS can't reach them).
+const MENTOR_HEX_DARK = {
+  '#872792': '#f0abfc', '#0F7B6C': '#6ee7b7', '#B7791F': '#fcd34d',
+  '#2383E2': '#93c5fd', '#C2410C': '#fdba74', '#6940A5': '#c4b5fd', '#AD1A72': '#f9a8d4',
+};
+const mentorHex = (hex, dark) => (dark ? (MENTOR_HEX_DARK[hex] || '#e9d5ff') : hex);
 const SECTION_RE = /^(Performance Summary|What's Going Well|What Needs Attention|Solutions & Study Ideas|Goals|Weekly Timetable|Mentor Message|Focus of the Week|What I Noticed|Recommended Actions|Next Level Goal|AI Mentor Message)\s*$/i;
 
 const DAY_LINE_RE = /^[-*\s]*\*{0,2}(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\*{0,2}\s*[:—-]\s*(.+)/i;
@@ -844,6 +851,7 @@ function ThinkingDots() {
 
 function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isStreaming, error, generatedAt }) {
   const reduce = useReducedMotion();
+  const dark = useTheme(s => s.dark);
   const [copiedAI, setCopiedAI] = useState(false);
   const sections = useMemo(() => (suggestions ? parseMentorSections(suggestions) : []), [suggestions]);
   const active = isStreaming || loading;
@@ -895,7 +903,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
               )}
               AI Mentor Analysis
             </h3>
-            <p className="text-[12px] font-bold text-[#872792]/70 leading-snug">Personalized coaching based on your streaks, trends and weak topics.</p>
+            <p className="text-[12px] font-bold leading-snug" style={{ color: mentorHex('#872792', dark), opacity: 0.75 }}>Personalized coaching based on your streaks, trends and weak topics.</p>
           </motion.div>
           <motion.button
             onClick={onToggle}
@@ -936,7 +944,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                     {sections.map((s, i) => {
                       const meta = MENTOR_SECTIONS.find(m => m.title.toLowerCase() === (s.title || '').toLowerCase());
                       const Icon = meta?.icon || Sparkles;
-                      const hex = meta?.hex || '#872792';
+                      const hex = mentorHex(meta?.hex || '#872792', dark);
                       const isLastSection = i === sections.length - 1;
                       const isTimetable = /weekly timetable/i.test(s.title || '');
                       const Body = isTimetable ? TimetableBody : MentorBody;
