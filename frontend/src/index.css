@@ -363,7 +363,8 @@ html.dark .border-\[\#D8D6D2\], html.dark .border-\[\#E5E5E5\],
 html.dark .border-red-100, html.dark .border-red-200, html.dark .border-amber-100, html.dark .border-amber-200,
 html.dark .border-green-100, html.dark .border-green-200, html.dark .border-emerald-200,
 html.dark .border-blue-100, html.dark .border-blue-200, html.dark .border-sky-200,
-html.dark .border-indigo-200, html.dark .border-purple-200, html.dark .border-orange-200 { border-color: rgba(255, 255, 255, 0.10) !important; }
+html.dark .border-indigo-200, html.dark .border-purple-200, html.dark .border-orange-100, html.dark .border-orange-200,
+html.dark .border-\[\#ffccd5\], html.dark .border-\[\#D9D7D3\], html.dark .border-\[\#D8D6D2\] { border-color: rgba(255, 255, 255, 0.10) !important; }
 
 /* Light gradient cards → flat dark tint. The from-/to- utilities only set CSS
    variables, so the bg-* rules above can't reach them — override the vars here. */
