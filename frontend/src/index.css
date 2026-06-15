@@ -193,14 +193,21 @@ html.dark .bg-white { background-color: #11122a !important; }
 html.dark .bg-canvas { background-color: #080818 !important; }
 html.dark .bg-\[\#F4F7F6\],
 html.dark .bg-\[\#FAFAF9\],
-html.dark .bg-\[\#f0f2f5\],
-html.dark .bg-\[\#efeae2\],
 html.dark .bg-\[\#F8F9FA\] { background-color: #0c0c1f !important; }
+/* Broadcast (WhatsApp-style) chat: distinct canvas / header / bubble layers so
+   message bubbles separate from the background and the green sent bubble flips. */
+html.dark .bg-\[\#efeae2\] { background-color: #0b141a !important; }   /* chat canvas */
+html.dark .bg-\[\#f0f2f5\] { background-color: #161b22 !important; }   /* header / footer / input bar */
+html.dark .bg-\[\#dcf8c6\] { background-color: #144d3a !important; }   /* teacher's sent (green) bubble */
 html.dark .bg-neutral-50,
 html.dark .bg-neutral-100 { background-color: #1a1b33 !important; }
 html.dark .bg-neutral-100\/80,
+html.dark .bg-neutral-100\/60,
 html.dark .bg-neutral-100\/50,
 html.dark .bg-neutral-50\/80 { background-color: rgba(255, 255, 255, 0.06) !important; }
+/* Nested tint blocks (reply quotes, attachment hovers) read as light on dark */
+html.dark .bg-black\/5 { background-color: rgba(255, 255, 255, 0.06) !important; }
+html.dark .bg-black\/10 { background-color: rgba(255, 255, 255, 0.10) !important; }
 html.dark .bg-neutral-900 { background-color: #05050f !important; }
 /* Translucent-white chips/circles/pills (mostly nested inside pastel tiles) →
    translucent light on the now-dark tile so their contents stay legible. */
