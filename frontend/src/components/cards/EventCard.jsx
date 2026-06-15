@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
-import { PASTEL } from './pastel';
+import { pastelTokens } from './pastel';
+import { useTheme } from '../../lib/theme';
 import { fadeUp, springCard } from '../../lib/motion';
 
 /**
@@ -19,7 +20,8 @@ import { fadeUp, springCard } from '../../lib/motion';
 export default function EventCard({
   color = 'sky', icon: Icon, kicker, date, title, body, footer, onClick, className = '',
 }) {
-  const pastel = PASTEL[color] || PASTEL.sky;
+  const dark = useTheme(s => s.dark);
+  const pastel = pastelTokens(color, dark);
   const clickable = !!onClick;
   return (
     <motion.div

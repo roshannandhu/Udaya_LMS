@@ -7,7 +7,8 @@ import {
 import { motion } from 'framer-motion';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Modal, Input, Skeleton } from '../../components/ui';
-import { PASTEL, pastelFor } from '../../components/cards/pastel';
+import { pastelFor, pastelTokens } from '../../components/cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { springCard } from '../../lib/motion';
 import { apiClient } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
@@ -141,8 +142,9 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
 
 /* ─── Bento Class Card ──────────────────────────────────────── */
 function BentoClassCard({ std, subjectsCount, studentsCount, navigate, isLast }) {
+  const dark = useTheme(s => s.dark);
   const num = getStdNum(std.name);
-  const pastel = PASTEL[pastelFor(std.name)];
+  const pastel = pastelTokens(pastelFor(std.name), dark);
 
   return (
     <div className="relative flex items-start gap-4 md:gap-6 group">

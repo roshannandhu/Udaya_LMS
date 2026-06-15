@@ -1,8 +1,10 @@
 import React from 'react';
 import { Play, Calendar } from 'lucide-react';
-import { PASTEL } from './pastel';
+import { pastelTokens } from './pastel';
+import { useTheme } from '../../lib/theme';
 
 export default function HeroCarousel({ items = [], onVideoClick, onLiveClick }) {
+  const dark = useTheme(s => s.dark);
   if (!items || items.length === 0) return null;
 
   // Format MM:SS
@@ -21,7 +23,7 @@ export default function HeroCarousel({ items = [], onVideoClick, onLiveClick }) 
       <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
         {items.map((item, idx) => {
           const isLive = item.type === 'live';
-          const pastel = PASTEL[isLive ? 'sky' : (idx % 2 === 0 ? 'pink' : 'lavender')];
+          const pastel = pastelTokens(isLive ? 'sky' : (idx % 2 === 0 ? 'pink' : 'lavender'), dark);
           const progressPct = item.duration_secs ? Math.min(100, (item.progress_secs / item.duration_secs) * 100) : 0;
           
           return (

@@ -33,6 +33,12 @@ export function pastelTokens(name, dark) {
   return { ...base, hex: d.hex, fgHex: d.fgHex };
 }
 
+// Pick the light value by day, the dark value at night. For bespoke inline
+// `style` colours that aren't pastel tokens (chart strokes, one-off tints, etc.).
+export function tone(lightHex, darkHex, dark) {
+  return dark ? darkHex : lightHex;
+}
+
 // WhatsApp green is an accent, not a rotation colour — keep it out of pastelFor().
 export const PASTEL_NAMES = Object.keys(PASTEL).filter((n) => n !== 'whatsapp');
 

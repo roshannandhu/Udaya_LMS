@@ -5,7 +5,8 @@ import TopBar from '../../components/shared/TopBar';
 import BroadcastThread from '../../components/teacher/BroadcastThread';
 import { useStore, useAppCache } from '../../store';
 import { Skeleton } from '../../components/ui';
-import { PASTEL, pastelFor } from '../../components/cards/pastel';
+import { pastelFor, pastelTokens } from '../../components/cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { broadcastApi } from '../../lib/api';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 
@@ -67,6 +68,7 @@ function TTLPopover({ standardId, onClose }) {
 export default function BroadcastsPage() {
   const { broadcastsByStandard, updateBroadcasts } = useStore();
   const location = useLocation();
+  const dark = useTheme(s => s.dark);
 
   const standards        = useAppCache(s => s.standards);
   const students         = useAppCache(s => s.students);
@@ -174,7 +176,7 @@ export default function BroadcastsPage() {
               return (
                 <div key={s.id} className={`flex items-center gap-3 px-4 py-3 border-b border-neutral-100 cursor-pointer transition-colors ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`} onClick={() => openThread(s.id)}>
                   <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-neutral-700 overflow-hidden"
-                    style={{ background: PASTEL[pastelFor(s.name)].hex }}>
+                    style={{ background: pastelTokens(pastelFor(s.name), dark).hex }}>
                     <SubjectIcon value={s.emoji} size={24} fallback="graduation" />
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col justify-center">

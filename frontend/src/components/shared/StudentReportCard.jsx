@@ -15,7 +15,8 @@ import { Avatar } from '../ui';
 import { aiApi } from '../../lib/api';
 import SubjectIcon from './SubjectIcon';
 import { CountUp, ProgressRing } from './Animated';
-import { PASTEL, pastelFor } from '../cards/pastel';
+import { pastelFor, pastelTokens } from '../cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
 import { fmtDate } from '../../lib/datetime';
 
@@ -43,15 +44,18 @@ function timeAgo(dateStr) {
 
 function pct(n) { return `${Math.round(n || 0)}%`; }
 
-function gradeBand(score) {
+function gradeBand(score, dark = false) {
   const s = Math.round(score || 0);
-  if (s >= 90) return { grade: 'A+', label: 'Outstanding', color: '#0F7B6C', bg: '#DFF5EC' };
-  if (s >= 80) return { grade: 'A', label: 'Excellent', color: '#0F7B6C', bg: '#DFF5EC' };
-  if (s >= 70) return { grade: 'B+', label: 'Very Good', color: '#2383E2', bg: '#E3EFFB' };
-  if (s >= 60) return { grade: 'B', label: 'Good', color: '#2383E2', bg: '#E3EFFB' };
-  if (s >= 50) return { grade: 'C', label: 'Average', color: '#B7791F', bg: '#FBF1D9' };
-  if (s >= 35) return { grade: 'D', label: 'Needs Work', color: '#C2410C', bg: '#FCE6DD' };
-  return { grade: 'E', label: 'At Risk', color: '#DC2626', bg: '#FEE2E2' };
+  // Light pair by day, dark-tint + light text at night so the grade chip follows the theme.
+  const band = (grade, label, color, bg, dColor, dBg) =>
+    ({ grade, label, color: dark ? dColor : color, bg: dark ? dBg : bg });
+  if (s >= 90) return band('A+', 'Outstanding', '#0F7B6C', '#DFF5EC', '#6ee7b7', '#16302a');
+  if (s >= 80) return band('A', 'Excellent', '#0F7B6C', '#DFF5EC', '#6ee7b7', '#16302a');
+  if (s >= 70) return band('B+', 'Very Good', '#2383E2', '#E3EFFB', '#93c5fd', '#14233a');
+  if (s >= 60) return band('B', 'Good', '#2383E2', '#E3EFFB', '#93c5fd', '#14233a');
+  if (s >= 50) return band('C', 'Average', '#B7791F', '#FBF1D9', '#fcd34d', '#2b2616');
+  if (s >= 35) return band('D', 'Needs Work', '#C2410C', '#FCE6DD', '#fdba74', '#2e1d16');
+  return band('E', 'At Risk', '#DC2626', '#FEE2E2', '#fca5a5', '#2e1620');
 }
 
 function localDayId(d) {
@@ -159,6 +163,7 @@ function pointsToPath(pts) {
 }
 
 function SkillRadar({ data, hasClass, classCount }) {
+  const dark = useTheme(s => s.dark);
   const reduce = useReducedMotion();
   const [selected, setSelected] = useState(0);
   const cx = 135, cy = 135, r = 85, n = data.length || 1, levels = [0.2, 0.4, 0.6, 0.8, 1.0];
@@ -189,7 +194,7 @@ function SkillRadar({ data, hasClass, classCount }) {
               const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
               return [cx + r * l * Math.cos(angle), cy + r * l * Math.sin(angle)];
             });
-            const poly = <polygon points={pts.map(p => p.join(',')).join(' ')} fill="none" stroke="#f0efed" strokeWidth="1.5" />;
+            const poly = <polygon points={pts.map(p => p.join(',')).join(' ')} fill="none" stroke={dark ? 'rgba(255,255,255,0.10)' : '#f0efed'} strokeWidth="1.5" />;
             if (reduce) return <g key={l}>{poly}</g>;
             return (
               <motion.g key={l}
@@ -206,7 +211,7 @@ function SkillRadar({ data, hasClass, classCount }) {
           {/* spokes: draw out from center; selected spoke highlighted */}
           {axisPoints.map((pt, i) => (
             <motion.line key={i} x1={cx} y1={cy} x2={pt.x} y2={pt.y}
-              stroke={i === selected ? '#1A56DB' : '#f0efed'}
+              stroke={i === selected ? '#1A56DB' : (dark ? 'rgba(255,255,255,0.10)' : '#f0efed')}
               strokeWidth={i === selected ? 2 : 1.5}
               strokeOpacity={i === selected ? 0.45 : 1}
               initial={reduce ? false : { pathLength: 0 }}
@@ -268,7 +273,7 @@ function SkillRadar({ data, hasClass, classCount }) {
           ))}
 
           {/* center hub: composite score */}
-          <motion.circle cx={cx} cy={cy} r="27" fill="#ffffff" stroke="#EBEAE7" strokeWidth="1.5"
+          <motion.circle cx={cx} cy={cy} r="27" fill={dark ? '#11122a' : '#ffffff'} stroke={dark ? 'rgba(255,255,255,0.12)' : '#EBEAE7'} strokeWidth="1.5"
             initial={reduce ? false : { scale: 0 }}
             whileInView={{ scale: 1 }}
             viewport={{ once: true }}
@@ -368,6 +373,7 @@ function TrendTooltip({ active, payload }) {
 }
 
 function StockTrend({ testTimeline, subjects }) {
+  const dark = useTheme(s => s.dark);
   const [selSubject, setSelSubject] = useState('all');
 
   const { points, stats } = useMemo(() => {
@@ -460,10 +466,10 @@ function StockTrend({ testTimeline, subjects }) {
                     <stop offset="100%" stopColor={color} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} minTickGap={24} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dx={-6} />
-                <Tooltip content={<TrendTooltip />} cursor={{ stroke: '#d4d4d4', strokeDasharray: '3 3' }} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? 'rgba(255,255,255,0.08)' : '#f3f4f6'} />
+                <XAxis dataKey="name" tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} minTickGap={24} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dx={-6} />
+                <Tooltip content={<TrendTooltip />} cursor={{ stroke: dark ? 'rgba(255,255,255,0.25)' : '#d4d4d4', strokeDasharray: '3 3' }} />
                 <ReferenceLine y={stats.avg} stroke="#a3a3a3" strokeDasharray="4 4" strokeWidth={1}
                   label={{ value: 'AVG', position: 'insideTopRight', fontSize: 8, fontWeight: 900, fill: '#a3a3a3' }} />
                 <ReferenceLine y={60} stroke="#fca5a5" strokeDasharray="2 4" strokeWidth={1} />
@@ -518,6 +524,7 @@ const CAL_TYPES = [
 ];
 
 function ActivityCalendar({ attData, testData, vidData, assignData, subjects, heatmapSubject, setHeatmapSubject, streak }) {
+  const dark = useTheme(s => s.dark);
   const reduce = useReducedMotion();
   const [type, setType] = useState('all');
   const [periodIdx, setPeriodIdx] = useState(0); // index into HEATMAP_PERIODS (0 = this month)
@@ -653,7 +660,7 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
                   <div
                     title={dayLabel(day)}
                     className="w-6 h-6 rounded-[6px] cursor-default"
-                    style={{ background: v > 0 ? tint(activeType.hex, 0.15 + v * 0.85) : '#F3F2F0' }}
+                    style={{ background: v > 0 ? tint(activeType.hex, 0.15 + v * 0.85) : (dark ? '#1a1b33' : '#F3F2F0') }}
                   />
                 );
                 if (reduce) return <div key={di}>{cell}</div>;
@@ -693,7 +700,7 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
         <div className="flex items-center gap-1">
           <span className="text-[9px] font-extrabold text-neutral-400 mr-0.5">Less</span>
           {[0, 0.25, 0.5, 0.75, 1].map(v => (
-            <span key={v} className="w-3 h-3 rounded-[3px]" style={{ background: v > 0 ? tint(activeType.hex, 0.15 + v * 0.85) : '#F3F2F0' }} />
+            <span key={v} className="w-3 h-3 rounded-[3px]" style={{ background: v > 0 ? tint(activeType.hex, 0.15 + v * 0.85) : (dark ? '#1a1b33' : '#F3F2F0') }} />
           ))}
           <span className="text-[9px] font-extrabold text-neutral-400 ml-0.5">More</span>
         </div>
@@ -774,6 +781,7 @@ function MentorBody({ lines, color, cursor }) {
 /** Day-by-day timetable rows with pastel day chips; non-day lines fall back to prose. */
 function TimetableBody({ lines, color, cursor }) {
   const reduce = useReducedMotion();
+  const dark = useTheme(s => s.dark);
   const rows = [];
   const prose = [];
   lines.forEach(l => {
@@ -787,7 +795,7 @@ function TimetableBody({ lines, color, cursor }) {
       {prose.length > 0 && <MentorBody lines={prose} color={color} cursor={false} />}
       <div className="space-y-1.5 mt-1">
         {rows.map((r, i) => {
-          const p = PASTEL[DAY_PASTELS[i % DAY_PASTELS.length]] || PASTEL.sky;
+          const p = pastelTokens(DAY_PASTELS[i % DAY_PASTELS.length], dark);
           const row = (
             <div className="flex items-start gap-2.5">
               <span
@@ -1026,6 +1034,7 @@ const PERIODS = [
 
 export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, onDownloadPDF }) {
   const reduce = useReducedMotion();
+  const dark = useTheme(s => s.dark);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState('');
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -1072,7 +1081,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const doneVids = subjectRadar.reduce((a, s) => a + (s.video_done || 0), 0);
   const videoPct = totalVids > 0 ? Math.round((doneVids / totalVids) * 100) : 0;
   const rank = data?.rank, totalStudents = data?.total_students || 0;
-  const grade = gradeBand(student.avg_score);
+  const grade = gradeBand(student.avg_score, dark);
   const percentile = rank && totalStudents > 0 ? Math.max(1, Math.round((rank / totalStudents) * 100)) : null;
 
   // ── Derived insights (streak, improvement, consistency, best/worst, coverage) ──
@@ -1358,7 +1367,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                 viewport={{ once: true }}
               >
                 {statTiles.map((t) => {
-                  const p = PASTEL[t.pastel] || PASTEL.sky;
+                  const p = pastelTokens(t.pastel, dark);
                   const Icon = t.icon;
                   return (
                     <motion.div
@@ -1395,7 +1404,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               <Section>
                 <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1">
                   {insightChips.map((c, i) => {
-                    const p = PASTEL[c.pastel] || PASTEL.sky;
+                    const p = pastelTokens(c.pastel, dark);
                     const Icon = c.icon;
                     const chip = (
                       <div className="flex-shrink-0 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 border border-black/5 shadow-sm bg-white">
@@ -1534,11 +1543,11 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                           <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-3">Scores</p>
                           <ResponsiveContainer width="100%" height={120}>
                             <BarChart data={gradedAssignments} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                              <XAxis dataKey="assignment_title" tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} tickFormatter={t => t.length > 8 ? t.slice(0, 8) + '…' : t} axisLine={false} tickLine={false} />
-                              <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold' }} cursor={{ fill: '#f3f4f6' }} />
+                              <XAxis dataKey="assignment_title" tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} tickFormatter={t => t.length > 8 ? t.slice(0, 8) + '…' : t} axisLine={false} tickLine={false} />
+                              <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold', backgroundColor: dark ? '#1a1b33' : '#fff', color: dark ? '#e5e7eb' : undefined }} cursor={{ fill: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6' }} />
                               <Bar dataKey="marks_obtained" radius={[3, 3, 0, 0]} animationDuration={1100}>
-                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? '#1A56DB' : '#ef4444'} />)}
+                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? (dark ? '#93c5fd' : '#1A56DB') : '#ef4444'} />)}
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
@@ -1576,7 +1585,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {subjectRadar.map((r, i) => {
-                    const p = PASTEL[pastelFor(r.subject)] || PASTEL.sky;
+                    const p = pastelTokens(pastelFor(r.subject), dark);
                     const testAvg = Math.round(r.test_avg || 0);
                     const vidP = r.video_total > 0 ? Math.round((r.video_done / r.video_total) * 100) : 0;
                     const attP = Math.round(r.attendance_pct || 0);

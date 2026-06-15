@@ -204,6 +204,7 @@ html.dark .bg-neutral-50\/80 { background-color: rgba(255, 255, 255, 0.06) !impo
 html.dark .bg-neutral-900 { background-color: #05050f !important; }
 /* Translucent-white chips/circles/pills (mostly nested inside pastel tiles) →
    translucent light on the now-dark tile so their contents stay legible. */
+html.dark .bg-white\/80,
 html.dark .bg-white\/70,
 html.dark .bg-white\/60,
 html.dark .bg-white\/50,
@@ -245,8 +246,18 @@ html.dark .text-\[\#1D6A2B\] { color: #6ee7b7 !important; }
 html.dark .text-\[\#966B08\] { color: #fcd34d !important; }
 html.dark .text-\[\#1A56DB\] { color: #93c5fd !important; }
 html.dark .text-\[\#9A3B1C\] { color: #fdba74 !important; }
-html.dark .text-\[\#0f1014\] { color: #f1f3f8 !important; }
+html.dark .text-\[\#0f1014\],
+html.dark .text-\[\#1A1A19\] { color: #f1f3f8 !important; }
 html.dark .text-\[\#8a7e00\] { color: #fde68a !important; }
+/* Calendar / WhatsApp / misc arbitrary accent text → light hue so it reads on dark */
+html.dark .text-\[\#C2410C\],
+html.dark .text-\[\#9A3B1C\] { color: #fdba74 !important; }
+html.dark .text-\[\#388e3c\] { color: #86efac !important; }
+html.dark .text-\[\#8e24aa\] { color: #d8b4fe !important; }
+html.dark .text-\[\#0288d1\],
+html.dark .text-\[\#0277bd\] { color: #93c5fd !important; }
+html.dark .text-\[\#d81b60\] { color: #f9a8d4 !important; }
+html.dark .text-\[\#00acc1\] { color: #67e8f9 !important; }
 /* The Live-classes cards use very dark `-950` text as their primary colour; lift
    it (and `-900`) so it stays legible once the card backgrounds flip dark. */
 html.dark .text-green-950,  html.dark .text-green-900  { color: #86efac !important; }
@@ -262,6 +273,89 @@ html.dark .bg-pastel-lavender { background-color: #221d33 !important; }
 html.dark .bg-pastel-cream    { background-color: #2b2616 !important; }
 html.dark .bg-pastel-sky      { background-color: #14233a !important; }
 html.dark .bg-pastel-peach    { background-color: #2e1d16 !important; }
+
+/* ── Exhaustive dark map ───────────────────────────────────────────────────
+   Goal: EVERY card flips to a dark surface and NO text is left invisible.
+   Surfaces are darkened and their text lightened in matched pairs. Unused
+   selectors below simply match nothing (harmless). Solid accent fills
+   (bg-{c}-500/600/700) keep their white text and are intentionally NOT listed. */
+
+/* Remaining neutral surface hexes → hover/page scale */
+html.dark .bg-\[\#F4F2EF\],
+html.dark .bg-\[\#F2F1EE\],
+html.dark .bg-\[\#F1F1EF\],
+html.dark .bg-\[\#F8F7F5\],
+html.dark .bg-\[\#f5f6f6\],
+html.dark .bg-\[\#F4F2EF\]\/60 { background-color: rgba(255, 255, 255, 0.06) !important; }
+html.dark .bg-\[\#fafafa\],
+html.dark .bg-\[\#FAFAF9\] { background-color: #0c0c1f !important; }
+
+/* Calendar / profile / report tint surfaces → nearest dark hue tint */
+html.dark .bg-\[\#e0f7fa\],
+html.dark .bg-\[\#b2ebf2\],
+html.dark .bg-\[\#e1f5fe\] { background-color: #14233a !important; }
+html.dark .bg-\[\#fce4ec\],
+html.dark .bg-\[\#fff0f2\],
+html.dark .bg-\[\#ffe4e8\] { background-color: #2e1c2a !important; }
+html.dark .bg-\[\#e8f5e9\] { background-color: #16302a !important; }
+html.dark .bg-\[\#f3e5f5\],
+html.dark .bg-\[\#FDF4FE\],
+html.dark .bg-\[\#F1C2F7\] { background-color: #221d33 !important; }
+html.dark .bg-\[\#FFF4E5\] { background-color: #2b2616 !important; }
+
+/* Semantic light tints (bg-{family}-50/100/200, incl. common /opacity) → dark hue tint */
+html.dark .bg-red-50, html.dark .bg-red-100, html.dark .bg-red-200,
+html.dark .bg-red-100\/90, html.dark .bg-red-100\/80,
+html.dark .bg-rose-50, html.dark .bg-rose-100, html.dark .bg-rose-200 { background-color: #2e1620 !important; }
+html.dark .bg-pink-50, html.dark .bg-pink-100, html.dark .bg-pink-200 { background-color: #2e1c2a !important; }
+html.dark .bg-fuchsia-50, html.dark .bg-fuchsia-100, html.dark .bg-fuchsia-200 { background-color: #2a1830 !important; }
+html.dark .bg-orange-50, html.dark .bg-orange-100, html.dark .bg-orange-200 { background-color: #2e1d16 !important; }
+html.dark .bg-amber-50, html.dark .bg-amber-100, html.dark .bg-amber-200, html.dark .bg-amber-50\/60,
+html.dark .bg-yellow-50, html.dark .bg-yellow-100, html.dark .bg-yellow-200 { background-color: #2b2616 !important; }
+html.dark .bg-lime-50, html.dark .bg-lime-100, html.dark .bg-lime-200 { background-color: #1f2e16 !important; }
+html.dark .bg-green-50, html.dark .bg-green-100, html.dark .bg-green-200,
+html.dark .bg-emerald-50, html.dark .bg-emerald-100, html.dark .bg-emerald-200,
+html.dark .bg-teal-50, html.dark .bg-teal-100, html.dark .bg-teal-200 { background-color: #16302a !important; }
+html.dark .bg-cyan-50, html.dark .bg-cyan-100, html.dark .bg-cyan-200,
+html.dark .bg-sky-50, html.dark .bg-sky-100, html.dark .bg-sky-200,
+html.dark .bg-blue-50, html.dark .bg-blue-100, html.dark .bg-blue-200 { background-color: #14233a !important; }
+html.dark .bg-indigo-50, html.dark .bg-indigo-100, html.dark .bg-indigo-200 { background-color: #1a1b3a !important; }
+html.dark .bg-violet-50, html.dark .bg-violet-100, html.dark .bg-violet-200,
+html.dark .bg-purple-50, html.dark .bg-purple-100, html.dark .bg-purple-200 { background-color: #221d33 !important; }
+html.dark .bg-slate-50, html.dark .bg-slate-100, html.dark .bg-gray-50, html.dark .bg-gray-100,
+html.dark .bg-zinc-50, html.dark .bg-zinc-100, html.dark .bg-stone-50, html.dark .bg-stone-100 { background-color: #1a1b33 !important; }
+
+/* Semantic dark text (600–950) → light hue tint (paired with the surfaces above).
+   text-white and 300/400/500 mid-tones are bright enough on dark → left alone. */
+html.dark .text-red-600, html.dark .text-red-700, html.dark .text-red-800, html.dark .text-red-900, html.dark .text-red-950,
+html.dark .text-rose-600, html.dark .text-rose-700, html.dark .text-rose-800, html.dark .text-rose-900 { color: #fca5a5 !important; }
+html.dark .text-pink-600, html.dark .text-pink-700, html.dark .text-pink-800, html.dark .text-pink-900 { color: #f9a8d4 !important; }
+html.dark .text-fuchsia-600, html.dark .text-fuchsia-700, html.dark .text-fuchsia-800, html.dark .text-fuchsia-900 { color: #f0abfc !important; }
+html.dark .text-orange-600, html.dark .text-orange-700, html.dark .text-orange-800 { color: #fdba74 !important; }
+html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800,
+html.dark .text-yellow-600, html.dark .text-yellow-700, html.dark .text-yellow-800, html.dark .text-yellow-900 { color: #fcd34d !important; }
+html.dark .text-lime-600, html.dark .text-lime-700, html.dark .text-lime-800 { color: #bef264 !important; }
+html.dark .text-green-600, html.dark .text-green-700, html.dark .text-green-800,
+html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-emerald-800, html.dark .text-emerald-900 { color: #86efac !important; }
+html.dark .text-teal-600, html.dark .text-teal-700, html.dark .text-teal-800, html.dark .text-teal-900 { color: #5eead4 !important; }
+html.dark .text-cyan-600, html.dark .text-cyan-700, html.dark .text-cyan-800, html.dark .text-cyan-900 { color: #67e8f9 !important; }
+html.dark .text-sky-600, html.dark .text-sky-700, html.dark .text-sky-800, html.dark .text-sky-900,
+html.dark .text-blue-600, html.dark .text-blue-700, html.dark .text-blue-800 { color: #93c5fd !important; }
+html.dark .text-indigo-600, html.dark .text-indigo-700, html.dark .text-indigo-800, html.dark .text-indigo-900 { color: #a5b4fc !important; }
+html.dark .text-violet-600, html.dark .text-violet-700, html.dark .text-violet-800, html.dark .text-violet-900,
+html.dark .text-purple-600, html.dark .text-purple-700, html.dark .text-purple-800 { color: #d8b4fe !important; }
+html.dark .text-slate-600, html.dark .text-slate-700, html.dark .text-slate-800, html.dark .text-slate-900,
+html.dark .text-gray-600, html.dark .text-gray-700, html.dark .text-gray-800, html.dark .text-gray-900,
+html.dark .text-zinc-600, html.dark .text-zinc-700, html.dark .text-zinc-800, html.dark .text-zinc-900,
+html.dark .text-stone-600, html.dark .text-stone-700, html.dark .text-stone-800, html.dark .text-stone-900 { color: #c9cfdb !important; }
+
+/* Coloured + arbitrary borders → faint white so card edges read on dark */
+html.dark .border-neutral-300, html.dark .border-neutral-700, html.dark .border-neutral-800,
+html.dark .border-\[\#D8D6D2\], html.dark .border-\[\#E5E5E5\],
+html.dark .border-red-100, html.dark .border-red-200, html.dark .border-amber-100, html.dark .border-amber-200,
+html.dark .border-green-100, html.dark .border-green-200, html.dark .border-emerald-200,
+html.dark .border-blue-100, html.dark .border-blue-200, html.dark .border-sky-200,
+html.dark .border-indigo-200, html.dark .border-purple-200, html.dark .border-orange-200 { border-color: rgba(255, 255, 255, 0.10) !important; }
 
 /* ── Motion is now enabled (Framer Motion + Tailwind transitions).
    Honor the OS "reduce motion" setting by disabling decorative transitions

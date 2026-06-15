@@ -18,7 +18,8 @@ import NewAssignmentModal from '../../components/teacher/NewAssignmentModal';
 import AssignmentSubmissionsSheet from '../../components/teacher/AssignmentSubmissionsSheet';
 import LiveClassAttendanceSheet from '../../components/teacher/LiveClassAttendanceSheet';
 import PerformancePanel from '../../components/teacher/PerformancePanel';
-import { PASTEL } from '../../components/cards/pastel';
+import { pastelTokens } from '../../components/cards/pastel';
+import { useTheme } from '../../lib/theme';
 import VideoAddModal from '../../components/teacher/subject/VideoAddModal';
 import VideoViewersModal from '../../components/teacher/subject/VideoViewersModal';
 import NoteFormModal from '../../components/teacher/subject/NoteFormModal';
@@ -60,6 +61,7 @@ function SectionHead({ icon: Icon, title, count, action, actionLabel }) {
 export default function SubjectDetailPage() {
   const { standardId, classId } = useParams();
   const navigate = useNavigate();
+  const dark = useTheme(s => s.dark);
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
 
@@ -347,7 +349,7 @@ export default function SubjectDetailPage() {
         {/* Quick add — one compact row on phone, lives in the right rail on laptop */}
         <div className="flex gap-2 mb-5 lg:hidden">
           {QUICK_ADD.map(q => {
-            const p = PASTEL[q.pastel];
+            const p = pastelTokens(q.pastel, dark);
             return (
               <button key={q.label} onClick={q.onClick}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl ${p.bg} border border-black/5 active:scale-95 transition-transform`}>
@@ -537,7 +539,7 @@ export default function SubjectDetailPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-3">Quick add</p>
               <div className="grid grid-cols-2 gap-2">
                 {QUICK_ADD.map((q, i) => {
-                  const p = PASTEL[q.pastel];
+                  const p = pastelTokens(q.pastel, dark);
                   return (
                     <button key={q.label} onClick={q.onClick}
                       className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl ${p.bg} border border-black/5 hover:-translate-y-0.5 transition-transform ${i === QUICK_ADD.length - 1 ? 'col-span-2' : ''}`}>

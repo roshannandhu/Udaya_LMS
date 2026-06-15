@@ -15,7 +15,8 @@ import { useAuthStore } from '../../lib/auth';
 import { useAppCache } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
 import SubjectIcon from '../../components/shared/SubjectIcon';
-import { PASTEL, pastelFor } from '../../components/cards/pastel';
+import { pastelFor, pastelTokens } from '../../components/cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 import CopySuspectsCard from '../../components/teacher/dashboard/CopySuspectsCard';
 import PendingReattemptsCard from '../../components/teacher/PendingReattemptsCard';
@@ -62,6 +63,7 @@ function ActionRow({ kind, eyebrow, title, meta, onClick, children }) {
 export default function TodayPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const dark = useTheme(s => s.dark);
   const standards        = useAppCache(s => s.standards);
   const subjects         = useAppCache(s => s.subjects);
   const students         = useAppCache(s => s.students);
@@ -442,7 +444,7 @@ export default function TodayPage() {
                   {quickActions.map((a, i) => (
                     <Card key={i} as="button" color={a.color} interactive padded={false}
                       onClick={() => navigate(a.to)} className="p-4 flex flex-col items-start gap-2">
-                      <a.icon size={18} style={{ color: PASTEL[a.color]?.fgHex }} />
+                      <a.icon size={18} style={{ color: pastelTokens(a.color, dark).fgHex }} />
                       <span className="text-xs font-semibold">{a.label}</span>
                     </Card>
                   ))}
@@ -500,7 +502,7 @@ export default function TodayPage() {
                   <div className="flex flex-col gap-2.5">
                     {standards.slice(0, 5).map(s => {
                       const c = countFor(s.id);
-                      const pastel = PASTEL[pastelFor(s.name)] || PASTEL.sky;
+                      const pastel = pastelTokens(pastelFor(s.name), dark);
                       return (
                         <button key={s.id} onClick={() => navigate(`/teacher/standards/${s.id}`)}
                           className="flex items-center gap-3 p-3 rounded-card border border-black/5 hover:shadow-soft hover:-translate-y-0.5 transition-all text-left"

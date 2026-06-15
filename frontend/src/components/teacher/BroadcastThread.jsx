@@ -4,7 +4,8 @@ import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
 import SubjectIcon, { IconPicker } from '../shared/SubjectIcon';
-import { PASTEL, pastelFor } from '../cards/pastel';
+import { pastelFor, pastelTokens } from '../cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { resolveAvatar } from '../ui';
 import { fmtTime, fmtChatDate, fmtShortDateTime } from '../../lib/datetime';
 
@@ -35,6 +36,7 @@ function mimeToExt(mime) {
 }
 
 export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, showBackBtn, studentCount = 0 }) {
+  const dark = useTheme(s => s.dark);
   const [msg, setMsg] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -320,7 +322,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
           <button onClick={() => setShowEmojiPicker(p => !p)} title="Change class icon"
             className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-700 hover:opacity-80 transition-all overflow-hidden"
-            style={{ background: PASTEL[pastelFor(std.name)]?.hex || '#e2e8f0' }}>
+            style={{ background: pastelTokens(pastelFor(std.name), dark).hex }}>
             <SubjectIcon value={std.emoji} size={22} fallback="graduation" />
           </button>
           {showEmojiPicker && (

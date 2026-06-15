@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Play, Check, Lock, Clock, Calendar, FileText, ArrowRight } from 'lucide-react';
-import { PASTEL, pastelFor } from './pastel';
+import { pastelFor, pastelTokens } from './pastel';
+import { useTheme } from '../../lib/theme';
 import { fadeUp, springCard } from '../../lib/motion';
 
 const STATUS = {
@@ -15,10 +16,11 @@ export default function RoadmapNode({
   title, subtitle, type = 'subject', status = 'upcoming', color,
   progressPct, onClick, overlayText
 }) {
+  const dark = useTheme(s => s.dark);
   const s = STATUS[status] || STATUS.upcoming;
   const isActive = status === 'active';
   const pastelName = color || (isActive ? 'pink' : pastelFor(title));
-  const pastel = PASTEL[pastelName] || PASTEL.lavender;
+  const pastel = pastelTokens(pastelName || 'lavender', dark);
   
   let TypeIcon = FileText;
   if (type === 'video') TypeIcon = Play;

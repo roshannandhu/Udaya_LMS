@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { PASTEL } from './pastel';
+import { pastelTokens } from './pastel';
+import { useTheme } from '../../lib/theme';
 import { fadeUp } from '../../lib/motion';
 
 /**
@@ -13,7 +14,8 @@ import { fadeUp } from '../../lib/motion';
  *  - emphasis: bool → larger/bordered "current" treatment
  */
 export default function StatCard({ value, label, icon: Icon, color, emphasis = false, className = '' }) {
-  const pastel = color ? PASTEL[color] : null;
+  const dark = useTheme(s => s.dark);
+  const pastel = color ? pastelTokens(color, dark) : null;
   const surface = pastel
     ? `${pastel.bg} ${emphasis ? 'ring-2 ring-black/10' : 'border border-black/5'}`
     : `bg-white border ${emphasis ? 'border-neutral-300 shadow-lift' : 'border-[#EFEDEA] shadow-soft'}`;
