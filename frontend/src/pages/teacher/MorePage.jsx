@@ -4,6 +4,7 @@ import { useAuthStore } from '../../lib/auth';
 import { MdPerson, MdLibraryBooks, MdPeople, MdChatBubble, MdEvent, MdBarChart, MdNotifications, MdSettings, MdHelp, MdChevronRight, MdEdit, MdLogout, MdLoop } from 'react-icons/md';
 import { FaWhatsapp } from 'react-icons/fa';
 import TopBar from '../../components/shared/TopBar';
+import ThemeToggle from '../../components/shared/ThemeToggle';
 import { Avatar, Modal } from '../../components/ui';
 import { Btn, Input } from '../../components/ui';
 import { PASTEL } from '../../components/cards/pastel';
@@ -86,6 +87,14 @@ export default function MorePage() {
               <MdChevronRight className="w-4 h-4 text-neutral-400 flex-shrink-0" />
             </button>
           ))}
+        </div>
+
+        <div className="glass-panel border-white/60 shadow-sm rounded-xl flex items-center justify-between px-4 py-3">
+          <div>
+            <p className="font-medium text-sm">Appearance</p>
+            <p className="text-xs text-neutral-500 mt-0.5">Switch between light and dark</p>
+          </div>
+          <ThemeToggle showLabel className="border border-[#EFEDEA]" />
         </div>
 
         <button onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-red-600 glass-panel border-white/60 shadow-sm rounded-xl hover:bg-[#F4F2EF] transition-colors">
