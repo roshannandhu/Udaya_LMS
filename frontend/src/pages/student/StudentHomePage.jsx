@@ -135,6 +135,9 @@ export default function StudentHomePage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const greetEmoji = hour < 12 ? '☀️' : hour < 17 ? '🌤️' : '🌙';
+  // Eyebrow shows the date so the time-aware greeting itself appears once (in the H1),
+  // not duplicated above it.
+  const dateLabel = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [videoThumbnails, setVideoThumbnails] = useState({});
@@ -438,7 +441,7 @@ export default function StudentHomePage() {
               </motion.div>
               <div className="min-w-0">
                 <p className="text-[11px] font-extrabold uppercase tracking-widest mb-1">
-                  <ShinyText base="#737373" shine="#1A1A19" duration={2.6}>{greeting}</ShinyText> {greetEmoji}
+                  <ShinyText base="#737373" shine="#1A1A19" duration={2.6}>{dateLabel}</ShinyText> {greetEmoji}
                 </p>
                 <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-900 leading-none truncate">
                   {greetWords.map((w, i) => (
