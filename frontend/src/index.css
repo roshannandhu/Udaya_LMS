@@ -198,16 +198,29 @@ html.dark .bg-\[\#efeae2\],
 html.dark .bg-\[\#F8F9FA\] { background-color: #0c0c1f !important; }
 html.dark .bg-neutral-50,
 html.dark .bg-neutral-100 { background-color: #1a1b33 !important; }
+html.dark .bg-neutral-100\/80,
+html.dark .bg-neutral-100\/50,
+html.dark .bg-neutral-50\/80 { background-color: rgba(255, 255, 255, 0.06) !important; }
 html.dark .bg-neutral-900 { background-color: #05050f !important; }
+/* Translucent-white chips/circles/pills (mostly nested inside pastel tiles) →
+   translucent light on the now-dark tile so their contents stay legible. */
+html.dark .bg-white\/70,
+html.dark .bg-white\/60,
+html.dark .bg-white\/50,
+html.dark .bg-white\/40 { background-color: rgba(255, 255, 255, 0.12) !important; }
 
-/* Text → light greys */
+/* Text → light greys. `text-ink` (#1A1A1A) is the app's primary text token used
+   on white/canvas surfaces, so it must lighten too (covers Tests, Broadcasts,
+   Calendar, Report cards etc.). */
 html.dark .text-neutral-900,
 html.dark .text-neutral-800,
+html.dark .text-ink,
 html.dark .text-black { color: #f1f3f8 !important; }
 html.dark .text-neutral-700,
 html.dark .text-neutral-600 { color: #c9cfdb !important; }
 html.dark .text-neutral-500,
 html.dark .text-neutral-400 { color: #9aa4b2 !important; }
+html.dark .text-neutral-300 { color: #6b7280 !important; }
 
 /* Borders → faint white */
 html.dark .border-\[\#EFEDEA\],
@@ -216,6 +229,31 @@ html.dark .border-\[\#E4E2DF\],
 html.dark .border-neutral-100,
 html.dark .border-neutral-200,
 html.dark .border-black\/5 { border-color: rgba(255, 255, 255, 0.08) !important; }
+
+/* Test/Report card palette (arbitrary hex bg + matching text) → dark tints +
+   light text, so these coloured cards follow the theme instead of staying bright. */
+html.dark .bg-\[\#F8E1FB\] { background-color: #2e1c2a !important; }
+html.dark .bg-\[\#EAF3EB\] { background-color: #16302a !important; }
+html.dark .bg-\[\#FFF6D8\] { background-color: #2b2616 !important; }
+html.dark .bg-\[\#E8F0FE\],
+html.dark .bg-\[\#E5F2FE\] { background-color: #14233a !important; }
+html.dark .bg-\[\#FFEBE5\] { background-color: #2e1d16 !important; }
+html.dark .bg-\[\#fff9c4\] { background-color: rgba(255, 255, 255, 0.08) !important; }
+html.dark .bg-\[\#e2e8f0\] { background-color: rgba(255, 255, 255, 0.10) !important; }
+html.dark .text-\[\#872792\] { color: #f0abfc !important; }
+html.dark .text-\[\#1D6A2B\] { color: #6ee7b7 !important; }
+html.dark .text-\[\#966B08\] { color: #fcd34d !important; }
+html.dark .text-\[\#1A56DB\] { color: #93c5fd !important; }
+html.dark .text-\[\#9A3B1C\] { color: #fdba74 !important; }
+html.dark .text-\[\#0f1014\] { color: #f1f3f8 !important; }
+html.dark .text-\[\#8a7e00\] { color: #fde68a !important; }
+/* The Live-classes cards use very dark `-950` text as their primary colour; lift
+   it (and `-900`) so it stays legible once the card backgrounds flip dark. */
+html.dark .text-green-950,  html.dark .text-green-900  { color: #86efac !important; }
+html.dark .text-purple-950, html.dark .text-purple-900 { color: #d8b4fe !important; }
+html.dark .text-amber-950,  html.dark .text-amber-900  { color: #fcd34d !important; }
+html.dark .text-blue-950,   html.dark .text-blue-900   { color: #93c5fd !important; }
+html.dark .text-orange-950, html.dark .text-orange-900 { color: #fdba74 !important; }
 
 /* Pastel tiles → dimmed dark-tinted so they read on a dark canvas */
 html.dark .bg-pastel-mint     { background-color: #16302a !important; }

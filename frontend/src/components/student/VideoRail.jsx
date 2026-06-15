@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, ChevronLeft, ChevronRight, Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { PASTEL, pastelFor } from '../cards/pastel';
+import { pastelFor, pastelTokens } from '../cards/pastel';
+import { useTheme } from '../../lib/theme';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -32,6 +33,7 @@ export default function VideoRail({
 }) {
   const trackRef = useRef(null);
   const pausedRef = useRef(false);
+  const dark = useTheme(s => s.dark);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
@@ -137,7 +139,7 @@ export default function VideoRail({
           {items.map((v) => {
             const pct = v.duration_secs ? Math.min(100, (v.progress_secs / v.duration_secs) * 100) : 0;
             const subject = getSubjectName(v.class_id) || v.subject_name || 'Lesson';
-            const pastel = PASTEL[pastelFor(subject)] || PASTEL.sky;
+            const pastel = pastelTokens(pastelFor(subject), dark);
             const dur = fmtDuration(v.duration_secs);
             return (
               <button
@@ -157,7 +159,7 @@ export default function VideoRail({
                   ) : (
                     <div
                       className="w-full h-full flex items-center justify-center"
-                      style={{ background: `linear-gradient(135deg, ${pastel.hex}, #ffffff)` }}
+                      style={{ background: `linear-gradient(135deg, ${pastel.hex}, ${dark ? '#11122a' : '#ffffff'})` }}
                     >
                       <Play size={30} style={{ color: pastel.fgHex }} className="opacity-70" />
                     </div>

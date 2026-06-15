@@ -14,7 +14,8 @@ import { useAppCache, useWhatsNew, isNewSince } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import VideoRail from '../../components/student/VideoRail';
-import { PASTEL, pastelFor } from '../../components/cards/pastel';
+import { pastelFor, pastelTokens } from '../../components/cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
 import { ShinyText, TiltCard } from '../../components/bits';
 import {
@@ -27,7 +28,8 @@ let homeCache = null;
 
 /** Pastel gamified stat tile with count-up. */
 function StatTile({ icon: Icon, label, value, display, pastel, ringPct, onClick }) {
-  const p = PASTEL[pastel] || PASTEL.sky;
+  const dark = useTheme(s => s.dark);
+  const p = pastelTokens(pastel, dark);
   return (
     <motion.button
       type="button"
@@ -404,7 +406,8 @@ export default function StudentHomePage() {
   const nextSlide = () => setCurrentSlide(prev => (prev + 1) % heroSlides.length);
   const prevSlide = () => setCurrentSlide(prev => (prev - 1 + heroSlides.length) % heroSlides.length);
   const slide = heroSlides[Math.min(currentSlide, heroSlides.length - 1)] || heroSlides[0];
-  const heroPastel = PASTEL[slide?.pastel] || PASTEL.mint;
+  const dark = useTheme(s => s.dark);
+  const heroPastel = pastelTokens(slide?.pastel || 'mint', dark);
 
   const greetWords = `${greeting}, ${displayName}!`.split(' ');
   const completedVideos = videos.filter(v => v.completed).length;
@@ -602,14 +605,16 @@ export default function StudentHomePage() {
                         {slide.progress > 0 ? <Flame size={12} /> : <Zap size={12} />}
                         {slide.tag}
                       </span>
-                      <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold tracking-tight leading-[1.08] text-neutral-900 line-clamp-2">
+                      {/* Pinned to an explicit dark color (not text-neutral-900) so it
+                          stays readable on the light pastel hero in dark mode too. */}
+                      <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold tracking-tight leading-[1.08] line-clamp-2" style={{ color: heroPastel.fgHex }}>
                         {slide.title}
                       </h2>
                       <div className="flex items-center flex-wrap gap-2 text-[13px] font-bold" style={{ color: heroPastel.fgHex }}>
                         <span>{slide.subtitle}</span>
                         {slide.duration && (<><span className="w-1 h-1 rounded-full opacity-40" style={{ background: heroPastel.fgHex }} /><span>{slide.duration}</span></>)}
                       </div>
-                      <p className="text-neutral-600 text-sm leading-relaxed line-clamp-2 max-w-[90%] font-medium">{slide.description}</p>
+                      <p className="text-sm leading-relaxed line-clamp-2 max-w-[90%] font-medium" style={{ color: dark ? '#cbd5e1' : '#52525b' }}>{slide.description}</p>
 
                       {slide.progress > 0 && (
                         <div className="w-full max-w-xs h-2 rounded-full bg-black/10 overflow-hidden">
@@ -839,7 +844,7 @@ export default function StudentHomePage() {
                 className="flex gap-4 overflow-x-auto scrollbar-hide snap-x pb-2 px-2 -mx-2"
               >
                 {subjects.map((c, idx) => {
-                  const pastel = PASTEL[pastelFor(c.name)] || PASTEL.sky;
+                  const pastel = pastelTokens(pastelFor(c.name), dark);
                   const vidCount = videos.filter(v => v.class_id === c.id).length;
                   return (
                     <motion.button

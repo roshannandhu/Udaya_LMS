@@ -7,7 +7,8 @@ import { apiClient, testApi } from '../../lib/api';
 import { useAppCache, useWhatsNew } from '../../store';
 import { useAuthStore } from '../../lib/auth';
 import { Skeleton } from '../../components/ui';
-import { PASTEL, pastelFor } from '../../components/cards/pastel';
+import { pastelFor, pastelTokens } from '../../components/cards/pastel';
+import { useTheme } from '../../lib/theme';
 import { staggerChildren, fadeUp, springCard } from '../../lib/motion';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { TiltCard, SpotlightCard } from '../../components/bits';
@@ -32,6 +33,7 @@ export default function StudentSubjectsPage() {
     return () => cancelAnimationFrame(r);
   }, [loading]);
   const subjects = useAppCache(s => s.subjects);
+  const dark = useTheme(s => s.dark);
   // New-video chips per subject; visiting this page clears the nav badge.
   const newVideoItems = useWhatsNew(s => s.data?.videos?.items) || [];
   useEffect(() => { useWhatsNew.getState().markSeen('videos'); }, []);
@@ -95,7 +97,7 @@ export default function StudentSubjectsPage() {
               const done = doneCounts[c.id] || 0;
               const pct = vc ? Math.round((done / vc) * 100) : 0;
               const newCount = newVideoItems.filter(v => v.class_id === c.id).length;
-              const pastel = PASTEL[pastelFor(c.name)];
+              const pastel = pastelTokens(pastelFor(c.name), dark);
               return (
                 <motion.div key={c.id} variants={fadeUp}>
                 <TiltCard>
@@ -106,7 +108,7 @@ export default function StudentSubjectsPage() {
                   className="group rounded-card p-5 cursor-pointer border border-black/5 flex flex-col h-full"
                   style={{ background: pastel.hex }}>
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center text-neutral-700 flex-shrink-0">
+                    <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: pastel.fgHex }}>
                       <SubjectIcon value={c.emoji} size={26} />
                     </div>
                     <div className="w-9 h-9 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 group-hover:bg-ink group-hover:text-white transition-colors">
@@ -114,7 +116,7 @@ export default function StudentSubjectsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mb-3">
-                    <p className="font-semibold text-lg tracking-tight" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{c.name}</p>
+                    <p className="font-semibold text-lg tracking-tight" style={{ fontFamily: '"Fraunces", Georgia, serif', color: pastel.fgHex }}>{c.name}</p>
                     {newCount > 0 && (
                       <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0">
                         {newCount} new

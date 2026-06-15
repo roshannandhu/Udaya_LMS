@@ -10,6 +10,29 @@ export const PASTEL = {
   whatsapp: { bg: 'bg-whatsapp-green-light', fg: 'text-whatsapp-green-fg', hex: '#E7FDDE', fgHex: '#0B6E3E' },
 };
 
+// Dark-mode tile variants — dark-tinted fill + a light foreground that pops on
+// it. The fills are kept in sync with the `html.dark .bg-pastel-*` rules in
+// index.css so class-based and inline pastel surfaces look identical.
+export const PASTEL_DARK = {
+  mint:     { hex: '#16302a', fgHex: '#6ee7b7' },
+  pink:     { hex: '#2e1c2a', fgHex: '#f9a8d4' },
+  lavender: { hex: '#221d33', fgHex: '#c4b5fd' },
+  cream:    { hex: '#2b2616', fgHex: '#fcd34d' },
+  sky:      { hex: '#14233a', fgHex: '#7dd3fc' },
+  peach:    { hex: '#2e1d16', fgHex: '#fdba74' },
+  whatsapp: { hex: '#0f2417', fgHex: '#86efac' },
+};
+
+// Theme-aware tile colours: light pastel by day, dark-tinted + light fg at night.
+// Use for inline `style` surfaces, which the CSS `html.dark` overrides can't reach
+// (inline styles win over stylesheet rules unless we duplicate every shade here).
+export function pastelTokens(name, dark) {
+  const base = PASTEL[name] || PASTEL.sky;
+  if (!dark) return base;
+  const d = PASTEL_DARK[name] || PASTEL_DARK.sky;
+  return { ...base, hex: d.hex, fgHex: d.fgHex };
+}
+
 // WhatsApp green is an accent, not a rotation colour — keep it out of pastelFor().
 export const PASTEL_NAMES = Object.keys(PASTEL).filter((n) => n !== 'whatsapp');
 
