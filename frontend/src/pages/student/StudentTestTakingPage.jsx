@@ -5,16 +5,7 @@ import { Flag, Clock, AlertTriangle, ChevronLeft, ChevronRight, Maximize2, Loade
 import { Btn } from '../../components/ui';
 import { testApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
-
-function useTimer(seconds, onExpire) {
-  const [remaining, setRemaining] = useState(seconds);
-  useEffect(() => {
-    if (remaining <= 0) { onExpire(); return; }
-    const id = setInterval(() => setRemaining((r) => r - 1), 1000);
-    return () => clearInterval(id);
-  }, [remaining]);
-  return remaining;
-}
+import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 
 function fmt(secs) {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -33,21 +24,45 @@ export default function StudentTestTakingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // sessionStorage persistence (keyed per test) so a refresh / accidental reload
+  // RESUMES the same exam instead of resetting the timer and wiping answers — which
+  // was the escape hatch that defeated all the anti-cheat below.
+  const PKEY = `exam:${testId}`;
+  const persisted = (() => {
+    try { return JSON.parse(sessionStorage.getItem(PKEY) || 'null'); } catch { return null; }
+  })();
+
   const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState(persisted?.answers || {});
   const [flagged, setFlagged] = useState(new Set());
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [warnCount, setWarnCount] = useState(0);
+  const [warnCount, setWarnCount] = useState(persisted?.warnCount || 0);
   const [showWarn, setShowWarn] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
-  
+
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(!!persisted?.deadline);
   const [isFocused, setIsFocused] = useState(true); // Track window focus
-  const cheatEvents = useRef([]);
+  const cheatEvents = useRef(persisted?.cheatEvents || []);
+  const deadlineRef = useRef(persisted?.deadline || null); // absolute end time (ms)
   const lastWarnRef = useRef(0); // de-dupe: one leave-screen action fires both
                                  // visibilitychange AND blur — count it once.
+  const submitRef = useRef(null); // always points at the latest submit handler
+
+  // Persist the live exam state (debounce-free; writes are tiny).
+  const persist = useCallback(() => {
+    try {
+      sessionStorage.setItem(PKEY, JSON.stringify({
+        deadline: deadlineRef.current,
+        answers,
+        warnCount,
+        cheatEvents: cheatEvents.current,
+      }));
+    } catch {}
+  }, [PKEY, answers, warnCount]);
+
+  useEffect(() => { if (hasStarted) persist(); }, [answers, warnCount, hasStarted, persist]);
 
   useEffect(() => {
     const fetchTest = async () => {
@@ -65,46 +80,32 @@ export default function StudentTestTakingPage() {
   }, [testId]);
 
   const totalSecs = (test?.duration_mins ?? 30) * 60;
-  
-  // Custom timer logic that only starts after hasStarted
-  const [remaining, setRemaining] = useState(totalSecs);
-  
-  useEffect(() => {
-    if (test && !hasStarted) {
-      let allocatedSeconds = (test.duration_mins || 30) * 60;
-      if (test.expires_at) {
-        const now = new Date().getTime();
-        const expiry = new Date(test.expires_at).getTime();
-        const secondsUntilExpiry = Math.floor((expiry - now) / 1000);
-        if (secondsUntilExpiry > 0 && secondsUntilExpiry < allocatedSeconds) {
-           allocatedSeconds = secondsUntilExpiry;
-        }
-      }
-      setRemaining(allocatedSeconds);
-    }
-  }, [test, hasStarted]);
 
+  // remaining is derived from the absolute deadline, so closing/reopening the tab
+  // never pauses or resets the clock.
+  const computeRemaining = () =>
+    deadlineRef.current ? Math.max(0, Math.round((deadlineRef.current - Date.now()) / 1000)) : totalSecs;
+  const [remaining, setRemaining] = useState(persisted?.deadline ? computeRemaining() : totalSecs);
+
+  // Tick from the deadline once started; auto-submit when it hits 0.
   useEffect(() => {
-    if (!hasStarted || submitted || remaining <= 0) return;
-    const id = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) {
-          clearInterval(id);
-          handleSubmit(true);
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
+    if (!hasStarted || submitted) return;
+    const tick = () => {
+      const r = computeRemaining();
+      setRemaining(r);
+      if (r <= 0) { submitRef.current?.(true); }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [hasStarted, submitted, remaining]);
+  }, [hasStarted, submitted]);
 
   // Auto-submit on 3rd warning (outside state updater to avoid strict-mode double-fire)
   useEffect(() => {
     if (warnCount >= 3 && hasStarted && !submitted) {
-      handleSubmit(true);
+      submitRef.current?.(true);
     }
-  }, [warnCount]);
+  }, [warnCount, hasStarted, submitted]);
 
   const q = questions[current];
 
@@ -151,7 +152,8 @@ export default function StudentTestTakingPage() {
     const preventAction = (e) => e.preventDefault();
     
     const handleKeydown = (e) => {
-      // Prevent Ctrl+C, Ctrl+V, Ctrl+P, Ctrl+S, F12, etc.
+      // Prevent Ctrl+C, Ctrl+V, Ctrl+P, Ctrl+S, F12, etc. (PrintScreen is handled
+      // by ScreenshotGuard → terminate.)
       if (
         (e.ctrlKey || e.metaKey) &&
         ['c', 'v', 'p', 's', 'x', 'a'].includes(e.key.toLowerCase())
@@ -163,33 +165,49 @@ export default function StudentTestTakingPage() {
         e.preventDefault();
         cheatEvents.current.push({ type: 'dev_tools_blocked', timestamp: new Date().toISOString() });
       }
-      if (e.key === 'PrintScreen') {
-        e.preventDefault();
-        try { navigator.clipboard.writeText(''); } catch {}
-        cheatEvents.current.push({ type: 'screenshot_attempt', timestamp: new Date().toISOString() });
-        triggerWarning();
-      }
     };
+
+    // Back / leave guard: trap the browser Back button so it can't silently exit the
+    // exam. Seed a dummy history entry; each popstate re-pushes it (cancelling the
+    // navigation) and counts as a warning strike toward the 3-strike auto-submit.
+    const handlePopState = () => {
+      if (submitted) return;
+      window.history.pushState(null, '', window.location.href);
+      cheatEvents.current.push({ type: 'nav_back_blocked', timestamp: new Date().toISOString() });
+      triggerWarning();
+    };
+    // Native confirm on reload / tab-close (persistence means a reload resumes anyway).
+    const handleBeforeUnload = (e) => {
+      if (submitted) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.history.pushState(null, '', window.location.href);
 
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('pagehide', handleBlur); // Mobile app switch
     window.addEventListener('focus', handleFocus);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     // Prevent copying, selecting, and right-click
     document.addEventListener('contextmenu', preventAction);
     document.addEventListener('copy', preventAction);
     document.addEventListener('cut', preventAction);
     document.addEventListener('selectstart', preventAction);
     document.addEventListener('keydown', handleKeydown);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('pagehide', handleBlur);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('contextmenu', preventAction);
       document.removeEventListener('copy', preventAction);
       document.removeEventListener('cut', preventAction);
@@ -198,19 +216,35 @@ export default function StudentTestTakingPage() {
     };
   }, [hasStarted, submitted]);
 
+  const startExam = () => {
+    if (hasStarted) return;
+    // Anchor the absolute deadline once, at start — capped by the test's expiry.
+    let allocatedSeconds = (test?.duration_mins || 30) * 60;
+    if (test?.expires_at) {
+      const secondsUntilExpiry = Math.floor((new Date(test.expires_at).getTime() - Date.now()) / 1000);
+      if (secondsUntilExpiry > 0 && secondsUntilExpiry < allocatedSeconds) allocatedSeconds = secondsUntilExpiry;
+    }
+    deadlineRef.current = Date.now() + allocatedSeconds * 1000;
+    setHasStarted(true);
+    setRemaining(allocatedSeconds);
+    persist();
+  };
+
   const enterFullscreen = async () => {
     try {
       await document.documentElement.requestFullscreen();
       setIsFullscreen(true);
-      if (!hasStarted) setHasStarted(true);
     } catch (err) {
       console.error('Error attempting to enable fullscreen:', err);
-      // Fallback if blocked
-      setHasStarted(true);
+      // Fallback if blocked — still start the exam.
+    } finally {
+      startExam();
     }
   };
 
-  const handleSubmit = useCallback(async (auto = false) => {
+  // Shared submit path. `terminated` cancels the exam (score 0) — used by the
+  // screenshot/recording guard.
+  const handleSubmit = useCallback(async (auto = false, terminated = false) => {
     if (submitted) return;
     setSubmitted(true);
     setConfirmSubmit(false);
@@ -219,9 +253,12 @@ export default function StudentTestTakingPage() {
     try {
       const res = await testApi.submitTest(testId, {
         answers,
-        cheat_events: cheatEvents.current
+        cheat_events: cheatEvents.current,
+        terminated,
       });
-      
+
+      try { sessionStorage.removeItem(PKEY); } catch {}
+
       if (document.fullscreenElement) {
         await document.exitFullscreen().catch(e => console.error(e));
       }
@@ -235,6 +272,7 @@ export default function StudentTestTakingPage() {
             testTitle: test?.title,
             total_marks: test?.total_marks,
             auto,
+            cancelled: terminated,
             test_id: testId,
           }
         },
@@ -245,7 +283,18 @@ export default function StudentTestTakingPage() {
       setSubmitted(false);
       setIsSubmitting(false);
     }
-  }, [submitted, answers, test, testId, navigate]);
+  }, [submitted, answers, test, testId, navigate, PKEY, questions.length]);
+
+  // Screenshot / screen-recording detected → cancel the exam immediately (score 0).
+  const handleTerminate = useCallback(() => {
+    if (submitted) return;
+    cheatEvents.current.push({ type: 'screenshot_terminated', timestamp: new Date().toISOString() });
+    handleSubmit(true, true);
+  }, [submitted, handleSubmit]);
+
+  // Keep the ref pointing at the latest submit handler so the timer/warn effects
+  // (which don't depend on it) never call a stale closure.
+  useEffect(() => { submitRef.current = handleSubmit; }, [handleSubmit]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-neutral-400" /></div>;
@@ -271,8 +320,8 @@ export default function StudentTestTakingPage() {
             <p className="font-semibold flex items-center gap-2"><AlertTriangle size={16}/> Before you begin:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Test runs in fullscreen mode.</li>
-              <li>Do not exit fullscreen or switch tabs.</li>
-              <li>Warnings will be issued if you leave the screen. Auto-submit on 3rd warning.</li>
+              <li>Do not exit fullscreen, switch tabs, or press Back — each is recorded. Auto-submit on the 3rd warning.</li>
+              <li className="font-semibold text-red-700">Taking a screenshot or screen recording will cancel your exam (score 0).</li>
               {test.negative_marking && <li>Negative marking (−{test.penalty}) is enabled.</li>}
             </ul>
           </div>
@@ -290,7 +339,13 @@ export default function StudentTestTakingPage() {
   const urgent = remaining < 120;
 
   return (
-    <div 
+    <ScreenshotGuard
+      enabled={!submitted}
+      label={user?.username}
+      mobileOverlay
+      onAttempt={({ type }) => { if (type === 'printscreen' || type === 'screenshare') handleTerminate(); }}
+    >
+    <div
       className="min-h-screen bg-transparent flex flex-col select-none relative"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }} // Crucial for iOS Safari
     >
@@ -434,5 +489,6 @@ export default function StudentTestTakingPage() {
         </div>
       )}
     </div>
+    </ScreenshotGuard>
   );
 }

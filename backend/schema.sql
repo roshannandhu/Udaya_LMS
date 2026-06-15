@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS test_attempts (
     points_earned INTEGER DEFAULT 0,
     flagged BOOLEAN DEFAULT false,
     cheat_events JSONB,
+    terminated BOOLEAN DEFAULT false,  -- exam cancelled (e.g. screenshot detected) → score 0
     started_at TIMESTAMPTZ,
     submitted_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),

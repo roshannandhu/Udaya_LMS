@@ -5542,6 +5542,7 @@ class TestUpdateFull(BaseModel):
 class SubmitTestRequest(BaseModel):
     answers: dict  # {question_id: selected_idx}
     cheat_events: List[dict] = []
+    terminated: bool = False  # exam cancelled (e.g. screenshot detected) → score 0
 
 class ReattemptRequest(BaseModel):
     reason: Optional[str] = None
@@ -5846,15 +5847,26 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
                     marks_deducted += deduction
                     total_obtained -= deduction
 
-    # Determine if flagged (cheat events)
-    flagged = len(request.cheat_events) > 0
+    # A terminated exam (e.g. screenshot detected) is cancelled: zero score, no
+    # points, always flagged. The attempt row is still written so the UNIQUE
+    # (test_id, student_id) lock applies → re-entry needs a teacher-approved reattempt.
+    if request.terminated:
+        correct_count = 0
+        wrong_count = len(questions_list)
+        marks_deducted = 0
+        total_obtained = 0
+
+    # Determine if flagged (cheat events, or a termination)
+    flagged = request.terminated or len(request.cheat_events) > 0
 
     # Calculate percentage
     score_pct = (total_obtained / test.data["total_marks"] * 100) if test.data["total_marks"] > 0 else 0
 
-    # Points earned (based on score)
+    # Points earned (based on score). A terminated/cancelled exam earns nothing.
     points_earned = 0
-    if score_pct >= 90:
+    if request.terminated:
+        points_earned = 0
+    elif score_pct >= 90:
         points_earned = 100
     elif score_pct >= 75:
         points_earned = 75
@@ -5892,6 +5904,15 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     else:
         result = service_supabase.table("test_attempts").insert(attempt_data).execute()
 
+    # Mark the attempt as terminated (cancelled). Best-effort: the column is optional,
+    # so an un-migrated DB never blocks submission — the score-0 + flagged above already
+    # encode the cancellation; this column only lets the UI label it "Cancelled".
+    if request.terminated and result.data:
+        try:
+            service_supabase.table("test_attempts").update({"terminated": True}).eq("id", result.data[0]["id"]).execute()
+        except Exception:
+            pass
+
     # Update student points. On a re-attempt, apply only the DELTA vs the old attempt
     # (which already contributed its points) so totals/leaderboard stay correct.
     points_delta = points_earned - (prior.get("points_earned") or 0) if is_reattempt else points_earned
@@ -5921,7 +5942,8 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
         "wrong_count": wrong_count,
         "marks_deducted": round(marks_deducted, 2),
         "points_earned": points_earned,
-        "flagged": flagged
+        "flagged": flagged,
+        "terminated": request.terminated,
     }
 
 # Get test results for a specific test (teacher view)

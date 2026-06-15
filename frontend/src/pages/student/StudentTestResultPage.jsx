@@ -32,6 +32,7 @@ export default function StudentTestResultPage() {
     testTitle,
     auto,
     flagged,
+    cancelled,       // exam terminated (e.g. screenshot detected) → score 0
   } = result;
 
   // Use backend's percentage if present, else calculate
@@ -51,13 +52,19 @@ export default function StudentTestResultPage() {
       <AnimatedPage className="w-full max-w-sm">
 
         {/* Warnings */}
-        {auto && (
+        {cancelled && (
+          <Item className="flex items-center gap-2 p-3 bg-red-100 border border-red-300 rounded-2xl text-red-800 text-sm mb-4 font-semibold">
+            <AlertTriangle size={15} />
+            <span>Exam cancelled — a screenshot or screen recording was detected. Score 0. Ask your teacher to allow a re-attempt.</span>
+          </Item>
+        )}
+        {auto && !cancelled && (
           <Item className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-sm mb-4">
             <AlertTriangle size={15} />
             <span>Test auto-submitted — time ran out.</span>
           </Item>
         )}
-        {flagged && (
+        {flagged && !cancelled && (
           <Item className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm mb-4">
             <AlertTriangle size={15} />
             <span>Your test was flagged for suspicious activity.</span>
