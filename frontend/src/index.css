@@ -120,18 +120,6 @@ h1, h2, h3 {
    AURORA SOFT FUTURISM — additive visual layer (light + dark)
    ════════════════════════════════════════════════════════════════════════ */
 
-/* Aurora background blobs (rendered by AuroraBackground.jsx, mounted in App). */
-.aurora-blob { opacity: 0.35; will-change: transform; }
-.aurora-blob-1 { animation: blobFloat1 11s ease-in-out infinite alternate; }
-.aurora-blob-2 { animation: blobFloat2 13s ease-in-out infinite alternate; }
-.aurora-blob-3 { animation: blobFloat3 12s ease-in-out infinite alternate; }
-.aurora-blob-4 { animation: blobFloat4 14s ease-in-out infinite alternate; }
-
-@keyframes blobFloat1 { from { transform: translate(0, 0) scale(1); } to { transform: translate(60px, 40px) scale(1.12); } }
-@keyframes blobFloat2 { from { transform: translate(0, 0) scale(1.05); } to { transform: translate(-50px, 50px) scale(0.95); } }
-@keyframes blobFloat3 { from { transform: translate(0, 0) scale(1); } to { transform: translate(40px, -45px) scale(1.1); } }
-@keyframes blobFloat4 { from { transform: translate(0, 0) scale(0.98); } to { transform: translate(-55px, -35px) scale(1.08); } }
-
 /* Confetti particle fall (utils/confetti.js). */
 @keyframes floatUp { to { transform: translateY(110vh) rotate(900deg); opacity: 0; } }
 
@@ -180,7 +168,6 @@ h1, h2, h3 {
    surface/text/border utilities + pastel tokens. Light mode untouched. ── */
 html.dark { color-scheme: dark; }
 html.dark body { background-color: #080818; color: #e5e7eb; }
-html.dark .aurora-blob { opacity: 0.14; }
 
 /* Surfaces → deep navy translucent */
 html.dark .glass,

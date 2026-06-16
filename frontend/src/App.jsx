@@ -6,7 +6,6 @@ import { useAuthStore, ROLES } from './lib/auth';
 import { useAppCache } from './store';
 import { useTheme } from './lib/theme';
 import ErrorBoundary from './components/ErrorBoundary';
-import AuroraBackground from './components/aurora/AuroraBackground';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
@@ -205,7 +204,6 @@ export default function App() {
   useEffect(() => { useTheme.getState().init(); }, []);
   return (
     <BrowserRouter>
-      <AuroraBackground />
       <AuthHandler />
       <RoutedBoundary>
       <Routes>
