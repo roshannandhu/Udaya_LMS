@@ -4,14 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#1a1a1a" />
-    <!-- Apply the saved/system theme BEFORE first paint so dark mode never flashes
-         light on load (FOUC). Mirrors initialDark() in src/lib/theme.js. -->
+    <!-- Apply an explicit dark choice BEFORE first paint so it never flashes light
+         (FOUC). Default is LIGHT — only a saved 'dark' goes dark. Mirrors
+         initialDark() in src/lib/theme.js. -->
     <script>
       (function () {
         try {
-          var s = localStorage.getItem('tutoria-theme');
-          var d = s === 'dark' || (s !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (d) { document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = 'dark'; }
+          if (localStorage.getItem('tutoria-theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
         } catch (e) {}
       })();
     </script>

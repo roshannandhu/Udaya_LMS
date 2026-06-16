@@ -8,6 +8,7 @@ import { Modal, Input, Skeleton, resolveAvatar } from '../../components/ui';
 import { apiClient } from '../../lib/api';
 import AttendanceStudentCard from '../../components/teacher/AttendanceStudentCard';
 import AvatarPresetPicker from '../../components/student/AvatarPresetPicker';
+import ThemeToggle from '../../components/shared/ThemeToggle';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
 
 function relTime(iso) {
@@ -305,8 +306,15 @@ export default function StudentProfilePage() {
 
           <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 border border-neutral-100 shadow-sm flex flex-col gap-4">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-2">
-              <Lock size={16} /> Security
+              <Lock size={16} /> Security & Appearance
             </h2>
+            <div className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50 border border-neutral-100">
+              <div>
+                <p className="text-sm font-bold text-neutral-900">Appearance</p>
+                <p className="text-xs text-neutral-500 font-medium">Switch between light and dark</p>
+              </div>
+              <ThemeToggle showLabel className="border border-[#EFEDEA] bg-white" />
+            </div>
             <button onClick={() => navigate('/student/change-password')} className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50 hover:bg-neutral-100 transition-colors border border-neutral-100 group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-neutral-600 group-hover:scale-110 transition-transform">

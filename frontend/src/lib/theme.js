@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 
 // Whole-app light/dark theme. Applies/removes the `dark` class on <html> (the
-// index.css `html.dark` overrides do the visual flip), persists the choice, and
-// defaults to the OS preference on first run. Purely visual — no logic impact.
+// index.css `html.dark` overrides do the visual flip) and persists the choice.
+// Defaults to LIGHT for everyone — it only goes dark when a user explicitly
+// toggles (the choice is then remembered per-browser). Purely visual.
 const STORAGE_KEY = 'tutoria-theme';
 
 function apply(dark) {
@@ -13,12 +14,12 @@ function apply(dark) {
 
 function initialDark() {
   if (typeof window === 'undefined') return false;
+  // Light unless the user has explicitly chosen dark. OS preference is ignored
+  // on purpose, so first-time students/teachers always start in light mode.
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === 'dark') return true;
-    if (saved === 'light') return false;
+    return localStorage.getItem(STORAGE_KEY) === 'dark';
   } catch { /* ignore */ }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches || false;
+  return false;
 }
 
 export const useTheme = create((set, get) => ({

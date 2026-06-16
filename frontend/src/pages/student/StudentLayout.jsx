@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import { useWhatsNew } from '../../store';
@@ -47,6 +47,11 @@ export default function StudentLayout() {
 
   const active = getActiveTab(location.pathname);
 
+  // Phone app-shell: the content area scrolls (not the body), so reset it to the
+  // top on route change — what body-scroll used to do for free.
+  const contentRef = useRef(null);
+  useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [location.pathname]);
+
   const handleSignOut = async () => {
     await clearAuth();
     navigate('/login');
@@ -69,11 +74,13 @@ export default function StudentLayout() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    // App-shell on phone (parity with TeacherLayout): lock to the dynamic
+    // viewport and scroll the content, not the body, so the fixed bottom dock
+    // can't drift when the mobile toolbar collapses. Desktop keeps body scroll.
+    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible">
       <TopNav type="student" badges={badges} />
-      {/* overflow-x-clip: stop any inner element that pokes past the viewport from
-          letting the page pan sideways on tablet/phone (parity with TeacherLayout). */}
-      <div className="flex-1 flex flex-col pb-28 lg:pb-0 overflow-x-clip">
+      {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-28 lg:pb-0">
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>

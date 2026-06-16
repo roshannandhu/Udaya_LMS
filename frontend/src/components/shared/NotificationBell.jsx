@@ -76,16 +76,16 @@ export default function NotificationBell({ dark = false }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-80 z-50 glass-panel rounded-xl shadow-lg border border-white/60 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/40">
+        <div className="absolute right-0 top-full mt-1.5 w-80 z-50 bg-white rounded-xl shadow-lg border border-[#EFEDEA] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#EFEDEA]">
             <span className="text-sm font-semibold">Notifications</span>
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
-                <button onClick={markAllRead} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-900 px-2 py-1 rounded hover:bg-white/40">
+                <button onClick={markAllRead} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-900 px-2 py-1 rounded hover:bg-[#F4F2EF]">
                   <CheckCheck size={11} /> Mark all read
                 </button>
               )}
-              <button onClick={() => setOpen(false)} className="p-1 text-neutral-400 hover:text-neutral-900 rounded hover:bg-white/40">
+              <button onClick={() => setOpen(false)} className="p-1 text-neutral-400 hover:text-neutral-900 rounded hover:bg-[#F4F2EF]">
                 <X size={12} />
               </button>
             </div>
@@ -105,7 +105,7 @@ export default function NotificationBell({ dark = false }) {
               <div
                 key={n.id}
                 onClick={() => !n.read && markRead(n.id)}
-                className={`px-4 py-3 border-b border-white/30 last:border-b-0 cursor-default transition-colors ${n.read ? 'opacity-60' : 'hover:bg-white/40 cursor-pointer'}`}
+                className={`px-4 py-3 border-b border-[#EFEDEA] last:border-b-0 cursor-default transition-colors ${n.read ? 'opacity-60' : 'hover:bg-[#F4F2EF] cursor-pointer'}`}
               >
                 <div className="flex items-start gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${n.read ? 'bg-transparent' : 'bg-blue-500'}`} />
@@ -116,7 +116,7 @@ export default function NotificationBell({ dark = false }) {
                   </div>
                   {!n.read && (
                     <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }}
-                      className="p-1 text-neutral-400 hover:text-blue-600 rounded hover:bg-white/40 flex-shrink-0">
+                      className="p-1 text-neutral-400 hover:text-blue-600 rounded hover:bg-[#F4F2EF] flex-shrink-0">
                       <Check size={11} />
                     </button>
                   )}

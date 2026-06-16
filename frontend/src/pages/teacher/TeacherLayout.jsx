@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import BottomNav from '../../components/shared/BottomNav';
@@ -25,6 +25,11 @@ export default function TeacherLayout() {
 
   const active = getActiveTab(location.pathname);
 
+  // On phone the content area is the scroll container (app-shell, see below),
+  // so reset it to the top on every route change — what body-scroll did for free.
+  const contentRef = useRef(null);
+  useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [location.pathname]);
+
   const handleSignOut = async () => {
     await clearAuth();
     navigate('/login');
@@ -45,12 +50,15 @@ export default function TeacherLayout() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    // App-shell on phone: lock the shell to the dynamic viewport (100dvh) and
+    // let the CONTENT scroll, not the body. With the body fixed, the mobile
+    // browser toolbar can't collapse on scroll, so the fixed bottom dock stops
+    // drifting. Desktop (lg) keeps normal body scroll, unchanged.
+    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible">
       <TopNav type="teacher" />
       {/* overflow-x-clip (not -hidden: that would break position:sticky headers)
-          stops any inner element that pokes past the viewport from letting the
-          page pan sideways under the fixed bottom dock on phones. */}
-      <div className="flex-1 flex flex-col pb-28 lg:pb-0 overflow-x-clip">
+          stops sideways pan; overflow-y-auto makes this the phone scroll area. */}
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-28 lg:pb-0">
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
           <Outlet />
         </Suspense>
