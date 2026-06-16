@@ -9399,13 +9399,15 @@ async def get_cached_insights(student_id: str, period: str = "overall", user: di
 @app.post("/api/insights/generate")
 async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
     _assert_insights_access(user, req.student_id)
-    # Read API key — Settings page value first; GEMINI_API_KEY env fallback so
-    # deploys (Render) work even though teacher_settings.json is ephemeral there.
+    # API key lives on the backend: prefer the GEMINI_API_KEY env var (set in
+    # backend/.env locally and in the Render dashboard), falling back to a key
+    # saved in teacher Settings only if the env var is unset. This keeps the key
+    # off the frontend and works on Render where teacher_settings.json is ephemeral.
     settings = get_teacher_settings()
     provider = settings.get("ai_provider", "gemini")
-    api_key = settings.get("ai_api_key")
-    if not api_key and provider == "gemini":
-        api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY") if provider == "gemini" else None
+    if not api_key:
+        api_key = settings.get("ai_api_key")
 
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
@@ -9471,9 +9473,10 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
     _assert_insights_access(user, req.student_id)
     settings = get_teacher_settings()
     provider = settings.get("ai_provider", "gemini")
-    api_key = settings.get("ai_api_key")
-    if not api_key and provider == "gemini":
-        api_key = os.getenv("GEMINI_API_KEY")
+    # Prefer the backend GEMINI_API_KEY env var; fall back to teacher Settings.
+    api_key = os.getenv("GEMINI_API_KEY") if provider == "gemini" else None
+    if not api_key:
+        api_key = settings.get("ai_api_key")
 
     if not api_key:
         raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
