@@ -306,9 +306,9 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
           <p className="text-neutral-500 mb-6">Please do not close this window.</p>
           
           <div className="w-full max-w-md bg-neutral-100 rounded-full h-3 overflow-hidden">
-            <div 
-              className="bg-blue-600 h-full transition-all duration-300 ease-out" 
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
+            <div
+              className="bg-blue-600 h-full transition-all duration-300 ease-out"
+              style={{ width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%` }}
             />
           </div>
           <p className="text-sm font-medium mt-3 text-neutral-600">

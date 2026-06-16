@@ -575,6 +575,21 @@ class CreateStudentRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     new_password: Optional[str] = None
 
+class BulkIdsRequest(BaseModel):
+    ids: List[str]
+
+class BulkMoveRequest(BaseModel):
+    ids: List[str]
+    standard_id: str
+
+class BulkBlockRequest(BaseModel):
+    ids: List[str]
+    blocked: bool
+
+class BulkResetRequest(BaseModel):
+    ids: List[str]
+    new_password: Optional[str] = None
+
 class LoginRequest(BaseModel):
     email_or_username: str
     password: str
@@ -4265,6 +4280,131 @@ def unenroll_student(student_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Session clear failed for student {student_id}: {e}")
     return {"message": "Student unenrolled"}
+
+
+# ─── Bulk student management (teacher-only) ──────────────────────────────────
+# Operate on many students at once from the Manage (Excel) grid. Every op is
+# scoped to the calling teacher's own standards (defence-in-depth) and uses a
+# single `.in_(ids)` query where Supabase allows it; the Auth Admin API is
+# per-user, so deletes/password-resets loop.
+
+def _teacher_owned_student_ids(user, ids):
+    """Return the subset of `ids` that belong to a student currently in one of
+    this teacher's standards — so a teacher can never act on someone else's."""
+    if not ids:
+        return []
+    std = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
+    std_ids = [s["id"] for s in (std.data or [])]
+    if not std_ids:
+        return []
+    rows = service_supabase.table("students").select("id").in_("id", ids).in_("standard_id", std_ids).execute()
+    return [r["id"] for r in (rows.data or [])]
+
+
+@app.post("/api/students/bulk-delete")
+def bulk_delete_students(req: BulkIdsRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    ids = _teacher_owned_student_ids(user, req.ids)
+    if not ids:
+        return {"deleted": 0, "failed": 0}
+
+    # Tables with no FK/CASCADE to students — clear first (one query each).
+    for tbl in ("test_attempts", "whatsapp_messages", "whatsapp_inbox", "student_sessions"):
+        try:
+            service_supabase.table(tbl).delete().in_("student_id", ids).execute()
+        except Exception as e:
+            print(f"Bulk delete cleanup failed on {tbl}: {e}")
+    service_supabase.table("students").delete().in_("id", ids).execute()
+
+    failed = 0
+    for sid in ids:
+        try:
+            service_supabase.auth.admin.delete_user(sid)
+        except Exception as e:
+            failed += 1
+            print(f"Auth delete failed for student {sid}: {e}")
+        _invalidate_auth_cache_for_user(sid)
+    return {"deleted": len(ids), "failed": failed}
+
+
+@app.post("/api/students/bulk-move")
+def bulk_move_students(req: BulkMoveRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Target standard must belong to this teacher.
+    target = service_supabase.table("standards").select("id").eq("id", req.standard_id).eq("teacher_id", user["teacher_id"]).execute()
+    if not target.data:
+        raise HTTPException(status_code=404, detail="Target standard not found")
+
+    ids = _teacher_owned_student_ids(user, req.ids)
+    if not ids:
+        return {"moved": 0}
+
+    service_supabase.table("students").update({"standard_id": req.standard_id}).in_("id", ids).execute()
+    # Drop device sessions + cached tokens so the new standard's content is
+    # served on the students' very next request (token carries standard_id).
+    try:
+        service_supabase.table("student_sessions").delete().in_("student_id", ids).execute()
+    except Exception as e:
+        print(f"Bulk move session clear failed: {e}")
+    for sid in ids:
+        _invalidate_auth_cache_for_user(sid)
+    return {"moved": len(ids)}
+
+
+@app.post("/api/students/bulk-block")
+def bulk_block_students(req: BulkBlockRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    ids = _teacher_owned_student_ids(user, req.ids)
+    if not ids:
+        return {"updated": 0}
+
+    service_supabase.table("students").update({"blocked": req.blocked}).in_("id", ids).execute()
+    for sid in ids:
+        _invalidate_auth_cache_for_user(sid)  # block is enforced at login/verify
+    return {"updated": len(ids)}
+
+
+@app.post("/api/students/bulk-reset-password")
+def bulk_reset_passwords(req: BulkResetRequest, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    import secrets, string
+
+    ids = _teacher_owned_student_ids(user, req.ids)
+    if not ids:
+        return {"results": [], "updated": 0, "failed": 0}
+
+    fixed = req.new_password.strip() if (req.new_password and len(req.new_password.strip()) >= 6) else None
+    alphabet = string.ascii_letters + string.digits
+    results, failed = [], 0
+    for sid in ids:
+        pw = fixed or ''.join(secrets.choice(alphabet) for _ in range(10))
+        try:
+            service_supabase.auth.admin.update_user_by_id(sid, {"password": pw})
+            try:
+                service_supabase.table("students").update({"must_change_pwd": True, "plain_password": pw}).eq("id", sid).execute()
+            except Exception:
+                service_supabase.table("students").update({"must_change_pwd": True}).eq("id", sid).execute()
+            _invalidate_auth_cache_for_user(sid)
+            results.append({"id": sid, "new_password": pw})
+        except Exception as e:
+            failed += 1
+            print(f"Bulk reset failed for student {sid}: {e}")
+    return {"results": results, "updated": len(results), "failed": failed}
 
 # Videos
 @app.get("/api/videos")

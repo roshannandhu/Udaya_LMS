@@ -241,6 +241,19 @@ export const leaderboardApi = {
     apiClient(`/leaderboard?class_id=${classId}`),
 };
 
+// Bulk student management (teacher Manage-Excel grid). Each maps to a
+// teacher-only backend endpoint that operates on many ids in one request.
+export const studentApi = {
+  bulkDelete: (ids) =>
+    apiClient('/students/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+  bulkMove: (ids, standard_id) =>
+    apiClient('/students/bulk-move', { method: 'POST', body: JSON.stringify({ ids, standard_id }) }),
+  bulkBlock: (ids, blocked) =>
+    apiClient('/students/bulk-block', { method: 'POST', body: JSON.stringify({ ids, blocked }) }),
+  bulkResetPassword: (ids, new_password = null) =>
+    apiClient('/students/bulk-reset-password', { method: 'POST', body: JSON.stringify({ ids, new_password }) }),
+};
+
 export const broadcastApi = {
   markRead: (broadcastIds) =>
     apiClient('/broadcast-reads', { method: 'POST', body: JSON.stringify({ broadcast_ids: broadcastIds }) }),

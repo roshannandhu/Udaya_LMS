@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Eye, EyeOff, Copy, Check, Loader2, KeyRound, ChevronDown, ChevronRight, AlertTriangle, UserPlus, Plus, X, Download } from 'lucide-react';
-import { apiClient } from '../../lib/api';
+import { Eye, EyeOff, Copy, Check, Loader2, KeyRound, ChevronDown, ChevronRight, AlertTriangle, UserPlus, Plus, X, Download, Trash2, ArrowRightLeft, Ban, ShieldCheck, ClipboardPaste } from 'lucide-react';
+import { apiClient, studentApi } from '../../lib/api';
 import { useAppCache, useSettingsStore } from '../../store';
-import { Skeleton, Toggle, Tag } from '../ui';
+import { Skeleton, Toggle, Tag, Modal, Btn } from '../ui';
 import SubjectIcon from '../shared/SubjectIcon';
 import { generateUsername, generatePassword } from '../../lib/bulkImport';
 import { downloadAoaWorkbook } from '../../lib/studentBackup';
@@ -72,20 +72,52 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
   const [copiedId, setCopiedId] = useState(null);
   const [collapsed, setCollapsed] = useState({}); // { [standardId]: true }
 
+  // ── Bulk selection + actions ────────────────────────────────────────────────
+  const [selected, setSelected] = useState(() => new Set()); // student ids
+  const [bulkAction, setBulkAction] = useState(null);        // 'delete'|'move'|'block'|'unblock'|'reset'|null
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState(null);
+  const [moveTarget, setMoveTarget] = useState('');         // standard id for Move
+  const [deleteAck, setDeleteAck] = useState(false);        // "I understand" gate
+  const [resetRows, setResetRows] = useState(null);         // [{...row, plain_password}] after a bulk reset
+
   // ── Add-new-students (in-grid) ──────────────────────────────────────────────
   const [drafts, setDrafts]   = useState([]);     // [{key, standard_id, name, email, phone}]
   const [savingNew, setSavingNew] = useState(false);
   const [addResult, setAddResult] = useState(null); // {added, skipped, errors, rows:[...]}
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [newStandard, setNewStandard] = useState(''); // default standard for added/pasted rows
 
   const defaultStudentPassword = useSettingsStore(s => s.defaultStudentPassword);
   const refreshStudents = useAppCache(s => s.refreshStudents);
 
-  // Default a new draft's standard to the active filter, else the only standard.
+  // Default a new draft's standard to the chosen default, else the active filter,
+  // else the only standard.
   const defaultStandardId = stdFilter !== 'all' ? String(stdFilter) : (standards.length === 1 ? standards[0].id : '');
-  const addDraft = () => { setAddResult(null); setDrafts(d => [...d, newDraft(defaultStandardId)]); };
+  const effectiveDefaultStd = newStandard || defaultStandardId;
+  const addDraft = () => { setAddResult(null); setDrafts(d => [...d, newDraft(effectiveDefaultStd)]); };
   const updateDraft = (key, patch) => setDrafts(d => d.map(r => (r.key === key ? { ...r, ...patch } : r)));
   const removeDraft = (key) => setDrafts(d => d.filter(r => r.key !== key));
   const stdName = (id) => standards.find(s => String(s.id) === String(id))?.name || '';
+
+  // Paste-to-add: each pasted line "Name, Email, Phone" (tab- or comma-separated)
+  // becomes a draft row, so a teacher can add a whole class in one paste.
+  const applyPaste = () => {
+    const lines = pasteText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const newRows = [];
+    for (const line of lines) {
+      const cells = line.split(/\t|,|;/).map(c => c.trim());
+      const name = cells[0];
+      if (!name) continue;
+      const emailCell = cells.find(c => c.includes('@')) || '';
+      const phoneCell = cells.slice(1).find(c => /\d/.test(c) && !c.includes('@')) || '';
+      newRows.push({ ...newDraft(effectiveDefaultStd), name, email: emailCell, phone: phoneCell });
+    }
+    if (newRows.length) { setAddResult(null); setDrafts(d => [...d, ...newRows]); }
+    setPasteText('');
+    setPasteOpen(false);
+  };
 
   const saveDrafts = async () => {
     const valid = drafts.filter(r => r.name.trim() && r.standard_id);
@@ -263,7 +295,87 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
     return ordered;
   }, [filtered, standards]);
 
-  const COLS = 6;
+  // ── Selection (scoped to what's currently visible/filtered) ────────────────
+  const filteredIds = useMemo(() => filtered.map(s => s.id), [filtered]);
+  const selectedIds = useMemo(() => filteredIds.filter(id => selected.has(id)), [filteredIds, selected]);
+  const selectedRows = useMemo(() => filtered.filter(s => selected.has(s.id)), [filtered, selected]);
+  const allSelected = filteredIds.length > 0 && selectedIds.length === filteredIds.length;
+
+  const toggleOne = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleMany = (ids, on) => setSelected(prev => { const n = new Set(prev); ids.forEach(id => (on ? n.add(id) : n.delete(id))); return n; });
+  const toggleAll = () => toggleMany(filteredIds, !allSelected);
+  const clearSelection = () => setSelected(new Set());
+
+  const selectedStdNames = useMemo(() => {
+    const names = new Set();
+    selectedRows.forEach(s => names.add(stdName(s.standard_id) || 'No standard'));
+    return [...names];
+  }, [selectedRows, standards]);
+  const allBlocked = selectedRows.length > 0 && selectedRows.every(s => s.blocked);
+
+  const closeBulk = () => { if (bulkBusy) return; setBulkAction(null); setBulkError(null); setDeleteAck(false); setMoveTarget(''); setResetRows(null); };
+  const afterMutate = () => { useAppCache.getState().invalidateStudents(); refreshStudents(); };
+
+  // Export credentials for an arbitrary set of rows (Export + reset result).
+  const exportRows = (rs, prefix = 'Students') => {
+    if (!rs?.length) return;
+    const aoa = [
+      ['Student ID', 'Name', 'Username', 'Password', 'Standard', 'Email', 'Phone', 'Login URL'],
+      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', 'https://tutoria.app/login']),
+    ];
+    downloadAoaWorkbook(aoa, {
+      filename: `${prefix}_${new Date().toISOString().split('T')[0]}`,
+      cols: [{ wch: 16 }, { wch: 20 }, { wch: 15 }, { wch: 16 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 24 }],
+      sheetName: 'Credentials',
+    });
+  };
+
+  const doDelete = async () => {
+    setBulkBusy(true); setBulkError(null);
+    try {
+      const ids = selectedIds;
+      await studentApi.bulkDelete(ids);
+      setRows(rs => rs.filter(r => !ids.includes(r.id)));
+      clearSelection(); afterMutate(); closeBulk();
+    } catch (e) { setBulkError(e?.message || 'Delete failed'); }
+    finally { setBulkBusy(false); }
+  };
+  const doMove = async () => {
+    if (!moveTarget) { setBulkError('Choose a class to move to.'); return; }
+    setBulkBusy(true); setBulkError(null);
+    try {
+      const ids = selectedIds;
+      await studentApi.bulkMove(ids, moveTarget);
+      setRows(rs => rs.map(r => (ids.includes(r.id) ? { ...r, standard_id: moveTarget } : r)));
+      clearSelection(); afterMutate(); closeBulk();
+    } catch (e) { setBulkError(e?.message || 'Move failed'); }
+    finally { setBulkBusy(false); }
+  };
+  const doBlock = async (blocked) => {
+    setBulkBusy(true); setBulkError(null);
+    try {
+      const ids = selectedIds;
+      await studentApi.bulkBlock(ids, blocked);
+      setRows(rs => rs.map(r => (ids.includes(r.id) ? { ...r, blocked } : r)));
+      clearSelection(); afterMutate(); closeBulk();
+    } catch (e) { setBulkError(e?.message || 'Update failed'); }
+    finally { setBulkBusy(false); }
+  };
+  const doReset = async () => {
+    setBulkBusy(true); setBulkError(null);
+    try {
+      const ids = selectedIds;
+      const res = await studentApi.bulkResetPassword(ids);
+      const pwById = Object.fromEntries((res.results || []).map(r => [r.id, r.new_password]));
+      setRows(rs => rs.map(r => (pwById[r.id] ? { ...r, plain_password: pwById[r.id] } : r)));
+      setRevealed(v => { const n = { ...v }; Object.keys(pwById).forEach(id => { n[id] = true; }); return n; });
+      setResetRows(selectedRows.map(r => ({ ...r, plain_password: pwById[r.id] || r.plain_password })));
+      afterMutate();
+    } catch (e) { setBulkError(e?.message || 'Reset failed'); }
+    finally { setBulkBusy(false); }
+  };
+
+  const COLS = 7;
   const validDraftCount = drafts.filter(d => d.name.trim() && d.standard_id).length;
 
   // In-grid "Add new students" panel. Lives above the table so the first
@@ -275,27 +387,58 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
         <div className="flex items-center gap-2 text-sm font-semibold text-neutral-800">
           <UserPlus size={15} className="text-neutral-500" /> Add new students
         </div>
-        {drafts.length === 0 ? (
-          <button onClick={addDraft} disabled={standards.length === 0}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
-            <Plus size={13} /> Add students
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Default standard applied to newly added / pasted rows */}
+          {standards.length > 1 && (
+            <select value={effectiveDefaultStd} onChange={e => setNewStandard(e.target.value)}
+              title="Default class for new rows"
+              className="px-2 py-1.5 rounded-lg border border-[#E4E2DF] text-xs bg-white outline-none max-w-[150px]">
+              <option value="">Class for new rows…</option>
+              {standards.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          <button onClick={() => { setAddResult(null); setPasteOpen(o => !o); }} disabled={standards.length === 0}
+            className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-[#F4F2EF] disabled:opacity-40 px-2.5 py-1.5 rounded-lg border border-[#EFEDEA] transition-colors">
+            <ClipboardPaste size={13} /> Paste list
           </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button onClick={addDraft}
-              className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-[#F4F2EF] px-2.5 py-1.5 rounded-lg border border-[#EFEDEA] transition-colors">
-              <Plus size={13} /> Add row
+          {drafts.length === 0 ? (
+            <button onClick={addDraft} disabled={standards.length === 0}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+              <Plus size={13} /> Add students
             </button>
-            <button onClick={() => setDrafts([])} disabled={savingNew}
-              className="text-xs text-neutral-500 hover:text-neutral-800 px-2 py-1.5 disabled:opacity-40">Discard</button>
-            <button onClick={saveDrafts} disabled={savingNew || validDraftCount === 0}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
-              {savingNew ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-              Save {validDraftCount || ''} student{validDraftCount === 1 ? '' : 's'}
+          ) : (
+            <>
+              <button onClick={addDraft}
+                className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-[#F4F2EF] px-2.5 py-1.5 rounded-lg border border-[#EFEDEA] transition-colors">
+                <Plus size={13} /> Add row
+              </button>
+              <button onClick={() => setDrafts([])} disabled={savingNew}
+                className="text-xs text-neutral-500 hover:text-neutral-800 px-2 py-1.5 disabled:opacity-40">Discard</button>
+              <button onClick={saveDrafts} disabled={savingNew || validDraftCount === 0}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+                {savingNew ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                Save {validDraftCount || ''} student{validDraftCount === 1 ? '' : 's'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {pasteOpen && (
+        <div className="px-4 py-3 border-b border-[#EFEDEA] bg-[#FAFAF9] space-y-2">
+          <p className="text-[11px] text-neutral-500">Paste one student per line — <span className="font-medium">Name, Email, Phone</span> (commas or tabs). Email/phone optional. They'll be added as rows below using the default class.</p>
+          <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={4}
+            placeholder={'Aarav Patel, aarav@email.com, 9876543210\nMeera Singh\nRohan Kumar, , 9123456780'}
+            className="w-full px-3 py-2 rounded-lg border border-[#E4E2DF] text-sm bg-white outline-none font-mono resize-y" />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setPasteOpen(false); setPasteText(''); }} className="text-xs text-neutral-500 hover:text-neutral-800 px-2 py-1.5">Cancel</button>
+            <button onClick={applyPaste} disabled={!pasteText.trim()}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+              <Plus size={13} /> Add rows
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {standards.length === 0 && (
         <div className="px-4 py-3 text-xs text-amber-700 bg-amber-50">Create a standard first, then you can add students here.</div>
@@ -379,6 +522,35 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
         </label>
       </div>
 
+      {/* Bulk selection action bar — appears once anything is selected */}
+      {selectedIds.length > 0 && (
+        <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2.5 border-b border-indigo-100 bg-indigo-50/90 flex-wrap">
+          <span className="text-xs font-bold text-indigo-900">{selectedIds.length} selected</span>
+          <button onClick={clearSelection} className="text-xs text-indigo-500 hover:text-indigo-800 underline-offset-2 hover:underline">Clear</button>
+          <div className="flex-1" />
+          <button onClick={() => { setMoveTarget(''); setBulkError(null); setBulkAction('move'); }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-700 bg-white hover:bg-[#F4F2EF] border border-[#E4E2DF] px-2.5 py-1.5 rounded-lg transition-colors">
+            <ArrowRightLeft size={13} /> Move to class
+          </button>
+          <button onClick={() => { setResetRows(null); setBulkError(null); setBulkAction('reset'); }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-700 bg-white hover:bg-[#F4F2EF] border border-[#E4E2DF] px-2.5 py-1.5 rounded-lg transition-colors">
+            <KeyRound size={13} /> Reset passwords
+          </button>
+          <button onClick={() => { setBulkError(null); setBulkAction(allBlocked ? 'unblock' : 'block'); }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-700 bg-white hover:bg-[#F4F2EF] border border-[#E4E2DF] px-2.5 py-1.5 rounded-lg transition-colors">
+            {allBlocked ? <><ShieldCheck size={13} /> Unblock</> : <><Ban size={13} /> Block</>}
+          </button>
+          <button onClick={() => exportRows(selectedRows, 'Selected_Students')}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-700 bg-white hover:bg-[#F4F2EF] border border-[#E4E2DF] px-2.5 py-1.5 rounded-lg transition-colors">
+            <Download size={13} /> Export
+          </button>
+          <button onClick={() => { setDeleteAck(false); setBulkError(null); setBulkAction('delete'); }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-2.5 py-1.5 rounded-lg transition-colors">
+            <Trash2 size={13} /> Delete
+          </button>
+        </div>
+      )}
+
       {pwUnavailable && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-100 text-amber-700 text-xs">
           <AlertTriangle size={14} />
@@ -390,6 +562,10 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
         <table className="w-full text-sm border-collapse min-w-[880px]">
           <thead>
             <tr className="bg-[#F1F1EF] text-[11px] uppercase tracking-wider text-neutral-500">
+              <th className="px-3 py-2 border-b border-[#E4E2DF] w-8">
+                <input type="checkbox" aria-label="Select all" checked={allSelected}
+                  onChange={toggleAll} className="w-4 h-4 accent-neutral-900 cursor-pointer align-middle" />
+              </th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Student ID</th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Name</th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Email</th>
@@ -403,11 +579,16 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
               const isCollapsed = !!collapsed[std.id];
               return (
                 <React.Fragment key={std.id}>
-                  <tr
-                    className="bg-[#FAF8F5] border-y border-[#EFEDEA] cursor-pointer hover:bg-[#F4F2EF]"
-                    onClick={() => setCollapsed(c => ({ ...c, [std.id]: !c[std.id] }))}
-                  >
-                    <td colSpan={COLS} className="px-3 py-1.5">
+                  <tr className="bg-[#FAF8F5] border-y border-[#EFEDEA] hover:bg-[#F4F2EF]">
+                    <td className="px-3 py-1.5 w-8">
+                      <input type="checkbox" aria-label={`Select all in ${std.name}`}
+                        checked={list.length > 0 && list.every(s => selected.has(s.id))}
+                        onChange={(e) => toggleMany(list.map(s => s.id), e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4 accent-neutral-900 cursor-pointer align-middle" />
+                    </td>
+                    <td colSpan={COLS - 1} className="px-3 py-1.5 cursor-pointer"
+                      onClick={() => setCollapsed(c => ({ ...c, [std.id]: !c[std.id] }))}>
                       <div className="flex items-center gap-2 text-xs font-semibold text-neutral-600">
                         {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                         {std.emoji && <SubjectIcon value={std.emoji} size={13} fallback="graduation" />}
@@ -420,8 +601,14 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
                   {!isCollapsed && list.map(s => {
                     const show = showAllPw || revealed[s.id];
                     const st = status[s.id];
+                    const isSel = selected.has(s.id);
                     return (
-                      <tr key={s.id} className="border-b border-[#EFEDEA] hover:bg-[#F9F8F6]">
+                      <tr key={s.id} className={`border-b border-[#EFEDEA] ${isSel ? 'bg-indigo-50/60' : 'hover:bg-[#F9F8F6]'}`}>
+                        <td className="px-3 py-1.5 w-8 align-middle">
+                          <input type="checkbox" aria-label={`Select ${s.name}`} checked={isSel}
+                            onChange={() => toggleOne(s.id)}
+                            className="w-4 h-4 accent-neutral-900 cursor-pointer align-middle" />
+                        </td>
                         <td className="px-3 py-1.5 align-middle whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-xs text-neutral-600">{s.student_code || '—'}</span>
@@ -487,6 +674,119 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
       </div>
       </div>
       )}
+
+      {/* ── Bulk action confirmation ─────────────────────────────────────────── */}
+      <Modal
+        open={!!bulkAction}
+        onClose={closeBulk}
+        title={
+          bulkAction === 'delete' ? 'Delete students'
+          : bulkAction === 'move' ? 'Move to another class'
+          : bulkAction === 'block' ? 'Block students'
+          : bulkAction === 'unblock' ? 'Unblock students'
+          : bulkAction === 'reset' ? 'Reset passwords'
+          : ''
+        }
+      >
+        <div className="space-y-4">
+          {bulkError && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100">
+              <AlertTriangle size={14} /> {bulkError}
+            </div>
+          )}
+
+          {bulkAction === 'delete' && (
+            <>
+              <p className="text-sm text-neutral-700">
+                Permanently delete <b>{selectedIds.length}</b> student{selectedIds.length === 1 ? '' : 's'}
+                {selectedStdNames.length > 0 && <> from <b>{selectedStdNames.join(', ')}</b></>}? This also removes their
+                login, test attempts and message history. <span className="text-red-600 font-semibold">This cannot be undone.</span>
+              </p>
+              <label className="flex items-center gap-2 text-sm text-neutral-700 select-none">
+                <input type="checkbox" checked={deleteAck} onChange={e => setDeleteAck(e.target.checked)}
+                  className="w-4 h-4 accent-red-600" />
+                I understand this is permanent
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <Btn variant="default" onClick={closeBulk} disabled={bulkBusy}>Cancel</Btn>
+                <button onClick={doDelete} disabled={bulkBusy || !deleteAck}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 px-4 py-2 rounded-xl transition-colors">
+                  {bulkBusy ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                  Delete {selectedIds.length}
+                </button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'move' && (
+            <>
+              <p className="text-sm text-neutral-700">
+                Move <b>{selectedIds.length}</b> student{selectedIds.length === 1 ? '' : 's'} to a different class.
+                They'll be enrolled in the new class and get all of its subjects.
+              </p>
+              <select value={moveTarget} onChange={e => setMoveTarget(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-[#E4E2DF] bg-white outline-none text-sm">
+                <option value="">Choose a class…</option>
+                {standards.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <div className="flex justify-end gap-2 pt-1">
+                <Btn variant="default" onClick={closeBulk} disabled={bulkBusy}>Cancel</Btn>
+                <Btn variant="primary" onClick={doMove} disabled={bulkBusy || !moveTarget}>
+                  {bulkBusy ? <Loader2 size={15} className="animate-spin mr-1" /> : <ArrowRightLeft size={15} className="mr-1" />}
+                  Move
+                </Btn>
+              </div>
+            </>
+          )}
+
+          {(bulkAction === 'block' || bulkAction === 'unblock') && (
+            <>
+              <p className="text-sm text-neutral-700">
+                {bulkAction === 'block'
+                  ? <>Block <b>{selectedIds.length}</b> student{selectedIds.length === 1 ? '' : 's'}? They won't be able to log in until unblocked.</>
+                  : <>Unblock <b>{selectedIds.length}</b> student{selectedIds.length === 1 ? '' : 's'}? They'll be able to log in again.</>}
+              </p>
+              <div className="flex justify-end gap-2 pt-1">
+                <Btn variant="default" onClick={closeBulk} disabled={bulkBusy}>Cancel</Btn>
+                <Btn variant="primary" onClick={() => doBlock(bulkAction === 'block')} disabled={bulkBusy}>
+                  {bulkBusy ? <Loader2 size={15} className="animate-spin mr-1" /> : (bulkAction === 'block' ? <Ban size={15} className="mr-1" /> : <ShieldCheck size={15} className="mr-1" />)}
+                  {bulkAction === 'block' ? 'Block' : 'Unblock'}
+                </Btn>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'reset' && (
+            resetRows ? (
+              <>
+                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-800 text-sm rounded-lg border border-emerald-100">
+                  <Check size={15} /> Reset {resetRows.filter(r => r.plain_password).length} password{resetRows.length === 1 ? '' : 's'}. Share the new ones with students.
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Btn variant="default" onClick={closeBulk}>Done</Btn>
+                  <Btn variant="primary" onClick={() => exportRows(resetRows, 'Reset_Credentials')}>
+                    <Download size={15} className="mr-1" /> Download credentials
+                  </Btn>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-neutral-700">
+                  Reset passwords for <b>{selectedIds.length}</b> student{selectedIds.length === 1 ? '' : 's'} to new random passwords?
+                  Each will be asked to change it on next login. You can download the new credentials afterwards.
+                </p>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Btn variant="default" onClick={closeBulk} disabled={bulkBusy}>Cancel</Btn>
+                  <Btn variant="primary" onClick={doReset} disabled={bulkBusy}>
+                    {bulkBusy ? <Loader2 size={15} className="animate-spin mr-1" /> : <KeyRound size={15} className="mr-1" />}
+                    Reset {selectedIds.length}
+                  </Btn>
+                </div>
+              </>
+            )
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
