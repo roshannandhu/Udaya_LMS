@@ -10,6 +10,9 @@ build/
 *.log
 broadcasts.json
 
+# Cloudflare Origin cert + key on the EC2 box — NEVER commit (private key).
+cf-origin/
+
 # NOTE: .env / .env.local are intentionally COMMITTED so collaborators can
 # `git clone` and run immediately against the shared Supabase project. See
 # SETUP.md. (Repo MUST stay private — these files contain the Supabase

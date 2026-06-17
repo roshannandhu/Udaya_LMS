@@ -1,10 +1,8 @@
-# Reverse proxy + HTTPS for the FastAPI backend (Phase 1). See LAUNCH_PLAN.md §4 / §14.
+# Reverse proxy + HTTPS for the FastAPI backend. See LAUNCH_PLAN.md §4 / §14.
 #
-# 1. Replace api.udayalms.com with your real backend subdomain.
-# 2. Cloudflare → SSL/TLS → Origin Server → Create Certificate → save the two PEM blocks as
-#    ./cf-origin/cert.pem and ./cf-origin/key.pem next to this file.
-# 3. Cloudflare → SSL/TLS → set encryption mode to "Full (strict)".
-api.udayalms.com {
+# Uses a Cloudflare Origin Certificate (saved on the box as ./cf-origin/cert.pem + key.pem).
+# Cloudflare proxies api.udaya-learn.com to this box on :443 with SSL mode "Full (strict)".
+api.udaya-learn.com {
     tls /etc/caddy/cf-origin/cert.pem /etc/caddy/cf-origin/key.pem
     reverse_proxy api:8001
 }
