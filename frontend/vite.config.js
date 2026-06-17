@@ -36,6 +36,12 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [{
+          // Cloudflare R2 (current storage) — avatars, notes, broadcast files, etc.
+          urlPattern: /^https:\/\/files\.udaya-learn\.com\/.*/i,
+          handler: 'CacheFirst',
+          options: { cacheName: 'r2-storage', expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 } }
+        }, {
+          // Supabase Storage — legacy fallback for files uploaded before the R2 cutover.
           urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
           handler: 'CacheFirst',
           options: { cacheName: 'supabase-storage', expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 } }
