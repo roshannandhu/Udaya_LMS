@@ -4,12 +4,12 @@
   //   1. runs the build below (installs deps + `vite build` in frontend/)
   //   2. uploads frontend/dist as static assets and serves them
   // SPA routing: unmatched paths fall back to index.html so React Router works.
-  // To change the backend the app calls, edit VITE_API_URL in the build command,
+  // To change the backend the app calls, edit VITE_API_URL in frontend/.env.production,
   // commit, and push — Cloudflare auto-deploys.
   "name": "udaya-learn",
   "compatibility_date": "2025-01-01",
   "build": {
-    "command": "cd frontend && npm install --legacy-peer-deps && VITE_API_URL=https://udaya-lms.onrender.com/api npm run build"
+    "command": "cd frontend && npm install --legacy-peer-deps && npm run build"
   },
   "assets": {
     "directory": "./frontend/dist",
