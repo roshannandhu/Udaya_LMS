@@ -1,0 +1,37 @@
+# Phase 1 single-box deploy — see LAUNCH_PLAN.md §4 (Phase C).
+#
+# First bring-up (before you have the Cloudflare Origin cert) — api only:
+#   docker compose up -d --build api
+#   curl -sf http://127.0.0.1:8001/api/health        # → {"status":"ok","database":"connected"}
+#
+# Once ./cf-origin/cert.pem + key.pem are in place, start the proxy too:
+#   docker compose up -d --build
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: ./backend/.env          # secrets live here on the box (kept off the public IP)
+    environment:
+      - PORT=8001
+    ports:
+      - "127.0.0.1:8001:8001"         # loopback only — host-local curl works, not public
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./cf-origin:/etc/caddy/cf-origin:ro   # put Cloudflare Origin cert.pem + key.pem here
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

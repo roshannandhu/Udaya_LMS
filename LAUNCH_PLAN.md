@@ -1,16 +1,21 @@
 # LAUNCH_PLAN.md — Udaya LMS
-> Version 2.1 — **DECISION CHANGED: stay on MANAGED Supabase (Pro); move only the FastAPI backend
->   to Hetzner CX33 + Coolify.** The self-hosted PostgreSQL / PgBouncer / Redis-for-DB /
->   self-hosted-Supabase / self-hosted-Jitsi sections further below are **SUPERSEDED — do NOT
->   implement them.** Trust the "Locked decisions" block immediately below for what actually applies.
-> Stack: React+Vite (Cloudflare Pages) · FastAPI (Hetzner CX33 + Coolify) · MANAGED Supabase
->        (Postgres + Auth + Storage + Realtime · Mumbai · Pro) · GoDaddy · Firebase FCM · Sentry
+> Version 3.0 — **DECISION CHANGED: backend compute moves to AWS EC2 (was Hetzner CX33 + Coolify).**
+>   Two-phase plan: **Phase 1 (today, ~300 students)** = a single EC2 `t3.small` running FastAPI in
+>   Docker, no load balancer. **Phase 2 (3,000+ students)** = Auto Scaling Group (1–10 instances)
+>   behind an Application Load Balancer, with ElastiCache (Redis) for shared WebSocket pub/sub.
+>   Database / Auth / Storage stay on **MANAGED Supabase** (unchanged). The self-hosted PostgreSQL /
+>   PgBouncer / Redis-for-DB / self-hosted-Supabase / self-hosted-Jitsi / custom-JWT-auth /
+>   custom-WebSocket sections further below are **SUPERSEDED — do NOT implement them.** Trust the
+>   "Locked decisions" block immediately below for what actually applies.
+> Stack: React+Vite (Cloudflare Pages) · FastAPI (AWS EC2 · Docker) · MANAGED Supabase
+>        (Postgres + Auth + Storage + Realtime · Mumbai · Pro) · GoDaddy + Cloudflare · Firebase FCM · Sentry
 > Keep this file in repo root. Reference in every Antigravity/Claude session.
 
 ---
 
 ## 0. Full architecture — how everything connects
 
+**PHASE 1 — today (~300 students): one EC2 box, no load balancer**
 ```
 Student / Teacher / Parent phone
           ↓
@@ -20,25 +25,43 @@ GoDaddy domain (udayalms.com)
 CLOUDFLARE (DNS + free SSL + CDN + DDoS — front of everything)
   ├── udayalms.com        → Marketing site     (Cloudflare Pages · Google indexes)
   ├── app.udayalms.com    → LMS frontend        (Cloudflare Pages · login wall · NOT indexed)
-  ├── api.udayalms.com    → FastAPI backend     (Hetzner CX33 · Coolify · Docker)
+  ├── api.udayalms.com    → FastAPI backend     (AWS EC2 · Elastic IP · proxied)
   └── files.udayalms.com  → Public files        (Cloudflare R2 · zero egress · CDN)
+                                    ↓  (Cloudflare proxy, SSL Full-strict)
+                    ┌──── AWS EC2 t3.small · Ubuntu 24.04 · Elastic IP ────┐
+                    │                                                       │
+                    │  Caddy / Nginx :443  →  FastAPI :8001 (Docker)        │
+                    │                         uvicorn — ONE worker          │
+                    │                         (in-memory WS + caches)       │
+                    │  Backup cron → pg_dump (Supabase) → R2 (Sun 2AM)      │
+                    └───────────────────────────────────────────────────────┘
+                                    ↓ network (≈40 ms to Mumbai)
+   MANAGED Supabase (Postgres + Auth + Storage + Realtime · Mumbai · Pro)
                                     ↓
-                    ┌───── Hetzner CX33 (one server, all services) ─────┐
-                    │                                                     │
-                    │  FastAPI (port 8001)   ←→  PostgreSQL (port 5432)  │
-                    │       ↓                      ↑                      │
-                    │  PgBouncer (port 6432)  ←── connection pooler       │
-                    │       ↓                                             │
-                    │  Redis (port 6379)  ← sessions, cache, FCM queue   │
-                    │       ↓                                             │
-                    │  Jitsi Meet (self-hosted, port 8443)               │
-                    │       ↓                                             │
-                    │  Backup cron → pg_dump → R2 (every Sunday 2AM)    │
-                    └─────────────────────────────────────────────────────┘
-                                    ↓
-                    Cloudflare R2  ←→  Firebase FCM  ←→  Sentry
-                    (files+backups)     (push alerts)      (error tracking)
+   Cloudflare R2 ←→ Firebase FCM ←→ Sentry ←→ Zoom (live classes, external SaaS)
+   (files+backups)   (push alerts)   (errors)
 ```
+
+**PHASE 2 — 3,000+ students: Auto Scaling Group + ALB + ElastiCache**
+```
+            CLOUDFLARE (DNS · DDoS) → api.udayalms.com → ACM cert
+                                    ↓
+                    Application Load Balancer (HTTPS :443, WebSocket-aware)
+                                    ↓  health check /api/health
+        ┌───────────── Auto Scaling Group (min 1 · max 10) ─────────────┐
+        │  EC2 #1 (FastAPI)   EC2 #2 (FastAPI)   …   EC2 #N (FastAPI)    │
+        │     ↑ scales out/in on CPU% + ALBRequestCountPerTarget         │
+        └───────────────────────────────┬───────────────────────────────┘
+                                         ↓ shared state (see Phase C-SCALE)
+                    ElastiCache (Redis)  —  WebSocket pub/sub,
+                    OTP/session state, rate-limit counters, caches
+                                         ↓
+            MANAGED Supabase (unchanged)  ·  R2  ·  FCM  ·  Sentry  ·  Zoom
+```
+> ⚠️ Going from Phase 1 → Phase 2 is **not** just "add an ALB + Redis." The backend currently
+> holds correctness-critical state in-process (WebSocket connections, OTP, rate limits, scheduler
+> loops, four local JSON files). That state must be externalized **before** running 2+ instances —
+> or even 2+ uvicorn workers on one box. The full prerequisite checklist is in **Phase C-SCALE**.
 
 ### What each piece does
 
@@ -47,32 +70,36 @@ CLOUDFLARE (DNS + free SSL + CDN + DDoS — front of everything)
 | GoDaddy domain | Buy `udayalms.com`, then point to Cloudflare and forget | ₹67 (₹800/yr) |
 | Cloudflare | DNS + SSL (free auto) + CDN + DDoS + proxy for all subdomains | ₹0 |
 | Cloudflare Pages | Hosts React+Vite frontend, auto-deploys on git push | ₹0 |
-| Hetzner CX33 | Your main server — backend + DB + Jitsi + Redis all on one box | ~₹900 (€9.99) |
-| PostgreSQL 16 | Self-hosted DB on CX33. You own your data, no per-row billing | ₹0 (on server) |
-| PgBouncer | Connection pooler in front of Postgres. Prevents connection overload | ₹0 (on server) |
-| Redis | Session cache, FCM notification queue, dashboard cache | ₹0 (on server) |
-| Coolify | Free self-hosted deployment dashboard on same CX33. GitHub auto-deploy | ₹0 |
+| **AWS EC2 `t3.small`** | **Phase 1 backend box — FastAPI in Docker (1 vCPU-bound worker + async I/O)** | **~₹1,250 ($15) on-demand · ~₹800 on a 1-yr Savings Plan** |
+| Elastic IP | Stable public IP for the EC2 box (free while attached) | ₹0 |
+| EBS gp3 (30 GB) | Root volume for the EC2 box | ~₹250 ($3) |
+| MANAGED Supabase (Pro) | Postgres + Auth + Storage + Realtime · Mumbai. Unchanged from today. | ~₹2,100 ($25) |
 | Cloudflare R2 | Public files (PDFs, avatars) + DB backups. Zero egress fees | ₹0 (10GB free) |
-| Jitsi Meet | Self-hosted live classes on same CX33 | ₹0 |
 | Firebase FCM | Push notifications to students (new video, broadcast, test) | ₹0 |
 | Sentry | Error tracking: frontend crashes + backend exceptions | ₹0 (free tier) |
-| UptimeRobot | Pings api.udayalms.com every 5 min, alerts if down | ₹0 |
-| YouTube Unlisted | Video hosting, infinite bandwidth, zero cost | ₹0 |
+| UptimeRobot / CloudWatch | Pings api.udayalms.com, alerts if down | ₹0 / ~₹0 |
+| Zoom | Live classes (external SaaS, already integrated) | per Zoom plan |
 | WANotifier | WhatsApp credential delivery — ₹0.145/student msg | ~₹4–50 |
 | Gemini / Claude Haiku | AI report suggestions | ~₹0–5 |
-| **Total at 300 students** | | **~₹970/month** |
-| **Total at launch/testing** | | **~₹970/month** |
+| **Phase 2 only — ALB** | Application Load Balancer (base + LCU) | ~₹1,700 ($20) |
+| **Phase 2 only — ElastiCache** | Redis `cache.t4g.micro` for pub/sub + shared state | ~₹1,000 ($12) |
+| **Total at 300 students (Phase 1)** | EC2 + EBS + Supabase Pro + domain | **~₹3,700/month** |
 
-> Why CX33 over CX22? CX33 (4 vCPU, 8GB RAM) at €9.99 runs PostgreSQL + FastAPI + Redis + Jitsi + Coolify safely on one box. CX22 (2 vCPU, 4GB) runs out of RAM when PostgreSQL + Jitsi run together. CX33 is the minimum for full self-hosted.
+> Why `t3.small` for Phase 1? 2 vCPU / 2 GB RAM comfortably runs a single-worker FastAPI container
+> for ~300 students (the workload is async I/O-bound — most time is spent waiting on Supabase, not
+> on CPU). Burstable credits cover login spikes. Move to `t3.medium` (4 GB) only if memory pressure
+> shows up in CloudWatch. **Do not raise uvicorn `--workers` above 1 on a single box** until the
+> Phase C-SCALE state externalization is done — extra workers are separate processes and would each
+> get their own in-memory WebSocket manager / OTP store, silently breaking broadcasts and OTP.
 
 ---
 
 ## 1. Locked decisions — do not re-debate these
 
 - **Database / Auth / Storage / Realtime** — **MANAGED Supabase** (Mumbai), upgraded to **Pro** when real students start. Keep Supabase Auth, Storage, and Realtime exactly as the app uses them today; the ~721 existing `supabase.*` calls stay unchanged. Scale by bumping Supabase compute, never by self-hosting.
-- **Backend host** — FastAPI runs on **Hetzner CX33 + Coolify** (Docker), talking to managed Supabase over the network (~40 ms CX33-Singapore ↔ Supabase-Mumbai). **No** self-hosted Postgres / PgBouncer / Redis-for-DB.
+- **Backend host** — FastAPI runs on **AWS EC2** (Docker), in region **ap-south-1 (Mumbai)** next to Supabase (~40 ms EC2 ↔ Supabase-Mumbai). **Phase 1** = one `t3.small`, single uvicorn worker, reverse-proxied by Caddy/Nginx, no load balancer. **Phase 2** = Auto Scaling Group (1–10) behind an Application Load Balancer, with **ElastiCache (Redis)** for shared WebSocket pub/sub + session state (see **Phase C-SCALE**). **No** self-hosted Postgres / PgBouncer / Redis-for-DB — Redis enters only in Phase 2, for pub/sub and ephemeral shared state, never as the database. Deploy is Docker (reuse the repo `Dockerfile`); config via a `.env` file on the box in Phase 1, AWS SSM Parameter Store in Phase 2.
 - **Videos** — YouTube Unlisted. `youtube_video_id` NEVER sent to client. Only via `/api/video/{id}/token` after verifying student standard_id.
-- **Live classes** — Jitsi Meet via **meet.jit.si** (do NOT self-host Jitsi on the CX33 — too heavy for one box). MediaRecorder for local recording. Teacher uploads to YouTube Unlisted after class.
+- **Live classes** — the app integrates **Zoom** (see `ZOOM_*` env vars). Do NOT self-host Jitsi on the EC2 box (Phase K below is superseded). MediaRecorder for local recording where used.
 - **Test scoring** — PostgreSQL function `submit_test_attempt` (SECURITY DEFINER). Students read from `student_questions` view (no `correct_idx`).
 - **Storage** — **Supabase Storage** (current `videos`/`avatars`/`broadcasts` buckets), included in Pro. Cloudflare R2 is optional/deferred — move public files there only if egress ever grows.
 - **Push notifications** — Firebase Cloud Messaging (FCM). Free, works on Android + iOS.
@@ -86,11 +113,11 @@ CLOUDFLARE (DNS + free SSL + CDN + DDoS — front of everything)
 
 ## ✅ Implemented this session (in-repo, verified)
 
-Done locally — these carry over to Coolify/Pages automatically on deploy:
+Done locally — these carry over to the EC2 backend + Cloudflare Pages on deploy:
 - **Sentry (env-gated)** — backend `main.py` guarded init + frontend `main.jsx` (`@sentry/react`). Dormant until `SENTRY_DSN` / `VITE_SENTRY_DSN` are set.
 - **Login rate limiting** — Cloudflare-aware in-memory limiter (8 / 5 min per real client IP via `CF-Connecting-IP`) on `/api/auth/login`; fails open so it can never lock users out. (OTP routes already cap attempts.)
 - **File validation** — `validate_upload()` (size + extension + lazy `magic` MIME sniff) wired into **all** uploads: student (avatar, submission) and teacher (thumbnail, profile-photo, video, note, broadcast, assignment files).
-- **DB backup script** — `backend/scripts/backup_db.py` (`pg_dump → gzip → R2`); standalone, schedule as a Coolify cron once R2 creds exist.
+- **DB backup script** — `backend/scripts/backup_db.py` (`pg_dump → gzip → R2`); standalone, schedule as a cron on the EC2 box (Phase 2: EventBridge) once R2 creds exist.
 - **Deps/infra** — `Dockerfile` ships `postgresql-client` + `libmagic1`; `requirements.txt` adds `sentry-sdk[fastapi]`, `python-magic`, `boto3`. All new imports are lazy/guarded so local dev (no libmagic) and the test backend keep working.
 
 Verified: `py -m py_compile main.py scripts/backup_db.py`, `py -c "import main"`, and `npm run build` all pass.
@@ -113,14 +140,20 @@ git log -p | grep -iE "secret|password|api_key|database_url|gemini|firebase" | h
 ```
 
 ### A3. Rotate ALL keys — no exceptions
+The repo currently commits secrets in `backend/.env` **and** `render.yaml` (Zoom client secret,
+webhook token, SDK secret). Treat every one of these as leaked and rotate it:
 ```
-PostgreSQL root password   → change in Phase B4
-FastAPI SECRET_KEY         → openssl rand -hex 32
+Supabase service_role key  → Supabase → Project Settings → API → roll service_role
+Supabase anon key          → roll if it was ever committed
+Zoom client/SDK secrets    → Zoom Marketplace → app → regenerate (they are in render.yaml)
 Gemini API key             → Google AI Studio → regenerate
+Resend API key             → Resend dashboard → regenerate
 Firebase server key        → Firebase Console → Project Settings → regenerate
 Any other API key          → regenerate in its dashboard
 ```
-Paste new values into Coolify env only — never in code.
+After rotating, **delete `render.yaml`** (Render is being retired) and move all secrets out of
+git: Phase 1 → a `.env` file on the EC2 box (chmod 600, git-ignored); Phase 2 → AWS SSM Parameter
+Store (SecureString) read at boot via the instance IAM role. Never paste secrets back into code.
 
 ### A4. Final .gitignore
 ```gitignore
@@ -189,225 +222,306 @@ async def forgot_password(request: Request, ...):
 
 ---
 
-## 3. PHASE B — Hetzner CX33 server setup
+## 3. PHASE B — AWS EC2 server setup
 
-### B1. Buy the server
+> Managed Supabase stays the database — there is **no** Postgres / PgBouncer / Redis to install on
+> this box in Phase 1. This phase is just: launch one hardened EC2 instance with Docker on it.
+
+### B1. Launch the EC2 instance
 ```
-hetzner.com → Cloud → New Server
-Location: Singapore (closest to India)
-Image:    Ubuntu 24.04 LTS
-Type:     CX33 (4 vCPU · 8 GB RAM · 80 GB SSD · €9.99/mo ≈ ₹900)
-SSH key:  add your public key at creation
+AWS Console → EC2 → Launch instance
+Name:       udaya-backend
+Region:     ap-south-1 (Mumbai) — same region as Supabase
+AMI:        Ubuntu Server 24.04 LTS (x86_64)
+Type:       t3.small (2 vCPU · 2 GB RAM)   ← move to t3.medium if CloudWatch shows memory pressure
+Key pair:   create/select an SSH key pair (download the .pem, store it safely)
+Storage:    30 GB gp3 root volume
+IAM role:   attach an instance profile with AmazonSSMManagedInstanceCore
+            (enables SSM Session Manager + Parameter Store — needed in Phase 2)
 ```
 
-### B2. Initial server hardening
+### B2. Elastic IP (stable public address)
+```
+EC2 → Elastic IPs → Allocate → Associate with the udaya-backend instance.
+```
+Point the Cloudflare DNS A record for `api.udayalms.com` at this IP (Phase C). Without an Elastic
+IP the public IP changes on every stop/start. Free while attached to a running instance.
+
+### B3. Security group (firewall)
+```
+Inbound:
+  22/tcp    SSH    → MY_ADMIN_IP/32 only   (best: skip 22 entirely, use SSM Session Manager)
+  80/tcp    HTTP   → Cloudflare IP ranges  (ACME challenge / http→https redirect)
+  443/tcp   HTTPS  → Cloudflare IP ranges  (https://www.cloudflare.com/ips/)
+Outbound: allow all (must reach Supabase, R2, FCM, Zoom, package mirrors).
+Never open 8001 — FastAPI binds to 127.0.0.1 only, behind the reverse proxy.
+```
+
+### B4. Connect and harden
 ```bash
-ssh root@YOUR_CX33_IP
+ssh -i udaya.pem ubuntu@YOUR_ELASTIC_IP        # or: aws ssm start-session --target i-xxxxxxxx
 
 # Update everything
-apt update && apt upgrade -y
+sudo apt update && sudo apt upgrade -y
 
-# Create non-root user
-adduser udaya
-usermod -aG sudo udaya
+# Automatic security updates + brute-force protection
+sudo apt install -y unattended-upgrades fail2ban
+sudo dpkg-reconfigure -plow unattended-upgrades
 
-# Disable root SSH login
-sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-systemctl restart sshd
-
-# Basic firewall
-ufw allow 22      # SSH
-ufw allow 80      # HTTP (Cloudflare → Coolify → backend)
-ufw allow 443     # HTTPS
-ufw allow 8000    # Coolify dashboard (restrict to your IP only in production)
-ufw allow 8443    # Jitsi Meet
-ufw allow 3478    # Jitsi STUN/TURN
-ufw enable
+# Optional host firewall (the security group is the primary gate; this is belt-and-suspenders)
+sudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw --force enable
 ```
+On Ubuntu the default `ubuntu` user is already non-root with sudo — no need to create one or to
+touch root SSH (key-only login is the AMI default).
 
-### B3. Install Coolify (your free deploy dashboard)
+### B5. Install Docker + Compose
 ```bash
-curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
-# Visit http://YOUR_CX33_IP:8000
-# Create admin account → this is how you deploy everything without SSH commands
-```
-Coolify runs as Docker containers. It manages: FastAPI backend, PgBouncer, Redis, Jitsi — all from one dashboard.
-
-### B4. Install PostgreSQL 16
-```bash
-# Install
-apt install -y postgresql-16 postgresql-contrib-16
-
-# Secure it immediately
-sudo -u postgres psql
-
--- Inside psql:
-ALTER USER postgres PASSWORD 'STRONG_PASSWORD_HERE_64_CHARS';
-CREATE DATABASE udaya_lms;
-CREATE USER udaya_app WITH ENCRYPTED PASSWORD 'APP_PASSWORD_HERE';
-GRANT ALL PRIVILEGES ON DATABASE udaya_lms TO udaya_app;
-\q
-
-# Configure PostgreSQL to listen on localhost only (not public internet)
-# /etc/postgresql/16/main/postgresql.conf:
-listen_addresses = 'localhost'
-
-# /etc/postgresql/16/main/pg_hba.conf — allow local connections:
-local   all   all   md5
-host    all   all   127.0.0.1/32   md5
-
-systemctl restart postgresql
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu      # log out / back in for group membership to apply
+docker --version && docker compose version
 ```
 
-Your `DATABASE_URL` in backend will be:
+### B6. Database — nothing to install (managed Supabase)
+The database stays on **managed Supabase** — do **not** install Postgres, PgBouncer, or Redis on
+this box in Phase 1. The schema, RLS policies, the `student_questions` view (strips `correct_idx`
+so students never see answers), and the `submit_test_attempt` scoring RPC already live in your
+Supabase project. If any are missing, run them once in the **Supabase SQL Editor**:
 ```
-postgresql://udaya_app:APP_PASSWORD@127.0.0.1:6432/udaya_lms
+backend/schema.sql
+backend/optimize_indexes.sql
 ```
-Port **6432** = PgBouncer (not 5432 direct). Never connect FastAPI directly to Postgres.
-
-### B5. Install PgBouncer (connection pooler — critical)
-```bash
-apt install -y pgbouncer
-
-# /etc/pgbouncer/pgbouncer.ini:
-[databases]
-udaya_lms = host=127.0.0.1 port=5432 dbname=udaya_lms
-
-[pgbouncer]
-listen_addr = 127.0.0.1
-listen_port = 6432
-auth_type = md5
-auth_file = /etc/pgbouncer/userlist.txt
-pool_mode = transaction        # transaction mode: safest for FastAPI async
-max_client_conn = 200          # max connections from FastAPI workers
-default_pool_size = 20         # actual connections to Postgres
-min_pool_size = 5
-reserve_pool_size = 5
-server_idle_timeout = 600
-
-# /etc/pgbouncer/userlist.txt:
-"udaya_app" "md5HASH_OF_PASSWORD"
-
-systemctl enable pgbouncer && systemctl start pgbouncer
+The only Supabase value the EC2 box itself needs (for the weekly backup script in Phase I) is the
+pooler connection string — the app code talks to Supabase over HTTPS via `SUPABASE_*` keys, not
+this URL:
 ```
-Why this matters: FastAPI with 4 workers each keeping 5 connections = 20 connections. Without PgBouncer, 100 concurrent requests = 100 Postgres connections = server crash. PgBouncer pools them to 20 real connections safely.
-
-### B6. Install Redis (cache + notification queue)
-```bash
-apt install -y redis-server
-
-# /etc/redis/redis.conf:
-bind 127.0.0.1       # localhost only, never public
-maxmemory 512mb
-maxmemory-policy allkeys-lru
-
-systemctl enable redis && systemctl start redis
-```
-Use Redis for: OTP cache (5-min TTL), session tokens, dashboard query cache (30-sec TTL), FCM notification job queue.
-
-### B7. Run schema and RPC SQL
-```bash
-psql -U udaya_app -d udaya_lms -h 127.0.0.1 -f backend/schema.sql
-psql -U udaya_app -d udaya_lms -h 127.0.0.1 -f backend/optimize_indexes.sql
-
-# Critical security SQL — run these BEFORE any students use the app:
-# 1. student_questions view (strips correct_idx — students never see answers)
-psql -U udaya_app -d udaya_lms -h 127.0.0.1 << 'SQL'
-CREATE OR REPLACE VIEW student_questions AS
-SELECT id, test_id, question, options, order_num FROM questions;
-SQL
-
-# 2. submit_test_attempt function (server-side scoring — correct_idx stays server-only)
-# Full SQL is in README.md Phase 4 Step 4.3
+DATABASE_URL=postgresql://postgres.<project-ref>:<db-password>@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
 ```
 
 ---
 
-## 4. PHASE C — Deploy FastAPI backend via Coolify
+## 4. PHASE C — Deploy FastAPI backend on EC2 (Docker + Caddy)
 
-### C1. Dockerfile for backend/
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8001
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "4"]
-```
+### C1. Use the existing repo Dockerfile (single worker)
+The repo already ships a working `Dockerfile` (Python 3.11-slim; installs `postgresql-client` +
+`libmagic1`; runs `uvicorn main:app`). Keep it as-is. Its default is **one** uvicorn worker — and
+that is required: the WebSocket connection manager plus the in-memory OTP / rate-limit / cache state
+all live inside a single process. **Do not add `--workers 2+`** until Phase C-SCALE moves that state
+to Redis (each extra worker is a separate process and would silently break broadcasts and OTP).
 
-### C2. Health check endpoint in main.py
+### C2. Health check — already implemented
+`GET /api/health` already exists and returns `{"status":"ok","database":"connected"}`. Use this path
+for the reverse-proxy / UptimeRobot check now, and for the ALB target-group check in Phase 2. No
+code change needed — ignore the `/health` path mentioned in older drafts.
+
+### C3. CORS — tighten before first deploy
+The backend currently ships `allow_origins=["*"]`. Lock it to your real origins in `backend/main.py`:
 ```python
-@app.get("/health")
-async def health():
-    return {"status": "ok", "version": "1.0.0"}
-```
-
-### C3. CORS — update before first deploy
-```python
-from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://app.udayalms.com",
         "https://udayalms.com",
-        "http://localhost:5173",   # local dev only
+        "http://localhost:3001",   # local Vite dev only
     ],
-    allow_credentials=True,
+    allow_credentials=False,       # the app sends the token in an Authorization header, not cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
 ```
 
-### C4. Coolify deploy steps
-```
-Coolify → Sources → Connect GitHub App → authorize Udaya_LMS (private repo)
-New Project → Add Resource → Application
-  Base directory: /backend
-  Build pack: Dockerfile
-  Port: 8001
-  Domain: api.udayalms.com
-  Health check: /health
-  Auto-deploy on push: ON
+### C4. Reverse proxy + HTTPS (Caddy + Cloudflare Origin cert)
+Cloudflare proxies `api.udayalms.com` → the Elastic IP. Set Cloudflare **SSL/TLS → Full (strict)**
+and install a Cloudflare **Origin Certificate** on the box so the CF→origin hop is encrypted and
+trusted. Run the API and Caddy as containers with Compose.
+
+`/opt/udaya/docker-compose.yml`:
+```yaml
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment: [ "PORT=8001" ]
+    expose: ["8001"]            # internal only — never published to the host's public IP
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on: [api]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./cf-origin:/etc/caddy/cf-origin:ro     # cert.pem + key.pem from Cloudflare
+    restart: unless-stopped
 ```
 
-### C5. Environment variables in Coolify
+`/opt/udaya/Caddyfile`:
+```
+api.udayalms.com {
+    tls /etc/caddy/cf-origin/cert.pem /etc/caddy/cf-origin/key.pem
+    reverse_proxy api:8001
+}
+```
+WebSockets pass through `reverse_proxy` automatically — no extra config for `/api/ws/...`.
+
+### C5. Bring it up
+```bash
+sudo mkdir -p /opt/udaya && sudo chown ubuntu:ubuntu /opt/udaya && cd /opt/udaya
+git clone <your-private-repo-url> .            # or copy backend/ + Dockerfile here
+# create .env (next step) + cf-origin/cert.pem + cf-origin/key.pem, then:
+docker compose up -d --build
+docker compose logs -f api                     # watch startup
+curl -sf https://api.udayalms.com/api/health   # → {"status":"ok","database":"connected"}
+```
+
+One-command redeploy on new code (`/opt/udaya/deploy.sh`):
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+cd /opt/udaya
+git pull --ff-only
+docker compose up -d --build
+docker image prune -f
+```
+(Phase 2 replaces this pull-and-build with GitHub Actions → ECR → SSM; see Phase C-SCALE.)
+
+### C6. Environment variables (`/opt/udaya/.env`, chmod 600)
+Mirror the **real** backend config. There is no custom `SECRET_KEY`/JWT or `REDIS_URL` in Phase 1 —
+auth is Supabase, and Redis only arrives in Phase 2:
 ```env
-# Database — PgBouncer pooler, NOT direct Postgres
-DATABASE_URL=postgresql://udaya_app:APP_PASSWORD@127.0.0.1:6432/udaya_lms
+# Supabase (database + auth + storage) — REQUIRED
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_KEY=<anon-key>
+SUPABASE_SERVICE_KEY=<service-role-key>
 
-# Auth
-SECRET_KEY=64-char-hex-from-openssl-rand
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
+# Zoom (live classes) — REQUIRED for live-class features
+ZOOM_ACCOUNT_ID=...
+ZOOM_CLIENT_ID=...
+ZOOM_CLIENT_SECRET=...
+ZOOM_SDK_KEY=...
+ZOOM_SDK_SECRET=...
+ZOOM_WEBHOOK_SECRET_TOKEN=...
 
-# Redis
-REDIS_URL=redis://127.0.0.1:6379/0
+# Email + AI
+RESEND_API_KEY=re_...
+GEMINI_API_KEY=...
 
-# AI
-GEMINI_API_KEY=your-key
-
-# Firebase FCM
-FIREBASE_SERVER_KEY=AAAAxxx...
-
-# Cloudflare R2
-R2_ACCOUNT_ID=your-account-id
-R2_ACCESS_KEY=your-access-key
-R2_SECRET_KEY=your-secret-key
-R2_PUBLIC_BUCKET=udaya-public
+# Optional — Cloudflare R2 (public files + backups). Omit to use the Supabase Storage fallback.
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY=...
+R2_SECRET_KEY=...
 R2_PRIVATE_BUCKET=udaya-private
-R2_ENDPOINT=https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
 
-# Sentry
-SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
-
-# YouTube
-YOUTUBE_API_KEY=your-data-api-key
+# Optional — error monitoring + weekly DB backup target
+SENTRY_DSN=https://...
+DATABASE_URL=postgresql://postgres.<ref>:<pw>@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
 ```
+After the box is healthy: update the **Zoom webhook URL** to `https://api.udayalms.com/...`, and set
+the frontend's `VITE_API_URL=https://api.udayalms.com/api` (Cloudflare Pages env → redeploy).
+
+---
+
+## 4b. PHASE C-SCALE — One EC2 → Auto Scaling Group (the 3,000-student path)
+
+Do this when one box is no longer enough — sustained CPU > ~60% in CloudWatch, or you want
+redundancy (no single point of failure). The AWS infra (ALB + ASG + ElastiCache) is the *easy*
+half. The hard half is **code**: the backend currently keeps correctness-critical state inside one
+Python process. **Those changes must land before `desired > 1` — or even before raising uvicorn
+`--workers` above 1 — otherwise things break silently.**
+
+### The blocker — per-process state in `backend/main.py`
+
+| State (location) | What breaks with 2+ processes/instances | Severity | Fix |
+|---|---|---|---|
+| `ConnectionManager.active_connections` (WebSocket) | A broadcast only reaches clients on the *same* process; others never get it | **Critical** | Redis pub/sub fan-out |
+| `_whatsapp_scheduler_loop` (background loop) | Runs on **every** instance → each due job sends WhatsApp messages **N times** to students | **Critical** | Distributed lock — one runner only |
+| `_otp_pending` (2-step verify) | OTP started on instance A can't be verified on B → "OTP not found" | High | Redis key w/ TTL |
+| `_login_attempts` (rate limiter) | Per-process → attacker gets 8×N login attempts via round-robin | Medium | Redis counter |
+| `_wa_batches` (WhatsApp send progress) | Status poll 404s if it lands on a different instance | Medium | Redis / Supabase row |
+| `broadcasts.json`, `trusted_devices.json`, `ai_insights_cache.json` | Local disk, not shared, wiped on instance replace | Medium | Supabase tables / Redis |
+| `teacher_settings.json` | Already write-through to DB — file is just a cache | Low | Rely on DB; keep file optional |
+| `_broadcast_cleanup_loop`, `_deferred_startup_migrations` | Run on every instance (idempotent but wasteful/noisy) | Low | Same distributed lock |
+| `_auth_cache` (30 s TTL) | Per-process; eventual consistency is acceptable | Low | Optional Redis |
+
+### Step 1 — ElastiCache (Redis)
+`cache.t4g.micro`, same VPC/subnets as the instances; its security group allows `6379` **from the
+app instances' security group only**. Add `REDIS_URL=redis://<endpoint>:6379/0` to config. Add
+`redis` (async client) to `requirements.txt`.
+
+### Step 2 — Code changes (the prerequisites — do these FIRST)
+1. **WebSocket fan-out via Redis.** In `ConnectionManager.broadcast_to_standard`, `PUBLISH` the
+   payload to channel `broadcasts:{standard_id}` instead of writing only to local sockets. On
+   startup each instance runs a Redis `SUBSCRIBE` task that relays incoming messages to its *own*
+   connected sockets. Sketch:
+   ```python
+   # publish (replaces the direct local send)
+   await redis.publish(f"broadcasts:{standard_id}", json.dumps(payload))
+
+   # one subscriber task per instance, started in startup_event()
+   async def _ws_relay():
+       pubsub = redis.pubsub()
+       await pubsub.psubscribe("broadcasts:*")
+       async for msg in pubsub.listen():
+           if msg["type"] == "pmessage":
+               std = msg["channel"].split(":", 1)[1]
+               await manager.fan_out_local(std, json.loads(msg["data"]))
+   ```
+2. **Move ephemeral state to Redis** (keys with TTL): `_otp_pending`, `_login_attempts`,
+   `_wa_batches`, optionally `_auth_cache`.
+3. **Retire the local JSON files**: `broadcasts.json` and `teacher_settings.json` already write
+   through to Supabase — stop reading the file as source of truth; move `trusted_devices.json` to a
+   Supabase table and `ai_insights_cache.json` to Redis.
+4. **Single-runner background loops.** Guard `_whatsapp_scheduler_loop` (and the two cleanup/
+   migration loops) with a Redis lease so exactly one instance runs them:
+   ```python
+   # only the lease holder runs the scheduler tick
+   if await redis.set("lock:wa-scheduler", INSTANCE_ID, nx=True, ex=90):
+       await _wa_scheduler_tick()
+   ```
+   (Alternative: run schedulers only on a single designated instance, or move them to EventBridge +
+   a dedicated worker outside the ASG.)
+5. **Health check depth.** Make `/api/health` also ping Redis and return `503` if it's down, so the
+   ALB drains a broken instance.
+
+> Until Step 2 is fully done, you can buy time by leaving the ASG at `desired = 1` (the ALB still
+> gives you zero-downtime deploys + health-based replacement) and/or enabling ALB **stickiness** as
+> a stopgap for OTP/rate-limit. Stickiness does **not** fix WebSocket fan-out or duplicate scheduler
+> sends — Steps 1 and 4 are mandatory before true multi-instance.
+
+### Step 3 — Image delivery via ECR
+GitHub Actions builds the image and pushes to **ECR** on each `main` push. Instances pull the
+tagged image at boot — no more `git pull && build` on the box.
+
+### Step 4 — Launch template
+`t3.small`/`t3.medium`, IAM instance profile (SSM + ECR pull + CloudWatch), and **user-data** that:
+reads the `.env` from **SSM Parameter Store**, `docker run` (or compose) the ECR image. Once Step 2
+is done you may also set uvicorn `--workers` to match vCPUs for more throughput per box.
+
+### Step 5 — Application Load Balancer
+HTTPS `:443` listener with an **ACM** cert for `api.udayalms.com`; target group → instance port,
+health check `/api/health` (30 s, healthy 2 / unhealthy 3); **idle timeout 300 s** (WebSockets);
+stickiness **off** once state is externalized. The ALB supports WebSockets natively.
+
+### Step 6 — Auto Scaling Group
+Launch template + ALB target group; **min 1 · desired 1–2 · max 10**; target-tracking policies on
+**CPU 60%** and **ALBRequestCountPerTarget**; health-check type **ELB**; instance-scale-in
+protection during deploys.
+
+### Step 7 — DNS cutover
+Cloudflare: repoint `api.udayalms.com` from the Elastic IP **A record** to a **CNAME → the ALB DNS
+name**. ACM is publicly trusted, so Cloudflare **Full (strict)** keeps working (or set the record to
+DNS-only and let ACM terminate TLS at the ALB).
+
+> **Order matters:** finish Step 2 → set up Steps 1,3–7 → only then raise ASG `desired` above 1.
 
 ---
 
 ## 5. PHASE D — Auth: FastAPI + JWT (replaces Supabase Auth)
+
+> ⚠️ **SUPERSEDED.** Auth stays on **managed Supabase** (locked decision) — the app keeps using
+> `supabase.auth.*` and validates tokens with `supabase.auth.get_user(token)`. This custom-JWT
+> section is left over from the abandoned self-hosted plan; do **not** build it.
 
 Since you are off Supabase, you handle auth yourself in FastAPI.
 
@@ -486,7 +600,8 @@ Since you are off Supabase, realtime is handled by FastAPI WebSockets.
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List
 
-# In-memory connection store (fine for single-server deployment)
+# In-memory store — OK for Phase 1 (ONE process/worker). Multi-instance OR multi-worker
+# needs Redis pub/sub — see Phase C-SCALE Step 1. (Real manager lives in backend/main.py.)
 class BroadcastManager:
     def __init__(self):
         self.connections: Dict[str, List[WebSocket]] = {}
@@ -862,7 +977,10 @@ Free tier: 5,000 errors/month. More than enough for a tuition LMS.
 
 ---
 
-## 12. PHASE K — Jitsi Meet self-hosted on same CX33
+## 12. PHASE K — Jitsi Meet self-hosted (SUPERSEDED)
+
+> ⚠️ **SUPERSEDED.** Do not self-host Jitsi. The app uses **Zoom** for live classes (`ZOOM_*` env
+> vars), and there is no CX33 — the backend is a single EC2 box. Kept only for historical reference.
 
 ```bash
 # Install Jitsi Meet on the same CX33 server
@@ -974,14 +1092,14 @@ Custom domain → Pages project Settings → Custom domains → `app.udayalms.co
 5. Wait 1–24h for propagation
 
 DNS records in Cloudflare (all Proxied ✅):
-  A      @          YOUR_CX33_IP           → marketing site (Coolify)
-  A      api        YOUR_CX33_IP           → FastAPI backend (Coolify)
-  A      meet       YOUR_CX33_IP           → Jitsi Meet
+  A      api        EC2_ELASTIC_IP         → FastAPI backend (Phase 1)
+                    ── Phase 2: change to  CNAME api → <alb-dns-name>  (ASG behind ALB)
   CNAME  app        udaya-lms.pages.dev    → LMS frontend (Cloudflare Pages)
+  CNAME  @          udaya-mkt.pages.dev    → marketing site (Cloudflare Pages, optional)
   CNAME  www        udayalms.com           → redirect to root
   CNAME  files      (auto-created by R2 custom domain setup)
 
-SSL/TLS → Full (strict)
+SSL/TLS → Full (strict)   (origin uses a Cloudflare Origin cert on EC2 in Phase 1; ACM on the ALB in Phase 2)
 ```
 That's it. HTTPS is automatic, free, never needs renewal, covers all subdomains.
 
@@ -990,7 +1108,7 @@ That's it. HTTPS is automatic, free, never needs renewal, covers all subdomains.
 ## 15. Post-deploy verification checklist (run all 18 before inviting students)
 
 ```
-□ 1.  https://api.udayalms.com/health → {"status":"ok"}
+□ 1.  https://api.udayalms.com/api/health → {"status":"ok","database":"connected"}
 □ 2.  https://api.udayalms.com/docs → FastAPI interactive docs load
 □ 3.  https://app.udayalms.com/login → page loads with padlock (SSL valid)
 □ 4.  Teacher login → JWT returned → dashboard loads with real DB data
@@ -1098,7 +1216,7 @@ play.google.com/console
 | Parental consent | DPDP requires consent for minors' data | Add line to paper admission form | ₹0 |
 | Udyam registration | Legal business identity, opens current account | udyamregistration.gov.in, 10 min | ₹0 |
 
-Privacy policy must state: what you collect (name, phone, marks, attendance, activity), why, where stored (Hetzner server, India region), retention period, how to request deletion (your email).
+Privacy policy must state: what you collect (name, phone, marks, attendance, activity), why, where stored (AWS Mumbai `ap-south-1` + managed Supabase, India region), retention period, how to request deletion (your email).
 
 Parental consent line for admission form:
 > *"I, parent/guardian of __________, consent to my child's data (name, phone, marks, attendance, learning activity) being stored and processed in the Udaya LMS platform for educational purposes. I understand I may request deletion by contacting udayacentre@gmail.com. Signature: ______ Date: ______"*
@@ -1227,19 +1345,22 @@ This converts better than anything about recorded classes or videos.
 
 ## 21. Cost at every student scale
 
-| Students | Hetzner | R2 | FCM | Jitsi | DB backup | Domain | Total/mo |
-|---|---|---|---|---|---|---|---|
-| Testing | ₹900 CX33 | ₹0 | ₹0 | ₹0 on CX33 | ₹0 | ₹67 | **~₹967** |
-| 300 | ₹900 CX33 | ₹0 | ₹0 | ₹0 | ₹0 | ₹67 | **~₹967** |
-| 500 | ₹900 CX33 | ₹0 | ₹0 | ₹0 | ₹0 | ₹67 | **~₹967** |
-| 1,000 | ₹900 CX33 | ~₹13 | ₹0 | ₹0 | ₹0 | ₹67 | **~₹980** |
-| 2,000 | ₹1,800 CX43 | ~₹38 | ₹0 | ₹0 | ₹0 | ₹67 | **~₹1,905** |
-| 5,000 | ₹4,500 CCX23 | ~₹108 | ₹0 | separate CX33 ₹900 | ₹0 | ₹67 | **~₹5,575** |
-| 10,000 | ₹9,000 2×CCX33 | ~₹203 | ₹0 | CCX23 ₹4,500 | ₹0 | ₹420 LB + ₹67 | **~₹14,190** |
+Figures are approximate (ap-south-1, on-demand, ~₹85/$). EBS + modest data-transfer folded in. A
+1-year Compute Savings Plan cuts EC2 ~40%. FCM/Sentry are free tiers and omitted.
 
-**No Supabase Pro bill = saves ₹2,100/month vs previous plan.**
-WhatsApp (WANotifier): ₹0.145/student one-time at enrollment. 300 students = ₹43.50/year.
-AI suggestions (Gemini): ~₹0–5/month.
+| Students | Phase | EC2 compute | ALB + Redis | Supabase Pro | R2 | Domain | Total/mo (≈) |
+|---|---|---|---|---|---|---|---|
+| Testing | 1 | t3.small ~₹1,250 | — | ₹2,100 | ₹0 | ₹67 | **~₹3,600** |
+| 300 | 1 | t3.small ~₹1,250 | — | ₹2,100 | ₹0 | ₹67 | **~₹3,600** |
+| 500 | 1 | t3.small ~₹1,250 | — | ₹2,100 | ₹0 | ₹67 | **~₹3,600** |
+| 1,000 | 1 | t3.medium ~₹2,550 | — | ₹2,100 | ~₹13 | ₹67 | **~₹4,950** |
+| 2,000 | 2 | 1–2× t3.medium ~₹2,550–5,100 | ~₹2,700 | ₹2,100 | ~₹38 | ₹67 | **~₹7,500–10,000** |
+| 5,000 | 2 | ASG 2–4× t3.medium ~₹5,100–10,200 | ~₹2,700 | ₹2,100 + compute add-on | ~₹108 | ₹67 | **~₹10,000–15,500** |
+| 10,000 | 2 | ASG 4–8× ~₹10,000–20,000 | ~₹2,700 + LCU | larger Supabase compute | ~₹203 | ₹67 | **~₹16,000–25,000** |
+
+Supabase Pro (~₹2,100/mo) is a fixed line from day one — it is the database/auth/storage and is
+unchanged by this AWS move. WhatsApp (WANotifier): ₹0.145/student one-time at enrollment (300
+students = ₹43.50/year). AI suggestions (Gemini): ~₹0–5/month.
 One-time costs: Play Store $25 (~₹2,100) · Udyam free · domain ₹800/yr.
 
 ---
@@ -1248,25 +1369,30 @@ One-time costs: Play Store $25 (~₹2,100) · Udyam free · domain ₹800/yr.
 
 ### Weekly (5 minutes)
 ```bash
-ssh udaya@HETZNER_IP
-sudo apt update && sudo apt upgrade -y
-# Check Coolify dashboard → all services green
-# Check Sentry → no new error spikes
-# Check logs: docker logs CONTAINER_ID --tail 50
+ssh -i udaya.pem ubuntu@ELASTIC_IP          # or: aws ssm start-session --target i-xxxx
+sudo apt update && sudo apt upgrade -y       # (unattended-upgrades already handles security)
+docker compose -f /opt/udaya/docker-compose.yml ps          # all containers Up
+docker compose -f /opt/udaya/docker-compose.yml logs --tail 50 api
+# Check Sentry → no new error spikes; CloudWatch → CPU/mem trend healthy
 ```
 
 ### Code updates (automated after setup)
 ```
 Frontend push → Cloudflare Pages auto-deploys in ~60s
-Backend push  → Coolify webhook auto-builds and restarts
+Backend (Phase 1) → ssh in → /opt/udaya/deploy.sh        (git pull + rebuild)
+Backend (Phase 2) → push to main → GitHub Actions → ECR → ASG instance refresh
 Rollback frontend: Pages → Deployments → last good → Rollback (instant)
-Rollback backend: Coolify → Deployments → previous green → Redeploy
+Rollback backend (Phase 1): git -C /opt/udaya checkout <prev-sha> && /opt/udaya/deploy.sh
+Rollback backend (Phase 2): deploy the previous ECR image tag → ASG instance refresh
 ```
+> Retire `.github/workflows/keep-alive.yml` — it exists only to stop the Render free tier sleeping.
+> EC2 never sleeps. Use UptimeRobot (or a CloudWatch alarm on ALB/target health) for liveness alerts.
 
 ### Monthly (10 minutes)
 ```
 □ R2 storage GB (slow growth, lifecycle auto-archives)
-□ Hetzner Coolify graphs: CPU/RAM should be <60% on CX33
+□ CloudWatch: EC2 CPU/RAM should be <60% (Phase 1) · ASG scaling healthy (Phase 2)
+□ AWS Cost Explorer: month-to-date spend tracks the §21 table (watch for surprise data-transfer)
 □ Play Console: crash-free rate should be >99%
 □ Sentry: review any recurring errors
 □ Check Sunday backup exists: R2 → backups/db/ → latest .sql.gz file
@@ -1319,15 +1445,15 @@ WEEK 1 — Security + paperwork
   Day 4: Buy GoDaddy domain → paste Cloudflare nameservers (propagation starts)
   Day 5: Sentry accounts created + DSNs copied
 
-WEEK 2 — Server setup
-  Day 1: Buy Hetzner CX33 → SSH → server hardening (firewall, non-root user)
-  Day 2: Install PostgreSQL 16 → PgBouncer → Redis → run schema.sql + indexes
-          Run student_questions view + submit_test_attempt RPC SQL
-  Day 3: Install Coolify → connect GitHub → deploy FastAPI backend
-          Test: https://api.udayalms.com/health → ok
-  Day 4: Install Jitsi Meet (meet.udayalms.com)
-          Cron job for Sunday backup → manual test run
-  Day 5: Cloudflare Pages → deploy frontend
+WEEK 2 — Server setup (AWS, Phase 1)
+  Day 1: Launch EC2 t3.small (ap-south-1) + Elastic IP + security group → harden (Phase B)
+  Day 2: Confirm Supabase has schema + RLS + student_questions view + submit_test_attempt RPC
+          (run schema.sql / optimize_indexes.sql in the Supabase SQL Editor if missing)
+  Day 3: Install Docker → docker compose up (api + Caddy) → tighten CORS
+          Test: https://api.udayalms.com/api/health → {"status":"ok"}
+  Day 4: Cloudflare Origin cert + DNS A record → Full(strict)
+          Cron job for Sunday DB backup (pg_dump → R2) → manual test run
+  Day 5: Cloudflare Pages → deploy frontend (VITE_API_URL → https://api.udayalms.com/api)
           DNS records → SSL Full(strict) → custom domains
 
 WEEK 3 — Storage + notifications
@@ -1338,7 +1464,7 @@ WEEK 3 — Storage + notifications
   Day 3: Sentry DSNs → integrate frontend + backend
           UptimeRobot monitor on api.udayalms.com
   Day 4: Run all 18 verification steps
-  Day 5: Pilot: 5–10 real students + teacher → watch Sentry + Coolify logs daily
+  Day 5: Pilot: 5–10 real students + teacher → watch Sentry + container logs (docker compose logs) daily
 
 WEEK 4 — Android app
   Day 1: Capacitor setup → npm run build → npx cap copy android
@@ -1366,21 +1492,25 @@ EVERY JUNE — Academic year cycle (Section 22)
 
 ## 24. Emergency procedures
 
-### Backend down (UptimeRobot alert emails you)
+### Backend down (UptimeRobot / CloudWatch alarm emails you)
 ```bash
-# Fix 1: Coolify dashboard → app → Restart  (fixes 80% of issues, 30 seconds)
+# Fix 1: restart the containers (fixes most issues, ~30 s)
+ssh -i udaya.pem ubuntu@ELASTIC_IP          # or: aws ssm start-session --target i-xxxx
+cd /opt/udaya && docker compose restart
 
-# Fix 2: Coolify itself unreachable
-ssh udaya@HETZNER_IP
-sudo docker ps -a                   # see which container is stopped
-sudo docker restart CONTAINER_ID
-sudo systemctl restart docker       # if docker daemon crashed
+# Fix 2: a container won't come up
+docker compose ps                            # see what's down
+docker compose logs --tail 100 api
+sudo systemctl restart docker                # if the docker daemon itself crashed
 
-# Fix 3: Server completely frozen
-# Hetzner Cloud Console → server → Power → Force Reboot (last resort)
+# Fix 3: instance frozen / unreachable
+# EC2 Console → Instances → Reboot (or Stop/Start — the Elastic IP stays attached)
 
-# Fix 4: Bad code deploy
-# Coolify → Deployments → last green build → Redeploy (instant rollback)
+# Fix 4: bad code deploy
+git -C /opt/udaya checkout <previous-good-sha> && /opt/udaya/deploy.sh   # Phase 1
+# Phase 2: redeploy the previous ECR image tag → ASG instance refresh
+
+# Phase 2 only: the ALB auto-replaces an instance that fails /api/health — usually no action needed
 ```
 
 ### Frontend broken after push
@@ -1390,17 +1520,18 @@ Done in 30 seconds. Zero downtime.
 ```
 
 ### Database corruption / data mistake
+The database is **managed Supabase** — restore there, not on the EC2 box.
 ```bash
-# Restore from last Sunday backup
-ssh udaya@HETZNER_IP
-# Download backup from R2
+# Preferred: Supabase Dashboard → Database → Backups → Point-in-Time Recovery (Pro plan)
+#   pick a timestamp just before the mistake → Restore.
+
+# Fallback: restore the weekly pg_dump (Phase I) from R2 into Supabase
 aws s3 cp s3://udaya-private/backups/db/udaya_lms_LATEST.sql.gz . \
   --endpoint-url https://ACCOUNT_ID.r2.cloudflarestorage.com
 gunzip udaya_lms_LATEST.sql.gz
-# STOP the backend first (prevent writes during restore)
-sudo docker stop FASTAPI_CONTAINER
-psql -U udaya_app -d udaya_lms -h 127.0.0.1 -f udaya_lms_LATEST.sql
-sudo docker start FASTAPI_CONTAINER
+# pause writes first (Phase 1: docker compose stop api  /  Phase 2: set ASG desired = 0)
+psql "$DATABASE_URL" -f udaya_lms_LATEST.sql       # DATABASE_URL = Supabase pooler
+# then bring the backend back up
 ```
 
 ### Database running slow under load
@@ -1420,11 +1551,11 @@ ORDER BY n_distinct DESC;
 
 ### Leaked key suspected
 ```bash
-# 1. FastAPI SECRET_KEY: openssl rand -hex 32 → update Coolify env → restart
-# 2. PostgreSQL password: ALTER USER udaya_app PASSWORD 'NEW_PASSWORD'
-#                        → update DATABASE_URL in Coolify → restart
-# 3. Any API key: regenerate in its dashboard → update Coolify → restart
-# Total time: 5 minutes, zero user downtime if done in this order
+# 1. Supabase service_role key: Supabase → Settings → API → roll → update .env / SSM → restart
+# 2. Any API key (Zoom / Gemini / Resend / R2): regenerate in its dashboard, then update + restart
+#    Phase 1: edit /opt/udaya/.env  →  docker compose up -d
+#    Phase 2: update SSM Parameter Store  →  ASG instance refresh
+# Total time: ~5 minutes, zero user downtime if done in this order
 ```
 
 ### Android app crashed

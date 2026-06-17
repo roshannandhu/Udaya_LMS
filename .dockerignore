@@ -1,0 +1,24 @@
+# Keep the Docker build context small and secret-free.
+.git/
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+env/
+node_modules/
+frontend/
+android/
+ios/
+evolution-api/
+screenshots/
+*.log
+*.md
+
+# Secrets / runtime state — injected at runtime via env_file, never baked into the image.
+backend/.env
+backend/teacher_settings.json
+backend/ai_insights_cache.json
+backend/whatsapp_config.json
+backend/trusted_devices.json
+broadcasts.json
+backend/broadcasts.json
