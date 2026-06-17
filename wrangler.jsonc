@@ -1,0 +1,18 @@
+{
+  // Cloudflare Workers Static Assets config for the Udaya frontend.
+  // The GitHub-connected build runs `npx wrangler deploy`, which:
+  //   1. runs the build below (installs deps + `vite build` in frontend/)
+  //   2. uploads frontend/dist as static assets and serves them
+  // SPA routing: unmatched paths fall back to index.html so React Router works.
+  // To change the backend the app calls, edit VITE_API_URL in the build command,
+  // commit, and push — Cloudflare auto-deploys.
+  "name": "udaya-learn",
+  "compatibility_date": "2025-01-01",
+  "build": {
+    "command": "cd frontend && npm install --legacy-peer-deps && VITE_API_URL=https://udaya-lms.onrender.com/api npm run build"
+  },
+  "assets": {
+    "directory": "./frontend/dist",
+    "not_found_handling": "single-page-application"
+  }
+}
