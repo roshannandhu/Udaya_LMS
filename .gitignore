@@ -13,10 +13,13 @@ broadcasts.json
 # Cloudflare Origin cert + key on the EC2 box — NEVER commit (private key).
 cf-origin/
 
-# NOTE: .env / .env.local are intentionally COMMITTED so collaborators can
-# `git clone` and run immediately against the shared Supabase project. See
-# SETUP.md. (Repo MUST stay private — these files contain the Supabase
-# service_role key which grants full DB access.)
+# backend/.env holds the Supabase service_role key + Zoom/Resend/Gemini secrets.
+# NOT committed — production secrets live only on the EC2 box
+# (/opt/udaya/backend/.env) and on local dev machines. Template: backend/.env.example
+backend/.env
+
+# frontend/.env.local (Supabase anon key + dev API URL) stays committed —
+# the anon key is public by design (it ships in the frontend bundle anyway).
 
 # teacher_settings.json holds a private AI (Gemini) API key — NOT committed
 # (GitHub push protection blocks it). Each user adds their own AI key in the
