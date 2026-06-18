@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import { useAuthStore, ROLES } from './lib/auth';
 import { useAppCache } from './store';
 import { useTheme } from './lib/theme';
+import useAndroidBackButton from './lib/useAndroidBackButton';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
@@ -202,6 +203,10 @@ function RoutedBoundary({ children }) {
 export default function App() {
   // Apply the saved/system theme as early as possible (sets html.dark).
   useEffect(() => { useTheme.getState().init(); }, []);
+  // Android APK: make the hardware Back button navigate the SPA instead of
+  // closing the app (no-op on web/iOS). Uses window history only, so it's safe
+  // to call here outside the Router context.
+  useAndroidBackButton();
   return (
     <BrowserRouter>
       <AuthHandler />

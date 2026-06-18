@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { MessageSquare, Pin, FileText, Loader2, Search, X } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
@@ -12,7 +11,6 @@ const formatChatDate = fmtChatDate;
 
 export default function StudentBroadcastsPage() {
   const { user } = useAuthStore();
-  const reduce = useReducedMotion();
   const [standard, setStandard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [broadcasts, setBroadcasts] = useState([]);
@@ -29,8 +27,11 @@ export default function StudentBroadcastsPage() {
   }, [user?.standard_id, user?.standard_name, user?.standard_emoji]);
 
   useEffect(() => {
+    // Jump (not smooth-scroll) to the latest message. A smooth scroll re-triggered
+    // every bubble's in-view animation, which read as flicker/jank; an instant jump
+    // is snappy and animation-free, like opening a real chat at the bottom.
     if (chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      chatBottomRef.current.scrollIntoView({ behavior: 'auto' });
     }
   }, [broadcasts.length]);
 
@@ -104,7 +105,7 @@ export default function StudentBroadcastsPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 lg:pb-0 h-[calc(100dvh-160px)] lg:h-[calc(100vh-64px)]">
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 lg:pb-0 lg:h-[calc(100vh-64px)]">
         <div className="lg:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin text-neutral-400" size={24} />
@@ -115,7 +116,7 @@ export default function StudentBroadcastsPage() {
 
   if (!standard) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 lg:pb-0 h-[calc(100dvh-160px)] lg:h-[calc(100vh-64px)]">
+      <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] pb-24 lg:pb-0 lg:h-[calc(100vh-64px)]">
         <div className="lg:hidden"><TopBar title="Class Updates" showSearch={false} /></div>
         <div className="px-5 py-16 text-center">
           <MessageSquare size={32} className="mx-auto mb-3 text-neutral-400" />
@@ -128,7 +129,7 @@ export default function StudentBroadcastsPage() {
   let currentGroup = null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] lg:pb-0 h-[calc(100dvh-160px)] lg:h-[calc(100vh-64px)]">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] lg:pb-0 lg:h-[calc(100vh-64px)]">
       <div className="lg:hidden flex-shrink-0"><TopBar title="Class Updates" showSearch={false} /></div>
       <div className="flex flex-1 w-full max-w-[1000px] mx-auto bg-[#efeae2] md:border-x md:border-black/5 shadow-sm relative flex-col min-h-0">
         
@@ -193,13 +194,7 @@ export default function StudentBroadcastsPage() {
                       </div>
                     )}
 
-                    <motion.div
-                      className="flex flex-col max-w-[85%] md:max-w-[70%] self-start items-start mb-1.5 relative group"
-                      initial={reduce ? false : { opacity: 0, y: 14, scale: 0.98 }}
-                      whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                      viewport={{ once: true, margin: '-20px' }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-                    >
+                    <div className="flex flex-col max-w-[85%] md:max-w-[70%] self-start items-start mb-1.5 relative group">
                       <div className="relative w-fit max-w-full px-3 py-2 shadow-sm bg-white rounded-2xl rounded-tl-sm">
                         
                         {/* Pinned Indicator */}
@@ -270,7 +265,7 @@ export default function StudentBroadcastsPage() {
 
                       </div>
 
-                    </motion.div>
+                    </div>
                   </React.Fragment>
                 );
               })}

@@ -77,7 +77,11 @@ export default function StudentLayout() {
     // App-shell on phone (parity with TeacherLayout): lock to the dynamic
     // viewport and scroll the content, not the body, so the fixed bottom dock
     // can't drift when the mobile toolbar collapses. Desktop keeps body scroll.
-    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible">
+    // pt-[env(safe-area-inset-top)]: on the Android APK (edge-to-edge, targetSdk 36)
+    // the WebView draws under the status bar. Padding the shell top by the inset
+    // pushes TopNav/content/headers below the clock/network/notification icons.
+    // env() is 0 on desktop/non-notched, so this is inert there.
+    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[env(safe-area-inset-top)] lg:pt-0">
       <TopNav type="student" badges={badges} />
       {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
       <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-28 lg:pb-0">

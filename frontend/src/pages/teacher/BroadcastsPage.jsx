@@ -159,7 +159,7 @@ export default function BroadcastsPage() {
         />
       </div>
 
-      <div className="flex flex-1 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 h-[calc(100dvh-160px)] lg:h-[calc(100vh-120px)]">
+      <div className="flex flex-1 min-h-0 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 lg:h-[calc(100vh-120px)]">
 
         {/* Standards list pane (Sidebar) */}
         <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-[350px] lg:w-[400px] bg-white border-r border-neutral-200 flex-shrink-0`}>

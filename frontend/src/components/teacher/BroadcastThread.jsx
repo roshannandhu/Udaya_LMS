@@ -93,9 +93,11 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   }, [readDetailsModal]);
 
   useEffect(() => {
-    // Scroll to bottom when opening or receiving new messages
+    // Jump (instant) to the latest message when opening or on a new message. A
+    // smooth scroll caused visible scroll churn on long threads; an instant jump
+    // mirrors how a real chat opens pinned to the bottom.
     if (chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      chatBottomRef.current.scrollIntoView({ behavior: 'auto' });
     }
   }, [broadcasts.length, std?.id]);
 
