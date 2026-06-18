@@ -468,6 +468,7 @@ async def startup_event():
     asyncio.create_task(_deferred_startup_migrations())
     asyncio.create_task(_broadcast_cleanup_loop())
     asyncio.create_task(_whatsapp_scheduler_loop())
+    asyncio.create_task(_backup_scheduler_loop())
 
 
 # Models
@@ -3745,6 +3746,49 @@ def backfill_student_codes(force: bool = False, user = Depends(verify_token)):
         else:
             skipped += 1
     return {"updated": updated, "skipped": skipped}
+
+
+@app.post("/api/admin/backup-now")
+async def backup_now(user = Depends(verify_token)):
+    """Teacher-triggered immediate backup (full DB dump + students CSV → R2)."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not filestore.is_r2_enabled():
+        raise HTTPException(status_code=503, detail="Backups require Cloudflare R2 to be configured")
+    try:
+        produced = await asyncio.to_thread(_run_backups)
+        await asyncio.to_thread(_set_backup_state, {"last_run_at": time_module.time()})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {e}")
+    return {"status": "ok", "result": produced}
+
+
+@app.get("/api/admin/backups")
+async def list_backups(user = Depends(verify_token)):
+    """List recent backups in R2 with short-lived presigned download URLs."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not filestore.is_r2_enabled():
+        return {"backups": []}
+    bucket = os.environ.get("R2_PRIVATE_BUCKET", "")
+    items = []
+    for folder, label in (("backups/db/", "Database"), ("backups/students/", "Students CSV")):
+        objs = await asyncio.to_thread(lambda p=folder: filestore.list_private(p))
+        for o in objs:
+            key = o["key"]
+            url = await asyncio.to_thread(
+                lambda k=key: filestore.signed_url(service_supabase, bucket, k, 3600)
+            )
+            lm = o.get("last_modified")
+            items.append({
+                "filename": key.split("/")[-1],
+                "type": label,
+                "size": o.get("size", 0),
+                "modified": lm.isoformat() if hasattr(lm, "isoformat") else (str(lm) if lm else None),
+                "download_url": url,
+            })
+    items.sort(key=lambda x: x["filename"], reverse=True)  # newest first (timestamped names)
+    return {"backups": items}
 
 @app.patch("/api/students/me")
 def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_token)):
@@ -8847,6 +8891,94 @@ def save_teacher_settings(data: dict):
         pass
 
 
+# ─── BACKUPS (scheduler + manual) ──────────────────────────────────────────
+# Auto-backup cadence is driven by the `backup_frequency` setting (off/daily/
+# weekly/monthly), enforced by _backup_scheduler_loop(). Runtime state (last run
+# time) lives in the app_settings table under its own row so it survives redeploys
+# and never races teacher-settings writes. Backups go to R2 udaya-private via the
+# standalone scripts; old ones are pruned to keep storage bounded.
+
+_BACKUP_INTERVALS = {"daily": 86400, "weekly": 604800, "monthly": 2592000}
+_BACKUP_KEEP = 30  # keep newest N per folder
+
+
+def _get_backup_frequency() -> str:
+    f = (get_teacher_settings() or {}).get("backup_frequency", "daily")
+    return f if f in ("off", "daily", "weekly", "monthly") else "daily"
+
+
+def _get_backup_state() -> dict:
+    if not service_supabase:
+        return {}
+    try:
+        row = service_supabase.table("app_settings").select("data").eq("id", "backup_state").limit(1).execute()
+        return (row.data[0].get("data") if row.data else {}) or {}
+    except Exception:
+        return {}
+
+
+def _set_backup_state(d: dict):
+    if not service_supabase:
+        return
+    try:
+        service_supabase.table("app_settings").upsert(
+            {"id": "backup_state", "data": d, "updated_at": datetime.now(timezone.utc).isoformat()},
+            on_conflict="id").execute()
+    except Exception as e:
+        print(f"[backup state] persist failed: {e}")
+
+
+def _prune_backups(keep: int = _BACKUP_KEEP):
+    """Keep only the newest `keep` objects per backup folder (names are timestamped
+    so lexical sort == chronological)."""
+    if not filestore.is_r2_enabled():
+        return
+    for prefix in ("backups/db/", "backups/students/"):
+        try:
+            objs = sorted(filestore.list_private(prefix), key=lambda o: o["key"])
+            old = [o["key"] for o in objs[:-keep]] if len(objs) > keep else []
+            if old:
+                filestore.remove(service_supabase, os.environ.get("R2_PRIVATE_BUCKET", ""), old, public=False)
+        except Exception as e:
+            print(f"[backup prune] {prefix}: {e}")
+
+
+def _run_backups() -> list:
+    """Run the DB + students backup scripts (standalone, isolated subprocesses),
+    prune old backups, and return their stdout lines. Raises on any failure."""
+    import subprocess
+    base = str(Path(__file__).resolve().parent)  # /app/backend
+    produced = []
+    for script, label in (("scripts/backup_db.py", "db"), ("scripts/backup_students.py", "students")):
+        r = subprocess.run(["python", script], cwd=base, capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(f"backup {label} failed: {(r.stderr or r.stdout).strip()}")
+        produced.append((r.stdout or "").strip())
+    _prune_backups()
+    return produced
+
+
+async def _backup_scheduler_loop():
+    """Periodic auto-backup driven by the `backup_frequency` setting. Checks every
+    30 min; runs a backup when the configured interval has elapsed since last run."""
+    await asyncio.sleep(120)  # let startup settle
+    while True:
+        try:
+            freq = await asyncio.to_thread(_get_backup_frequency)
+            if freq != "off" and filestore.is_r2_enabled():
+                interval = _BACKUP_INTERVALS.get(freq, 86400)
+                state = await asyncio.to_thread(_get_backup_state)
+                last = float(state.get("last_run_at", 0) or 0)
+                now = time_module.time()
+                if now - last >= interval:
+                    await asyncio.to_thread(_run_backups)
+                    await asyncio.to_thread(_set_backup_state, {"last_run_at": now})
+                    print(f"[backup] auto backup complete (freq={freq})")
+        except Exception as e:
+            print(f"[backup scheduler] error: {e}")
+        await asyncio.sleep(1800)  # every 30 min
+
+
 def _store_branding_logo(data_url: str) -> Optional[str]:
     """Move an inline base64 logo (data: URL) into file storage; return its public
     URL. Keeps large images out of the settings record / DB. None on failure."""
@@ -8889,6 +9021,8 @@ class TeacherSettingsInput(BaseModel):
     notif_weekly_report: Optional[bool] = None
     # Student portal
     students_can_view_report: Optional[bool] = None
+    # Backups — auto-backup cadence: off | daily | weekly | monthly
+    backup_frequency: Optional[str] = None
 
 @app.get("/api/teacher/settings")
 def get_settings(user: dict = Depends(get_current_user)):
@@ -8897,6 +9031,7 @@ def get_settings(user: dict = Depends(get_current_user)):
     settings = dict(get_teacher_settings())
     # Read-only hint for the Security UI: OTP emails need RESEND_API_KEY in .env.
     settings["otp_email_ready"] = bool(RESEND_API_KEY)
+    settings.setdefault("backup_frequency", "daily")
     return settings
 
 @app.post("/api/teacher/settings")

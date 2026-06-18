@@ -348,6 +348,11 @@ export const teacherApi = {
   backfillStudentCodes: (force = false) =>
     apiClient(`/admin/backfill-student-codes${force ? '?force=true' : ''}`, { method: 'POST' }),
 
+  // Backups: trigger an immediate backup, and list recent backups (with presigned
+  // download URLs). Auto-backup cadence is the `backup_frequency` setting.
+  createBackup: () => apiClient('/admin/backup-now', { method: 'POST' }),
+  listBackups: () => apiClient('/admin/backups'),
+
   // Universal auto-thumbnail base image (teacher's face + blank space on one side)
   getThumbnail: () => apiClient('/teacher/thumbnail'),
   uploadThumbnail: async ({ file, textSide }) => {

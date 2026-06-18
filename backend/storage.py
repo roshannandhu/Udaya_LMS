@@ -123,3 +123,24 @@ def remove(supa, bucket: str, paths, public: bool = True):
             _r2().delete_object(Bucket=target, Key=k)
         return
     supa.storage.from_(bucket).remove(keys)
+
+
+def list_private(prefix: str = "") -> list:
+    """List objects in the private bucket under `prefix`. R2 only — returns [] if
+    R2 isn't enabled. Each item: {key, size, last_modified}. Used by the backup
+    list endpoint + pruning."""
+    if not is_r2_enabled():
+        return []
+    out, token = [], None
+    while True:
+        kw = {"Bucket": os.environ["R2_PRIVATE_BUCKET"], "Prefix": prefix}
+        if token:
+            kw["ContinuationToken"] = token
+        resp = _r2().list_objects_v2(**kw)
+        for o in resp.get("Contents", []):
+            out.append({"key": o["Key"], "size": o.get("Size", 0), "last_modified": o.get("LastModified")})
+        if resp.get("IsTruncated"):
+            token = resp.get("NextContinuationToken")
+        else:
+            break
+    return out

@@ -1,11 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MdArrowBack, MdVisibility, MdVisibilityOff, MdAddPhotoAlternate, MdClose, MdPeople, MdGppBad, MdDelete, MdLoop, MdPersonAdd, MdCheck, MdCheckCircle, MdFavorite } from 'react-icons/md';
+import { MdArrowBack, MdVisibility, MdVisibilityOff, MdAddPhotoAlternate, MdClose, MdPeople, MdGppBad, MdDelete, MdLoop, MdPersonAdd, MdCheck, MdCheckCircle, MdFavorite, MdBackup, MdDownload } from 'react-icons/md';
 import { Toggle, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../../store';
 import { teacherApi } from '../../lib/api';
 import LiveClassCard from '../../components/cards/LiveClassCard';
+
+const fmtSize = (n) => {
+  if (n == null) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+const fmtDate = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return ''; } };
 
 function PasswordChange({ onClose }) {
   const { changePassword } = useAuthStore();
@@ -120,6 +128,12 @@ export default function SettingsPage() {
   const [regen, setRegen] = useState({ loading: false, msg: '' });
   const [pinInput, setPinInput] = useState(terminationPin || '');
   const [pinSaved, setPinSaved] = useState(false);
+
+  // Backups: cadence setting + manual run + recent list
+  const [backupFreq, setBackupFreq] = useState('daily');
+  const [freqSaved, setFreqSaved] = useState(false);
+  const [backupRun, setBackupRun] = useState({ loading: false, msg: '' });
+  const [backupList, setBackupList] = useState([]);
 
   // Team management state (primary teacher only)
   const [subTeachers, setSubTeachers] = useState([]);
@@ -274,6 +288,44 @@ export default function SettingsPage() {
       });
     } catch (e) {
       setRegen({ loading: false, msg: e.message || 'Failed to regenerate IDs.' });
+    }
+  };
+
+  // Load backup cadence + recent backups on mount
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await teacherApi.getSettings();
+        if (alive && s?.backup_frequency) setBackupFreq(s.backup_frequency);
+      } catch { /* ignore */ }
+      try {
+        const r = await teacherApi.listBackups();
+        if (alive) setBackupList(r?.backups || []);
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const handleSaveFrequency = async (next) => {
+    setBackupFreq(next);
+    setFreqSaved(false);
+    try {
+      await teacherApi.updateSettings({ backup_frequency: next });
+      setFreqSaved(true);
+      setTimeout(() => setFreqSaved(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const handleBackupNow = async () => {
+    setBackupRun({ loading: true, msg: '' });
+    try {
+      await teacherApi.createBackup();
+      const r = await teacherApi.listBackups();
+      setBackupList(r?.backups || []);
+      setBackupRun({ loading: false, msg: 'Backup complete.' });
+    } catch (e) {
+      setBackupRun({ loading: false, msg: e.message || 'Backup failed.' });
     }
   };
 
@@ -709,6 +761,62 @@ export default function SettingsPage() {
         </div>
 
         {pwOpen && <PasswordChange onClose={() => setPwOpen(false)} />}
+
+        {/* Backups */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Backups</p>
+          <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
+            <p className="text-sm font-medium mb-0.5">Automatic backups</p>
+            <p className="text-xs text-neutral-500 mb-3">Your data (students, attendance, marks, tests — everything) is backed up to secure cloud storage. Videos &amp; notes are already stored safely and aren't re-copied.</p>
+            <div className="flex items-center gap-2">
+              <select
+                value={backupFreq}
+                onChange={e => handleSaveFrequency(e.target.value)}
+                className="px-3 py-2 rounded-md bg-white border border-[#EFEDEA] focus:bg-white/70 outline-none text-sm transition-all"
+              >
+                <option value="off">Off</option>
+                <option value="daily">Daily (recommended)</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              {freqSaved && <span className="text-[11px] text-green-700 flex items-center gap-1"><MdCheckCircle className="w-3.5 h-3.5" /> Saved</span>}
+            </div>
+
+            {/* Manual backup */}
+            <div className="mt-5 pt-4 border-t border-white/40">
+              <p className="text-sm font-medium mb-0.5">Backup now</p>
+              <p className="text-xs text-neutral-500 mb-3">Create an immediate backup — handy before big changes like year-end updates.</p>
+              <Btn variant="primary" size="sm" onClick={handleBackupNow} disabled={backupRun.loading}>
+                {backupRun.loading ? <><MdLoop className="w-3.5 h-3.5 animate-spin mr-1" />Backing up…</> : <><MdBackup className="w-4 h-4 mr-1" />Backup now</>}
+              </Btn>
+              {backupRun.msg && (
+                <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
+                  <MdCheckCircle className="w-3.5 h-3.5" /> {backupRun.msg}
+                </p>
+              )}
+            </div>
+
+            {/* Recent backups */}
+            {backupList.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-white/40">
+                <p className="text-sm font-medium mb-2">Recent backups</p>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  {backupList.slice(0, 20).map((b) => (
+                    <div key={b.filename} className="flex items-center justify-between gap-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="truncate text-neutral-700">{b.filename}</p>
+                        <p className="text-[10px] text-neutral-400">{b.type} · {fmtSize(b.size)}{b.modified ? ' · ' + fmtDate(b.modified) : ''}</p>
+                      </div>
+                      <a href={b.download_url} target="_blank" rel="noopener noreferrer" className="shrink-0 inline-flex items-center gap-1 text-neutral-600 hover:text-ink hover:underline">
+                        <MdDownload className="w-4 h-4" /> Download
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Data */}
         <div className="mb-6">

@@ -64,3 +64,6 @@ subjects_page_redesign.html
 google-services.json
 android/app/build/
 android/.gradle/
+
+# stray build artifact from manual Pages upload
+frontend/udaya-dist.zip
