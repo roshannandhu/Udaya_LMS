@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, CheckCircle2, WifiOff, Wifi, ThumbsUp, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
+import { MediaPlayer, MediaProvider } from '@vidstack/react';
+import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
+import '@vidstack/react/player/styles/default/theme.css';
+import '@vidstack/react/player/styles/default/layouts/video.css';
 import { Btn, Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { Reveal } from '../../components/bits';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
+import VideoComments from '../../components/student/VideoComments';
 import {
   isVideoSaved,
   saveVideoOffline,
@@ -23,40 +28,12 @@ function toMmSs(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Robust singleton loader for the YouTube IFrame API. The old per-mount loader
-// appended the <script> every time and OVERWROTE window.onYouTubeIframeAPIReady
-// — but YouTube fires that callback exactly ONCE, so a second mount (or fast
-// navigation) orphaned the first waiter and its player never initialised (the
-// "stuck on the loading spinner" bug). This loads the script at most once,
-// queues all waiters, and polls as a fallback in case the global callback was
-// already consumed by an earlier page load.
-let _ytApiPromise = null;
-function loadYouTubeApi() {
-  if (window.YT?.Player) return Promise.resolve();
-  if (_ytApiPromise) return _ytApiPromise;
-  _ytApiPromise = new Promise((resolve) => {
-    const done = () => resolve();
-    const prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => { try { prev && prev(); } catch {} done(); };
-    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
-      const s = document.createElement('script');
-      s.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(s);
-    }
-    // Fallback poll — covers the case where the ready callback already fired.
-    const started = Date.now();
-    const poll = setInterval(() => {
-      if (window.YT?.Player) { clearInterval(poll); done(); }
-      else if (Date.now() - started > 15000) { clearInterval(poll); done(); }
-    }, 150);
-  });
-  return _ytApiPromise;
-}
-
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore(s => s.user);
+
+  const playerRef = useRef(null);
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
@@ -75,56 +52,16 @@ export default function StudentVideoPlayerPage() {
   const [cachedSize, setCachedSize] = useState(null);
   const [blobUrl, setBlobUrl]     = useState(null);
   const blobUrlRef = useRef(null);
-  const videoRef = useRef(null);
-  const iframeRef = useRef(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [ytToken, setYtToken]         = useState(null);
-  const [ytPlayerReady, setYtPlayerReady] = useState(false);
-  const [ytError, setYtError]         = useState(null);
-  const ytPlayerRef   = useRef(null);
-  const ytProgressRef = useRef(null);
-  const ytMountRef    = useRef(null); // stable wrapper; a fresh child is mounted per init
-  const [chapterActive, setChapterActive] = useState(-1);
-  const [isPlaying,          setIsPlaying]          = useState(false);
-  const [duration,           setDuration]           = useState(0);
-  const [volume,             setVolume]             = useState(100);
-  const [isMuted,            setIsMuted]            = useState(false);
-  const [showControls,       setShowControls]       = useState(true);
-  const [playbackRate,       setPlaybackRate]       = useState(1);
-  const [quality,            setQuality]            = useState('auto');
-  const [availableQualities, setAvailableQualities] = useState([]);
-  const [showSpeedMenu,      setShowSpeedMenu]      = useState(false);
-  const [showQualityMenu,    setShowQualityMenu]    = useState(false);
-  const [seekFeedback,       setSeekFeedback]       = useState(null);
-  const [ccEnabled,          setCcEnabled]          = useState(false);
-  const [isFullscreen,       setIsFullscreen]       = useState(false);
-  const playerContainerRef  = useRef(null);
-  const controlsTimerRef    = useRef(null);
-  const tapTimerRef         = useRef(null);
-  const lastTapRef          = useRef({ time: 0, zone: null });
-  const singleTapTimerRef   = useRef(null);
 
-  // Throttled time update (250ms instead of 60fps)
-  useEffect(() => {
-    let interval;
-    const updateTime = () => {
-      if (ytPlayerRef.current?.getCurrentTime) {
-        const t = ytPlayerRef.current.getCurrentTime();
-        setCurrentTime(t);
-        const d = ytPlayerRef.current.getDuration?.();
-        if (d && d > 0) setDuration(d);
-        if (video?.chapters?.length) {
-          let idx = -1;
-          for (let i = video.chapters.length - 1; i >= 0; i--) {
-            if (t >= video.chapters[i].start_secs) { idx = i; break; }
-          }
-          setChapterActive(idx);
-        }
-      }
-    };
-    interval = setInterval(updateTime, 250);
-    return () => clearInterval(interval);
-  }, [video?.chapters]);
+  // YouTube source needs a per-request token (the raw YT id is never sent in the list)
+  const [ytToken, setYtToken]     = useState(null);
+  const [ytError, setYtError]     = useState(null);
+
+  // Playback state (drives chapter highlight + progress save + completion)
+  const [currentTime, setCurrentTime] = useState(0);
+  const [chapterActive, setChapterActive] = useState(-1);
+  const lastSavedRef = useRef(0);   // last progress_secs POSTed
+  const resumedRef   = useRef(false); // resume-seek applied once
 
   // Track online/offline status
   useEffect(() => {
@@ -163,32 +100,18 @@ export default function StudentVideoPlayerPage() {
   // Init offline state after video loads
   useEffect(() => {
     if (!video) return;
-
     const isSaved = isVideoSaved(videoId);
     setSaved(isSaved);
-
     if (isSaved) {
-      // Get cached size for display
-      getCachedVideoSize(videoId).then(size => {
-        if (size) setCachedSize(formatBytes(size));
-      });
-
-      // If currently offline, load the blob URL so playback works
+      getCachedVideoSize(videoId).then(size => { if (size) setCachedSize(formatBytes(size)); });
       if (!navigator.onLine) {
         getCachedVideoBlobUrl(videoId).then(url => {
-          if (url) {
-            blobUrlRef.current = url;
-            setBlobUrl(url);
-          }
+          if (url) { blobUrlRef.current = url; setBlobUrl(url); }
         });
       }
     }
-
     return () => {
-      // Revoke blob URL on unmount to free memory
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-      }
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
     };
   }, [video, videoId]);
 
@@ -210,108 +133,39 @@ export default function StudentVideoPlayerPage() {
   useEffect(() => {
     if (!isOnline && saved && !blobUrl) {
       getCachedVideoBlobUrl(videoId).then(url => {
-        if (url) {
-          blobUrlRef.current = url;
-          setBlobUrl(url);
-        }
+        if (url) { blobUrlRef.current = url; setBlobUrl(url); }
       });
     }
   }, [isOnline, saved, blobUrl, videoId]);
 
-  function startYtProgress(player) {
-    stopYtProgress();
-    ytProgressRef.current = setInterval(async () => {
-      try {
-        const currentTime = Math.floor(player.getCurrentTime());
-        const duration    = Math.floor(player.getDuration());
-        await apiClient('/video-progress', {
-          method: 'POST',
-          body: JSON.stringify({ video_id: videoId, progress_secs: currentTime }),
-        });
-        if (duration > 0 && currentTime / duration >= 0.9 && !completed) {
-          markComplete();
-        }
-      } catch { /* silent — do not interrupt playback */ }
-    }, 5000);
+  // ── Unified player lifecycle (works for every source via Vidstack) ──────────
+
+  function markComplete() {
+    if (completed) return;
+    videoApi.markComplete(video.id)
+      .then(() => setCompleted(true))
+      .catch(err => console.error('markComplete failed:', err));
   }
 
-  function stopYtProgress() {
-    if (ytProgressRef.current) {
-      clearInterval(ytProgressRef.current);
-      ytProgressRef.current = null;
+  // Resume from the last saved position once the media is ready to play.
+  const onCanPlay = () => {
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    const resume = video?.progress_secs || 0;
+    if (resume > 10 && playerRef.current) {
+      try { playerRef.current.currentTime = resume; } catch { /* ignore */ }
     }
-  }
+  };
 
-  // Load YouTube IFrame API and init player when token is ready
-  useEffect(() => {
-    if (!ytToken) return;
-    let cancelled = false;
-    setYtPlayerReady(false);
-
-    loadYouTubeApi().then(() => {
-      if (cancelled || !ytMountRef.current) return;
-      // Mount into a FRESH child element each time. YT.Player.destroy() removes
-      // the iframe it created, leaving no node to mount into on the next video —
-      // which broke navigating between two YouTube videos. A new child per init
-      // always gives the constructor a clean target.
-      ytMountRef.current.innerHTML = '';
-      const mountEl = document.createElement('div');
-      mountEl.className = 'w-full h-full';
-      ytMountRef.current.appendChild(mountEl);
-
-      ytPlayerRef.current = new window.YT.Player(mountEl, {
-        videoId: ytToken,
-        playerVars: {
-          controls: 0,
-          rel: 0,
-          modestbranding: 1,
-          iv_load_policy: 3,
-          disablekb: 1,
-          enablejsapi: 1,
-          origin: window.location.origin,
-          cc_load_policy: 0,
-        },
-        events: {
-          onReady: e => {
-            setYtPlayerReady(true);
-            setDuration(e.target.getDuration());
-            setVolume(e.target.getVolume());
-            setIsMuted(e.target.isMuted());
-            const quals = e.target.getAvailableQualityLevels() || [];
-            setAvailableQualities(quals);
-            const saved = video?.progress_secs || 0;
-            if (saved > 30) e.target.seekTo(saved, true);
-          },
-          onStateChange: e => {
-            const S = window.YT.PlayerState;
-            setIsPlaying(e.data === S.PLAYING);
-            if (e.data === S.PLAYING) {
-              startYtProgress(e.target);
-              // Refresh quality list once playback starts (more accurate than onReady)
-              const quals = e.target.getAvailableQualityLevels?.() || [];
-              if (quals.length > 0) setAvailableQualities(quals);
-            } else {
-              stopYtProgress();
-            }
-            if (e.data === S.ENDED) markComplete();
-          },
-          onError: () => setYtError('Video cannot be played. Make sure it is Unlisted on YouTube.'),
-        },
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      stopYtProgress();
-      try { ytPlayerRef.current?.destroy?.(); } catch {}
-      ytPlayerRef.current = null;
-    };
-  }, [ytToken]);
-
-  const handleTimeUpdate = useCallback(() => {
-    const t = videoRef.current?.currentTime;
-    if (t == null) return;
+  // Fires ~4x/sec; we read live values off the player ref (provider-agnostic),
+  // update the chapter highlight, and throttle the progress POST to every ~8s.
+  const onTimeUpdate = () => {
+    const p = playerRef.current;
+    if (!p) return;
+    const t = p.currentTime || 0;
+    const dur = p.duration || video?.duration_secs || 0;
     setCurrentTime(t);
+
     if (video?.chapters?.length) {
       let idx = -1;
       for (let i = video.chapters.length - 1; i >= 0; i--) {
@@ -319,140 +173,25 @@ export default function StudentVideoPlayerPage() {
       }
       setChapterActive(idx);
     }
-  }, [video?.chapters]);
 
-  const seekTo = (secs) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = secs;
-      videoRef.current.play();
-    } else if (iframeRef.current) {
-      iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'seek', data: secs }), '*');
-    } else if (ytPlayerRef.current) {
-      ytPlayerRef.current.seekTo(secs);
-      ytPlayerRef.current.playVideo();
+    if (isOnline && t - lastSavedRef.current >= 8) {
+      lastSavedRef.current = t;
+      apiClient('/video-progress', {
+        method: 'POST',
+        body: JSON.stringify({ video_id: videoId, progress_secs: Math.floor(t) }),
+      }).catch(() => {});
+      if (dur > 0 && t / dur >= 0.9 && !completed) markComplete();
     }
   };
 
-  useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
+  const onEnded = () => { if (!completed) markComplete(); };
 
-  function showControlsTemporarily() {
-    setShowControls(true);
-    clearTimeout(controlsTimerRef.current);
-    if (ytPlayerRef.current?.getPlayerState?.() === 1) {
-      controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
-    }
-  }
-
-  function toggleControlsVisibility() {
-    setShowControls(prev => {
-      clearTimeout(controlsTimerRef.current);
-      if (prev) {
-        return false;
-      } else {
-        if (ytPlayerRef.current?.getPlayerState?.() === 1) {
-          controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
-        }
-        return true;
-      }
-    });
-  }
-
-  function seekRelative(secs) {
-    const p = ytPlayerRef.current;
+  // Chapter click → seek the unified player (works for ALL sources now).
+  const seekTo = (secs) => {
+    const p = playerRef.current;
     if (!p) return;
-    const dur = p.getDuration?.() || 0;
-    p.seekTo(Math.max(0, Math.min(p.getCurrentTime() + secs, dur)), true);
-    setSeekFeedback({ side: secs > 0 ? 'right' : 'left' });
-    clearTimeout(tapTimerRef.current);
-    tapTimerRef.current = setTimeout(() => setSeekFeedback(null), 700);
-  }
-
-  function handleKeyDown(e) {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    const p = ytPlayerRef.current;
-    if (!p) return;
-    switch (e.key) {
-      case ' ':
-      case 'k':
-        e.preventDefault();
-        p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
-        break;
-      case 'ArrowLeft':  e.preventDefault(); seekRelative(-10); break;
-      case 'ArrowRight': e.preventDefault(); seekRelative(10);  break;
-      case 'ArrowUp': {
-        e.preventDefault();
-        const vUp = Math.min(100, (p.getVolume() || 0) + 10);
-        p.setVolume(vUp); setVolume(vUp); p.unMute(); setIsMuted(false);
-        break;
-      }
-      case 'ArrowDown': {
-        e.preventDefault();
-        const vDn = Math.max(0, (p.getVolume() || 0) - 10);
-        p.setVolume(vDn); setVolume(vDn);
-        break;
-      }
-      case 'm':
-        p.isMuted() ? (p.unMute(), setIsMuted(false)) : (p.mute(), setIsMuted(true));
-        break;
-      case 'f':
-        toggleFullscreen();
-        break;
-    }
-    showControlsTemporarily();
-  }
-
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      playerContainerRef.current?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  }
-
-  function handlePlayerTap(e) {
-    const container = playerContainerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? (rect.left + rect.width / 2);
-    const pct = (clientX - rect.left) / rect.width;
-    const zone = pct < 0.3 ? 'left' : pct > 0.7 ? 'right' : 'center';
-    const now = Date.now();
-    const last = lastTapRef.current;
-    
-    clearTimeout(singleTapTimerRef.current);
-    
-    if (now - last.time < 300 && last.zone === zone) {
-      // Double-tap detected
-      lastTapRef.current = { time: 0, zone: null };
-      if (zone === 'left')       seekRelative(-10);
-      else if (zone === 'right') seekRelative(10);
-      else                       toggleFullscreen();
-    } else {
-      // First tap — wait to see if double-tap follows
-      lastTapRef.current = { time: now, zone };
-      singleTapTimerRef.current = setTimeout(() => {
-        // Single tap toggles controls visibility instead of pausing
-        toggleControlsVisibility();
-      }, 300);
-    }
-  }
-
-  function toggleCC() {
-    const p = ytPlayerRef.current;
-    if (!p) return;
-    if (ccEnabled) {
-      p.setOption('captions', 'track', {});
-      setCcEnabled(false);
-    } else {
-      p.loadModule('captions');
-      p.setOption('captions', 'track', { languageCode: 'en' });
-      setCcEnabled(true);
-    }
-  }
+    try { p.currentTime = secs; p.play?.(); } catch { /* ignore */ }
+  };
 
   const handleMarkComplete = async () => {
     setIsMarking(true);
@@ -467,13 +206,6 @@ export default function StudentVideoPlayerPage() {
     }
   };
 
-  function markComplete() {
-    if (completed) return;
-    videoApi.markComplete(video.id)
-      .then(() => setCompleted(true))
-      .catch(err => console.error('markComplete failed:', err));
-  }
-
   const handleSaveOffline = async () => {
     if (!video?.allow_download) {
       setSaveError('The teacher has disabled offline saving for this video.');
@@ -483,9 +215,7 @@ export default function StudentVideoPlayerPage() {
     setSaveError('');
     setSaveProgress(0);
     try {
-      await saveVideoOffline(videoId, video.cloudflare_video_id, (pct) => {
-        setSaveProgress(pct);
-      });
+      await saveVideoOffline(videoId, video.cloudflare_video_id, (pct) => setSaveProgress(pct));
       setSaved(true);
       setSaveProgress(100);
       const size = await getCachedVideoSize(videoId);
@@ -504,10 +234,7 @@ export default function StudentVideoPlayerPage() {
       setSaved(false);
       setCachedSize(null);
       setSaveProgress(null);
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
       setBlobUrl(null);
     } catch (err) {
       console.error(err);
@@ -530,277 +257,31 @@ export default function StudentVideoPlayerPage() {
     );
   }
 
-  // Decide what to render in the player area
+  // ── Resolve the single player source by type ────────────────────────────────
   const isStorageUrl = video.cloudflare_video_id?.startsWith('https://');
-  const isYouTube = video.source_type === 'youtube';
-  const showOfflinePlayer = !isOnline && blobUrl;
-  const showOfflineUnavailable = !isOnline && !blobUrl;
-  const showCloudflarePlayer = isOnline && video.cloudflare_video_id && !isStorageUrl;
-  const showStoragePlayer = isOnline && isStorageUrl;
-  const showYouTubePlayer = isOnline && isYouTube && ytToken;
-  const showYouTubeLoading = isOnline && isYouTube && !ytToken;
-  const showNoPlayer = isOnline && !video.cloudflare_video_id && !isYouTube;
+  const isYouTube    = video.source_type === 'youtube';
+  const showOffline  = !isOnline && blobUrl;
 
-  if (video?.source_type === 'youtube') {
-    const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-    const QUALITY_LABELS = {
-      hd1080: '1080p', hd720: '720p', large: '480p',
-      medium: '360p', small: '240p', tiny: '144p', auto: 'Auto',
-    };
-
-    const guardLabel = user?.username || user?.name || 'student';
-    return (
-      <ScreenshotGuard label={guardLabel} className="min-h-screen bg-black flex flex-col">
-      <div className="min-h-screen bg-black flex flex-col">
-
-        {/* Player container */}
-        <div
-          ref={playerContainerRef}
-          className="relative w-full bg-black select-none outline-none"
-          style={{ aspectRatio: '16/9' }}
-          tabIndex={0}
-          onKeyDown={handleKeyDown}
-          onMouseMove={showControlsTemporarily}
-        >
-          {/* Stable wrapper — the init effect injects a fresh child div here for
-              YT.Player to take over, so re-navigating between videos always has a
-              clean mount target. */}
-          <div ref={ytMountRef} className="w-full h-full" />
-
-          {/* Transparent click interceptor — blocks YouTube overlay UI and handles
-              tap gestures: single-center=play/pause, double-left=−10s,
-              double-right=+10s, double-center=fullscreen */}
-          <div
-            className="absolute inset-0"
-            style={{ zIndex: 2, touchAction: 'manipulation' }}
-            onClick={handlePlayerTap}
-          />
-
-          {/* Pause overlay — visually covers YouTube pause screen (logo + copy-link UI) */}
-          {!isPlaying && ytPlayerReady && !ytError && (
-            <div
-              className="absolute inset-0 flex items-center justify-center pointer-events-none"
-              style={{ zIndex: 3, background: 'rgba(0,0,0,0.5)' }}
-            >
-              <div className="w-16 h-16 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                <svg width="28" height="28" fill="white" viewBox="0 0 24 24">
-                  <polygon points="5,3 19,12 5,21"/>
-                </svg>
-              </div>
-            </div>
-          )}
-
-          {/* Loading spinner */}
-          {!ytPlayerReady && !ytError && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 5 }}>
-              <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            </div>
-          )}
-
-          {/* Error */}
-          {ytError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center" style={{ zIndex: 5 }}>
-              <p className="text-white/70 text-sm">{ytError}</p>
-              <button onClick={() => navigate(-1)} className="text-white/50 text-xs underline mt-1">Go back</button>
-            </div>
-          )}
-
-          {/* Seek feedback flash */}
-          {seekFeedback && (
-            <div className={`absolute top-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center gap-1 ${seekFeedback.side === 'left' ? 'left-8' : 'right-8'}`} style={{ zIndex: 12 }}>
-              <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <span className="text-white text-xl font-bold">{seekFeedback.side === 'left' ? '«' : '»'}</span>
-              </div>
-              <span className="text-white/80 text-xs font-medium">10s</span>
-            </div>
-          )}
-
-          {/* Back button */}
-          <button
-            onClick={(e) => { e.stopPropagation(); navigate(-1); }}
-            className="absolute top-3 left-3 z-20 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70 transition-colors"
-          >
-            <ArrowLeft size={18} />
-          </button>
-
-          {/* Custom control bar (auto-hides while playing) */}
-          <div
-            className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-            style={{ zIndex: 15 }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none rounded-b" />
-
-            <div className="relative px-3 pb-3 pt-8">
-              {/* Progress bar */}
-              <div className="mb-2">
-                <input
-                  type="range"
-                  min={0} max={duration || 100} step={0.5}
-                  value={currentTime}
-                  onMouseDown={() => {
-                    clearTimeout(controlsTimerRef.current);
-                    setShowControls(true);
-                  }}
-                  onChange={e => {
-                    const v = Number(e.target.value);
-                    ytPlayerRef.current?.seekTo(v, true);
-                    setCurrentTime(v);
-                  }}
-                  onMouseUp={showControlsTemporarily}
-                  onTouchEnd={showControlsTemporarily}
-                  className="w-full h-1 accent-white cursor-pointer"
-                  style={{ background: `linear-gradient(to right, white ${(currentTime / (duration || 1)) * 100}%, rgba(255,255,255,0.3) 0%)` }}
-                />
-              </div>
-
-              {/* Controls row */}
-              <div className="flex items-center gap-2 text-white">
-                {/* Play/Pause */}
-                <button
-                  onClick={() => {
-                    const p = ytPlayerRef.current;
-                    p?.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
-                  }}
-                  className="p-1 hover:text-white/80 transition-colors flex-shrink-0"
-                >
-                  {isPlaying ? (
-                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
-                      <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                    </svg>
-                  ) : (
-                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
-                      <polygon points="5,3 19,12 5,21"/>
-                    </svg>
-                  )}
-                </button>
-
-                {/* Time */}
-                <span className="text-xs font-mono flex-shrink-0 tabular-nums">
-                  {toMmSs(currentTime)} / {toMmSs(duration)}
-                </span>
-
-                <div className="flex-1" />
-
-                {/* Mute */}
-                <button
-                  onClick={() => {
-                    const p = ytPlayerRef.current;
-                    if (!p) return;
-                    if (isMuted) { p.unMute(); setIsMuted(false); }
-                    else         { p.mute();   setIsMuted(true);  }
-                  }}
-                  className="p-1 hover:text-white/80 transition-colors flex-shrink-0"
-                >
-                  {isMuted || volume === 0 ? (
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-                      <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2"/>
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                    </svg>
-                  )}
-                </button>
-
-                {/* Speed */}
-                <div className="relative">
-                  <button
-                    onClick={() => { setShowSpeedMenu(prev => !prev); setShowQualityMenu(false); }}
-                    className="text-xs font-medium px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                  >
-                    {playbackRate === 1 ? '1×' : `${playbackRate}×`}
-                  </button>
-                  {showSpeedMenu && (
-                    <div className="absolute bottom-8 right-0 bg-black/90 backdrop-blur-sm rounded-lg overflow-hidden min-w-[80px] shadow-xl border border-white/10">
-                      {SPEEDS.map(s => (
-                        <button key={s} onClick={() => {
-                          ytPlayerRef.current?.setPlaybackRate(s);
-                          setPlaybackRate(s);
-                          setShowSpeedMenu(false);
-                        }} className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 transition-colors ${playbackRate === s ? 'text-white font-semibold' : 'text-white/70'}`}>
-                          {s === 1 ? 'Normal' : `${s}×`}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Quality */}
-                <div className="relative">
-                  <button
-                    onClick={() => { setShowQualityMenu(prev => !prev); setShowSpeedMenu(false); }}
-                    className="text-xs font-medium px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                  >
-                    {QUALITY_LABELS[quality] || 'Auto'}
-                  </button>
-                  {showQualityMenu && (
-                    <div className="absolute bottom-8 right-0 bg-black/90 backdrop-blur-sm rounded-lg overflow-hidden min-w-[80px] shadow-xl border border-white/10">
-                      {/* Use player-reported qualities when available; fall back to full fixed list */}
-                      {(availableQualities.length > 0
-                        ? ['auto', ...availableQualities]
-                        : ['auto', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny']
-                      ).map(q => (
-                        <button key={q} onClick={() => {
-                          ytPlayerRef.current?.setPlaybackQuality(q);
-                          setQuality(q);
-                          setShowQualityMenu(false);
-                        }} className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 transition-colors ${quality === q ? 'text-white font-semibold' : 'text-white/70'}`}>
-                          {QUALITY_LABELS[q] || q}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* CC */}
-                <button
-                  onClick={toggleCC}
-                  className={`text-xs font-bold px-1.5 py-0.5 rounded transition-colors ${ccEnabled ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
-                >
-                  CC
-                </button>
-
-                {/* Fullscreen */}
-                <button onClick={toggleFullscreen} className="p-1 hover:text-white/80 transition-colors flex-shrink-0">
-                  {isFullscreen ? (
-                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 0 2 2v3"/>
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Info below player */}
-        <div className="flex-1 bg-[#FAFAF9] px-4 py-4 space-y-2">
-          <h1 className="text-lg md:text-xl font-semibold text-neutral-900">{video.title}</h1>
-          {video.description && (
-            <p className="text-sm text-neutral-500 leading-relaxed">{video.description}</p>
-          )}
-          {completed && (
-            <div className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
-              <CheckCircle size={14} /> Completed · +10 points
-            </div>
-          )}
-        </div>
-
-      </div>
-      </ScreenshotGuard>
-    );
+  let playerSrc = null;
+  if (showOffline) {
+    playerSrc = { src: blobUrl, type: 'video/mp4' };
+  } else if (isYouTube && ytToken) {
+    playerSrc = `youtube/${ytToken}`;
+  } else if (isOnline && isStorageUrl) {
+    playerSrc = { src: video.cloudflare_video_id, type: 'video/mp4' };
+  } else if (isOnline && video.cloudflare_video_id && !isStorageUrl && !isYouTube) {
+    // Cloudflare Stream UID → HLS manifest
+    playerSrc = { src: `https://videodelivery.net/${video.cloudflare_video_id}/manifest/video.m3u8`, type: 'application/x-mpegurl' };
   }
 
+  const showYouTubeLoading    = isOnline && isYouTube && !ytToken && !ytError;
+  const showOfflineUnavailable = !isOnline && !blobUrl;
   const guardLabel = user?.username || user?.name || 'student';
+
   return (
     <ScreenshotGuard label={guardLabel}>
-    <div>
+    <div className="min-h-screen bg-canvas">
+      {/* Header */}
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
         <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate(`/student/subjects/${classId}`)}
@@ -818,50 +299,37 @@ export default function StudentVideoPlayerPage() {
       </div>
 
       <div className="max-w-5xl mx-auto">
-        {/* ── Video player area ── */}
-        <div className="relative bg-neutral-900 aspect-video flex items-center justify-center">
-          {showCloudflarePlayer && (
-            <iframe
-              ref={iframeRef}
-              src={`https://iframe.cloudflarestream.com/${video.cloudflare_video_id}`}
-              className="w-full h-full border-0"
-              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
-              allowFullScreen
+        {/* ── Unified player ── (fixed 16/9 box; same on phone & laptop) */}
+        <div className="relative bg-black w-full overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
+          {playerSrc && !ytError ? (
+            <MediaPlayer
+              ref={playerRef}
+              src={playerSrc}
               title={video.title}
-            />
-          )}
-          {showStoragePlayer && (
-            <video
-              ref={videoRef}
-              src={video.cloudflare_video_id}
-              controls
-              className="w-full h-full"
-              controlsList={video.allow_download ? '' : 'nodownload'}
-              title={video.title}
-              onTimeUpdate={handleTimeUpdate}
-            />
-          )}
-          {showYouTubeLoading && (
-            <div className="flex items-center gap-2 text-white/60 text-sm">
-              <Loader2 className="animate-spin" size={18} />
-              Loading video...
+              poster={video.thumbnail_url || undefined}
+              playsInline
+              crossOrigin
+              aspectRatio="16/9"
+              className="absolute inset-0 w-full h-full"
+              onCanPlay={onCanPlay}
+              onTimeUpdate={onTimeUpdate}
+              onEnded={onEnded}
+            >
+              <MediaProvider />
+              <DefaultVideoLayout icons={defaultLayoutIcons} />
+            </MediaPlayer>
+          ) : ytError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
+              <AlertTriangle size={28} className="text-white/40" />
+              <p className="text-white/70 text-sm">{ytError}</p>
+              <button onClick={() => navigate(-1)} className="text-white/50 text-xs underline mt-1">Go back</button>
             </div>
-          )}
-          {/* YouTube renders via the dedicated early-return player above (ytMountRef);
-              no mount here — avoids a duplicate yt-player-mount the SDK could grab. */}
-          {showOfflinePlayer && (
-            <video
-              ref={videoRef}
-              src={blobUrl}
-              className="w-full h-full"
-              controls
-              autoPlay={false}
-              title={video.title}
-              onTimeUpdate={handleTimeUpdate}
-            />
-          )}
-          {showOfflineUnavailable && (
-            <div className="flex flex-col items-center gap-3 text-white/70 px-8 text-center">
+          ) : showYouTubeLoading ? (
+            <div className="absolute inset-0 flex items-center gap-2 items-center justify-center text-white/60 text-sm">
+              <Loader2 className="animate-spin" size={18} /> Loading video…
+            </div>
+          ) : showOfflineUnavailable ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/70 px-8 text-center">
               <WifiOff size={40} className="text-white/40" />
               <p className="text-sm font-medium text-white/80">You're offline</p>
               <p className="text-xs text-white/50">
@@ -870,14 +338,14 @@ export default function StudentVideoPlayerPage() {
                   : 'Save this video while online to watch it offline.'}
               </p>
             </div>
-          )}
-          {showNoPlayer && (
-            <div className="flex flex-col items-center gap-3 text-white/50 text-sm">
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50 text-sm">
               <p>No video available for this lesson.</p>
             </div>
           )}
         </div>
 
+        {/* ── Info panel ── */}
         <div className="px-5 md:px-8 py-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
@@ -915,14 +383,10 @@ export default function StudentVideoPlayerPage() {
                 <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-white/60 text-sm text-neutral-600 min-w-[130px]">
                   <Loader2 size={13} className="animate-spin flex-shrink-0" />
                   <div className="flex-1">
-                    <div className="text-xs mb-0.5">
-                      {saveProgress !== null ? `${saveProgress}%` : 'Downloading…'}
-                    </div>
+                    <div className="text-xs mb-0.5">{saveProgress !== null ? `${saveProgress}%` : 'Downloading…'}</div>
                     <div className="h-1 bg-neutral-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-neutral-800 rounded-full transition-all duration-300"
-                        style={{ width: saveProgress !== null ? `${saveProgress}%` : '100%' }}
-                      />
+                      <div className="h-full bg-neutral-800 rounded-full transition-all duration-300"
+                        style={{ width: saveProgress !== null ? `${saveProgress}%` : '100%' }} />
                     </div>
                   </div>
                 </div>
@@ -933,11 +397,8 @@ export default function StudentVideoPlayerPage() {
                   <span className="flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm border-green-200 bg-green-50 text-green-700">
                     <Wifi size={13} /> Saved{cachedSize ? ` · ${cachedSize}` : ''}
                   </span>
-                  <button
-                    onClick={handleRemoveOffline}
-                    title="Remove offline copy"
-                    className="p-2 rounded-md border border-white/60 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
-                  >
+                  <button onClick={handleRemoveOffline} title="Remove offline copy"
+                    className="p-2 rounded-md border border-white/60 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -945,7 +406,6 @@ export default function StudentVideoPlayerPage() {
             </div>
           </div>
 
-          {/* Save error */}
           {saveError && (
             <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
               <AlertTriangle size={15} className="flex-shrink-0" />
@@ -953,7 +413,6 @@ export default function StudentVideoPlayerPage() {
             </div>
           )}
 
-          {/* Saved offline notice */}
           {saved && !saveError && (
             <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
               <CheckCircle2 size={15} className="flex-shrink-0" />
@@ -975,7 +434,7 @@ export default function StudentVideoPlayerPage() {
                 <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Chapters</p>
               </div>
               <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden divide-y divide-white/40">
-                {video.chapters.sort((a, b) => a.start_secs - b.start_secs).map((ch, idx) => (
+                {[...video.chapters].sort((a, b) => a.start_secs - b.start_secs).map((ch, idx) => (
                   <button key={idx} onClick={() => seekTo(ch.start_secs)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F4F2EF] ${
                       chapterActive === idx ? 'bg-blue-50/60 border-l-2 border-l-blue-500' : ''
@@ -998,13 +457,7 @@ export default function StudentVideoPlayerPage() {
           )}
 
           {!completed && isOnline && (
-            <Btn
-              variant="primary"
-              onClick={handleMarkComplete}
-              icon={CheckCircle2}
-              className="w-full justify-center"
-              disabled={isMarking}
-            >
+            <Btn variant="primary" onClick={handleMarkComplete} icon={CheckCircle2} className="w-full justify-center" disabled={isMarking}>
               {isMarking ? 'Marking...' : 'Mark as completed'}
             </Btn>
           )}
@@ -1020,6 +473,9 @@ export default function StudentVideoPlayerPage() {
               You've completed this video. Great work!
             </div>
           )}
+
+          {/* Private comments — students see only their own; teacher sees all. */}
+          {isOnline && <VideoComments videoId={videoId} />}
         </div>
       </div>
     </div>

@@ -323,6 +323,13 @@ export const videoApi = {
     apiClient(`/videos/${videoId}/token`),
   getThumbnail: (videoId) =>
     apiClient(`/videos/${videoId}/thumbnail`),
+  // Private per-student comments. Student sees only their own; teacher sees all.
+  getComments: (videoId) =>
+    apiClient(`/videos/${videoId}/comments`),
+  postComment: (videoId, text) =>
+    apiClient(`/videos/${videoId}/comments`, { method: 'POST', body: JSON.stringify({ text }) }),
+  replyComment: (commentId, text) =>
+    apiClient(`/video-comments/${commentId}/reply`, { method: 'PATCH', body: JSON.stringify({ text }) }),
 };
 
 export const liveClassApi = {
