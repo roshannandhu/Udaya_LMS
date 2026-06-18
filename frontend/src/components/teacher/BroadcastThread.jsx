@@ -88,6 +88,23 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       .catch(() => {});
   }, [std?.id, broadcasts.length]);
 
+  // Fast first paint: seed the thread from plain HTTP the moment a class opens,
+  // in parallel with the WebSocket, so messages appear without waiting for the
+  // WS handshake. The store cache already makes later re-opens instant.
+  useEffect(() => {
+    if (!std?.id) return;
+    let cancelled = false;
+    apiClient(`/broadcasts?standard_id=${std.id}`)
+      .then(rows => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const formatted = rows.map(mapBroadcast);
+        onUpdate(prev => (formatted.length >= (prev?.length || 0) ? formatted : prev));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [std?.id]);
+
   useEffect(() => {
     readDetailsModalRef.current = readDetailsModal;
   }, [readDetailsModal]);

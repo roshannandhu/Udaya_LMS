@@ -2,18 +2,30 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Pin, FileText, Loader2, Search, X } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
-import { broadcastApi, getApiBaseUrl } from '../../lib/api';
+import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { fmtTime, fmtChatDate } from '../../lib/datetime';
 
 const formatChatDate = fmtChatDate;
 
+// Module-level cache so re-opening Class Updates renders instantly instead of
+// waiting for the WebSocket handshake + history each time. Keyed by user+standard.
+let studentBroadcastsCache = null; // { key: `${userId}:${standardId}`, items: [...] }
+
 export default function StudentBroadcastsPage() {
   const { user } = useAuthStore();
-  const [standard, setStandard] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [broadcasts, setBroadcasts] = useState([]);
+  const standardId = user?.standard_id || null;
+  const cacheKey = (user?.id && standardId) ? `${user.id}:${standardId}` : null;
+  const cacheHit = !!(cacheKey && studentBroadcastsCache?.key === cacheKey);
+
+  // Derive the standard synchronously from the auth store (no extra round-trip)
+  // and seed messages from the module cache, so the chat paints immediately.
+  const [standard, setStandard] = useState(
+    standardId ? { id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || 'graduation' } : null
+  );
+  const [loading, setLoading] = useState(!standardId);
+  const [broadcasts, setBroadcasts] = useState(cacheHit ? studentBroadcastsCache.items : []);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const wsRef = useRef(null);
@@ -21,10 +33,42 @@ export default function StudentBroadcastsPage() {
   const chatBottomRef = useRef(null);
 
   useEffect(() => {
-    const standardId = user?.standard_id;
-    if (standardId) setStandard({ id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || 'graduation' });
-    setLoading(false);
+    if (standardId) {
+      setStandard({ id: standardId, name: user?.standard_name || 'My Class', emoji: user?.standard_emoji || 'graduation' });
+      setLoading(false);
+    }
   }, [user?.standard_id, user?.standard_name, user?.standard_emoji]);
+
+  // Fast first paint: pull history over plain HTTP the moment we know the
+  // standard, in parallel with the WebSocket. HTTP reuses the warm keep-alive
+  // connection, so messages show up well before the WS handshake completes; the
+  // WS then takes over for live updates.
+  useEffect(() => {
+    if (!standardId) return;
+    let cancelled = false;
+    apiClient(`/broadcasts?standard_id=${standardId}`)
+      .then(rows => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const now = new Date();
+        const formatted = rows
+          .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
+          .map(mapBroadcast);
+        // Don't clobber a longer list the WS may have already delivered.
+        setBroadcasts(prev => (formatted.length >= prev.length ? formatted : prev));
+        const unseen = formatted.map(b => b.id).filter(id => id && !markedReadRef.current.has(id));
+        if (unseen.length > 0) {
+          broadcastApi.markRead(unseen).catch(() => {});
+          unseen.forEach(id => markedReadRef.current.add(id));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [standardId]);
+
+  // Keep the module cache in sync with the rendered list for instant re-opens.
+  useEffect(() => {
+    if (cacheKey) studentBroadcastsCache = { key: cacheKey, items: broadcasts };
+  }, [broadcasts, cacheKey]);
 
   useEffect(() => {
     // Jump (not smooth-scroll) to the latest message. A smooth scroll re-triggered
