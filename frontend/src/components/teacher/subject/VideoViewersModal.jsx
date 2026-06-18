@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, Clock, MessageCircle, Send, Loader2 } from 'lucide-react';
+import { CheckCircle2, Clock, MessageCircle, Send, Loader2, Trash2, Heart } from 'lucide-react';
 import { Avatar, Modal, Skeleton } from '../../ui';
 import { apiClient, videoApi } from '../../../lib/api';
 
@@ -20,6 +20,7 @@ function CommentsTab({ video }) {
   const [replyFor, setReplyFor] = useState(null); // comment id being replied to
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy]         = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     if (!video?.id) return;
@@ -50,6 +51,20 @@ function CommentsTab({ video }) {
     }
   };
 
+  const removeComment = async (commentId) => {
+    if (deletingId) return;
+    if (!window.confirm('Delete this student message (and your reply)? This cannot be undone.')) return;
+    setDeletingId(commentId);
+    try {
+      await videoApi.deleteComment(commentId);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } catch (err) {
+      alert(err?.message || 'Could not delete.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-neutral-400" /></div>;
   }
@@ -65,10 +80,18 @@ function CommentsTab({ video }) {
           <div key={c.id} className="rounded-2xl border border-neutral-100 bg-white p-3">
             <div className="flex items-center gap-2.5 mb-2">
               <Avatar name={s.name || 'Student'} src={s.avatar_url} size="sm" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{s.name || 'Student'}</p>
                 <p className="text-[11px] text-neutral-400">{relTime(c.created_at)}</p>
               </div>
+              <button
+                onClick={() => removeComment(c.id)}
+                disabled={deletingId === c.id}
+                title="Delete message"
+                className="p-1.5 -mr-1 rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+              >
+                {deletingId === c.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              </button>
             </div>
             <p className="text-sm text-neutral-800 whitespace-pre-wrap break-words">{c.text}</p>
 
@@ -175,7 +198,7 @@ export default function VideoViewersModal({ video, onClose }) {
                 <span className="text-sm font-bold text-neutral-900">{watchPct}%</span>
               </div>
             </div>
-            <div className="flex-1 grid grid-cols-2 gap-2">
+            <div className="flex-1 grid grid-cols-3 gap-2">
               <div className="bg-green-50 border border-green-100 rounded-xl p-2.5 text-center">
                 <p className="text-2xl font-bold text-green-700 leading-none mb-0.5">{watched.length}</p>
                 <p className="text-xs text-green-600 font-medium">Watched</p>
@@ -183,6 +206,12 @@ export default function VideoViewersModal({ video, onClose }) {
               <div className="bg-white border border-neutral-200 rounded-xl p-2.5 text-center">
                 <p className="text-2xl font-bold text-neutral-500 leading-none mb-0.5">{notWatched.length}</p>
                 <p className="text-xs text-neutral-400 font-medium">Not yet</p>
+              </div>
+              <div className="bg-rose-50 border border-rose-100 rounded-xl p-2.5 text-center">
+                <p className="text-2xl font-bold text-rose-600 leading-none mb-0.5 flex items-center justify-center gap-1">
+                  <Heart size={15} className="fill-rose-500 text-rose-500" />{video?.like_count || 0}
+                </p>
+                <p className="text-xs text-rose-500 font-medium">Likes</p>
               </div>
             </div>
           </div>

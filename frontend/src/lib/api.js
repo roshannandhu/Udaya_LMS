@@ -330,6 +330,14 @@ export const videoApi = {
     apiClient(`/videos/${videoId}/comments`, { method: 'POST', body: JSON.stringify({ text }) }),
   replyComment: (commentId, text) =>
     apiClient(`/video-comments/${commentId}/reply`, { method: 'PATCH', body: JSON.stringify({ text }) }),
+  // Delete a comment. Student may delete only their own; teacher may delete any (server-enforced).
+  deleteComment: (commentId) =>
+    apiClient(`/video-comments/${commentId}`, { method: 'DELETE' }),
+  // Likes. Student likes/unlikes a lesson; teacher sees the count (in the video list).
+  likeVideo: (videoId) =>
+    apiClient(`/videos/${videoId}/like`, { method: 'POST' }),
+  unlikeVideo: (videoId) =>
+    apiClient(`/videos/${videoId}/like`, { method: 'DELETE' }),
 };
 
 export const liveClassApi = {

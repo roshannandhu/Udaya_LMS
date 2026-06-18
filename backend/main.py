@@ -432,6 +432,87 @@ def _video_comments_enabled() -> bool:
     return bool(_VIDEO_COMMENTS_OK)
 
 
+async def _ensure_video_likes_table():
+    """Auto-add the video_likes table if missing (one like per student per video).
+    Same self-heal pattern as _ensure_video_comments_table: try pg-meta, then psql."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
+        return
+    try:
+        service_supabase.table("video_likes").select("id").limit(1).execute()
+        return
+    except Exception:
+        pass
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+    ddl = """
+        CREATE TABLE IF NOT EXISTS video_likes (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            video_id    UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+            student_id  UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            created_at  TIMESTAMPTZ DEFAULT now(),
+            UNIQUE (video_id, student_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_likes_video ON video_likes(video_id);
+        CREATE INDEX IF NOT EXISTS idx_video_likes_student ON video_likes(student_id);
+        ALTER TABLE video_likes ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "deny_all_video_likes" ON video_likes;
+        CREATE POLICY "deny_all_video_likes" ON video_likes FOR ALL USING (false);
+    """
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
+            )
+            if resp.is_success:
+                print("[*] Auto-migrated: video_likes table (pg-meta)")
+                return
+            raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] pg-meta migrate failed for video_likes: {e}")
+
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        print("[!] DATABASE_URL not set — cannot self-create video_likes.")
+        print("[!] Run the video_likes block from backend/schema.sql in the Supabase SQL Editor.")
+        return
+    try:
+        proc = await asyncio.to_thread(
+            lambda: subprocess.run(
+                ["psql", db_url, "-v", "ON_ERROR_STOP=1", "-c", ddl],
+                capture_output=True, timeout=20,
+            )
+        )
+        if proc.returncode == 0:
+            print("[*] Auto-migrated: video_likes table (psql)")
+        else:
+            print(f"[!] psql migrate failed for video_likes: {proc.stderr.decode(errors='replace')[:300]}")
+            print("[!] Run the video_likes block from backend/schema.sql in the Supabase SQL Editor.")
+    except Exception as e:
+        print(f"[!] psql migrate error for video_likes: {e}")
+        print("[!] Run the video_likes block from backend/schema.sql in the Supabase SQL Editor.")
+
+
+_VIDEO_LIKES_OK = None
+
+def _video_likes_enabled() -> bool:
+    """True once the video_likes table exists (graceful degrade before migration)."""
+    global _VIDEO_LIKES_OK
+    if _VIDEO_LIKES_OK:
+        return True
+    if not service_supabase:
+        return False
+    try:
+        service_supabase.table("video_likes").select("id").limit(1).execute()
+        _VIDEO_LIKES_OK = True
+    except Exception:
+        _VIDEO_LIKES_OK = False
+    return bool(_VIDEO_LIKES_OK)
+
+
 _REATTEMPT_OK = None
 
 def _reattempt_enabled() -> bool:
@@ -546,6 +627,7 @@ async def _deferred_startup_migrations():
         await _ensure_notes_and_broadcast_columns()
         await _ensure_reattempt_table()
         await _ensure_video_comments_table()
+        await _ensure_video_likes_table()
         await _ensure_notes_bucket()
     except Exception as e:
         print(f"[!] deferred startup migrations error (ignored): {e}")
@@ -4598,6 +4680,33 @@ def get_videos(class_id: Optional[str] = None, limit: Optional[int] = None, user
                 v.setdefault("my_completed", False)
                 v.setdefault("progress_secs", None)
 
+    # Embed like_count (both roles) + my_liked (student) in one extra query.
+    if videos and _video_likes_enabled():
+        try:
+            ids = [v["id"] for v in videos]
+            likes = service_supabase.table("video_likes").select("video_id, student_id").in_("video_id", ids).execute()
+            counts: dict = {}
+            mine = set()
+            my_sid = user.get("student_id")
+            for r in (likes.data or []):
+                counts[r["video_id"]] = counts.get(r["video_id"], 0) + 1
+                if my_sid and r.get("student_id") == my_sid:
+                    mine.add(r["video_id"])
+            for v in videos:
+                v["like_count"] = counts.get(v["id"], 0)
+                if user["role"] == "student":
+                    v["my_liked"] = v["id"] in mine
+        except Exception:
+            for v in videos:
+                v.setdefault("like_count", 0)
+                if user["role"] == "student":
+                    v.setdefault("my_liked", False)
+    else:
+        for v in videos:
+            v.setdefault("like_count", 0)
+            if user["role"] == "student":
+                v.setdefault("my_liked", False)
+
     if limit:
         videos = videos[:limit]
 
@@ -6940,6 +7049,66 @@ def reply_video_comment(comment_id: str, req: VideoCommentReply, user = Depends(
         print(f"Video reply student notification failed: {e}")
 
     return upd.data[0] if upd.data else {"id": comment_id, "teacher_reply": text, "replied_at": replied_at}
+
+
+@app.delete("/api/video-comments/{comment_id}")
+def delete_video_comment(comment_id: str, user = Depends(verify_token)):
+    """Delete a comment. A student may delete only their OWN message; the teacher
+    may delete any (mirrors the reply endpoint's role model)."""
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    existing = service_supabase.table("video_comments").select("student_id").eq("id", comment_id).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if user["role"] == "teacher":
+        pass  # teacher can delete any
+    elif user["role"] == "student" and existing.data.get("student_id") == user.get("student_id"):
+        pass  # student can delete their own
+    else:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    service_supabase.table("video_comments").delete().eq("id", comment_id).execute()
+    return {"ok": True}
+
+
+# ── Video likes (student likes a lesson; teacher sees the count) ─────────────────
+
+def _video_like_count(video_id: str) -> int:
+    try:
+        res = service_supabase.table("video_likes").select("id", count="exact").eq("video_id", video_id).execute()
+        return res.count or 0
+    except Exception:
+        return 0
+
+
+@app.post("/api/videos/{video_id}/like")
+def like_video(video_id: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase or not user.get("student_id"):
+        raise HTTPException(status_code=503, detail="Not available")
+    if not _video_likes_enabled():
+        raise HTTPException(status_code=503, detail="Likes aren't enabled yet.")
+    try:
+        # Idempotent: ignore the duplicate-key error if already liked.
+        service_supabase.table("video_likes").insert(
+            {"video_id": video_id, "student_id": user["student_id"]}
+        ).execute()
+    except Exception:
+        pass
+    return {"liked": True, "like_count": _video_like_count(video_id)}
+
+
+@app.delete("/api/videos/{video_id}/like")
+def unlike_video(video_id: str, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase or not user.get("student_id"):
+        raise HTTPException(status_code=503, detail="Not available")
+    if not _video_likes_enabled():
+        return {"liked": False, "like_count": 0}
+    service_supabase.table("video_likes").delete() \
+        .eq("video_id", video_id).eq("student_id", user["student_id"]).execute()
+    return {"liked": False, "like_count": _video_like_count(video_id)}
 
 
 # --- Reminders ---

@@ -260,6 +260,21 @@ ALTER TABLE video_comments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "deny_all_video_comments" ON video_comments;
 CREATE POLICY "deny_all_video_comments" ON video_comments FOR ALL USING (false);
 
+-- Video likes (one like per student per lesson; teacher sees the count). RLS
+-- denies direct client access — the API computes counts with the service key.
+CREATE TABLE IF NOT EXISTS video_likes (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_id    UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    student_id  UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (video_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_video_likes_video ON video_likes(video_id);
+CREATE INDEX IF NOT EXISTS idx_video_likes_student ON video_likes(student_id);
+ALTER TABLE video_likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_video_likes" ON video_likes;
+CREATE POLICY "deny_all_video_likes" ON video_likes FOR ALL USING (false);
+
 -- Broadcasts (WhatsApp-style per standard)
 CREATE TABLE IF NOT EXISTS broadcasts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
