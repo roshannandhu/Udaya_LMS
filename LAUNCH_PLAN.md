@@ -1,4 +1,16 @@
 # LAUNCH_PLAN.md — Udaya LMS
+
+> ⚠️ **AS-BUILT NOTE (June 2026): the app is now LIVE. For the actual production setup + ops
+> runbook, see [`DEPLOYMENT.md`](DEPLOYMENT.md) — that is the source of truth.** This file remains
+> the broader strategic plan (architecture rationale, cost, security, marketing, legal, Android,
+> roadmap, Phase-2 scaling). A few Phase-1 deploy specifics below drifted from what was actually
+> deployed — trust DEPLOYMENT.md where they differ:
+> - EC2 is **t3.micro** (free tier), region **ap-south-2 (Hyderabad)** — *not* t3.small / ap-south-1.
+> - Supabase is in **ap-northeast-1 (Tokyo)**; backup `DATABASE_URL` uses the `aws-1-ap-northeast-1` pooler.
+> - Backend auto-deploy is a **cron poller** (`autodeploy.sh`), *not* GitHub Actions.
+> - Backups run via an **in-app scheduler** (Settings → Backups, off/daily/weekly/monthly), *not* a crontab.
+> - SSH lockdown (port 22 → My IP) was **intentionally skipped** (key-only + fail2ban).
+
 > Version 3.0 — **DECISION CHANGED: backend compute moves to AWS EC2 (was Hetzner CX33 + Coolify).**
 >   Two-phase plan: **Phase 1 (today, ~300 students)** = a single EC2 `t3.small` running FastAPI in
 >   Docker, no load balancer. **Phase 2 (3,000+ students)** = Auto Scaling Group (1–10 instances)
