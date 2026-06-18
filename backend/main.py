@@ -8244,6 +8244,8 @@ def _verify_teacher_owns_class(class_id: str, teacher_id: str):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 async def _ensure_assignments_bucket():
+    if filestore.is_r2_enabled():
+        return  # R2 needs no pre-created bucket; files go to R2_PRIVATE_BUCKET
     try:
         await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("assignments"))
     except Exception:
