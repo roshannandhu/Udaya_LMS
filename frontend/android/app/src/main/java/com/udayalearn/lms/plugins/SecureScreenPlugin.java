@@ -1,4 +1,4 @@
-package com.tutoria.lms.plugins;
+package com.udayalearn.lms.plugins;
 
 import android.view.WindowManager;
 import com.getcapacitor.Plugin;

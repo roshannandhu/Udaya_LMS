@@ -1,8 +1,8 @@
-package com.tutoria.lms;
+package com.udayalearn.lms;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
-import com.tutoria.lms.plugins.SecureScreenPlugin;
+import com.udayalearn.lms.plugins.SecureScreenPlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
