@@ -12,6 +12,7 @@
     "cap:sync": "npm run build && npx cap sync"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@clerk/clerk-react": "^5.61.6",
     "@heroicons/react": "^2.2.0",
@@ -38,6 +39,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.4",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
