@@ -342,6 +342,71 @@ async def _ensure_reattempt_table():
         print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
 
 
+async def _ensure_video_comments_table():
+    """Auto-add the video_comments table if missing (private per-student video
+    Q&A → teacher reply). Best-effort like the others; on hosted Supabase the
+    pg-meta API is unavailable, so the canonical path is running schema.sql."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not service_supabase:
+        return
+    try:
+        service_supabase.table("video_comments").select("id").limit(1).execute()
+        return
+    except Exception:
+        pass
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+    }
+    ddl = """
+        CREATE TABLE IF NOT EXISTS video_comments (
+            id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            video_id      UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+            student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            text          TEXT NOT NULL,
+            teacher_reply TEXT,
+            replied_at    TIMESTAMPTZ,
+            created_at    TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_comments_video ON video_comments(video_id);
+        CREATE INDEX IF NOT EXISTS idx_video_comments_student ON video_comments(student_id);
+        ALTER TABLE video_comments ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "deny_all_video_comments" ON video_comments;
+        CREATE POLICY "deny_all_video_comments" ON video_comments FOR ALL USING (false);
+    """
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
+            )
+            if resp.is_success:
+                print("[*] Auto-migrated: video_comments table")
+            else:
+                raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Could not auto-migrate video_comments table: {e}")
+        print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
+
+
+_VIDEO_COMMENTS_OK = None
+
+def _video_comments_enabled() -> bool:
+    """True once the video_comments table exists. Same self-healing probe as
+    _reattempt_enabled, so the feature degrades gracefully before migration."""
+    global _VIDEO_COMMENTS_OK
+    if _VIDEO_COMMENTS_OK:
+        return True
+    if not service_supabase:
+        return False
+    try:
+        service_supabase.table("video_comments").select("id").limit(1).execute()
+        _VIDEO_COMMENTS_OK = True
+    except Exception:
+        _VIDEO_COMMENTS_OK = False
+    return bool(_VIDEO_COMMENTS_OK)
+
+
 _REATTEMPT_OK = None
 
 def _reattempt_enabled() -> bool:
@@ -455,6 +520,7 @@ async def _deferred_startup_migrations():
     try:
         await _ensure_notes_and_broadcast_columns()
         await _ensure_reattempt_table()
+        await _ensure_video_comments_table()
         await _ensure_notes_bucket()
     except Exception as e:
         print(f"[!] deferred startup migrations error (ignored): {e}")
@@ -6003,8 +6069,12 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     # depends on a DB column that may not exist.
     existing = service_supabase.table("test_attempts").select("id, points_earned").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
     prior = existing.data[0] if existing.data else None
-    is_reattempt = bool(prior and _reattempt_enabled() and _has_approved_reattempt(test_id, user["student_id"]))
-    if prior and not is_reattempt:
+    # An approved grant lets the student submit: either OVERWRITING a prior attempt
+    # (re-attempt of a test already taken) OR taking a MISSED test (no prior attempt)
+    # the teacher re-opened. The grant is an 'approved' row in test_reattempt_requests.
+    has_grant = bool(user.get("student_id") and _reattempt_enabled()
+                     and _has_approved_reattempt(test_id, user["student_id"]))
+    if prior and not has_grant:
         raise HTTPException(status_code=400, detail="Test already attempted")
 
     # Get questions with correct answers
@@ -6076,17 +6146,21 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
         "started_at": datetime.now(timezone.utc).isoformat(),
         "submitted_at": datetime.now(timezone.utc).isoformat()
     }
-    if is_reattempt:
-        # Overwrite the prior attempt; consume the one-shot grant by marking the
-        # approved request 'completed' (that status IS the grant — no DB column).
+    if prior:
+        # Overwrite the prior attempt (a re-attempt of a test already taken).
         result = service_supabase.table("test_attempts").update(attempt_data).eq("id", prior["id"]).execute()
+    else:
+        # First-ever attempt — a normal submission, OR a MISSED test re-opened by a grant.
+        result = service_supabase.table("test_attempts").insert(attempt_data).execute()
+    if has_grant:
+        # Consume the one-shot grant by marking the approved request 'completed'
+        # (that status IS the grant — no DB column). Covers BOTH a re-attempt of a
+        # prior score and a first attempt of a missed test the teacher re-opened.
         try:
             service_supabase.table("test_reattempt_requests").update({"status": "completed"}) \
                 .eq("test_id", test_id).eq("student_id", user["student_id"]).eq("status", "approved").execute()
         except Exception:
             pass
-    else:
-        result = service_supabase.table("test_attempts").insert(attempt_data).execute()
 
     # Mark the attempt as terminated (cancelled). Best-effort: the column is optional,
     # so an un-migrated DB never blocks submission — the score-0 + flagged above already
@@ -6099,7 +6173,7 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
 
     # Update student points. On a re-attempt, apply only the DELTA vs the old attempt
     # (which already contributed its points) so totals/leaderboard stay correct.
-    points_delta = points_earned - (prior.get("points_earned") or 0) if is_reattempt else points_earned
+    points_delta = (points_earned - (prior.get("points_earned") or 0)) if prior else points_earned
     student = service_supabase.table("students").select("points").eq("id", user["student_id"]).single().execute()
     if student.data:
         new_points = (student.data.get("points") or 0) + points_delta
@@ -6226,10 +6300,12 @@ def request_reattempt(test_id: str, req: ReattemptRequest, user = Depends(verify
     if not _reattempt_enabled():
         raise HTTPException(status_code=503, detail="Re-attempt isn't enabled yet. Please ask your teacher to finish setup.")
 
-    # Must have an attempt to re-attempt; can't request if a grant is already open.
-    existing = service_supabase.table("test_attempts").select("id").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
-    if not existing.data:
-        raise HTTPException(status_code=400, detail="You haven't attempted this test yet.")
+    # A re-attempt can be requested either for a test the student ALREADY took
+    # (wants to improve / was cut off) OR for one they MISSED entirely (absent /
+    # deadline passed) and want the teacher to re-open — so a prior attempt is
+    # optional. Can't request if a grant is already open.
+    existing = service_supabase.table("test_attempts").select("id, score").eq("test_id", test_id).eq("student_id", user["student_id"]).execute()
+    prior_attempt = existing.data[0] if existing.data else None
     if _has_approved_reattempt(test_id, user["student_id"]):
         raise HTTPException(status_code=400, detail="A re-attempt is already approved — just open the test again.")
 
@@ -6244,7 +6320,7 @@ def request_reattempt(test_id: str, req: ReattemptRequest, user = Depends(verify
             "student_id": user["student_id"],
             "reason": (req.reason or "").strip()[:500] or None,
             "status": "pending",
-            "old_score": existing.data[0].get("score"),
+            "old_score": prior_attempt.get("score") if prior_attempt else None,
         }).execute()
     except Exception as e:
         raise HTTPException(status_code=400, detail="Could not submit request. Please try again.")
@@ -6717,6 +6793,129 @@ def update_video_progress(data: dict, user = Depends(verify_token)):
     }, on_conflict="video_id,student_id").execute()
 
     return {"status": "ok"}
+
+
+# ── Private per-student video comments (student asks → teacher replies) ──────────
+# Visibility model mirrors the re-attempt requests: a student sees ONLY their own
+# comments; the teacher sees ALL comments on the video. Enforced server-side here
+# (service key bypasses RLS), exactly like get_broadcasts' role filtering.
+
+class VideoCommentCreate(BaseModel):
+    text: str
+
+class VideoCommentReply(BaseModel):
+    text: str
+
+@app.get("/api/videos/{video_id}/comments")
+def list_video_comments(video_id: str, user = Depends(verify_token)):
+    if not service_supabase or not _video_comments_enabled():
+        return []
+    if user["role"] == "teacher":
+        rows = service_supabase.table("video_comments").select(
+            "*, students(name, username, avatar_url)"
+        ).eq("video_id", video_id).order("created_at", desc=True).execute()
+        return rows.data or []
+    # Student: only their own comments
+    if not user.get("student_id"):
+        return []
+    rows = service_supabase.table("video_comments").select("*") \
+        .eq("video_id", video_id).eq("student_id", user["student_id"]) \
+        .order("created_at", desc=True).execute()
+    return rows.data or []
+
+
+@app.post("/api/videos/{video_id}/comments")
+def create_video_comment(video_id: str, req: VideoCommentCreate, user = Depends(verify_token)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    if not user.get("student_id"):
+        raise HTTPException(status_code=400, detail="Student record not found. Contact your teacher.")
+    if not _video_comments_enabled():
+        raise HTTPException(status_code=503, detail="Comments aren't enabled yet. Please ask your teacher to finish setup.")
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+    text = text[:1000]
+
+    try:
+        ins = service_supabase.table("video_comments").insert({
+            "video_id": video_id,
+            "student_id": user["student_id"],
+            "text": text,
+        }).execute()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not post comment. Please try again.")
+
+    created = ins.data[0] if ins.data else {"video_id": video_id, "student_id": user["student_id"], "text": text}
+
+    # Best-effort: notify the class teacher (never blocks the comment).
+    try:
+        vid = service_supabase.table("videos").select("title, class_id").eq("id", video_id).single().execute()
+        class_id = (vid.data or {}).get("class_id")
+        teacher_id = None
+        if class_id:
+            cls = service_supabase.table("subject_classes").select("standards(teacher_id)").eq("id", class_id).single().execute()
+            teacher_id = (((cls.data or {}).get("standards") or {}) or {}).get("teacher_id")
+        if teacher_id:
+            student = service_supabase.table("students").select("name").eq("id", user["student_id"]).single().execute()
+            sname = (student.data or {}).get("name") or "A student"
+            vtitle = (vid.data or {}).get("title") or "a video"
+            service_supabase.table("notifications").insert({
+                "recipient_id": teacher_id,
+                "recipient_type": "teacher",
+                "type": "video_comment",
+                "title": "New video question",
+                "body": f"{sname} asked about “{vtitle}”.",
+                "data": {"video_id": video_id, "student_id": user["student_id"]},
+                "read": False,
+            }).execute()
+    except Exception as e:
+        print(f"Video comment teacher notification failed: {e}")
+
+    return created
+
+
+@app.patch("/api/video-comments/{comment_id}/reply")
+def reply_video_comment(comment_id: str, req: VideoCommentReply, user = Depends(verify_token)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Reply cannot be empty")
+    text = text[:1000]
+
+    existing = service_supabase.table("video_comments").select("student_id, video_id").eq("id", comment_id).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    replied_at = datetime.now(timezone.utc).isoformat()
+    upd = service_supabase.table("video_comments").update({
+        "teacher_reply": text,
+        "replied_at": replied_at,
+    }).eq("id", comment_id).execute()
+
+    # Best-effort: notify the student their question was answered.
+    try:
+        service_supabase.table("notifications").insert({
+            "recipient_id": existing.data["student_id"],
+            "recipient_type": "student",
+            "type": "video_reply",
+            "title": "Teacher replied",
+            "body": "Your teacher answered your question.",
+            "data": {"video_id": existing.data.get("video_id")},
+            "read": False,
+        }).execute()
+    except Exception as e:
+        print(f"Video reply student notification failed: {e}")
+
+    return upd.data[0] if upd.data else {"id": comment_id, "teacher_reply": text, "replied_at": replied_at}
+
 
 # --- Reminders ---
 @app.get("/api/reminders")
@@ -9002,8 +9201,10 @@ def _store_branding_logo(data_url: str) -> Optional[str]:
         return None
 
 class TeacherSettingsInput(BaseModel):
-    ai_provider: Optional[str] = None
-    ai_api_key: Optional[str] = None
+    # NOTE: the AI provider/key are configured on the backend via env vars
+    # (AI_PROVIDER, GEMINI_API_KEY, …) — see _resolve_ai_config — NOT here. The
+    # old ai_provider/ai_api_key fields were removed: a stale ai_provider in the
+    # shared settings DB used to shadow GEMINI_API_KEY and break insights.
     # Branding
     lms_name: Optional[str] = None
     lms_logo: Optional[str] = None  # base64 data URL or "" to clear
@@ -9029,6 +9230,10 @@ def get_settings(user: dict = Depends(get_current_user)):
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Not authorized")
     settings = dict(get_teacher_settings())
+    # The AI provider/key now live in backend env vars, not in settings. Never
+    # ship them to the client even if a stale value is still persisted in the DB.
+    settings.pop("ai_api_key", None)
+    settings.pop("ai_provider", None)
     # Read-only hint for the Security UI: OTP emails need RESEND_API_KEY in .env.
     settings["otp_email_ready"] = bool(RESEND_API_KEY)
     settings.setdefault("backup_frequency", "daily")
@@ -9080,6 +9285,43 @@ GEMINI_GEN_CONFIG = {
     "thinkingConfig": {"thinkingBudget": 0},
 }
 OPENAI_TEMPERATURE = 0.3
+
+
+def _resolve_ai_config() -> dict:
+    """Single source of truth for which AI provider/model/key to use.
+
+    Driven ENTIRELY by backend env vars — never the frontend or the (shared,
+    DB-backed) teacher settings. This is deliberate: the old code read the
+    provider from teacher_settings, so a stale `ai_provider="openai"` saved once
+    via the now-removed Settings dropdown silently shadowed GEMINI_API_KEY in
+    every environment. Resolving from env means the feature works wherever the
+    key is set, and swapping to Groq later is a pure config change (Groq exposes
+    an OpenAI-compatible API, so it reuses the openai_compatible branch).
+
+    Returns a dict with `kind` ("gemini" | "openai_compatible"), `api_key`, and
+    either `models` (gemini, with a fallback model) or `base_url`+`model`.
+    """
+    provider = (os.getenv("AI_PROVIDER") or "gemini").strip().lower()
+    if provider == "gemini":
+        return {
+            "kind": "gemini",
+            "api_key": os.getenv("GEMINI_API_KEY"),
+            "models": [os.getenv("GEMINI_MODEL") or "gemini-2.5-flash", "gemini-flash-latest"],
+        }
+    if provider == "groq":  # Groq is OpenAI-compatible → reuse the openai branch
+        return {
+            "kind": "openai_compatible",
+            "api_key": os.getenv("GROQ_API_KEY"),
+            "base_url": os.getenv("GROQ_BASE_URL") or "https://api.groq.com/openai/v1",
+            "model": os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile",
+        }
+    # openai (or any other OpenAI-compatible endpoint)
+    return {
+        "kind": "openai_compatible",
+        "api_key": os.getenv("OPENAI_API_KEY"),
+        "base_url": os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1",
+        "model": os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
+    }
 
 
 def build_insights_prompt(stats: dict, viewer_role: str) -> str:
@@ -9536,18 +9778,13 @@ async def get_cached_insights(student_id: str, period: str = "overall", user: di
 @app.post("/api/insights/generate")
 async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
     _assert_insights_access(user, req.student_id)
-    # API key lives on the backend: prefer the GEMINI_API_KEY env var (set in
-    # backend/.env locally and in the Render dashboard), falling back to a key
-    # saved in teacher Settings only if the env var is unset. This keeps the key
-    # off the frontend and works on Render where teacher_settings.json is ephemeral.
-    settings = get_teacher_settings()
-    provider = settings.get("ai_provider", "gemini")
-    api_key = os.getenv("GEMINI_API_KEY") if provider == "gemini" else None
+    # Provider + key + model come ONLY from backend env vars (see _resolve_ai_config).
+    # This keeps the key off the frontend and makes a future provider swap (Gemini →
+    # Groq) a pure config change.
+    cfg = _resolve_ai_config()
+    api_key = cfg["api_key"]
     if not api_key:
-        api_key = settings.get("ai_api_key")
-
-    if not api_key:
-        raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
+        raise HTTPException(status_code=400, detail="AI API key not configured on the server.")
 
     cache_key = f"{req.student_id}:{_insights_period(req)}"
     stats = await enrich_insights_stats(req, user)
@@ -9555,35 +9792,36 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            if provider == "gemini":
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+            if cfg["kind"] == "gemini":
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": GEMINI_GEN_CONFIG,
                 }
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 404:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
+                resp = None
+                for idx, model in enumerate(cfg["models"]):
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
                     resp = await client.post(url, json=payload)
+                    # 404 on the first model → retry with the fallback model name
+                    if resp.status_code == 404 and idx + 1 < len(cfg["models"]):
+                        continue
+                    break
                 if not resp.is_success:
                     raise Exception(f"Gemini API error: {resp.text}")
                 data = resp.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
-            elif provider == "openai":
-                url = "https://api.openai.com/v1/chat/completions"
+            else:  # openai_compatible (openai, groq, …)
+                url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
                 headers = {"Authorization": f"Bearer {api_key}"}
                 payload = {
-                    "model": "gpt-4o-mini",
+                    "model": cfg["model"],
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": OPENAI_TEMPERATURE,
                 }
                 resp = await client.post(url, headers=headers, json=payload)
                 if not resp.is_success:
-                    raise Exception(f"OpenAI API error: {resp.text}")
+                    raise Exception(f"AI API error: {resp.text}")
                 data = resp.json()
                 text = data["choices"][0]["message"]["content"]
-            else:
-                raise Exception("Unknown provider")
 
             # For the new conversational prompt, we just return the raw text
             text = text.strip()
@@ -9608,15 +9846,11 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
     semaphore caps concurrent upstream streams.
     """
     _assert_insights_access(user, req.student_id)
-    settings = get_teacher_settings()
-    provider = settings.get("ai_provider", "gemini")
-    # Prefer the backend GEMINI_API_KEY env var; fall back to teacher Settings.
-    api_key = os.getenv("GEMINI_API_KEY") if provider == "gemini" else None
+    # Provider + key + model come ONLY from backend env vars (see _resolve_ai_config).
+    cfg = _resolve_ai_config()
+    api_key = cfg["api_key"]
     if not api_key:
-        api_key = settings.get("ai_api_key")
-
-    if not api_key:
-        raise HTTPException(status_code=400, detail="AI API key not configured in settings.")
+        raise HTTPException(status_code=400, detail="AI API key not configured on the server.")
 
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
@@ -9652,7 +9886,7 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": GEMINI_GEN_CONFIG,
         }
-        models = ["gemini-2.5-flash", "gemini-flash-latest"]
+        models = cfg["models"]
         async with httpx.AsyncClient(timeout=60) as client:
             for idx, model in enumerate(models):
                 url = (
@@ -9661,8 +9895,8 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                 )
                 try:
                     async with client.stream("POST", url, json=payload) as resp:
-                        # 404 on the first model → retry with the fallback model name
-                        if resp.status_code == 404 and idx == 0:
+                        # 404 on this model → retry with the next fallback model name
+                        if resp.status_code == 404 and idx + 1 < len(models):
                             continue
                         if resp.status_code == 429:
                             yield {"error": AI_BUSY_MSG}
@@ -9691,11 +9925,11 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                     yield {"error": f"Connection error: {e}"}
                     return
 
-    async def openai_stream():
-        url = "https://api.openai.com/v1/chat/completions"
+    async def openai_compatible_stream():
+        url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}"}
         payload = {
-            "model": "gpt-4o-mini",
+            "model": cfg["model"],
             "messages": [{"role": "user", "content": prompt}],
             "stream": True,
             "temperature": OPENAI_TEMPERATURE,
@@ -9708,7 +9942,7 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                         return
                     if resp.status_code >= 400:
                         body = (await resp.aread()).decode("utf-8", "ignore")
-                        yield {"error": f"OpenAI API error: {body[:400]}"}
+                        yield {"error": f"AI API error: {body[:400]}"}
                         return
                     async for line in resp.aiter_lines():
                         if not line or not line.startswith("data:"):
@@ -9733,7 +9967,7 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
         acc, finished = "", False
         try:
             async with _AI_SEMAPHORE:
-                gen = openai_stream() if provider == "openai" else gemini_stream()
+                gen = gemini_stream() if cfg["kind"] == "gemini" else openai_compatible_stream()
                 async for obj in gen:
                     if obj.get("text"):
                         acc += obj["text"]

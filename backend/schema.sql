@@ -242,6 +242,24 @@ CREATE TABLE IF NOT EXISTS assignment_reattempt_requests (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_reattempt_pending
     ON assignment_reattempt_requests(assignment_id, student_id) WHERE status = 'pending';
 
+-- Private per-student video comments (student asks a doubt on a lesson; teacher
+-- replies). A student sees ONLY their own; the teacher sees all. Visibility is
+-- enforced in the API (role-based), and RLS denies all direct client access.
+CREATE TABLE IF NOT EXISTS video_comments (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_id      UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    text          TEXT NOT NULL,
+    teacher_reply TEXT,
+    replied_at    TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_video_comments_video ON video_comments(video_id);
+CREATE INDEX IF NOT EXISTS idx_video_comments_student ON video_comments(student_id);
+ALTER TABLE video_comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_all_video_comments" ON video_comments;
+CREATE POLICY "deny_all_video_comments" ON video_comments FOR ALL USING (false);
+
 -- Broadcasts (WhatsApp-style per standard)
 CREATE TABLE IF NOT EXISTS broadcasts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
