@@ -67,3 +67,8 @@ android/.gradle/
 
 # stray build artifact from manual Pages upload
 frontend/udaya-dist.zip
+
+# Android build artifacts / IDE
+*.apk
+*.aab
+frontend/android/.idea/
