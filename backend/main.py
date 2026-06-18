@@ -5269,7 +5269,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 @app.get("/api/health")
 def health_check():
     db_status = "connected" if supabase else "disconnected"
-    return {"status": "ok", "database": db_status, "version": "2026-06-18-autodeploy-test"}
+    return {"status": "ok", "database": db_status, "version": "2026-06-18-poll-ok"}
 
 # ─── Teacher Team Management ─────────────────────────────────────────────────
 
