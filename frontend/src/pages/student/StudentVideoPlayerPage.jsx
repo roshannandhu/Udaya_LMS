@@ -5,7 +5,7 @@ import { MediaPlayer, MediaProvider } from '@vidstack/react';
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
-import { Btn, Tag } from '../../components/ui';
+import { Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { Reveal } from '../../components/bits';
@@ -28,20 +28,44 @@ function toMmSs(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// YouTube quality levels (value = YouTube's code, label = what students see).
+const YT_QUALITIES = [
+  { value: 'default', label: 'Auto' },
+  { value: 'hd1080',  label: '1080p' },
+  { value: 'hd720',   label: '720p' },
+  { value: 'large',   label: '480p' },
+  { value: 'medium',  label: '360p' },
+];
+
+// Scoped fix for the "two play buttons" bug on YouTube: the cross-origin YouTube
+// iframe renders its OWN centre play button (can't be hidden via CSS), so we make
+// the iframe non-interactive (all taps go to Vidstack's gesture/controls layer)
+// and hide Vidstack's large centre start-button — leaving YouTube's single button
+// as the only one, fully driven by Vidstack's control bar.
+const PLAYER_FIX_CSS = `
+  .udaya-player [data-provider="youtube"] iframe { pointer-events: none !important; }
+  .udaya-player media-play-button[data-media-button][data-paused],
+  .udaya-player .vds-play-button.vds-big-button { display: none !important; }
+`;
+
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore(s => s.user);
 
   const playerRef = useRef(null);
+  const playerBoxRef = useRef(null);
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
   const [loading, setLoading]     = useState(true);
 
   const [completed, setCompleted] = useState(false);
-  const [isMarking, setIsMarking] = useState(false);
   const [liked, setLiked]         = useState(false);
+
+  // YouTube quality (best-effort: a request to YouTube, which may auto-adjust)
+  const [quality, setQuality]     = useState('default');
+  const [showQuality, setShowQuality] = useState(false);
 
   // Offline state
   const [isOnline, setIsOnline]   = useState(navigator.onLine);
@@ -60,8 +84,12 @@ export default function StudentVideoPlayerPage() {
   // Playback state (drives chapter highlight + progress save + completion)
   const [currentTime, setCurrentTime] = useState(0);
   const [chapterActive, setChapterActive] = useState(-1);
+  const [watchedPct, setWatchedPct] = useState(0); // genuine coverage, for the completion hint
   const lastSavedRef = useRef(0);   // last progress_secs POSTed
   const resumedRef   = useRef(false); // resume-seek applied once
+  const watchedRef   = useRef(0);     // seconds ACTUALLY played (seeks excluded)
+  const lastTickRef  = useRef(0);     // previous currentTime, to measure real playback deltas
+  const completeFiredRef = useRef(false); // auto-complete fires at most once
 
   // Track online/offline status
   useEffect(() => {
@@ -140,11 +168,23 @@ export default function StudentVideoPlayerPage() {
 
   // ── Unified player lifecycle (works for every source via Vidstack) ──────────
 
+  // Reset per-video watch tracking whenever the video changes (and seed coverage
+  // from saved progress so a returning student isn't forced to re-watch).
+  useEffect(() => {
+    resumedRef.current = false;
+    completeFiredRef.current = false;
+    watchedRef.current = video?.progress_secs || 0;
+    lastTickRef.current = 0;
+    lastSavedRef.current = 0;
+    setWatchedPct(0);
+  }, [video?.id]);
+
   function markComplete() {
-    if (completed) return;
+    if (completed || completeFiredRef.current) return;
+    completeFiredRef.current = true;
     videoApi.markComplete(video.id)
       .then(() => setCompleted(true))
-      .catch(err => console.error('markComplete failed:', err));
+      .catch(err => { completeFiredRef.current = false; console.error('markComplete failed:', err); });
   }
 
   // Resume from the last saved position once the media is ready to play.
@@ -153,18 +193,29 @@ export default function StudentVideoPlayerPage() {
     resumedRef.current = true;
     const resume = video?.progress_secs || 0;
     if (resume > 10 && playerRef.current) {
-      try { playerRef.current.currentTime = resume; } catch { /* ignore */ }
+      try { playerRef.current.currentTime = resume; lastTickRef.current = resume; } catch { /* ignore */ }
     }
   };
 
   // Fires ~4x/sec; we read live values off the player ref (provider-agnostic),
-  // update the chapter highlight, and throttle the progress POST to every ~8s.
+  // update the chapter highlight, accumulate GENUINE watched time (so completion
+  // can't be gamed by skipping to the end), throttle the progress POST to ~8s, and
+  // auto-complete only when the whole video has actually been watched.
   const onTimeUpdate = () => {
     const p = playerRef.current;
     if (!p) return;
     const t = p.currentTime || 0;
     const dur = p.duration || video?.duration_secs || 0;
     setCurrentTime(t);
+
+    // Accumulate watched seconds only across normal playback steps. A forward seek
+    // produces a big delta and a rewind a negative one — both are ignored, so only
+    // time the student actually sat through counts toward completion.
+    const delta = t - lastTickRef.current;
+    if (delta > 0 && delta < 1.5) watchedRef.current += delta;
+    lastTickRef.current = t;
+
+    if (dur > 0) setWatchedPct(Math.min(100, Math.round((watchedRef.current / dur) * 100)));
 
     if (video?.chapters?.length) {
       let idx = -1;
@@ -174,36 +225,46 @@ export default function StudentVideoPlayerPage() {
       setChapterActive(idx);
     }
 
+    // Auto-complete: must have reached the end AND genuinely watched ~all of it.
+    if (dur > 0 && !completed && t >= dur * 0.98 && watchedRef.current >= dur * 0.9) {
+      markComplete();
+    }
+
     if (isOnline && t - lastSavedRef.current >= 8) {
       lastSavedRef.current = t;
       apiClient('/video-progress', {
         method: 'POST',
         body: JSON.stringify({ video_id: videoId, progress_secs: Math.floor(t) }),
       }).catch(() => {});
-      if (dur > 0 && t / dur >= 0.9 && !completed) markComplete();
     }
   };
 
-  const onEnded = () => { if (!completed) markComplete(); };
+  // Reaching the natural end still requires real coverage (can't skip-to-end).
+  const onEnded = () => {
+    const dur = playerRef.current?.duration || video?.duration_secs || 0;
+    if (!completed && dur > 0 && watchedRef.current >= dur * 0.9) markComplete();
+  };
+
+  // Best-effort YouTube quality: post the (deprecated-but-harmless) quality
+  // commands straight to the embed iframe. YouTube may honour or auto-adjust it.
+  const setYouTubeQuality = (q) => {
+    setQuality(q);
+    setShowQuality(false);
+    const iframe = playerBoxRef.current?.querySelector('iframe');
+    const win = iframe?.contentWindow;
+    if (!win || q === 'default') return;
+    const origin = 'https://www.youtube-nocookie.com';
+    try {
+      win.postMessage(JSON.stringify({ event: 'command', func: 'setPlaybackQualityRange', args: [q, q] }), origin);
+      win.postMessage(JSON.stringify({ event: 'command', func: 'setPlaybackQuality', args: [q] }), origin);
+    } catch { /* ignore */ }
+  };
 
   // Chapter click → seek the unified player (works for ALL sources now).
   const seekTo = (secs) => {
     const p = playerRef.current;
     if (!p) return;
     try { p.currentTime = secs; p.play?.(); } catch { /* ignore */ }
-  };
-
-  const handleMarkComplete = async () => {
-    setIsMarking(true);
-    try {
-      await videoApi.markComplete(video.id);
-      setCompleted(true);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to mark as completed.');
-    } finally {
-      setIsMarking(false);
-    }
   };
 
   const handleSaveOffline = async () => {
@@ -300,7 +361,8 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Unified player ── (fixed 16/9 box; same on phone & laptop) */}
-        <div className="relative bg-black w-full overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
+        <style>{PLAYER_FIX_CSS}</style>
+        <div ref={playerBoxRef} className="udaya-player relative bg-black w-full overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
           {playerSrc && !ytError ? (
             <MediaPlayer
               ref={playerRef}
@@ -341,6 +403,34 @@ export default function StudentVideoPlayerPage() {
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50 text-sm">
               <p>No video available for this lesson.</p>
+            </div>
+          )}
+
+          {/* YouTube-only best-effort quality picker (top-right). YouTube may
+              still auto-adjust — it's a request, not a guarantee. */}
+          {isYouTube && playerSrc && !ytError && (
+            <div className="absolute top-2 right-2 z-30">
+              <button
+                onClick={() => setShowQuality(s => !s)}
+                className="px-2.5 py-1 rounded-md bg-black/55 backdrop-blur-sm text-white text-[11px] font-semibold hover:bg-black/75 transition-colors"
+                title="Video quality (YouTube may auto-adjust)"
+              >
+                {YT_QUALITIES.find(q => q.value === quality)?.label || 'Auto'}
+              </button>
+              {showQuality && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowQuality(false)} />
+                  <div className="absolute right-0 mt-1 z-20 min-w-[112px] rounded-lg bg-black/90 backdrop-blur-sm border border-white/10 shadow-xl overflow-hidden">
+                    <p className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-white/40 border-b border-white/10">Quality</p>
+                    {YT_QUALITIES.map(q => (
+                      <button key={q.value} onClick={() => setYouTubeQuality(q.value)}
+                        className={`block w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-white/10 ${quality === q.value ? 'text-white font-semibold' : 'text-white/70'}`}>
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -456,15 +546,20 @@ export default function StudentVideoPlayerPage() {
             </Reveal>
           )}
 
-          {!completed && isOnline && (
-            <Btn variant="primary" onClick={handleMarkComplete} icon={CheckCircle2} className="w-full justify-center" disabled={isMarking}>
-              {isMarking ? 'Marking...' : 'Mark as completed'}
-            </Btn>
-          )}
-          {!completed && !isOnline && (
-            <div className="flex items-center gap-2 p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-500 text-sm">
-              <WifiOff size={15} />
-              Connect to the internet to mark this video as completed.
+          {/* Completion is automatic — it marks done once the whole video has
+              actually been watched (skipping to the end won't count). */}
+          {!completed && (
+            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+              <div className="flex items-center justify-between text-sm text-neutral-600 mb-2">
+                <span className="flex items-center gap-2">
+                  <Play size={14} className="text-neutral-400" />
+                  Watch the full video to complete{!isOnline && ' (syncs when you\'re back online)'}
+                </span>
+                <span className="font-semibold tabular-nums">{watchedPct}%</span>
+              </div>
+              <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
+                <div className="h-full bg-neutral-800 rounded-full transition-all duration-300" style={{ width: `${watchedPct}%` }} />
+              </div>
             </div>
           )}
           {completed && (

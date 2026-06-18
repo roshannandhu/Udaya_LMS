@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 import uuid
 import re
 import os
+import subprocess
 import json
 import base64
 import hashlib
@@ -381,12 +382,36 @@ async def _ensure_video_comments_table():
                 f"{SUPABASE_URL}/pg-meta/v0/query", headers=headers, json={"query": ddl}
             )
             if resp.is_success:
-                print("[*] Auto-migrated: video_comments table")
-            else:
-                raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
+                print("[*] Auto-migrated: video_comments table (pg-meta)")
+                return
+            raise Exception(f"pg-meta query: {resp.status_code} {resp.text[:200]}")
     except Exception as e:
-        print(f"[!] Could not auto-migrate video_comments table: {e}")
-        print("[!] Run backend/schema.sql in the Supabase SQL Editor to apply.")
+        print(f"[!] pg-meta migrate failed for video_comments: {e}")
+
+    # Fallback: run the DDL directly over the Postgres connection via psql. Hosted
+    # Supabase doesn't expose pg-meta, so this is the path that actually works in
+    # production. DATABASE_URL is already on the box (used by scripts/backup_db.py)
+    # and postgresql-client (psql) ships in the image, so this mirrors that setup.
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        print("[!] DATABASE_URL not set — cannot self-create video_comments.")
+        print("[!] Run the video_comments block from backend/schema.sql in the Supabase SQL Editor.")
+        return
+    try:
+        proc = await asyncio.to_thread(
+            lambda: subprocess.run(
+                ["psql", db_url, "-v", "ON_ERROR_STOP=1", "-c", ddl],
+                capture_output=True, timeout=20,
+            )
+        )
+        if proc.returncode == 0:
+            print("[*] Auto-migrated: video_comments table (psql)")
+        else:
+            print(f"[!] psql migrate failed for video_comments: {proc.stderr.decode(errors='replace')[:300]}")
+            print("[!] Run the video_comments block from backend/schema.sql in the Supabase SQL Editor.")
+    except Exception as e:
+        print(f"[!] psql migrate error for video_comments: {e}")
+        print("[!] Run the video_comments block from backend/schema.sql in the Supabase SQL Editor.")
 
 
 _VIDEO_COMMENTS_OK = None

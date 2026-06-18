@@ -45,9 +45,14 @@ export default function VideoComments({ videoId }) {
       const created = await videoApi.postComment(videoId, t);
       // Backend returns the inserted row; prepend so it shows instantly.
       setComments(prev => [created, ...prev]);
-      setText('');
+      setText('');   // only cleared on success — a failed send keeps the text
     } catch (err) {
-      setError(err?.message || 'Could not send. Please try again.');
+      // 503 = the comments table isn't set up yet; show a friendly, non-alarming note.
+      const code = err?.status;
+      const msg = (code === 503 || /enabled yet|setup/i.test(err?.message || ''))
+        ? 'Comments are being set up — please try again shortly.'
+        : (err?.message || 'Could not send. Please try again.');
+      setError(msg);
     } finally {
       setSending(false);
     }
