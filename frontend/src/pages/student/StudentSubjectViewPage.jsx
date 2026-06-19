@@ -11,6 +11,7 @@ import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingVie
 import LiveClassCard from '../../components/cards/LiveClassCard';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import SecureFileViewer from '../../components/shared/SecureFileViewer';
 
 function fmtDateTimeLC(iso) {
   if (!iso) return '';
@@ -157,6 +158,7 @@ export default function StudentSubjectViewPage() {
   const [loading, setLoading] = useState(true);
   const [liveClasses, setLiveClasses] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [viewerNote, setViewerNote] = useState(null); // note open in the secure viewer
   const [activeJoin, setActiveJoin] = useState(null);
   const [joiningLiveId, setJoiningLiveId] = useState(null);
 
@@ -639,10 +641,10 @@ export default function StudentSubjectViewPage() {
                       </div>
                     </div>
                     {note.body && <p className="text-sm font-medium text-neutral-600 mt-3 whitespace-pre-wrap relative z-10">{note.body}</p>}
-                    {note.file_url && (
-                      <a href={note.file_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center justify-center w-full gap-2 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs font-bold uppercase tracking-widest text-neutral-700 hover:bg-neutral-50 hover:text-indigo-600 transition-colors shadow-sm relative z-10">
+                    {(note.storage_path || note.file_url) && (
+                      <button onClick={() => setViewerNote(note)} className="mt-4 inline-flex items-center justify-center w-full gap-2 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs font-bold uppercase tracking-widest text-neutral-700 hover:bg-neutral-50 hover:text-indigo-600 transition-colors shadow-sm relative z-10">
                         <FileText size={16} /> View Attachment
-                      </a>
+                      </button>
                     )}
                   </motion.div>
                 ))
@@ -686,6 +688,13 @@ export default function StudentSubjectViewPage() {
 
         </motion.div>
       </div>
+
+      <SecureFileViewer
+        open={!!viewerNote}
+        onClose={() => setViewerNote(null)}
+        endpoint={viewerNote ? `/notes/${viewerNote.id}/file` : null}
+        title={viewerNote?.title || 'Note'}
+      />
     </div>
   );
 }

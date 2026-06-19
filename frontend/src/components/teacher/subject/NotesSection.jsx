@@ -2,7 +2,7 @@ import React from 'react';
 import { StickyNote, Plus, Pin, PinOff, Edit2, Trash2, FileText } from 'lucide-react';
 import { Btn } from '../../ui';
 
-export default function NotesSection({ notes, onCreate, onEdit, onDelete, onTogglePin }) {
+export default function NotesSection({ notes, onCreate, onEdit, onDelete, onTogglePin, onView }) {
   if (notes.length === 0) {
     return (
       <div className="text-center py-14 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
@@ -26,11 +26,11 @@ export default function NotesSection({ notes, onCreate, onEdit, onDelete, onTogg
                 <h3 className="text-sm font-semibold text-neutral-900 truncate">{note.title}</h3>
               </div>
               {note.body && <p className="text-sm text-neutral-600 line-clamp-3 whitespace-pre-wrap">{note.body}</p>}
-              {note.file_url && (
-                <a href={note.file_url} target="_blank" rel="noopener noreferrer"
+              {(note.storage_path || note.file_url) && (
+                <button onClick={() => onView?.(note)}
                   className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800">
                   <FileText size={13}/> View attachment
-                </a>
+                </button>
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">

@@ -56,9 +56,9 @@ export default function NoteFormModal({ open, onClose, classId, note, onSaved })
         </div>
         <div>
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Attachment (PDF / image)</label>
-          {(note?.file_url && !file) ? (
+          {((note?.storage_path || note?.file_url) && !file) ? (
             <div className="flex items-center gap-2 text-sm text-neutral-600">
-              <FileText size={14}/> <span className="truncate">{note.file_url.split('/').pop()}</span>
+              <FileText size={14}/> <span className="truncate">{(note.storage_path || note.file_url || '').split('/').pop()}</span>
               <button onClick={()=>setFile('remove')} className="text-red-500 hover:text-red-700 text-xs">Remove</button>
             </div>
           ) : (

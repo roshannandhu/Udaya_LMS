@@ -87,6 +87,17 @@ def upload_private(supa, bucket: str, path: str, data: bytes, content_type: str)
     return path
 
 
+def get_bytes(supa, bucket: str, path: str, private: bool = True) -> bytes:
+    """Read an object's raw bytes server-side (for authed streaming — the client
+    never gets a file URL). R2 get_object or Supabase download."""
+    _require_backend()
+    if is_r2_enabled():
+        target = os.environ["R2_PRIVATE_BUCKET"] if private else os.environ["R2_PUBLIC_BUCKET"]
+        obj = _r2().get_object(Bucket=target, Key=path)
+        return obj["Body"].read()
+    return supa.storage.from_(bucket).download(path)
+
+
 def signed_url(supa, bucket: str, path: str, expires: int = 3600) -> str:
     """Short-lived read URL for a private object. R2 presign or Supabase signed URL."""
     _require_backend()

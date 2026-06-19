@@ -14,6 +14,7 @@ import { useAppCache, useWhatsNew, isNewSince } from '../../store';
 import NotificationBell from '../../components/shared/NotificationBell';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import VideoRail from '../../components/student/VideoRail';
+import SecureFileViewer from '../../components/shared/SecureFileViewer';
 import { pastelFor, pastelTokens } from '../../components/cards/pastel';
 import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
@@ -143,6 +144,7 @@ export default function StudentHomePage() {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [videoThumbnails, setVideoThumbnails] = useState({});
+  const [viewerNote, setViewerNote] = useState(null);
   // XP bar fills from 0 → value once content is ready (via the `.bar-fill` CSS
   // transition). Gated on `loading` so it also animates on a cold first load,
   // not just cached navigations.
@@ -814,7 +816,7 @@ export default function StudentHomePage() {
                       whileHover={{ x: 3 }}
                       transition={springCard}
                       className="p-3 flex items-start gap-3 rounded-2xl cursor-pointer hover:bg-[#F4F2EF]"
-                      onClick={() => n.file_url && window.open(n.file_url, '_blank')}
+                      onClick={() => (n.storage_path || n.file_url) && setViewerNote(n)}
                     >
                       <StickyNote size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
                       <div className="min-w-0">
@@ -917,6 +919,13 @@ export default function StudentHomePage() {
 
         </motion.div>
       </div>
+
+      <SecureFileViewer
+        open={!!viewerNote}
+        onClose={() => setViewerNote(null)}
+        endpoint={viewerNote ? `/notes/${viewerNote.id}/file` : null}
+        title={viewerNote?.title || 'Note'}
+      />
     </div>
   );
 }

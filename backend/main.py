@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import asyncio
 import csv
 from io import StringIO
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 import uuid
 import re
 import os
@@ -7754,7 +7754,7 @@ async def delete_note(note_id: str, user = Depends(verify_token)):
         row = await asyncio.to_thread(lambda: service_supabase.table("notes").select("storage_path").eq("id", note_id).single().execute())
         path = row.data.get("storage_path") if row.data else None
         if path:
-            await asyncio.to_thread(lambda: filestore.remove(service_supabase, "notes", path, public=True))
+            await asyncio.to_thread(lambda: filestore.remove(service_supabase, "notes", path, public=False))
     except Exception as e:
         print(f"Note file delete failed (ignored): {e}")
     await asyncio.to_thread(lambda: service_supabase.table("notes").delete().eq("id", note_id).execute())
@@ -7771,8 +7771,73 @@ async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(..
     contents = await file.read()
     validate_upload(file.filename, contents, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
     ct = file.content_type or "application/octet-stream"
-    url = await asyncio.to_thread(lambda: filestore.upload_public(service_supabase, "notes", path, contents, ct))
-    return {"url": url, "path": path, "type": ct}
+    # PRIVATE bucket: the file is never publicly reachable. Students view it only
+    # through the authed streaming endpoint GET /api/notes/{id}/file (no URL, no
+    # download). We return the storage key, not a public URL.
+    await asyncio.to_thread(lambda: filestore.upload_private(service_supabase, "notes", path, contents, ct))
+    return {"url": None, "path": path, "type": ct}
+
+
+# ── Secure file viewing: authed byte-streaming so students never get a file URL ──
+# Files live in the PRIVATE bucket; these endpoints verify the caller may see the
+# resource (enrolled student OR owning teacher), then proxy the bytes inline. No
+# presigned URL ever reaches the client → no download, no shareable link.
+
+def _require_class_access(class_id: str, user: dict):
+    """Raise 403 unless `user` is a student enrolled in this class's standard, or
+    the teacher who owns it. Mirrors the video-token check (main.py:4866)."""
+    cls = service_supabase.table("subject_classes").select("standard_id").eq("id", class_id).single().execute()
+    if not cls.data:
+        raise HTTPException(status_code=404, detail="Not found")
+    standard_id = cls.data["standard_id"]
+    if user["role"] == "teacher":
+        owns = service_supabase.table("standards").select("id") \
+            .eq("id", standard_id).eq("teacher_id", user["teacher_id"]).single().execute()
+        if not owns.data:
+            raise HTTPException(status_code=403, detail="Not your class")
+    else:
+        if user.get("standard_id") != standard_id:
+            raise HTTPException(status_code=403, detail="Not enrolled in this class")
+        blocked = service_supabase.table("students").select("blocked").eq("id", user["user_id"]).single().execute()
+        if not blocked.data or blocked.data.get("blocked"):
+            raise HTTPException(status_code=403, detail="Account blocked")
+
+
+async def _stream_stored_file(storage_path: Optional[str], legacy_url: Optional[str],
+                              bucket: str, content_type: Optional[str], filename: str = "file"):
+    """Return the file bytes inline. Prefer the private-bucket key; if a row only
+    has a legacy public URL (pre-migration), fetch and proxy that instead."""
+    data = None
+    if storage_path:
+        data = await asyncio.to_thread(lambda: filestore.get_bytes(service_supabase, bucket, storage_path, private=True))
+    elif legacy_url and legacy_url.startswith("http"):
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(legacy_url)
+            if r.status_code == 200:
+                data = r.content
+                content_type = content_type or r.headers.get("content-type")
+    if data is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    return Response(
+        content=data,
+        media_type=content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{filename}"', "Cache-Control": "private, no-store"},
+    )
+
+
+@app.get("/api/notes/{note_id}/file")
+async def get_note_file(note_id: str, user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    note = await asyncio.to_thread(lambda: service_supabase.table("notes")
+        .select("class_id, storage_path, file_url, file_type, title").eq("id", note_id).single().execute())
+    if not note.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    await asyncio.to_thread(lambda: _require_class_access(note.data["class_id"], user))
+    return await _stream_stored_file(
+        note.data.get("storage_path"), note.data.get("file_url"),
+        "notes", note.data.get("file_type"), note.data.get("title") or "note",
+    )
 
 
 @app.post("/api/upload")

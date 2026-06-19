@@ -301,6 +301,24 @@ export const notesApi = {
   },
 };
 
+// Fetch a protected file's bytes through the authed streaming endpoint (no public
+// URL ever reaches the client). Returns { blob, type } — the caller renders it in
+// the SecureFileViewer and revokes any object URL on close.
+export async function fetchSecureBlob(endpoint) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    const err = new Error(e.detail || `Failed to load file (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  const blob = await res.blob();
+  return { blob, type: blob.type || res.headers.get('content-type') || 'application/octet-stream' };
+}
+
 export const notificationApi = {
   getAll: () =>
     apiClient('/notifications'),

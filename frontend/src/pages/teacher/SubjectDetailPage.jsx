@@ -29,6 +29,7 @@ import TestsSection from '../../components/teacher/subject/TestsSection';
 import AssignmentsSection from '../../components/teacher/subject/AssignmentsSection';
 import LiveSection from '../../components/teacher/subject/LiveSection';
 import NotesSection from '../../components/teacher/subject/NotesSection';
+import SecureFileViewer from '../../components/shared/SecureFileViewer';
 
 const VALID_TABS = ['learn', 'assess', 'live', 'people', 'performance'];
 // Old tab ids (bookmarks / older links) map onto the merged tabs.
@@ -110,6 +111,7 @@ export default function SubjectDetailPage() {
   const [notes, setNotes]                       = useState([]);
   const [showNoteForm, setShowNoteForm]         = useState(false);
   const [editNote, setEditNote]                 = useState(null);
+  const [viewerNote, setViewerNote]             = useState(null);
   const deepLinkedTestRef = useRef(false);
 
   // Deep link from the dashboard copy-suspects card: ?test=<id> opens the
@@ -406,6 +408,7 @@ export default function SubjectDetailPage() {
                     onEdit={(n) => { setEditNote(n); setShowNoteForm(true); }}
                     onDelete={handleDeleteNote}
                     onTogglePin={handleTogglePin}
+                    onView={(n) => setViewerNote(n)}
                   />
                 </div>
               </div>
@@ -640,6 +643,12 @@ export default function SubjectDetailPage() {
         classId={classId}
         note={editNote}
         onSaved={fetchNotes}
+      />
+      <SecureFileViewer
+        open={!!viewerNote}
+        onClose={() => setViewerNote(null)}
+        endpoint={viewerNote ? `/notes/${viewerNote.id}/file` : null}
+        title={viewerNote?.title || 'Note'}
       />
       <LiveClassAttendanceSheet
         liveClassId={attendanceSheetId}
