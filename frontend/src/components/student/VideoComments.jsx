@@ -72,12 +72,12 @@ export default function VideoComments({ videoId }) {
   };
 
   return (
-    <div className="mt-6 pt-6 border-t border-[#EFEDEA]">
+    <div className="mt-6 pt-6 border-t border-[#EFEDEA] dark:border-slate-800">
       <div className="flex items-center gap-2 mb-1">
         <MessageCircle size={16} className="text-neutral-500" />
-        <h3 className="font-semibold text-neutral-900">Ask your teacher</h3>
+        <h3 className="font-semibold text-neutral-900 dark:text-white">Ask your teacher</h3>
       </div>
-      <p className="flex items-center gap-1.5 text-xs text-neutral-500 mb-4">
+      <p className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 mb-4">
         <Lock size={11} /> Private — only you and your teacher can see your messages.
       </p>
 
@@ -90,27 +90,27 @@ export default function VideoComments({ videoId }) {
           rows={2}
           maxLength={1000}
           placeholder="Ask a doubt about this lesson…"
-          className="flex-1 text-sm rounded-2xl border border-[#EFEDEA] bg-white px-4 py-2.5 outline-none focus:border-neutral-300 focus:ring-2 focus:ring-neutral-100 resize-none placeholder:text-neutral-400 transition-all"
+          className="flex-1 text-sm rounded-2xl border border-[#EFEDEA] dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-4 py-2.5 outline-none focus:border-neutral-300 dark:focus:border-slate-500 focus:ring-2 focus:ring-neutral-100 dark:focus:ring-slate-700 resize-none placeholder:text-neutral-400 dark:placeholder:text-neutral-500 transition-all"
         />
         <button
           onClick={submit}
           disabled={!text.trim() || sending}
-          className="flex-shrink-0 w-11 h-11 rounded-full bg-ink text-white flex items-center justify-center disabled:opacity-40 hover:bg-neutral-800 transition-colors"
+          className="flex-shrink-0 w-11 h-11 rounded-full bg-ink dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center disabled:opacity-40 hover:bg-neutral-800 dark:hover:bg-white transition-colors"
           title="Send"
         >
           {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</p>}
 
       {/* Thread */}
       {loading ? (
-        <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-neutral-400" /></div>
+        <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-neutral-400 dark:text-neutral-500" /></div>
       ) : comments.length === 0 ? (
         <div className="text-center py-8">
-          <MessageCircle size={26} className="text-neutral-300 mx-auto mb-2" />
-          <p className="text-sm text-neutral-400">No messages yet.<br />Ask your first doubt above.</p>
+          <MessageCircle size={26} className="text-neutral-300 dark:text-neutral-600 mx-auto mb-2" />
+          <p className="text-sm text-neutral-400 dark:text-neutral-500">No messages yet.<br />Ask your first doubt above.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -118,30 +118,30 @@ export default function VideoComments({ videoId }) {
             <div key={c.id} className="space-y-1.5">
               {/* Student's own message (right-aligned) */}
               <div className="flex flex-col items-end group">
-                <div className="max-w-[85%] bg-neutral-900 text-white text-sm rounded-2xl rounded-tr-md px-3.5 py-2 shadow-sm whitespace-pre-wrap break-words">
+                <div className="max-w-[85%] bg-neutral-900 dark:bg-slate-700 text-white text-sm rounded-2xl rounded-tr-md px-3.5 py-2 shadow-sm whitespace-pre-wrap break-words">
                   {c.text}
                 </div>
                 <div className="flex items-center gap-2 mt-1 mr-1">
                   <button
                     onClick={() => remove(c.id)}
                     disabled={deletingId === c.id}
-                    className="text-[10px] text-neutral-400 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center gap-0.5"
+                    className="text-[10px] text-neutral-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center gap-0.5"
                     title="Delete message"
                   >
                     {deletingId === c.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
                     Delete
                   </button>
-                  <span className="text-[10px] text-neutral-400">{relTime(c.created_at)}</span>
+                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500">{relTime(c.created_at)}</span>
                 </div>
               </div>
               {/* Teacher's reply (left-aligned) */}
               {c.teacher_reply && (
                 <div className="flex flex-col items-start">
-                  <div className="max-w-[85%] bg-white border border-[#EFEDEA] text-neutral-900 text-sm rounded-2xl rounded-tl-md px-3.5 py-2 shadow-sm whitespace-pre-wrap break-words">
-                    <span className="block text-[11px] font-semibold text-blue-600 mb-0.5">Teacher</span>
+                  <div className="max-w-[85%] bg-white dark:bg-slate-800 border border-[#EFEDEA] dark:border-slate-700 text-neutral-900 dark:text-white text-sm rounded-2xl rounded-tl-md px-3.5 py-2 shadow-sm whitespace-pre-wrap break-words">
+                    <span className="block text-[11px] font-semibold text-blue-600 dark:text-blue-400 mb-0.5">Teacher</span>
                     {c.teacher_reply}
                   </div>
-                  <span className="text-[10px] text-neutral-400 mt-1 ml-1">{relTime(c.replied_at)}</span>
+                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500 mt-1 ml-1">{relTime(c.replied_at)}</span>
                 </div>
               )}
             </div>

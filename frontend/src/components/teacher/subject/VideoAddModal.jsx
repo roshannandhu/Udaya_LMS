@@ -76,7 +76,7 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
   return (
     <Modal open={open} onClose={onClose} title="Add video" size="md">
       <div className="space-y-4">
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-xl text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
           <strong>Important:</strong> Set your YouTube video to <strong>Unlisted</strong> — not Private.
           Students watch inside this app and never see the URL.
         </div>
@@ -88,7 +88,7 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
               href="https://www.youtube.com/upload"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] bg-white hover:bg-[#F4F2EF] text-sm font-medium transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F4F2EF] dark:hover:bg-slate-700 text-sm font-medium transition-colors dark:text-slate-200"
             >
               <Youtube size={16} className="text-red-600" /> Upload new
               <ExternalLink size={12} className="text-neutral-400" />
@@ -97,7 +97,7 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
               href="https://studio.youtube.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] bg-white hover:bg-[#F4F2EF] text-sm font-medium transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#EFEDEA] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F4F2EF] dark:hover:bg-slate-700 text-sm font-medium transition-colors dark:text-slate-200"
             >
               <Youtube size={16} className="text-red-600" /> My videos
               <ExternalLink size={12} className="text-neutral-400" />
@@ -115,16 +115,16 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
             value={youtubeUrl}
             onChange={onYoutubeUrlChange}
             placeholder="https://www.youtube.com/watch?v=..."
-            className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
+            className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10 dark:focus:ring-slate-700 focus:border-neutral-400 dark:focus:border-slate-500"
           />
         </div>
 
         {ytPreviewError && (
-          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{ytPreviewError}</p>
+          <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/50 rounded-xl p-3">{ytPreviewError}</p>
         )}
 
         {ytVideoId && !ytPreviewError && (
-          <div className="flex gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-xl">
+          <div className="flex gap-3 p-3 bg-neutral-50 dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-xl">
             <img
               src={`https://img.youtube.com/vi/${ytVideoId}/mqdefault.jpg`}
               alt="preview"
@@ -132,7 +132,7 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
               style={{ aspectRatio: '16/9' }}
             />
             <div className="flex-1 min-w-0">
-              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded-full font-medium">
                 ✓ Video detected
               </span>
               <p className="text-xs text-neutral-400 mt-1 font-mono break-all">{ytVideoId}</p>
@@ -149,7 +149,7 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
                 value={ytTitle}
                 onChange={e => setYtTitle(e.target.value)}
                 placeholder="e.g. Chapter 5 — Quadratic Equations"
-                className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
+                className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10 dark:focus:ring-slate-700"
               />
             </div>
             <div>
@@ -159,7 +159,7 @@ export default function VideoAddModal({ open, onClose, classId, onAdded }) {
                 onChange={e => setYtDescription(e.target.value)}
                 placeholder="What this video covers..."
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-xl bg-white resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
+                className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-neutral-900/10 dark:focus:ring-slate-700"
               />
             </div>
             <Btn

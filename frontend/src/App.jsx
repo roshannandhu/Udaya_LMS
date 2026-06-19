@@ -7,6 +7,7 @@ import { useAppCache } from './store';
 import { useTheme } from './lib/theme';
 import useAndroidBackButton from './lib/useAndroidBackButton';
 import ErrorBoundary from './components/ErrorBoundary';
+import useLiveClassEvents from './hooks/useLiveClassEvents';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
@@ -201,6 +202,7 @@ function RoutedBoundary({ children }) {
 }
 
 export default function App() {
+  useLiveClassEvents();
   // Apply the saved/system theme as early as possible (sets html.dark).
   useEffect(() => { useTheme.getState().init(); }, []);
   // Android APK: make the hardware Back button navigate the SPA instead of

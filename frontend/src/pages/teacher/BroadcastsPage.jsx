@@ -148,7 +148,7 @@ export default function BroadcastsPage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 h-full bg-[#f0f2f5] lg:p-4 lg:pb-6" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
+    <div className="flex flex-col flex-1 h-full bg-[#f0f2f5] lg:p-4 lg:pb-6 -mb-28 lg:mb-0 pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:pb-0" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
       {/* Mobile/tablet TopBar — the desktop TopNav only appears at lg, so keep the
           page header until then (was md:hidden → vanished on iPad with no replacement). */}
       <div className="lg:hidden flex-shrink-0">

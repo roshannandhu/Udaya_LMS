@@ -128,14 +128,22 @@ export default function StudentLiveClassesPage() {
     return () => cancel(id);
   }, []);
 
-  // Refresh list + clock every 15s — list is now fast (DB only, no Zoom calls).
+  // Listen for real-time status updates from WebSocket
   useEffect(() => {
-    const id = setInterval(() => {
-      setNow(Date.now());
-      if (!document.hidden) fetchAll();
-    }, 15000);
-    return () => clearInterval(id);
-  }, [standardId]);
+    const handleUpdate = (e) => {
+      const { id, status } = e.detail;
+      setLiveClasses(prev => prev.map(lc => lc.id === id ? { ...lc, status } : lc));
+    };
+    window.addEventListener('live-class-update', handleUpdate);
+    
+    // Still update the clock every second for countdowns
+    const clockId = setInterval(() => setNow(Date.now()), 1000);
+    
+    return () => {
+      window.removeEventListener('live-class-update', handleUpdate);
+      clearInterval(clockId);
+    };
+  }, []);
 
   const handleJoin = async (lc) => {
     if (joiningId) return;            // ignore double-clicks while a join is in flight

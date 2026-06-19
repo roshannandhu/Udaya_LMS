@@ -301,15 +301,15 @@ export default function TeacherLiveClassesPage() {
 
   useEffect(() => { fetchAll(); }, [standards, standardsReady]);
 
-  // Refresh every 15s so cards flip to LIVE/ENDED on their own — the host
-  // starts and ends the class from their Zoom phone app, never from here.
-  // The backend list endpoint reconciles status with Zoom on each fetch.
+  // Listen for real-time status updates from WebSocket
   useEffect(() => {
-    const id = setInterval(() => {
-      if (!document.hidden) fetchAll(true);
-    }, 15000);
-    return () => clearInterval(id);
-  }, [standards, standardsReady]);
+    const handleUpdate = (e) => {
+      const { id, status } = e.detail;
+      setLiveClasses(prev => prev.map(lc => lc.id === id ? { ...lc, status } : lc));
+    };
+    window.addEventListener('live-class-update', handleUpdate);
+    return () => window.removeEventListener('live-class-update', handleUpdate);
+  }, []);
 
   // Warm the Zoom SDK in the background so the first "Watch" click is instant.
   // NOTE: requestIdleCallback/cancelIdleCallback MUST be called bound to window —

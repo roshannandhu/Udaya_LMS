@@ -9,10 +9,10 @@ export default function VideoCard({ video, thumbnail, studentsCount, onView, onM
     : null;
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-neutral-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 group">
+    <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-sm border border-neutral-100 dark:border-slate-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 group">
       {/* Thumbnail */}
       <div
-        className="relative aspect-video bg-gradient-to-br from-neutral-100 to-neutral-200 overflow-hidden cursor-pointer"
+        className="relative aspect-video bg-gradient-to-br from-neutral-100 to-neutral-200 dark:from-slate-700 dark:to-slate-800 overflow-hidden cursor-pointer"
         onClick={() => onView(video)}
       >
         {thumbnail ? (
@@ -63,13 +63,13 @@ export default function VideoCard({ video, thumbnail, studentsCount, onView, onM
 
       {/* Body */}
       <div className="p-3.5 cursor-pointer" onClick={() => onView(video)}>
-        <h4 className="text-sm font-semibold text-neutral-900 mb-2.5 line-clamp-2 leading-snug">
+        <h4 className="text-sm font-semibold text-neutral-900 dark:text-white mb-2.5 line-clamp-2 leading-snug">
           {video.title}
         </h4>
         {studentsCount > 0 ? (
           <div>
             <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="flex items-center gap-1 text-neutral-500">
+              <span className="flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
                 <Eye size={11} />
                 {watchedCount} / {studentsCount} watched
               </span>
@@ -79,7 +79,7 @@ export default function VideoCard({ video, thumbnail, studentsCount, onView, onM
                 {watchPct}%
               </span>
             </div>
-            <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-neutral-100 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   watchPct >= 70 ? 'bg-green-500' : watchPct >= 30 ? 'bg-amber-400' : 'bg-neutral-300'
@@ -89,7 +89,7 @@ export default function VideoCard({ video, thumbnail, studentsCount, onView, onM
             </div>
           </div>
         ) : (
-          <p className="text-xs text-neutral-400">No students yet</p>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500">No students yet</p>
         )}
       </div>
     </div>

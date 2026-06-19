@@ -161,48 +161,55 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
       ZoomMtg.preLoadWasm();
       ZoomMtg.prepareWebSDK();
 
-      setStatus('joining');
-
-      ZoomMtg.init({
-        leaveUrl: window.location.origin,
-        patchJsMedia: true,
-        // Default to speaker view so the host (owner) fills the screen.
-        defaultView: 'speaker',
-        // No one in the web view may copy/share the meeting link. Zoom's own UI
-        // otherwise exposes it twice: the Invite button and the meeting-info
-        // panel (invite link + meeting ID + passcode with a Copy action).
-        disableInvite: true,
-        meetingInfo: ['topic', 'host'],
-        // Students can never share their screen or rearrange tiles — only the
-        // host's (phone) share should ever be visible to the class.
-        ...(isStudent ? { screenShare: false, videoDrag: false } : {}),
-        success: () => {
-          ZoomMtg.join({
-            meetingNumber: String(meeting_id).replace(/\s/g, ''),
-            userName: display_name,
-            userEmail: '',
-            signature,
-            sdkKey: sdk_key,
-            passWord: passcode || '',
-            // Viewers receive no zak; only a host would.
-            zak: zak || '',
-            success: () => setStatus('joined'),
-            error: (e) => {
-              setError(e?.errorMessage || e?.reason || 'Could not join the meeting. Please try again.');
-              setStatus('error');
-            },
-          });
-        },
-        error: (e) => {
-          setError(e?.errorMessage || 'Could not initialize Zoom. Please check your connection.');
-          setStatus('error');
-        },
-      });
+      // Stop here and wait for a user click. The user click provides the fresh gesture 
+      // required by the browser to allow AudioContext to autoplay upon joining.
+      setStatus('ready_to_join');
     } catch (err) {
       console.error('Zoom SDK error:', err);
       setError(`Failed to load Zoom: ${err?.message || String(err)}`);
       setStatus('error');
     }
+  }
+
+  function handleJoinMeeting() {
+    setStatus('joining');
+    const ZoomMtg = zoomRef.current;
+    if (!ZoomMtg) return;
+
+    ZoomMtg.init({
+      leaveUrl: window.location.origin,
+      // Default to speaker view so the host (owner) fills the screen.
+      defaultView: 'speaker',
+      // No one in the web view may copy/share the meeting link. Zoom's own UI
+      // otherwise exposes it twice: the Invite button and the meeting-info
+      // panel (invite link + meeting ID + passcode with a Copy action).
+      disableInvite: true,
+      meetingInfo: ['topic', 'host'],
+      // Students can never share their screen or rearrange tiles — only the
+      // host's (phone) share should ever be visible to the class.
+      ...(isStudent ? { screenShare: false, videoDrag: false } : {}),
+      success: () => {
+        ZoomMtg.join({
+          meetingNumber: String(meeting_id).replace(/\s/g, ''),
+          userName: display_name,
+          userEmail: '',
+          signature,
+          sdkKey: sdk_key,
+          passWord: passcode || '',
+          // Viewers receive no zak; only a host would.
+          zak: zak || '',
+          success: () => setStatus('joined'),
+          error: (e) => {
+            setError(e?.errorMessage || e?.reason || 'Could not join the meeting. Please try again.');
+            setStatus('error');
+          },
+        });
+      },
+      error: (e) => {
+        setError(e?.errorMessage || 'Could not initialize Zoom. Please check your connection.');
+        setStatus('error');
+      },
+    });
   }
 
   function handleLeave() {
@@ -237,7 +244,7 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
         Leave Classroom
       </button>
 
-      {(status === 'loading' || status === 'joining') && (
+      {(status === 'loading' || status === 'joining' || status === 'ready_to_join') && (
         <div className="absolute inset-0 bg-[#F4F7F6] flex items-center justify-center pointer-events-auto z-[105] overflow-hidden">
           {/* Decorative background blobs */}
           <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#EAF3EB] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-pulse" style={{ animationDuration: '4s' }}></div>
@@ -271,15 +278,25 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
             </div>
 
             <h2 className="text-[26px] font-extrabold text-neutral-900 mb-3 tracking-tight leading-tight">
-              {status === 'loading' ? 'Preparing your live class...' : 'Connecting you now...'}
+              {status === 'loading' ? 'Preparing your live class...' : status === 'ready_to_join' ? 'Class is ready' : 'Connecting you now...'}
             </h2>
             <p className="text-[15px] font-medium text-neutral-500 mb-8 leading-relaxed">
-              {status === 'loading' ? 'Setting up the interactive whiteboard and video streams.' : 'Securing your connection to the live session.'}
+              {status === 'loading' ? 'Setting up the interactive whiteboard and video streams.' : status === 'ready_to_join' ? 'Click below to securely connect your audio and video.' : 'Securing your connection to the live session.'}
             </p>
 
-            <div className="w-full bg-neutral-100 h-3 rounded-full overflow-hidden shadow-inner">
-              <div className={`h-full bg-green-500 rounded-full transition-all duration-1000 ease-out ${status === 'loading' ? 'w-2/5' : 'w-4/5'}`}></div>
-            </div>
+            {status === 'ready_to_join' ? (
+              <button 
+                onClick={handleJoinMeeting}
+                className="w-full py-4 bg-green-500 text-white rounded-2xl font-bold text-[17px] hover:bg-green-600 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <Video className="w-6 h-6" />
+                Enter Classroom
+              </button>
+            ) : (
+              <div className="w-full bg-neutral-100 h-3 rounded-full overflow-hidden shadow-inner">
+                <div className={`h-full bg-green-500 rounded-full transition-all duration-1000 ease-out ${status === 'loading' ? 'w-2/5' : 'w-4/5'}`}></div>
+              </div>
+            )}
           </div>
         </div>
       )}

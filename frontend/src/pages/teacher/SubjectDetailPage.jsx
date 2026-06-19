@@ -243,6 +243,15 @@ export default function SubjectDetailPage() {
   }
 
   useEffect(() => {
+    const handleUpdate = (e) => {
+      const { id, status } = e.detail;
+      setLiveClasses(prev => prev.map(lc => lc.id === id ? { ...lc, status } : lc));
+    };
+    window.addEventListener('live-class-update', handleUpdate);
+    return () => window.removeEventListener('live-class-update', handleUpdate);
+  }, []);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         const [videosData, testsData, lowAttData, assignData, liveData, notesData] = await Promise.all([

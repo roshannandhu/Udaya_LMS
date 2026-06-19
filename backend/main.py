@@ -897,6 +897,33 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+class LiveClassManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+    
+    async def connect(self, websocket: WebSocket, standard_id: str):
+        await websocket.accept()
+        if standard_id not in self.active_connections:
+            self.active_connections[standard_id] = []
+        self.active_connections[standard_id].append(websocket)
+        
+    def disconnect(self, websocket: WebSocket, standard_id: str):
+        if standard_id in self.active_connections and websocket in self.active_connections[standard_id]:
+            self.active_connections[standard_id].remove(websocket)
+            
+    async def broadcast(self, standard_id: str, message: dict):
+        if standard_id in self.active_connections:
+            dead = []
+            for conn in self.active_connections[standard_id]:
+                try:
+                    await conn.send_json(message)
+                except Exception:
+                    dead.append(conn)
+            for d in dead:
+                self.disconnect(d, standard_id)
+
+lc_manager = LiveClassManager()
+
 # --- Zoom helpers ---
 
 async def zoom_get_token() -> str:
@@ -7872,6 +7899,40 @@ async def get_assignment_attachment_file(attachment_id: str, user = Depends(veri
     )
 
 
+def _require_standard_access(standard_id: str, user: dict):
+    """Raise 403 unless the user is a student in this standard or its owning teacher."""
+    if user["role"] == "teacher":
+        owns = service_supabase.table("standards").select("id") \
+            .eq("id", standard_id).eq("teacher_id", user["teacher_id"]).single().execute()
+        if not owns.data:
+            raise HTTPException(status_code=403, detail="Not your class")
+    else:
+        if user.get("standard_id") != standard_id:
+            raise HTTPException(status_code=403, detail="Not in this class")
+        blocked = service_supabase.table("students").select("blocked").eq("id", user["user_id"]).single().execute()
+        if not blocked.data or blocked.data.get("blocked"):
+            raise HTTPException(status_code=403, detail="Account blocked")
+
+
+@app.get("/api/broadcasts/{broadcast_id}/file")
+async def get_broadcast_file(broadcast_id: str, user = Depends(verify_token),
+                             x_udaya_client: Optional[str] = Header(None, alias="X-Udaya-Client")):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    _require_app_for_students(user, x_udaya_client)
+    b = await asyncio.to_thread(lambda: service_supabase.table("broadcasts")
+        .select("standard_id, attachment_url, attachment_type").eq("id", broadcast_id).single().execute())
+    if not b.data:
+        raise HTTPException(status_code=404, detail="Not found")
+    await asyncio.to_thread(lambda: _require_standard_access(b.data["standard_id"], user))
+    att = b.data.get("attachment_url")
+    # Document broadcast attachments store the private-bucket KEY; legacy/public
+    # rows store a full URL which _stream_stored_file proxies for backward compat.
+    storage_path = None if (att or "").startswith("http") else att
+    legacy_url = att if (att or "").startswith("http") else None
+    return await _stream_stored_file(storage_path, legacy_url, "broadcasts", b.data.get("attachment_type"), "attachment")
+
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)):
     if user["role"] != "teacher":
@@ -7884,18 +7945,30 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
     validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
     file_ext = os.path.splitext(file.filename)[1]
     file_name = f"{uuid.uuid4()}{file_ext}"
+    ct = file.content_type or "application/octet-stream"
+    # Inline chat media (photos, voice notes) stay public so they render inline in
+    # the WhatsApp-style thread. DOCUMENT attachments (PDF/doc) go to the PRIVATE
+    # bucket and are viewed only through the authed, app-only secure viewer — the
+    # `secure` flag tells the client to store the key and use /broadcasts/{id}/file.
+    is_inline_media = ct.startswith("image/") or ct.startswith("audio/")
 
     try:
-        if not filestore.is_r2_enabled():
-            try:
-                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("broadcasts"))
-            except:
-                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("broadcasts", options={"public": True}))
+        if is_inline_media:
+            if not filestore.is_r2_enabled():
+                try:
+                    await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("broadcasts"))
+                except:
+                    await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("broadcasts", options={"public": True}))
+            public_url = await asyncio.to_thread(
+                lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, ct)
+            )
+            return {"url": public_url, "type": file.content_type, "filename": file.filename, "secure": False}
 
-        public_url = await asyncio.to_thread(
-            lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, file.content_type or "application/octet-stream")
+        # Document → private bucket; store the KEY (not a URL) in attachment_url.
+        await asyncio.to_thread(
+            lambda: filestore.upload_private(service_supabase, "broadcasts", file_name, file_bytes, ct)
         )
-        return {"url": public_url, "type": file.content_type, "filename": file.filename}
+        return {"url": file_name, "type": file.content_type, "filename": file.filename, "secure": True}
     except Exception as e:
         # Never embed the file as a base64 data: URL — that would store a large
         # binary inside the broadcasts table. Fail loudly so the file genuinely
@@ -8734,22 +8807,52 @@ async def zoom_webhook(request: Request):
     meeting_id = str(data.get("payload", {}).get("object", {}).get("id", ""))
 
     if event == "meeting.started":
-        service_supabase.table("live_classes") \
-            .update({"status": "live"}) \
-            .eq("zoom_meeting_id", meeting_id) \
-            .eq("status", "scheduled").execute()
+        lc = service_supabase.table("live_classes") \
+            .select("id, class_id").eq("zoom_meeting_id", meeting_id).eq("status", "scheduled").single().execute()
+        if lc.data:
+            lc_id = lc.data["id"]
+            service_supabase.table("live_classes") \
+                .update({"status": "live"}).eq("id", lc_id).execute()
+            
+            # Broadcast update
+            sc = service_supabase.table("subject_classes").select("standard_id").eq("id", lc.data["class_id"]).single().execute()
+            if sc.data:
+                std_id = sc.data["standard_id"]
+                msg = {"type": "status_update", "id": lc_id, "status": "live"}
+                asyncio.create_task(lc_manager.broadcast(std_id, msg))
+                asyncio.create_task(lc_manager.broadcast("teacher", msg))
 
     elif event == "meeting.ended":
         lc = service_supabase.table("live_classes") \
-            .select("id").eq("zoom_meeting_id", meeting_id).single().execute()
+            .select("id, class_id").eq("zoom_meeting_id", meeting_id).single().execute()
         if lc.data:
+            lc_id = lc.data["id"]
             service_supabase.table("live_classes") \
-                .update({"status": "ended"}).eq("id", lc.data["id"]).execute()
+                .update({"status": "ended"}).eq("id", lc_id).execute()
+            
+            # Broadcast update
+            sc = service_supabase.table("subject_classes").select("standard_id").eq("id", lc.data["class_id"]).single().execute()
+            if sc.data:
+                std_id = sc.data["standard_id"]
+                msg = {"type": "status_update", "id": lc_id, "status": "ended"}
+                asyncio.create_task(lc_manager.broadcast(std_id, msg))
+                asyncio.create_task(lc_manager.broadcast("teacher", msg))
+            
             # Note: Teacher should click "End class" to pull full attendance.
             # Webhook just marks it ended. Attendance pull requires Zoom report API
             # which may not be ready immediately after meeting ends.
 
     return {"status": "ok"}
+
+
+@app.websocket("/api/ws/live-classes/{standard_id}")
+async def ws_live_classes(websocket: WebSocket, standard_id: str):
+    await lc_manager.connect(websocket, standard_id)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        lc_manager.disconnect(websocket, standard_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

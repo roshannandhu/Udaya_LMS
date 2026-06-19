@@ -90,11 +90,11 @@ export default function VideoRail({
     <div className="relative">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 px-2">
-        <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500">{title}</h2>
+        <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">{title}</h2>
         {(seeAllTo || onSeeAll) && (
           <button
             onClick={onSeeAll}
-            className="flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-neutral-900 transition-colors"
+            className="flex items-center gap-1 text-xs font-bold text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
           >
             See all <ArrowRight size={13} />
           </button>
@@ -115,7 +115,7 @@ export default function VideoRail({
           <button
             aria-label="Scroll left"
             onClick={() => scrollByDir(-1)}
-            className="hidden md:flex absolute left-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white text-neutral-700 shadow-lift border border-[#EFEDEA] items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 transition-opacity"
+            className="hidden md:flex absolute left-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-neutral-700 dark:text-neutral-300 shadow-lift border border-[#EFEDEA] dark:border-slate-700 items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 dark:hover:bg-slate-700 transition-opacity"
           >
             <ChevronLeft size={20} />
           </button>
@@ -125,7 +125,7 @@ export default function VideoRail({
           <button
             aria-label="Scroll right"
             onClick={() => scrollByDir(1)}
-            className="hidden md:flex absolute right-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white text-neutral-700 shadow-lift border border-[#EFEDEA] items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 transition-opacity"
+            className="hidden md:flex absolute right-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-neutral-700 dark:text-neutral-300 shadow-lift border border-[#EFEDEA] dark:border-slate-700 items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 dark:hover:bg-slate-700 transition-opacity"
           >
             <ChevronRight size={20} />
           </button>
@@ -148,7 +148,7 @@ export default function VideoRail({
                 className="snap-start flex-shrink-0 w-60 md:w-72 text-left group/card focus:outline-none"
               >
                 {/* Thumbnail */}
-                <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 shadow-card border border-black/5">
+                <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 shadow-card border border-black/5 dark:border-white/5">
                   {v.thumbnail_url ? (
                     <img
                       src={v.thumbnail_url}
@@ -197,7 +197,7 @@ export default function VideoRail({
                   <p className="text-[10px] font-extrabold uppercase tracking-widest mb-1 line-clamp-1" style={{ color: pastel.fgHex }}>
                     {subject}
                   </p>
-                  <h3 className="text-sm font-bold text-neutral-900 leading-snug line-clamp-2">{v.title}</h3>
+                  <h3 className="text-sm font-bold text-neutral-900 dark:text-white leading-snug line-clamp-2">{v.title}</h3>
                   {pct > 0 && !v.completed && (
                     <p className="text-[11px] font-semibold text-neutral-400 mt-1">{Math.round(pct)}% watched</p>
                   )}

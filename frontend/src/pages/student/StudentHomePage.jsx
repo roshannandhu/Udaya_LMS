@@ -156,6 +156,15 @@ export default function StudentHomePage() {
   }, [loading]);
 
   useEffect(() => {
+    const handleUpdate = (e) => {
+      const { id, status } = e.detail;
+      setLiveClasses(prev => prev.map(lc => lc.id === id ? { ...lc, status } : lc));
+    };
+    window.addEventListener('live-class-update', handleUpdate);
+    return () => window.removeEventListener('live-class-update', handleUpdate);
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
       if (!(homeCache && homeCache.userId === user?.id)) setLoading(true);
       try {
@@ -428,8 +437,8 @@ export default function StudentHomePage() {
   }
 
   return (
-    <div className="pb-32 min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900 flex justify-center">
-      <div className="w-full max-w-[1100px] px-5 pt-8">
+    <div className="min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900 flex justify-center">
+      <div className="w-full max-w-[1100px] px-5 pt-8 pb-32">
         <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-8 lg:gap-10">
 
           {/* ── 1. GREETING HERO STRIP ── */}

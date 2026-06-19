@@ -361,18 +361,18 @@ export default function StudentVideoPlayerPage() {
 
   return (
     <ScreenshotGuard label={guardLabel}>
-    <div className="min-h-screen bg-canvas" onContextMenu={(e) => e.preventDefault()}>
+    <div className="min-h-screen bg-canvas dark:bg-slate-950" onContextMenu={(e) => e.preventDefault()}>
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-canvas/95 backdrop-blur border-b border-[#EFEDEA]">
+      <div className="sticky top-0 z-30 bg-canvas/95 dark:bg-slate-950/95 backdrop-blur border-b border-[#EFEDEA] dark:border-slate-800">
         <div className="px-4 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate(`/student/subjects/${classId}`)}
-            className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-lg transition-colors">
+            className="p-2 -ml-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-[#F4F2EF] dark:hover:bg-slate-800 rounded-lg transition-colors">
             <ArrowLeft size={18} />
           </button>
-          <h1 className="text-base md:text-lg font-semibold flex-1 truncate">{video.title}</h1>
+          <h1 className="text-base md:text-lg font-semibold flex-1 truncate dark:text-white">{video.title}</h1>
           {completed && <Tag color="green"><CheckCircle2 size={11} className="mr-1 inline" />Done</Tag>}
           {!isOnline && (
-            <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-full px-2 py-0.5">
               <WifiOff size={11} /> Offline
             </span>
           )}
@@ -383,8 +383,13 @@ export default function StudentVideoPlayerPage() {
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
         {/* The YouTube embed renders its OWN play/pause overlay; taps were reaching
             it AND Vidstack, so two play/pause symbols flashed. Make the iframe
-            non-interactive so only Vidstack's controls drive playback. */}
-        <style>{`.udaya-player [data-provider="youtube"] iframe, .udaya-player iframe[src*="youtube"] { pointer-events: none !important; }`}</style>
+            non-interactive so only Vidstack's controls drive playback.
+            Additionally, hide Vidstack's flashing play/pause keyboard action
+            display so we don't get duplicate buttons appearing over the video. */}
+        <style>{`
+          .udaya-player [data-provider="youtube"] iframe, .udaya-player iframe[src*="youtube"] { pointer-events: none !important; }
+          .udaya-player .vds-kb-action { display: none !important; }
+        `}</style>
         <div ref={playerBoxRef} className="udaya-player relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
           {fileSrc ? (
             <MediaPlayer
@@ -453,8 +458,8 @@ export default function StudentVideoPlayerPage() {
         <div className="px-4 md:px-8 py-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">
-              <h2 className="font-semibold text-lg mb-1 leading-snug">{video.title}</h2>
-              <p className="text-sm text-neutral-500 inline-flex items-center gap-1.5">
+              <h2 className="font-semibold text-lg mb-1 leading-snug dark:text-white">{video.title}</h2>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 inline-flex items-center gap-1.5">
                 <SubjectIcon value={subject?.emoji} size={14} />{subject?.name || 'Subject'}
               </p>
             </div>
@@ -466,7 +471,7 @@ export default function StudentVideoPlayerPage() {
                 disabled={likeBusy}
                 title={liked ? 'Unlike' : 'Like this lesson'}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
-                  liked ? 'bg-rose-50 border-rose-200 text-rose-600' : 'border-[#EFEDEA] text-neutral-600 hover:bg-[#F4F2EF]'
+                  liked ? 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400' : 'border-[#EFEDEA] dark:border-slate-800 text-neutral-600 dark:text-neutral-300 hover:bg-[#F4F2EF] dark:hover:bg-slate-800'
                 }`}
               >
                 <Heart size={15} className={liked ? 'fill-rose-500 text-rose-500' : ''} />
@@ -485,19 +490,19 @@ export default function StudentVideoPlayerPage() {
                       ? 'Download disabled by teacher'
                       : 'Save for offline viewing'
                   }
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors border-[#EFEDEA] text-neutral-600 hover:bg-[#F4F2EF] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors border-[#EFEDEA] dark:border-slate-800 text-neutral-600 dark:text-neutral-300 hover:bg-[#F4F2EF] dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <WifiOff size={13} /> Save
                 </button>
               )}
 
               {saving && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#EFEDEA] text-sm text-neutral-600 min-w-[130px]">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#EFEDEA] dark:border-slate-800 text-sm text-neutral-600 dark:text-neutral-300 min-w-[130px]">
                   <Loader2 size={13} className="animate-spin flex-shrink-0" />
                   <div className="flex-1">
                     <div className="text-xs mb-0.5">{saveProgress !== null ? `${saveProgress}%` : 'Downloading…'}</div>
-                    <div className="h-1 bg-neutral-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-neutral-800 rounded-full transition-all duration-300"
+                    <div className="h-1 bg-neutral-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-neutral-800 dark:bg-slate-300 rounded-full transition-all duration-300"
                         style={{ width: saveProgress !== null ? `${saveProgress}%` : '100%' }} />
                     </div>
                   </div>
@@ -506,11 +511,11 @@ export default function StudentVideoPlayerPage() {
 
               {saved && !saving && (
                 <div className="flex items-center gap-1">
-                  <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm border-green-200 bg-green-50 text-green-700">
+                  <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm border-green-200 dark:border-green-800/50 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400">
                     <Wifi size={13} /> Saved{cachedSize ? ` · ${cachedSize}` : ''}
                   </span>
                   <button onClick={handleRemoveOffline} title="Remove offline copy"
-                    className="p-2 rounded-lg border border-[#EFEDEA] text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors">
+                    className="p-2 rounded-lg border border-[#EFEDEA] dark:border-slate-800 text-neutral-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -519,14 +524,14 @@ export default function StudentVideoPlayerPage() {
           </div>
 
           {saveError && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+            <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg text-amber-800 dark:text-amber-400 text-sm">
               <AlertTriangle size={15} className="flex-shrink-0" />
               {saveError}
             </div>
           )}
 
           {saved && !saveError && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+            <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800/50 rounded-lg text-green-800 dark:text-green-400 text-sm">
               <CheckCircle2 size={15} className="flex-shrink-0" />
               Video saved to this device. You can watch it without internet.
             </div>
@@ -534,7 +539,7 @@ export default function StudentVideoPlayerPage() {
 
           {video.description && (
             <Reveal>
-              <p className="text-sm text-neutral-600 mb-5 leading-relaxed whitespace-pre-wrap">{video.description}</p>
+              <p className="text-sm text-neutral-600 dark:text-neutral-300 mb-5 leading-relaxed whitespace-pre-wrap">{video.description}</p>
             </Reveal>
           )}
 
@@ -542,26 +547,26 @@ export default function StudentVideoPlayerPage() {
           {video?.chapters?.length > 0 && (
             <Reveal className="mb-5">
               <div className="flex items-center gap-2 mb-2">
-                <Clock size={13} className="text-neutral-400" />
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Chapters</p>
+                <Clock size={13} className="text-neutral-400 dark:text-neutral-500" />
+                <p className="text-xs font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Chapters</p>
               </div>
-              <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden divide-y divide-white/40">
+              <div className="glass-panel border-[#EFEDEA] dark:border-slate-800 shadow-sm rounded-xl overflow-hidden divide-y divide-[#EFEDEA] dark:divide-slate-800">
                 {[...video.chapters].sort((a, b) => a.start_secs - b.start_secs).map((ch, idx) => (
                   <button key={idx} onClick={() => seekTo(ch.start_secs)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F4F2EF] ${
-                      chapterActive === idx ? 'bg-blue-50/60 border-l-2 border-l-blue-500' : ''
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F4F2EF] dark:hover:bg-slate-800 ${
+                      chapterActive === idx ? 'bg-blue-50/60 dark:bg-blue-900/30 border-l-2 border-l-blue-500' : ''
                     }`}>
                     <span className={`text-[11px] font-mono font-medium px-1.5 py-0.5 rounded ${
-                      chapterActive === idx ? 'bg-blue-100 text-blue-700' : 'bg-neutral-100 text-neutral-600'
+                      chapterActive === idx ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'bg-neutral-100 dark:bg-slate-800 text-neutral-600 dark:text-neutral-300'
                     }`}>
                       {toMmSs(ch.start_secs)}
                     </span>
                     <span className={`text-sm flex-1 min-w-0 truncate ${
-                      chapterActive === idx ? 'font-medium text-blue-800' : 'text-neutral-700'
+                      chapterActive === idx ? 'font-medium text-blue-800 dark:text-blue-200' : 'text-neutral-700 dark:text-neutral-200'
                     }`}>
                       {ch.title}
                     </span>
-                    <Play size={11} className="text-neutral-400 flex-shrink-0" />
+                    <Play size={11} className="text-neutral-400 dark:text-neutral-500 flex-shrink-0" />
                   </button>
                 ))}
               </div>
@@ -571,20 +576,20 @@ export default function StudentVideoPlayerPage() {
           {/* Completion is automatic — marks done once the whole video has actually
               been watched (skipping to the end won't count). */}
           {!completed ? (
-            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
-              <div className="flex items-center justify-between text-sm text-neutral-600 mb-2">
+            <div className="p-3 bg-neutral-50 dark:bg-slate-900 border border-neutral-200 dark:border-slate-800 rounded-lg">
+              <div className="flex items-center justify-between text-sm text-neutral-600 dark:text-neutral-400 mb-2">
                 <span className="flex items-center gap-2">
-                  <Play size={14} className="text-neutral-400" />
+                  <Play size={14} className="text-neutral-400 dark:text-neutral-500" />
                   Watch the full video to complete{!isOnline && ' (syncs when you\'re back online)'}
                 </span>
                 <span className="font-semibold tabular-nums">{watchedPct}%</span>
               </div>
-              <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
-                <div className="h-full bg-neutral-800 rounded-full transition-all duration-300" style={{ width: `${watchedPct}%` }} />
+              <div className="h-1.5 bg-neutral-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-neutral-800 dark:bg-slate-300 rounded-full transition-all duration-300" style={{ width: `${watchedPct}%` }} />
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800/50 rounded-lg text-green-700 dark:text-green-400 text-sm">
               <CheckCircle2 size={16} />
               You've completed this video. Great work!
             </div>

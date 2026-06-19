@@ -77,44 +77,44 @@ function CommentsTab({ video }) {
       {comments.map(c => {
         const s = c.students || {};
         return (
-          <div key={c.id} className="rounded-2xl border border-neutral-100 bg-white p-3">
+          <div key={c.id} className="rounded-2xl border border-neutral-100 dark:border-slate-800 bg-white dark:bg-slate-800 p-3">
             <div className="flex items-center gap-2.5 mb-2">
               <Avatar name={s.name || 'Student'} src={s.avatar_url} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{s.name || 'Student'}</p>
-                <p className="text-[11px] text-neutral-400">{relTime(c.created_at)}</p>
+                <p className="text-sm font-medium truncate dark:text-white">{s.name || 'Student'}</p>
+                <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{relTime(c.created_at)}</p>
               </div>
               <button
                 onClick={() => removeComment(c.id)}
                 disabled={deletingId === c.id}
                 title="Delete message"
-                className="p-1.5 -mr-1 rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                className="p-1.5 -mr-1 rounded-lg text-neutral-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors flex-shrink-0"
               >
                 {deletingId === c.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               </button>
             </div>
-            <p className="text-sm text-neutral-800 whitespace-pre-wrap break-words">{c.text}</p>
+            <p className="text-sm text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words">{c.text}</p>
 
             {c.teacher_reply ? (
               <div className="mt-2 pl-3 border-l-2 border-blue-200">
                 <p className="text-[11px] font-semibold text-blue-600 mb-0.5">Your reply · {relTime(c.replied_at)}</p>
-                <p className="text-sm text-neutral-700 whitespace-pre-wrap break-words">{c.teacher_reply}</p>
+                <p className="text-sm text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words">{c.teacher_reply}</p>
               </div>
             ) : replyFor === c.id ? (
               <div className="mt-2 flex items-end gap-2">
                 <textarea
                   autoFocus value={replyText} onChange={e => setReplyText(e.target.value)} rows={2}
                   placeholder="Write a private reply…"
-                  className="flex-1 text-sm rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 outline-none focus:border-blue-300 resize-none"
+                  className="flex-1 text-sm rounded-xl border border-neutral-200 dark:border-slate-700 bg-neutral-50 dark:bg-slate-900 dark:text-white px-3 py-2 outline-none focus:border-blue-300 dark:focus:border-blue-500 resize-none"
                 />
                 <button onClick={() => sendReply(c.id)} disabled={!replyText.trim() || busy}
-                  className="w-9 h-9 rounded-full bg-black text-white flex items-center justify-center disabled:opacity-40">
+                  className="w-9 h-9 rounded-full bg-black dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center disabled:opacity-40">
                   {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 </button>
               </div>
             ) : (
               <button onClick={() => { setReplyFor(c.id); setReplyText(''); }}
-                className="mt-2 text-xs font-medium text-blue-600 hover:underline">Reply</button>
+                className="mt-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">Reply</button>
             )}
           </div>
         );
@@ -158,13 +158,13 @@ export default function VideoViewersModal({ video, onClose }) {
   return (
     <Modal open={!!video} onClose={onClose} title={video?.title || ''} size="md">
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-neutral-100 rounded-full mb-4">
+      <div className="flex gap-1 p-1 bg-neutral-100 dark:bg-slate-900 rounded-full mb-4">
         <button onClick={() => setTab('viewers')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-semibold transition-colors ${tab === 'viewers' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500'}`}>
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-semibold transition-colors ${tab === 'viewers' ? 'bg-white dark:bg-slate-800 shadow-sm text-neutral-900 dark:text-white' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}>
           <CheckCircle2 size={14} /> Viewers
         </button>
         <button onClick={() => setTab('comments')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-semibold transition-colors ${tab === 'comments' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500'}`}>
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-semibold transition-colors ${tab === 'comments' ? 'bg-white dark:bg-slate-800 shadow-sm text-neutral-900 dark:text-white' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}>
           <MessageCircle size={14} /> Comments
         </button>
       </div>
@@ -187,7 +187,7 @@ export default function VideoViewersModal({ video, onClose }) {
       ) : (
         <div className="space-y-4">
           {/* Stats panel */}
-          <div className="flex items-center gap-4 p-4 bg-neutral-50 border border-neutral-100 rounded-2xl">
+          <div className="flex items-center gap-4 p-4 bg-neutral-50 dark:bg-slate-900/50 border border-neutral-100 dark:border-slate-800 rounded-2xl">
             <div className="relative w-16 h-16 flex-shrink-0">
               <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3.2" />
@@ -195,7 +195,7 @@ export default function VideoViewersModal({ video, onClose }) {
                   strokeDasharray={`${watchPct} ${100 - watchPct}`} strokeLinecap="round" />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-sm font-bold text-neutral-900">{watchPct}%</span>
+                <span className="text-sm font-bold text-neutral-900 dark:text-white">{watchPct}%</span>
               </div>
             </div>
             <div className="flex-1 grid grid-cols-3 gap-2">
@@ -203,15 +203,15 @@ export default function VideoViewersModal({ video, onClose }) {
                 <p className="text-2xl font-bold text-green-700 leading-none mb-0.5">{watched.length}</p>
                 <p className="text-xs text-green-600 font-medium">Watched</p>
               </div>
-              <div className="bg-white border border-neutral-200 rounded-xl p-2.5 text-center">
-                <p className="text-2xl font-bold text-neutral-500 leading-none mb-0.5">{notWatched.length}</p>
-                <p className="text-xs text-neutral-400 font-medium">Not yet</p>
+              <div className="bg-white dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 rounded-xl p-2.5 text-center">
+                <p className="text-2xl font-bold text-neutral-500 dark:text-neutral-400 leading-none mb-0.5">{notWatched.length}</p>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 font-medium">Not yet</p>
               </div>
               <div className="bg-rose-50 border border-rose-100 rounded-xl p-2.5 text-center">
                 <p className="text-2xl font-bold text-rose-600 leading-none mb-0.5 flex items-center justify-center gap-1">
                   <Heart size={15} className="fill-rose-500 text-rose-500" />{video?.like_count || 0}
                 </p>
-                <p className="text-xs text-rose-500 font-medium">Likes</p>
+                <p className="text-xs text-rose-500 dark:text-rose-400 font-medium">Likes</p>
               </div>
             </div>
           </div>
@@ -223,20 +223,20 @@ export default function VideoViewersModal({ video, onClose }) {
               </p>
               <div className="space-y-1.5">
                 {watched.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border border-neutral-100">
+                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-neutral-100 dark:border-slate-700">
                     <Avatar name={s.name} src={s.avatar_url} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name}</p>
-                      <p className="text-xs text-neutral-400">
+                      <p className="text-sm font-medium truncate dark:text-white">{s.name}</p>
+                      <p className="text-xs text-neutral-400 dark:text-neutral-500">
                         @{s.username}{s.last_watched_at ? ` · ${fmtTime(s.last_watched_at)}` : ''}
                       </p>
                     </div>
                     {s.completed ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                      <span className="flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800/50 rounded-full px-2 py-0.5 flex-shrink-0">
                         <CheckCircle2 size={10} /> Done
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                      <span className="flex items-center gap-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/50 rounded-full px-2 py-0.5 flex-shrink-0">
                         <Clock size={10} /> Partial
                       </span>
                     )}
@@ -253,13 +253,13 @@ export default function VideoViewersModal({ video, onClose }) {
               </p>
               <div className="space-y-1.5">
                 {notWatched.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-slate-900/50 border border-neutral-100 dark:border-slate-800">
                     <Avatar name={s.name} src={s.avatar_url} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate text-neutral-600">{s.name}</p>
-                      <p className="text-xs text-neutral-400">@{s.username}</p>
+                      <p className="text-sm font-medium truncate text-neutral-600 dark:text-neutral-300">{s.name}</p>
+                      <p className="text-xs text-neutral-400 dark:text-neutral-500">@{s.username}</p>
                     </div>
-                    <span className="text-xs font-medium text-neutral-400 bg-neutral-100 border border-neutral-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                    <span className="text-xs font-medium text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 rounded-full px-2 py-0.5 flex-shrink-0">
                       Not watched
                     </span>
                   </div>

@@ -6,12 +6,12 @@ import VideoCard from './VideoCard';
 export default function VideosSection({ videos, thumbnailUrls, studentsCount, onAdd, onView, onMenu }) {
   if (videos.length === 0) {
     return (
-      <div className="text-center py-14 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-        <div className="w-14 h-14 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-3">
-          <Video size={24} className="text-neutral-400" />
+      <div className="text-center py-14 glass-panel border-dashed border-[#D8D6D2] dark:border-slate-700 rounded-2xl">
+        <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
+          <Video size={24} className="text-neutral-400 dark:text-neutral-500" />
         </div>
-        <h3 className="font-semibold text-neutral-800 mb-1">No videos yet</h3>
-        <p className="text-sm text-neutral-500 mb-5">Add your first YouTube video link.</p>
+        <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">No videos yet</h3>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-5">Add your first YouTube video link.</p>
         <Btn variant="primary" icon={Upload} onClick={onAdd}>Add video</Btn>
       </div>
     );
@@ -30,9 +30,9 @@ export default function VideosSection({ videos, thumbnailUrls, studentsCount, on
       ))}
       <button
         onClick={onAdd}
-        className="aspect-video rounded-2xl border-2 border-dashed border-neutral-200 hover:border-neutral-400 hover:bg-neutral-50 transition-all flex flex-col items-center justify-center gap-2 text-neutral-400 hover:text-neutral-600"
+        className="aspect-video rounded-2xl border-2 border-dashed border-neutral-200 dark:border-slate-700 hover:border-neutral-400 dark:hover:border-slate-500 hover:bg-neutral-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center justify-center gap-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
       >
-        <div className="w-10 h-10 rounded-full border-2 border-neutral-300 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-2 border-neutral-300 dark:border-slate-600 flex items-center justify-center">
           <Plus size={18} />
         </div>
         <span className="text-xs font-medium">Add video</span>
