@@ -4,6 +4,7 @@ import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
 import SubjectIcon, { IconPicker } from '../shared/SubjectIcon';
+import SecureFileViewer from '../shared/SecureFileViewer';
 import { pastelFor, pastelTokens } from '../cards/pastel';
 import { useTheme } from '../../lib/theme';
 import { resolveAvatar } from '../ui';
@@ -53,6 +54,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [readDetailsData, setReadDetailsData] = useState({ loading: false, read_by: [], not_read_by: [] });
   const [readDetailsTab, setReadDetailsTab] = useState('read');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [viewerBroadcastId, setViewerBroadcastId] = useState(null); // doc attachment in secure viewer
   const readDetailsModalRef = useRef(null);
   const { refreshStandards, invalidate, updateStandardLocal } = useAppCache();
   const fileInputRef = useRef(null);
@@ -480,12 +482,12 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                               ) : a.type?.startsWith('audio/') ? (
                                 <VoiceNotePlayer src={a.url} isSender={isSender} />
                               ) : (
-                                <a href={a.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-black/5 hover:bg-black/10 transition-colors rounded-lg text-sm">
+                                <button onClick={() => setViewerBroadcastId(b.id)} className="w-full flex items-center gap-2 p-2 bg-black/5 hover:bg-black/10 transition-colors rounded-lg text-sm text-left">
                                   <div className="w-8 h-8 rounded-full bg-[#35b5a2]/20 flex items-center justify-center">
                                     <FileText size={14} className="text-[#35b5a2]" />
                                   </div>
                                   <span className="flex-1 truncate font-medium text-neutral-800">{a.name || 'Document'}</span>
-                                </a>
+                                </button>
                               )}
                             </div>
                           ))}
@@ -775,6 +777,13 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
           </div>
         </div>
       )}
+
+      <SecureFileViewer
+        open={!!viewerBroadcastId}
+        onClose={() => setViewerBroadcastId(null)}
+        endpoint={viewerBroadcastId ? `/broadcasts/${viewerBroadcastId}/file` : null}
+        title="Attachment"
+      />
     </div>
   );
 }

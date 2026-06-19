@@ -5,6 +5,7 @@ import { useAuthStore } from '../../lib/auth';
 import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 import SubjectIcon from '../../components/shared/SubjectIcon';
+import SecureFileViewer from '../../components/shared/SecureFileViewer';
 import { fmtTime, fmtChatDate } from '../../lib/datetime';
 
 const formatChatDate = fmtChatDate;
@@ -28,6 +29,7 @@ export default function StudentBroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState(cacheHit ? studentBroadcastsCache.items : []);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewerBroadcastId, setViewerBroadcastId] = useState(null); // doc attachment open in secure viewer
   const wsRef = useRef(null);
   const markedReadRef = useRef(new Set());
   const chatBottomRef = useRef(null);
@@ -318,6 +320,13 @@ export default function StudentBroadcastsPage() {
           )}
         </div>
       </div>
+
+      <SecureFileViewer
+        open={!!viewerBroadcastId}
+        onClose={() => setViewerBroadcastId(null)}
+        endpoint={viewerBroadcastId ? `/broadcasts/${viewerBroadcastId}/file` : null}
+        title="Attachment"
+      />
     </div>
   );
 }
