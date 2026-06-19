@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, WifiOff, Wifi, Heart, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, WifiOff, Wifi, Heart, Loader2, Trash2, AlertTriangle, Clock, Play, Captions, CaptionsOff } from 'lucide-react';
 import { MediaPlayer, MediaProvider } from '@vidstack/react';
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/default/theme.css';
@@ -34,6 +34,7 @@ export default function StudentVideoPlayerPage() {
   const user = useAuthStore(s => s.user);
 
   const playerRef = useRef(null);       // Vidstack player ref (all sources)
+  const playerBoxRef = useRef(null);    // container — to reach the YouTube iframe + settings menu
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
@@ -59,6 +60,9 @@ export default function StudentVideoPlayerPage() {
   // YouTube source needs a per-request token (the raw YT id is never sent in the list)
   const [ytToken, setYtToken]     = useState(null);
   const [ytError, setYtError]     = useState(null);
+
+  // Captions (best-effort toggle on the YouTube embed)
+  const [cc, setCc] = useState(false);
 
   // Playback state (drives chapter highlight + progress save + completion)
   const [chapterActive, setChapterActive] = useState(-1);
@@ -156,6 +160,26 @@ export default function StudentVideoPlayerPage() {
     lastTickRef.current = 0;
     lastSavedRef.current = 0;
     setWatchedPct(0);
+    setCc(false);
+  }, [video?.id]);
+
+  // Hide the "Accessibility" item from Vidstack's settings (gear) menu. Vidstack
+  // gives no prop/stable class for it and builds the menu lazily on open, so we
+  // watch the player subtree (light DOM) and hide any menu item with that label.
+  useEffect(() => {
+    const box = playerBoxRef.current;
+    if (!box) return;
+    const hideAccessibility = () => {
+      box.querySelectorAll('[role="menuitem"]').forEach(el => {
+        if ((el.textContent || '').trim().toLowerCase() === 'accessibility') {
+          el.style.display = 'none';
+        }
+      });
+    };
+    const obs = new MutationObserver(hideAccessibility);
+    obs.observe(box, { childList: true, subtree: true });
+    hideAccessibility();
+    return () => obs.disconnect();
   }, [video?.id]);
 
   function markComplete() {
@@ -223,6 +247,26 @@ export default function StudentVideoPlayerPage() {
     const p = playerRef.current;
     if (!p) return;
     try { p.currentTime = secs; p.play?.(); } catch { /* ignore */ }
+  };
+
+  // Best-effort captions toggle for the YouTube embed. Vidstack's YouTube provider
+  // doesn't surface caption tracks, so we drive YouTube's caption module directly
+  // via postMessage. Works only when the video actually has captions.
+  const toggleCaptions = () => {
+    const iframe = playerBoxRef.current?.querySelector('iframe');
+    const win = iframe?.contentWindow;
+    const next = !cc;
+    setCc(next);
+    if (!win) return;
+    const send = (func, args) => {
+      try { win.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch { /* ignore */ }
+    };
+    if (next) {
+      send('loadModule', ['captions']);
+      send('setOption', ['captions', 'track', {}]);
+    } else {
+      send('unloadModule', ['captions']);
+    }
   };
 
   const toggleLike = async () => {
@@ -337,7 +381,7 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
-        <div className="relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
+        <div ref={playerBoxRef} className="relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
           {fileSrc ? (
             <MediaPlayer
               ref={playerRef}
@@ -379,6 +423,20 @@ export default function StudentVideoPlayerPage() {
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50 text-sm">
               <p>No video available for this lesson.</p>
             </div>
+          )}
+
+          {/* Best-effort captions toggle (YouTube only). Works when the video has captions. */}
+          {isYouTube && fileSrc && isOnline && (
+            <button
+              onClick={toggleCaptions}
+              title={cc ? 'Turn off captions' : 'Turn on captions'}
+              aria-pressed={cc}
+              className={`absolute top-2 right-2 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold backdrop-blur transition-colors ${
+                cc ? 'bg-white text-black' : 'bg-black/55 text-white hover:bg-black/75'
+              }`}
+            >
+              {cc ? <Captions size={14} /> : <CaptionsOff size={14} />} CC
+            </button>
           )}
         </div>
 
