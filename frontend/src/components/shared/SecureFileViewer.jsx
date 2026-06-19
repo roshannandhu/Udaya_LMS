@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Loader2, AlertTriangle, FileText, ChevronLeft, ChevronRight, Lock, Smartphone } from 'lucide-react';
+import { X, Loader2, AlertTriangle, FileText, ChevronLeft, ChevronRight, Lock, Smartphone, Download, Check, Trash2, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { fetchSecureBlob } from '../../lib/api';
 import ScreenshotGuard from './ScreenshotGuard';
 import { useAuthStore } from '../../lib/auth';
+import {
+  isFileSaved, saveFileOffline, removeFileOffline, getCachedFile, formatBytes,
+} from '../../lib/offlineFiles';
 
 // Screenshots can only be truly blocked inside the native app (Android FLAG_SECURE).
 // So protected files are STUDENT-app-only: a student on web/desktop is told to open
@@ -24,9 +27,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
  *  - Docx → converted to read-only HTML via mammoth.
  *  - Wrapped in ScreenshotGuard (APK already blocks via FLAG_SECURE; web deters).
  *
- * Props: open, onClose, endpoint (e.g. `/notes/{id}/file`), title, cachedBlob? (offline).
+ * Props: open, onClose, endpoint (e.g. `/notes/{id}/file`), title,
+ *        offlineKey? (stable id, e.g. `note-123`, to enable "save for offline").
  */
-export default function SecureFileViewer({ open, onClose, endpoint, title = 'Document', cachedBlob = null }) {
+export default function SecureFileViewer({ open, onClose, endpoint, title = 'Document', offlineKey = null }) {
   const user = useAuthStore(s => s.user);
   const role = useAuthStore(s => s.role);
   // Students may only view protected files inside the app (where screenshots are
@@ -41,9 +45,25 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
   const [page, setPage]       = useState(1);
   const [numPages, setNumPages] = useState(0);
 
+  // Offline-in-app cache (native only; sandboxed bytes, not a device download).
+  const canOffline = IS_NATIVE && !!offlineKey;
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [saved, setSaved]   = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedSize, setSavedSize] = useState(null);
+
   const canvasRef = useRef(null);
   const objUrlRef = useRef(null);
   const pdfRef    = useRef(null);
+
+  useEffect(() => {
+    const on = () => setIsOnline(true), off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+
+  useEffect(() => { if (open && offlineKey) setSaved(isFileSaved(offlineKey)); }, [open, offlineKey]);
 
   // Load + classify the file whenever the viewer opens for a new endpoint.
   useEffect(() => {
@@ -53,16 +73,36 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
     setPdf(null); setPage(1); setNumPages(0);
 
     (async () => {
+      // Step 1 — get the bytes (network/offline errors are reported as such).
+      let blob, type;
       try {
-        const { blob, type } = cachedBlob
-          ? { blob: cachedBlob, type: cachedBlob.type }
-          : await fetchSecureBlob(endpoint);
-        if (cancelled) return;
+        let src = null;
+        if (canOffline && (saved || !navigator.onLine)) {
+          src = await getCachedFile(offlineKey);
+        }
+        if (!src) {
+          if (!navigator.onLine) throw new Error('You are offline. Save this file while online to view it later.');
+          src = await fetchSecureBlob(endpoint);
+        }
+        ({ blob, type } = src);
+      } catch (err) {
+        if (!cancelled) { setError(err?.message || 'Could not load this file.'); setLoading(false); }
+        return;
+      }
+      if (cancelled) return;
 
-        const t = (type || '').toLowerCase();
-        if (t.includes('pdf')) {
-          const buf = await blob.arrayBuffer();
-          const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+      // Step 2 — classify. Trust the magic bytes over the content-type so a file
+      // served as application/octet-stream still renders correctly.
+      let buf;
+      try { buf = await blob.arrayBuffer(); } catch { buf = null; }
+      const head = buf ? new Uint8Array(buf.slice(0, 4)) : new Uint8Array();
+      const isPdf = (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) // %PDF
+        || (type || '').toLowerCase().includes('pdf');
+      const t = (type || '').toLowerCase();
+
+      try {
+        if (isPdf && buf) {
+          const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
           if (cancelled) return;
           pdfRef.current = doc;
           setPdf(doc); setNumPages(doc.numPages); setKind('pdf');
@@ -72,7 +112,6 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
           setImgUrl(url); setKind('image');
         } else if (t.includes('word') || t.includes('officedocument') || t.includes('msword')) {
           const mammoth = (await import('mammoth')).default || (await import('mammoth'));
-          const buf = await blob.arrayBuffer();
           const res = await mammoth.convertToHtml({ arrayBuffer: buf });
           if (cancelled) return;
           setHtml(res.value || '<p>Empty document.</p>'); setKind('html');
@@ -80,7 +119,10 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
           setKind('unsupported');
         }
       } catch (err) {
-        if (!cancelled) setError(err?.message || 'Could not open this file.');
+        // Rendering failed (e.g. the pdf.js worker couldn't load) — distinct from a
+        // network failure so the message is actionable.
+        if (!cancelled) setError('Could not display this file. Please try again.');
+        console.error('SecureFileViewer render error:', err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -92,7 +134,28 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
       try { pdfRef.current?.destroy?.(); } catch { /* ignore */ }
       pdfRef.current = null;
     };
-  }, [open, endpoint, cachedBlob, mustUseApp]);
+  }, [open, endpoint, mustUseApp, canOffline, saved, offlineKey, isOnline]);
+
+  const handleSaveOffline = async () => {
+    if (!canOffline || saving) return;
+    setSaving(true);
+    try {
+      const size = await saveFileOffline(endpoint, offlineKey);
+      setSaved(true);
+      setSavedSize(formatBytes(size));
+    } catch (err) {
+      setError(err?.message || 'Could not save for offline.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveOffline = async () => {
+    if (!offlineKey) return;
+    await removeFileOffline(offlineKey);
+    setSaved(false);
+    setSavedSize(null);
+  };
 
   // Render the current PDF page to the canvas.
   const renderPage = useCallback(async () => {
@@ -159,6 +222,23 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
       <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900 text-white flex-shrink-0">
         <FileText size={18} className="text-white/70 flex-shrink-0" />
         <p className="flex-1 min-w-0 truncate text-sm font-medium">{title}</p>
+        {!isOnline && <span className="flex items-center gap-1 text-[11px] text-amber-300"><WifiOff size={12} /> Offline</span>}
+
+        {/* Save-for-offline (in-app only; sandboxed bytes, not a device download) */}
+        {canOffline && (
+          saved ? (
+            <button onClick={handleRemoveOffline} title="Remove offline copy"
+              className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-medium hover:bg-emerald-500/30 transition-colors">
+              <Check size={12} /> Saved{savedSize ? ` · ${savedSize}` : ''} <Trash2 size={11} className="ml-0.5 opacity-70" />
+            </button>
+          ) : (
+            <button onClick={handleSaveOffline} disabled={saving || !isOnline} title={isOnline ? 'Save for offline' : 'Connect to save'}
+              className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-white text-[11px] font-medium hover:bg-white/20 disabled:opacity-40 transition-colors">
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Save
+            </button>
+          )
+        )}
+
         <span className="hidden sm:flex items-center gap-1 text-[11px] text-white/50"><Lock size={11} /> View only</span>
         <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" aria-label="Close">
           <X size={20} />

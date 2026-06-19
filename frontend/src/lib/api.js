@@ -310,7 +310,12 @@ export async function fetchSecureBlob(endpoint) {
   // Signal the native app so the backend can enforce app-only viewing for
   // students (protected files are blocked on student web). Set at boot in main.jsx.
   if (typeof window !== 'undefined' && window.__UDAYA_NATIVE__) headers['X-Udaya-Client'] = 'app';
-  const res = await fetch(`${API_BASE}${endpoint}`, { headers });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, { headers });
+  } catch {
+    throw new Error('Network error — check your connection and try again.');
+  }
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     const err = new Error(e.detail || `Failed to load file (${res.status})`);

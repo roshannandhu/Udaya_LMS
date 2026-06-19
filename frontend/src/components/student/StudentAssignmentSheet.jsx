@@ -392,6 +392,7 @@ export default function StudentAssignmentSheet({
         open={!!viewerAtt}
         onClose={() => setViewerAtt(null)}
         endpoint={viewerAtt ? `/assignment-attachments/${viewerAtt.id}/file` : null}
+        offlineKey={viewerAtt ? `asg-att-${viewerAtt.id}` : null}
         title={viewerAtt?.file_name || 'Attachment'}
       />
     </Sheet>

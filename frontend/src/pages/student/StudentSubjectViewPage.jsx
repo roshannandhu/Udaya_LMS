@@ -693,6 +693,7 @@ export default function StudentSubjectViewPage() {
         open={!!viewerNote}
         onClose={() => setViewerNote(null)}
         endpoint={viewerNote ? `/notes/${viewerNote.id}/file` : null}
+        offlineKey={viewerNote ? `note-${viewerNote.id}` : null}
         title={viewerNote?.title || 'Note'}
       />
     </div>

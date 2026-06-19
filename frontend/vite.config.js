@@ -27,7 +27,9 @@ export default defineConfig({
       },
       includeAssets: ['favicon.ico', 'favicon-32.png', 'apple-touch-icon.png'],
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Include .mjs — the pdf.js worker ships as pdf.worker.min-*.mjs. Without
+        // it the worker isn't precached and PDF viewing fails ("fetch fail").
+        globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // Activate a new service worker immediately and drop old precaches so the
         // app never serves stale chunk references after a deploy (the cause of

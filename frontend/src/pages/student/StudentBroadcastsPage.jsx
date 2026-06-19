@@ -325,6 +325,7 @@ export default function StudentBroadcastsPage() {
         open={!!viewerBroadcastId}
         onClose={() => setViewerBroadcastId(null)}
         endpoint={viewerBroadcastId ? `/broadcasts/${viewerBroadcastId}/file` : null}
+        offlineKey={viewerBroadcastId ? `bc-${viewerBroadcastId}` : null}
         title="Attachment"
       />
     </div>

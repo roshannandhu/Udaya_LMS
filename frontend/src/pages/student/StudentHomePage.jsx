@@ -437,9 +437,9 @@ export default function StudentHomePage() {
   }
 
   return (
-    <div className="min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900 flex justify-center">
-      <div className="w-full max-w-[1100px] px-5 pt-8 pb-32">
-        <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-8 lg:gap-10">
+    <div className="min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900">
+      <div className="w-full max-w-[1100px] mx-auto px-5 pt-8">
+        <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-8 lg:gap-10 pb-[150px]">
 
           {/* ── 1. GREETING HERO STRIP ── */}
           <motion.div variants={fadeUp} className="flex items-end justify-between gap-4">
@@ -933,6 +933,7 @@ export default function StudentHomePage() {
         open={!!viewerNote}
         onClose={() => setViewerNote(null)}
         endpoint={viewerNote ? `/notes/${viewerNote.id}/file` : null}
+        offlineKey={viewerNote ? `note-${viewerNote.id}` : null}
         title={viewerNote?.title || 'Note'}
       />
     </div>
