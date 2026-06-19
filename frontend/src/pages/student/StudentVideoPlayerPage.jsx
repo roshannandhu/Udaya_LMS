@@ -5,6 +5,8 @@ import { MediaPlayer, MediaProvider } from '@vidstack/react';
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
+import Plyr from 'plyr';
+import 'plyr/dist/plyr.css';
 import { Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import SubjectIcon from '../../components/shared/SubjectIcon';
@@ -12,7 +14,6 @@ import { Reveal } from '../../components/bits';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import VideoComments from '../../components/student/VideoComments';
-import YouTubePlayer from '../../components/student/YouTubePlayer';
 import {
   isVideoSaved,
   saveVideoOffline,
@@ -29,13 +30,20 @@ function toMmSs(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// We play YouTube lessons through **Plyr**, which hides ALL YouTube identity
+// (logo, channel name, title bar, "Watch on YouTube", related-video chrome) and
+// renders its own custom controls. The YouTube iframe is non-interactive, so
+// there's no right-click "Copy video URL"/context menu either — the lesson never
+// feels like it's from YouTube. Quality is YouTube-adaptive (Auto) because manual
+// quality is only exposed via YouTube's own branded UI, which we deliberately hide.
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore(s => s.user);
 
   const playerRef = useRef(null);       // Vidstack player ref (file sources)
-  const ytRef = useRef(null);           // YouTubePlayer (custom controls) ref
+  const plyrRef = useRef(null);         // Plyr instance (youtube source)
+  const plyrHostRef = useRef(null);     // div Plyr mounts into
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
@@ -228,12 +236,62 @@ export default function StudentVideoPlayerPage() {
     if (!completed && dur > 0 && watchedRef.current >= dur * 0.9) markComplete();
   };
 
+  // ── Plyr (YouTube) lifecycle — custom controls, all YouTube branding hidden ──
   const isYouTube = video?.source_type === 'youtube';
+
+  useEffect(() => {
+    if (!isYouTube || !ytToken || ytError || !plyrHostRef.current) return;
+    let destroyed = false;
+    let poll = null;
+
+    // Plyr reads the YouTube id from a placeholder div's data-plyr-embed-id.
+    const embed = document.createElement('div');
+    embed.setAttribute('data-plyr-provider', 'youtube');
+    embed.setAttribute('data-plyr-embed-id', ytToken);
+    plyrHostRef.current.innerHTML = '';
+    plyrHostRef.current.appendChild(embed);
+
+    const player = new Plyr(embed, {
+      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
+      settings: ['captions', 'speed'],
+      speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+      youtube: {
+        noCookie: true, rel: 0, modestbranding: 1, iv_load_policy: 3,
+        playsinline: 1, controls: 0, showinfo: 0, disablekb: 0,
+      },
+      hideControls: true,
+      ratio: '16:9',
+    });
+    plyrRef.current = player;
+
+    player.on('ready', () => {
+      const resume = video?.progress_secs || 0;
+      if (resume > 10) { try { player.currentTime = resume; lastTickRef.current = resume; } catch { /* ignore */ } }
+    });
+    player.on('playing', () => {
+      if (poll) clearInterval(poll);
+      poll = setInterval(() => {
+        if (!plyrRef.current) return;
+        tickRef.current(plyrRef.current.currentTime || 0, plyrRef.current.duration || 0);
+      }, 750);
+    });
+    const stop = () => { if (poll) { clearInterval(poll); poll = null; } };
+    player.on('pause', stop);
+    player.on('ended', () => { stop(); endedRef.current(plyrRef.current?.duration || 0); });
+
+    return () => {
+      destroyed = true;
+      stop();
+      try { player.destroy(); } catch { /* ignore */ }
+      plyrRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isYouTube, ytToken, ytError, video?.id]);
 
   // Chapter click → seek whichever player is active.
   const seekTo = (secs) => {
-    if (isYouTube && ytRef.current?.seekTo) {
-      ytRef.current.seekTo(secs);
+    if (isYouTube && plyrRef.current) {
+      try { plyrRef.current.currentTime = secs; plyrRef.current.play?.(); } catch { /* ignore */ }
       return;
     }
     const p = playerRef.current;
@@ -351,22 +409,36 @@ export default function StudentVideoPlayerPage() {
       </div>
 
       <div className="max-w-5xl mx-auto">
+        {/* Hide every scrap of YouTube identity (logo, channel, title, share,
+            "Watch on YouTube", end-screen related videos) and make the iframe
+            non-interactive so there's no right-click → Copy URL / context menu.
+            Plyr's own controls sit above this and stay fully usable. */}
+        <style>{`
+          .udaya-yt .plyr__video-embed iframe { pointer-events: none !important; }
+          .udaya-yt .plyr { --plyr-color-main: #2563eb; }
+          /* YouTube chrome that can bleed through the embed */
+          .udaya-yt .ytp-chrome-top,
+          .udaya-yt .ytp-show-cards-title,
+          .udaya-yt .ytp-watermark,
+          .udaya-yt .ytp-youtube-button,
+          .udaya-yt .ytp-pause-overlay,
+          .udaya-yt .ytp-ce-element,
+          .udaya-yt .ytp-gradient-top,
+          .udaya-yt .ytp-title,
+          .udaya-yt .ytp-chrome-top-buttons { display: none !important; opacity: 0 !important; }
+        `}</style>
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
         <div
-          className="relative bg-black w-full overflow-hidden md:rounded-b-xl select-none"
+          className="relative bg-black w-full overflow-hidden md:rounded-b-xl"
           style={{ aspectRatio: '16 / 9' }}
           onContextMenu={(e) => e.preventDefault()}
         >
           {showYouTubePlayer ? (
-            <div className="absolute inset-0 w-full h-full">
-              <YouTubePlayer
-                ref={ytRef}
-                videoId={ytToken}
-                resumeSecs={video?.progress_secs || 0}
-                poster={video.thumbnail_url || undefined}
-                onTick={(t, d) => tickRef.current(t, d)}
-                onEnded={(d) => endedRef.current(d || video?.duration_secs || 0)}
-              />
+            // Wrapper is React-owned; Plyr builds its own DOM inside (incl. the YT
+            // iframe), so React never removes a node Plyr swapped (avoids unmount
+            // crashes). The branding-hiding CSS lives in YT_HIDE_CSS below.
+            <div className="absolute inset-0 w-full h-full udaya-yt">
+              <div ref={plyrHostRef} className="w-full h-full" />
             </div>
           ) : fileSrc ? (
             <MediaPlayer
