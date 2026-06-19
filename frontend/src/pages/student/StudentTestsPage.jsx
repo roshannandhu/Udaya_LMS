@@ -141,6 +141,30 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
           )}
         </div>
       )}
+
+      {/* Missed (absent / deadline passed, never attempted) — let the student ask
+          the teacher to re-open it. Mirrors the completed re-attempt flow. */}
+      {section === 'missed' && (
+        <div className="mt-auto pt-6 border-t border-black/5">
+          {reattemptStatus[t.id] === 'pending' ? (
+            <div className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200">
+              <Clock size={16} /> Re-attempt requested
+            </div>
+          ) : (
+            <>
+              <p className="text-[12px] font-medium text-neutral-500 mb-3 text-center leading-relaxed">
+                Missed this one? Ask your teacher to re-open it for you.
+              </p>
+              <button
+                onClick={() => onRequestReattempt(t)}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-neutral-700 bg-white/70 hover:bg-white transition-all border border-black/10"
+              >
+                <RotateCcw size={15} /> Request re-attempt
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -401,6 +425,9 @@ export default function StudentTestsPage() {
   );
   const completed = allTests.filter(t => attemptedIds.has(String(t.id)) && !isGranted(t));
   const missed    = allTests.filter(t =>
+    // A teacher-approved re-attempt re-opens a missed test → it belongs under
+    // "Available" (via isGranted), not here, so exclude granted ones.
+    !isGranted(t) &&
     (t.status === 'completed' || (t.expires_at && new Date(t.expires_at) <= now)) && !attemptedIds.has(String(t.id))
   );
 

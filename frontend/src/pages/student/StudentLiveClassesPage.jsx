@@ -72,6 +72,13 @@ export default function StudentLiveClassesPage() {
   const [joiningId, setJoiningId] = useState(null);
   const [now, setNow] = useState(Date.now());
   const fetchSeq = useRef(0);
+  // True once we've shown a list at least once (from cache or a successful fetch).
+  // Read inside fetchAll so BACKGROUND refreshes (the 15s interval / focus) never
+  // flip `loading` back on — flashing the spinner would unmount the card grid and
+  // replay AnimatedPage's entrance stagger, which is the "cards flicker every few
+  // seconds" the user saw. A ref (stable identity, read at call time) sidesteps the
+  // stale-closure bug where the interval captured the first render's `cache` (null).
+  const hydratedRef = useRef(!!cache);
 
   const standardId = user?.standard_id;
 
@@ -82,7 +89,7 @@ export default function StudentLiveClassesPage() {
   const fetchAll = async () => {
     if (!standardId) { setLoading(false); return; }
     const seq = ++fetchSeq.current; // ignore out-of-order responses
-    if (!cache) setLoading(true);
+    if (!hydratedRef.current) setLoading(true);
     try {
       // Single call for all live classes in the student's standard.
       // null = request failed — keep showing the last good list instead of
@@ -96,6 +103,7 @@ export default function StudentLiveClassesPage() {
         .map(lc => ({ ...lc, subject: { id: lc.class_id, name: lc.class_name || '' } }));
       filtered.sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
       setLiveClasses(filtered);
+      hydratedRef.current = true; // from now on, refreshes update in place (no spinner)
       liveClassesCache = { userId: user?.id, list: filtered };
     } catch (err) {
       console.error(err);

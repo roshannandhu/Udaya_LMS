@@ -14,8 +14,14 @@ if (sentryDsn) {
   })
 }
 
+// NOTE: React.StrictMode is intentionally OFF.
+// In development it double-invokes mount (mount → unmount → mount), which makes
+// every Framer Motion entrance animation (`initial="hidden"` / `fadeUp` /
+// staggerChildren) play, tear down, and play AGAIN — read by users as cards
+// "flickering" on load/navigation across every page. Production builds never
+// double-mount, so this only ever affected the dev experience.
+// Re-enable by wrapping <App /> in <React.StrictMode> if you want the extra
+// dev-time checks back (impure-render / missing-cleanup detection).
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <App />,
 )
