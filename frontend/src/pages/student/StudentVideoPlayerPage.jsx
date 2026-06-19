@@ -381,7 +381,11 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
-        <div ref={playerBoxRef} className="relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
+        {/* The YouTube embed renders its OWN play/pause overlay; taps were reaching
+            it AND Vidstack, so two play/pause symbols flashed. Make the iframe
+            non-interactive so only Vidstack's controls drive playback. */}
+        <style>{`.udaya-player [data-provider="youtube"] iframe, .udaya-player iframe[src*="youtube"] { pointer-events: none !important; }`}</style>
+        <div ref={playerBoxRef} className="udaya-player relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
           {fileSrc ? (
             <MediaPlayer
               ref={playerRef}
@@ -397,7 +401,25 @@ export default function StudentVideoPlayerPage() {
               onEnded={onEnded}
             >
               <MediaProvider />
-              <DefaultVideoLayout icons={defaultLayoutIcons} />
+              <DefaultVideoLayout
+                icons={defaultLayoutIcons}
+                slots={isYouTube ? {
+                  // CC lives INSIDE the player's top controls so it shows in
+                  // fullscreen too (an outside overlay would vanish there).
+                  topControlsGroupEnd: (
+                    <button
+                      type="button"
+                      className="vds-button"
+                      onClick={toggleCaptions}
+                      aria-label="Captions"
+                      aria-pressed={cc}
+                      title={cc ? 'Turn off captions' : 'Turn on captions'}
+                    >
+                      {cc ? <Captions size={24} /> : <CaptionsOff size={24} />}
+                    </button>
+                  ),
+                } : undefined}
+              />
             </MediaPlayer>
           ) : ytError ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
@@ -425,19 +447,6 @@ export default function StudentVideoPlayerPage() {
             </div>
           )}
 
-          {/* Best-effort captions toggle (YouTube only). Works when the video has captions. */}
-          {isYouTube && fileSrc && isOnline && (
-            <button
-              onClick={toggleCaptions}
-              title={cc ? 'Turn off captions' : 'Turn on captions'}
-              aria-pressed={cc}
-              className={`absolute top-2 right-2 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold backdrop-blur transition-colors ${
-                cc ? 'bg-white text-black' : 'bg-black/55 text-white hover:bg-black/75'
-              }`}
-            >
-              {cc ? <Captions size={14} /> : <CaptionsOff size={14} />} CC
-            </button>
-          )}
         </div>
 
         {/* ── Info panel ── */}
