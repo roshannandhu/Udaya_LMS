@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, WifiOff, Wifi, Heart, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Heart, Loader2, AlertTriangle, Clock, Play } from 'lucide-react';
 import { MediaPlayer, MediaProvider } from '@vidstack/react';
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
-import Plyr from 'plyr';
-import 'plyr/dist/plyr.css';
 import { Tag } from '../../components/ui';
 import { videoApi, apiClient } from '../../lib/api';
 import SubjectIcon from '../../components/shared/SubjectIcon';
@@ -14,14 +12,6 @@ import { Reveal } from '../../components/bits';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import VideoComments from '../../components/student/VideoComments';
-import {
-  isVideoSaved,
-  saveVideoOffline,
-  removeVideoOffline,
-  getCachedVideoBlobUrl,
-  getCachedVideoSize,
-  formatBytes,
-} from '../../lib/offlineVideos';
 
 function toMmSs(secs) {
   if (secs == null) return '0:00';
@@ -30,20 +20,35 @@ function toMmSs(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// We play YouTube lessons through **Plyr**, which hides ALL YouTube identity
-// (logo, channel name, title bar, "Watch on YouTube", related-video chrome) and
-// renders its own custom controls. The YouTube iframe is non-interactive, so
-// there's no right-click "Copy video URL"/context menu either — the lesson never
-// feels like it's from YouTube. Quality is YouTube-adaptive (Auto) because manual
-// quality is only exposed via YouTube's own branded UI, which we deliberately hide.
+// ── YouTube IFrame API loader (singleton) ───────────────────────────────────
+// YouTube lessons use YouTube's NATIVE player so quality, captions (CC),
+// fullscreen (incl. iPhone/iPad), volume and a single play/pause all work.
+let _ytApiPromise = null;
+function loadYouTubeAPI() {
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+  if (_ytApiPromise) return _ytApiPromise;
+  _ytApiPromise = new Promise((resolve) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { prev && prev(); resolve(window.YT); };
+    if (!document.getElementById('yt-iframe-api')) {
+      const tag = document.createElement('script');
+      tag.id = 'yt-iframe-api';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+  });
+  return _ytApiPromise;
+}
+
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore(s => s.user);
 
   const playerRef = useRef(null);       // Vidstack player ref (file sources)
-  const plyrRef = useRef(null);         // Plyr instance (youtube source)
-  const plyrHostRef = useRef(null);     // div Plyr mounts into
+  const ytPlayerRef = useRef(null);     // YT.Player instance (youtube source)
+  const ytHostRef = useRef(null);       // div the YT player mounts into
+  const ytPollRef = useRef(null);       // interval id for YT time polling
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
@@ -56,19 +61,10 @@ export default function StudentVideoPlayerPage() {
   const [likeCount, setLikeCount] = useState(0);
   const [likeBusy, setLikeBusy]   = useState(false);
 
-  // Offline state
-  const [isOnline, setIsOnline]   = useState(navigator.onLine);
-  const [saved, setSaved]         = useState(false);
-  const [saving, setSaving]       = useState(false);
-  const [saveProgress, setSaveProgress] = useState(null); // 0-100 | null
-  const [saveError, setSaveError] = useState('');
-  const [cachedSize, setCachedSize] = useState(null);
-  const [blobUrl, setBlobUrl]     = useState(null);
-  const blobUrlRef = useRef(null);
-
   // YouTube source needs a per-request token (the raw YT id is never sent in the list)
   const [ytToken, setYtToken]     = useState(null);
   const [ytError, setYtError]     = useState(null);
+  const [ytPlaying, setYtPlaying] = useState(false); // drives the branding cover
 
   // Playback state (drives chapter highlight + progress save + completion)
   const [chapterActive, setChapterActive] = useState(-1);
@@ -78,18 +74,6 @@ export default function StudentVideoPlayerPage() {
   const watchedRef   = useRef(0);     // seconds ACTUALLY played (seeks excluded)
   const lastTickRef  = useRef(0);     // previous currentTime, to measure real playback deltas
   const completeFiredRef = useRef(false); // auto-complete fires at most once
-
-  // Track online/offline status
-  useEffect(() => {
-    const online  = () => setIsOnline(true);
-    const offline = () => setIsOnline(false);
-    window.addEventListener('online', online);
-    window.addEventListener('offline', offline);
-    return () => {
-      window.removeEventListener('online', online);
-      window.removeEventListener('offline', offline);
-    };
-  }, []);
 
   // Load video metadata
   useEffect(() => {
@@ -115,24 +99,6 @@ export default function StudentVideoPlayerPage() {
     fetchVid();
   }, [classId, videoId]);
 
-  // Init offline state after video loads
-  useEffect(() => {
-    if (!video) return;
-    const isSaved = isVideoSaved(videoId);
-    setSaved(isSaved);
-    if (isSaved) {
-      getCachedVideoSize(videoId).then(size => { if (size) setCachedSize(formatBytes(size)); });
-      if (!navigator.onLine) {
-        getCachedVideoBlobUrl(videoId).then(url => {
-          if (url) { blobUrlRef.current = url; setBlobUrl(url); }
-        });
-      }
-    }
-    return () => {
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-    };
-  }, [video, videoId]);
-
   // Fetch YouTube token when source_type is youtube
   useEffect(() => {
     if (video?.source_type !== 'youtube') return;
@@ -146,15 +112,6 @@ export default function StudentVideoPlayerPage() {
         }
       });
   }, [video?.source_type, videoId]);
-
-  // When going offline, load blob URL if video is saved
-  useEffect(() => {
-    if (!isOnline && saved && !blobUrl) {
-      getCachedVideoBlobUrl(videoId).then(url => {
-        if (url) { blobUrlRef.current = url; setBlobUrl(url); }
-      });
-    }
-  }, [isOnline, saved, blobUrl, videoId]);
 
   // ── Source-agnostic watch tracking ──────────────────────────────────────────
   // Reset per-video tracking when the video changes (seed coverage from saved
@@ -198,7 +155,7 @@ export default function StudentVideoPlayerPage() {
       markComplete();
     }
 
-    if (isOnline && t - lastSavedRef.current >= 8) {
+    if (t - lastSavedRef.current >= 8) {
       lastSavedRef.current = t;
       apiClient('/video-progress', {
         method: 'POST',
@@ -227,8 +184,8 @@ export default function StudentVideoPlayerPage() {
   };
 
   // The YouTube player is created ONCE, so its event handlers would capture stale
-  // state (completed/isOnline). Route them through refs that always hold the
-  // latest handlers so the interval/ENDED callbacks see current values.
+  // state (completed). Route them through refs that always hold the latest
+  // handlers so the interval/ENDED callbacks see current values.
   const tickRef  = useRef(() => {});
   const endedRef = useRef(() => {});
   tickRef.current = handleTick;
@@ -236,62 +193,64 @@ export default function StudentVideoPlayerPage() {
     if (!completed && dur > 0 && watchedRef.current >= dur * 0.9) markComplete();
   };
 
-  // ── Plyr (YouTube) lifecycle — custom controls, all YouTube branding hidden ──
+  // ── Native YouTube player lifecycle ─────────────────────────────────────────
   const isYouTube = video?.source_type === 'youtube';
 
   useEffect(() => {
-    if (!isYouTube || !ytToken || ytError || !plyrHostRef.current) return;
+    if (!isYouTube || !ytToken || ytError) return;
     let destroyed = false;
-    let poll = null;
 
-    // Plyr reads the YouTube id from a placeholder div's data-plyr-embed-id.
-    const embed = document.createElement('div');
-    embed.setAttribute('data-plyr-provider', 'youtube');
-    embed.setAttribute('data-plyr-embed-id', ytToken);
-    plyrHostRef.current.innerHTML = '';
-    plyrHostRef.current.appendChild(embed);
-
-    const player = new Plyr(embed, {
-      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
-      settings: ['captions', 'speed'],
-      speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
-      youtube: {
-        noCookie: true, rel: 0, modestbranding: 1, iv_load_policy: 3,
-        playsinline: 1, controls: 0, showinfo: 0, disablekb: 0,
-      },
-      hideControls: true,
-      ratio: '16:9',
+    loadYouTubeAPI().then((YT) => {
+      if (destroyed || !ytHostRef.current) return;
+      ytPlayerRef.current = new YT.Player(ytHostRef.current, {
+        videoId: ytToken,
+        host: 'https://www.youtube-nocookie.com',
+        width: '100%',
+        height: '100%',
+        playerVars: {
+          rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3,
+          fs: 1, controls: 1, enablejsapi: 1, origin: window.location.origin,
+        },
+        events: {
+          onReady: (e) => {
+            const resume = video?.progress_secs || 0;
+            if (resume > 10) { try { e.target.seekTo(resume, true); lastTickRef.current = resume; } catch { /* ignore */ } }
+          },
+          onStateChange: (e) => {
+            const YTPS = window.YT.PlayerState;
+            if (e.data === YTPS.PLAYING) {
+              setYtPlaying(true);
+              if (ytPollRef.current) clearInterval(ytPollRef.current);
+              ytPollRef.current = setInterval(() => {
+                const p = ytPlayerRef.current;
+                if (!p?.getCurrentTime) return;
+                tickRef.current(p.getCurrentTime() || 0, p.getDuration() || 0);
+              }, 750);
+            } else {
+              setYtPlaying(false);
+              if (ytPollRef.current) { clearInterval(ytPollRef.current); ytPollRef.current = null; }
+              if (e.data === YTPS.ENDED) {
+                endedRef.current(ytPlayerRef.current?.getDuration?.() || 0);
+              }
+            }
+          },
+        },
+      });
     });
-    plyrRef.current = player;
-
-    player.on('ready', () => {
-      const resume = video?.progress_secs || 0;
-      if (resume > 10) { try { player.currentTime = resume; lastTickRef.current = resume; } catch { /* ignore */ } }
-    });
-    player.on('playing', () => {
-      if (poll) clearInterval(poll);
-      poll = setInterval(() => {
-        if (!plyrRef.current) return;
-        tickRef.current(plyrRef.current.currentTime || 0, plyrRef.current.duration || 0);
-      }, 750);
-    });
-    const stop = () => { if (poll) { clearInterval(poll); poll = null; } };
-    player.on('pause', stop);
-    player.on('ended', () => { stop(); endedRef.current(plyrRef.current?.duration || 0); });
 
     return () => {
       destroyed = true;
-      stop();
-      try { player.destroy(); } catch { /* ignore */ }
-      plyrRef.current = null;
+      if (ytPollRef.current) { clearInterval(ytPollRef.current); ytPollRef.current = null; }
+      try { ytPlayerRef.current?.destroy?.(); } catch { /* ignore */ }
+      ytPlayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isYouTube, ytToken, ytError, video?.id]);
 
   // Chapter click → seek whichever player is active.
   const seekTo = (secs) => {
-    if (isYouTube && plyrRef.current) {
-      try { plyrRef.current.currentTime = secs; plyrRef.current.play?.(); } catch { /* ignore */ }
+    if (isYouTube && ytPlayerRef.current?.seekTo) {
+      try { ytPlayerRef.current.seekTo(secs, true); ytPlayerRef.current.playVideo?.(); } catch { /* ignore */ }
       return;
     }
     const p = playerRef.current;
@@ -310,46 +269,10 @@ export default function StudentVideoPlayerPage() {
       if (typeof res?.like_count === 'number') setLikeCount(res.like_count);
       if (typeof res?.liked === 'boolean') setLiked(res.liked);
     } catch {
-      // revert on failure
       setLiked(!next);
       setLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
     } finally {
       setLikeBusy(false);
-    }
-  };
-
-  const handleSaveOffline = async () => {
-    if (!video?.allow_download) {
-      setSaveError('The teacher has disabled offline saving for this video.');
-      return;
-    }
-    setSaving(true);
-    setSaveError('');
-    setSaveProgress(0);
-    try {
-      await saveVideoOffline(videoId, video.cloudflare_video_id, (pct) => setSaveProgress(pct));
-      setSaved(true);
-      setSaveProgress(100);
-      const size = await getCachedVideoSize(videoId);
-      if (size) setCachedSize(formatBytes(size));
-    } catch (err) {
-      setSaveError(err.message || 'Failed to save. Try again.');
-      setSaveProgress(null);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRemoveOffline = async () => {
-    try {
-      await removeVideoOffline(videoId);
-      setSaved(false);
-      setCachedSize(null);
-      setSaveProgress(null);
-      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-      setBlobUrl(null);
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -371,21 +294,17 @@ export default function StudentVideoPlayerPage() {
 
   // ── Resolve the player source by type ────────────────────────────────────────
   const isStorageUrl = video.cloudflare_video_id?.startsWith('https://');
-  const showOffline  = !isOnline && blobUrl;
 
   // File-source (non-YouTube) src for Vidstack
   let fileSrc = null;
-  if (showOffline) {
-    fileSrc = { src: blobUrl, type: 'video/mp4' };
-  } else if (isOnline && isStorageUrl) {
+  if (isStorageUrl) {
     fileSrc = { src: video.cloudflare_video_id, type: 'video/mp4' };
-  } else if (isOnline && video.cloudflare_video_id && !isStorageUrl && !isYouTube) {
+  } else if (video.cloudflare_video_id && !isStorageUrl && !isYouTube) {
     fileSrc = { src: `https://videodelivery.net/${video.cloudflare_video_id}/manifest/video.m3u8`, type: 'application/x-mpegurl' };
   }
 
-  const showYouTubePlayer     = isYouTube && ytToken && !ytError;
-  const showYouTubeLoading    = isOnline && isYouTube && !ytToken && !ytError;
-  const showOfflineUnavailable = !isOnline && !blobUrl;
+  const showYouTubePlayer  = isYouTube && ytToken && !ytError;
+  const showYouTubeLoading = isYouTube && !ytToken && !ytError;
   const guardLabel = user?.username || user?.name || 'student';
 
   return (
@@ -400,46 +319,32 @@ export default function StudentVideoPlayerPage() {
           </button>
           <h1 className="text-base md:text-lg font-semibold flex-1 truncate">{video.title}</h1>
           {completed && <Tag color="green"><CheckCircle2 size={11} className="mr-1 inline" />Done</Tag>}
-          {!isOnline && (
-            <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-              <WifiOff size={11} /> Offline
-            </span>
-          )}
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto">
-        {/* Hide every scrap of YouTube identity (logo, channel, title, share,
-            "Watch on YouTube", end-screen related videos) and make the iframe
-            non-interactive so there's no right-click → Copy URL / context menu.
-            Plyr's own controls sit above this and stay fully usable. */}
-        <style>{`
-          .udaya-yt .plyr__video-embed iframe { pointer-events: none !important; }
-          .udaya-yt .plyr { --plyr-color-main: #2563eb; }
-          /* YouTube chrome that can bleed through the embed */
-          .udaya-yt .ytp-chrome-top,
-          .udaya-yt .ytp-show-cards-title,
-          .udaya-yt .ytp-watermark,
-          .udaya-yt .ytp-youtube-button,
-          .udaya-yt .ytp-pause-overlay,
-          .udaya-yt .ytp-ce-element,
-          .udaya-yt .ytp-gradient-top,
-          .udaya-yt .ytp-title,
-          .udaya-yt .ytp-chrome-top-buttons { display: none !important; opacity: 0 !important; }
-        `}</style>
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
         <div
-          className="relative bg-black w-full overflow-hidden md:rounded-b-xl"
+          className="relative bg-black w-full overflow-hidden md:rounded-b-xl select-none"
           style={{ aspectRatio: '16 / 9' }}
           onContextMenu={(e) => e.preventDefault()}
         >
           {showYouTubePlayer ? (
-            // Wrapper is React-owned; Plyr builds its own DOM inside (incl. the YT
-            // iframe), so React never removes a node Plyr swapped (avoids unmount
-            // crashes). The branding-hiding CSS lives in YT_HIDE_CSS below.
-            <div className="absolute inset-0 w-full h-full udaya-yt">
-              <div ref={plyrHostRef} className="w-full h-full" />
-            </div>
+            <>
+              {/* Wrapper is React-owned; YT replaces the INNER div with its iframe so
+                  React never removes a node YouTube swapped (avoids unmount crashes). */}
+              <div className="absolute inset-0 w-full h-full">
+                <div ref={ytHostRef} className="w-full h-full" />
+              </div>
+              {/* Branding cover: hides YouTube's channel name/avatar + title that
+                  appear top-left on load/pause. Always blocks clicks there (so the
+                  channel link can't be opened); only opaque while NOT playing so it
+                  never covers the video during playback. */}
+              <div
+                className={`absolute top-0 left-0 right-0 z-20 transition-opacity duration-200 ${ytPlaying ? 'bg-transparent' : 'bg-black'}`}
+                style={{ height: '15%' }}
+              />
+            </>
           ) : fileSrc ? (
             <MediaPlayer
               ref={playerRef}
@@ -467,16 +372,6 @@ export default function StudentVideoPlayerPage() {
             <div className="absolute inset-0 flex items-center justify-center gap-2 text-white/60 text-sm">
               <Loader2 className="animate-spin" size={18} /> Loading video…
             </div>
-          ) : showOfflineUnavailable ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/70 px-8 text-center">
-              <WifiOff size={40} className="text-white/40" />
-              <p className="text-sm font-medium text-white/80">You're offline</p>
-              <p className="text-xs text-white/50">
-                {saved
-                  ? 'Cached video could not be loaded. Try removing and re-saving when online.'
-                  : 'Save this video while online to watch it offline.'}
-              </p>
-            </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50 text-sm">
               <p>No video available for this lesson.</p>
@@ -494,78 +389,19 @@ export default function StudentVideoPlayerPage() {
               </p>
             </div>
 
-            <div className="flex gap-2 flex-shrink-0">
-              {/* Like (persisted; teacher sees the count) */}
-              <button
-                onClick={toggleLike}
-                disabled={likeBusy}
-                title={liked ? 'Unlike' : 'Like this lesson'}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
-                  liked ? 'bg-rose-50 border-rose-200 text-rose-600' : 'border-[#EFEDEA] text-neutral-600 hover:bg-[#F4F2EF]'
-                }`}
-              >
-                <Heart size={15} className={liked ? 'fill-rose-500 text-rose-500' : ''} />
-                {likeCount > 0 && <span className="tabular-nums">{likeCount}</span>}
-              </button>
-
-              {/* Save offline */}
-              {!saved && !saving && (
-                <button
-                  onClick={handleSaveOffline}
-                  disabled={!video.cloudflare_video_id || isStorageUrl || !video.allow_download}
-                  title={
-                    !video.cloudflare_video_id || isStorageUrl
-                      ? 'No video to cache'
-                      : !video.allow_download
-                      ? 'Download disabled by teacher'
-                      : 'Save for offline viewing'
-                  }
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors border-[#EFEDEA] text-neutral-600 hover:bg-[#F4F2EF] disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <WifiOff size={13} /> Save
-                </button>
-              )}
-
-              {saving && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#EFEDEA] text-sm text-neutral-600 min-w-[130px]">
-                  <Loader2 size={13} className="animate-spin flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-xs mb-0.5">{saveProgress !== null ? `${saveProgress}%` : 'Downloading…'}</div>
-                    <div className="h-1 bg-neutral-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-neutral-800 rounded-full transition-all duration-300"
-                        style={{ width: saveProgress !== null ? `${saveProgress}%` : '100%' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {saved && !saving && (
-                <div className="flex items-center gap-1">
-                  <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm border-green-200 bg-green-50 text-green-700">
-                    <Wifi size={13} /> Saved{cachedSize ? ` · ${cachedSize}` : ''}
-                  </span>
-                  <button onClick={handleRemoveOffline} title="Remove offline copy"
-                    className="p-2 rounded-lg border border-[#EFEDEA] text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Like (persisted; teacher sees the count) */}
+            <button
+              onClick={toggleLike}
+              disabled={likeBusy}
+              title={liked ? 'Unlike' : 'Like this lesson'}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
+                liked ? 'bg-rose-50 border-rose-200 text-rose-600' : 'border-[#EFEDEA] text-neutral-600 hover:bg-[#F4F2EF]'
+              }`}
+            >
+              <Heart size={15} className={liked ? 'fill-rose-500 text-rose-500' : ''} />
+              {likeCount > 0 && <span className="tabular-nums">{likeCount}</span>}
+            </button>
           </div>
-
-          {saveError && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
-              <AlertTriangle size={15} className="flex-shrink-0" />
-              {saveError}
-            </div>
-          )}
-
-          {saved && !saveError && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
-              <CheckCircle2 size={15} className="flex-shrink-0" />
-              Video saved to this device. You can watch it without internet.
-            </div>
-          )}
 
           {video.description && (
             <Reveal>
@@ -610,7 +446,7 @@ export default function StudentVideoPlayerPage() {
               <div className="flex items-center justify-between text-sm text-neutral-600 mb-2">
                 <span className="flex items-center gap-2">
                   <Play size={14} className="text-neutral-400" />
-                  Watch the full video to complete{!isOnline && ' (syncs when you\'re back online)'}
+                  Watch the full video to complete
                 </span>
                 <span className="font-semibold tabular-nums">{watchedPct}%</span>
               </div>
@@ -626,7 +462,7 @@ export default function StudentVideoPlayerPage() {
           )}
 
           {/* Private comments — students see only their own; teacher sees all. */}
-          {isOnline && <VideoComments videoId={videoId} />}
+          <VideoComments videoId={videoId} />
         </div>
       </div>
     </div>
