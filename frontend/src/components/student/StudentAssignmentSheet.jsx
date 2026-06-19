@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Sheet, Btn, Tag } from '../ui';
 import { assignmentApi } from '../../lib/api';
+import SecureFileViewer from '../shared/SecureFileViewer';
 
 function formatBytes(bytes) {
   if (!bytes) return '';
@@ -27,6 +28,7 @@ export default function StudentAssignmentSheet({
   const [redoReason, setRedoReason]     = useState('');
   const [redoBusy, setRedoBusy]         = useState(false);
   const [redoSent, setRedoSent]         = useState(false);
+  const [viewerAtt, setViewerAtt]       = useState(null); // teacher file open in secure viewer
   const cameraRef = useRef(null);
   const fileRef   = useRef(null);
 
@@ -153,18 +155,15 @@ export default function StudentAssignmentSheet({
             </p>
             <div className="space-y-2">
               {attachments.map(att => (
-                <a
+                <button
                   key={att.id}
-                  href={att.file_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  download={att.file_name}
-                  className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition-all"
+                  onClick={() => setViewerAtt(att)}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition-all text-left"
                 >
                   <Paperclip size={15} className="flex-shrink-0" />
                   <span className="flex-1 truncate font-medium">{att.file_name}</span>
                   <ExternalLink size={13} className="flex-shrink-0 opacity-60" />
-                </a>
+                </button>
               ))}
             </div>
           </div>
@@ -388,6 +387,13 @@ export default function StudentAssignmentSheet({
           )}
         </div>
       </div>
+
+      <SecureFileViewer
+        open={!!viewerAtt}
+        onClose={() => setViewerAtt(null)}
+        endpoint={viewerAtt ? `/assignment-attachments/${viewerAtt.id}/file` : null}
+        title={viewerAtt?.file_name || 'Attachment'}
+      />
     </Sheet>
   );
 }

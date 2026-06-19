@@ -7851,6 +7851,27 @@ async def get_note_file(note_id: str, user = Depends(verify_token),
     )
 
 
+@app.get("/api/assignment-attachments/{attachment_id}/file")
+async def get_assignment_attachment_file(attachment_id: str, user = Depends(verify_token),
+                                         x_udaya_client: Optional[str] = Header(None, alias="X-Udaya-Client")):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    _require_app_for_students(user, x_udaya_client)
+    att = await asyncio.to_thread(lambda: service_supabase.table("assignment_attachments")
+        .select("assignment_id, storage_path, file_url, file_type, file_name").eq("id", attachment_id).single().execute())
+    if not att.data:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    asg = await asyncio.to_thread(lambda: service_supabase.table("assignments")
+        .select("class_id").eq("id", att.data["assignment_id"]).single().execute())
+    if not asg.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    await asyncio.to_thread(lambda: _require_class_access(asg.data["class_id"], user))
+    return await _stream_stored_file(
+        att.data.get("storage_path"), att.data.get("file_url"),
+        "assignments", att.data.get("file_type"), att.data.get("file_name") or "file",
+    )
+
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)):
     if user["role"] != "teacher":
@@ -8835,11 +8856,16 @@ async def list_assignments(class_id: str, user = Depends(verify_token)):
     ).eq("class_id", class_id).order("created_at", desc=True).execute()
     assignments = res.data or []
 
-    # Replace stored public URLs with 1-hour signed URLs so files open
-    # regardless of whether the assignments bucket is configured as public.
+    # Students NEVER get a usable file URL (no download/share) — they view files
+    # only through the authed, app-only endpoint /assignment-attachments/{id}/file.
+    # Teachers keep a 1-hour signed URL for their own web flows.
+    is_teacher = user["role"] in ("teacher", "sub_teacher")
     for a in assignments:
         for att in (a.get("assignment_attachments") or []):
             sp = att.get("storage_path")
+            if not is_teacher:
+                att["file_url"] = None
+                continue
             if not sp:
                 continue
             try:
@@ -9264,21 +9290,11 @@ async def get_all_student_assignments(user = Depends(verify_token)):
     if not assignments:
         return {"assignments": []}
 
-    # Signed URLs for teacher-uploaded question files
+    # Teacher-uploaded files: NO downloadable URL for students — they view only
+    # through the authed, app-only endpoint /assignment-attachments/{id}/file.
     for a in assignments:
         for att in (a.get("assignment_attachments") or []):
-            sp = att.get("storage_path")
-            if not sp:
-                continue
-            try:
-                signed = await asyncio.to_thread(
-                    lambda p=sp: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
-                )
-                url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
-                if url:
-                    att["file_url"] = url
-            except Exception:
-                pass
+            att["file_url"] = None
 
     # Student's submissions for all these assignments
     assign_ids = [a["id"] for a in assignments]
