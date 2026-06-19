@@ -7832,12 +7832,21 @@ def _require_class_access(class_id: str, user: dict):
 
 async def _stream_stored_file(storage_path: Optional[str], legacy_url: Optional[str],
                               bucket: str, content_type: Optional[str], filename: str = "file"):
-    """Return the file bytes inline. Prefer the private-bucket key; if a row only
-    has a legacy public URL (pre-migration), fetch and proxy that instead."""
+    """Return the file bytes inline. Resilient across the public→private migration:
+    try the PRIVATE bucket first; if the key isn't there (a legacy note whose file
+    is still in the PUBLIC bucket), try the public bucket with the same key; finally
+    fall back to proxying a stored legacy public URL. So existing files keep working
+    with NO migration required, while new uploads are private."""
     data = None
     if storage_path:
-        data = await asyncio.to_thread(lambda: filestore.get_bytes(service_supabase, bucket, storage_path, private=True))
-    elif legacy_url and legacy_url.startswith("http"):
+        try:
+            data = await asyncio.to_thread(lambda: filestore.get_bytes(service_supabase, bucket, storage_path, private=True))
+        except Exception:
+            try:  # legacy: file may still live in the PUBLIC bucket under the same key
+                data = await asyncio.to_thread(lambda: filestore.get_bytes(service_supabase, bucket, storage_path, private=False))
+            except Exception:
+                data = None
+    if data is None and legacy_url and legacy_url.startswith("http"):
         async with httpx.AsyncClient(timeout=20) as client:
             r = await client.get(legacy_url)
             if r.status_code == 200:
