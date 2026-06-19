@@ -1,8 +1,13 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import * as Sentry from '@sentry/react'
+import { Capacitor } from '@capacitor/core'
 import App from './App'
 import './index.css'
+
+// Mark whether we're running inside the native app, so the API layer can tag
+// requests (used to enforce app-only viewing of protected files for students).
+window.__UDAYA_NATIVE__ = Capacitor.isNativePlatform()
 
 // Error monitoring — dormant unless VITE_SENTRY_DSN is set in the Pages env.
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN

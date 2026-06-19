@@ -306,9 +306,11 @@ export const notesApi = {
 // the SecureFileViewer and revokes any object URL on close.
 export async function fetchSecureBlob(endpoint) {
   const token = localStorage.getItem(TOKEN_KEY);
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  // Signal the native app so the backend can enforce app-only viewing for
+  // students (protected files are blocked on student web). Set at boot in main.jsx.
+  if (typeof window !== 'undefined' && window.__UDAYA_NATIVE__) headers['X-Udaya-Client'] = 'app';
+  const res = await fetch(`${API_BASE}${endpoint}`, { headers });
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     const err = new Error(e.detail || `Failed to load file (${res.status})`);

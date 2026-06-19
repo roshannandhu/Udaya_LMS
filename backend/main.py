@@ -7825,10 +7825,21 @@ async def _stream_stored_file(storage_path: Optional[str], legacy_url: Optional[
     )
 
 
+def _require_app_for_students(user: dict, x_udaya_client: Optional[str]):
+    """App-only viewing for students: protected files may only be fetched from the
+    native app (where screenshots are blocked), never from student web. Teachers
+    (content owners) are exempt. The header is set by the app in api.js — a soft
+    gate (a determined user could spoof it), but it closes the casual web path."""
+    if user["role"] == "student" and x_udaya_client != "app":
+        raise HTTPException(status_code=451, detail="Open in the Udaya app to view this file.")
+
+
 @app.get("/api/notes/{note_id}/file")
-async def get_note_file(note_id: str, user = Depends(verify_token)):
+async def get_note_file(note_id: str, user = Depends(verify_token),
+                        x_udaya_client: Optional[str] = Header(None, alias="X-Udaya-Client")):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="DB not configured")
+    _require_app_for_students(user, x_udaya_client)
     note = await asyncio.to_thread(lambda: service_supabase.table("notes")
         .select("class_id, storage_path, file_url, file_type, title").eq("id", note_id).single().execute())
     if not note.data:

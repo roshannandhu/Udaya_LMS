@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Loader2, AlertTriangle, FileText, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { X, Loader2, AlertTriangle, FileText, ChevronLeft, ChevronRight, Lock, Smartphone } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { fetchSecureBlob } from '../../lib/api';
 import ScreenshotGuard from './ScreenshotGuard';
 import { useAuthStore } from '../../lib/auth';
+
+// Screenshots can only be truly blocked inside the native app (Android FLAG_SECURE).
+// So protected files are STUDENT-app-only: a student on web/desktop is told to open
+// the app; teachers (content owners) keep full web access for managing materials.
+const IS_NATIVE = Capacitor.isNativePlatform();
 
 // pdf.js (lazy worker). v6 ships an ESM worker; Vite resolves the ?url import.
 import * as pdfjsLib from 'pdfjs-dist';
@@ -22,6 +28,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
  */
 export default function SecureFileViewer({ open, onClose, endpoint, title = 'Document', cachedBlob = null }) {
   const user = useAuthStore(s => s.user);
+  const role = useAuthStore(s => s.role);
+  // Students may only view protected files inside the app (where screenshots are
+  // blocked); on web they're shown an "open in the app" notice instead.
+  const mustUseApp = role === 'student' && !IS_NATIVE;
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [kind, setKind]       = useState(null);   // 'pdf' | 'image' | 'html' | 'unsupported'
@@ -37,7 +47,7 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
 
   // Load + classify the file whenever the viewer opens for a new endpoint.
   useEffect(() => {
-    if (!open || !endpoint) return;
+    if (!open || !endpoint || mustUseApp) return;  // never fetch bytes on student web
     let cancelled = false;
     setLoading(true); setError(''); setKind(null); setHtml(''); setImgUrl(null);
     setPdf(null); setPage(1); setNumPages(0);
@@ -82,7 +92,7 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
       try { pdfRef.current?.destroy?.(); } catch { /* ignore */ }
       pdfRef.current = null;
     };
-  }, [open, endpoint, cachedBlob]);
+  }, [open, endpoint, cachedBlob, mustUseApp]);
 
   // Render the current PDF page to the canvas.
   const renderPage = useCallback(async () => {
@@ -111,6 +121,37 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
   if (!open) return null;
 
   const guardLabel = user?.username || user?.name || 'student';
+
+  // Student on web/desktop → protected files are app-only (so screenshots stay
+  // blocked). Show an "open in the app" notice instead of the file.
+  if (mustUseApp) {
+    return (
+      <div className="fixed inset-0 z-[120] bg-black/85 flex flex-col">
+        <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900 text-white flex-shrink-0">
+          <FileText size={18} className="text-white/70 flex-shrink-0" />
+          <p className="flex-1 min-w-0 truncate text-sm font-medium">{title}</p>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" aria-label="Close">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">
+            <Smartphone size={30} className="text-white/80" />
+          </div>
+          <div>
+            <p className="text-white font-semibold mb-1">Open in the Udaya app</p>
+            <p className="text-white/60 text-sm max-w-xs leading-relaxed">
+              For your security, notes and study materials can only be viewed in the Udaya mobile app.
+              Please open this lesson on your phone.
+            </p>
+          </div>
+          <button onClick={onClose} className="mt-1 px-5 py-2.5 rounded-full bg-white text-neutral-900 text-sm font-semibold hover:bg-neutral-100 transition-colors">
+            Got it
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/85 flex flex-col" onContextMenu={e => e.preventDefault()}>
