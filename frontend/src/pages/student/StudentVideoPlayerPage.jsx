@@ -64,6 +64,10 @@ export default function StudentVideoPlayerPage() {
   // Captions (best-effort toggle on the YouTube embed)
   const [cc, setCc] = useState(false);
 
+  // Paused flag (starts true = pre-play). Drives the overlay that COVERS YouTube's
+  // own centre play/pause button so the user never sees a duplicate.
+  const [isPaused, setIsPaused] = useState(true);
+
   // Playback state (drives chapter highlight + progress save + completion)
   const [chapterActive, setChapterActive] = useState(-1);
   const [watchedPct, setWatchedPct] = useState(0); // genuine coverage, for the completion hint
@@ -381,11 +385,11 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
-        {/* The YouTube embed renders its OWN play/pause overlay; taps were reaching
-            it AND Vidstack, so two play/pause symbols flashed. Make the iframe
-            non-interactive so only Vidstack's controls drive playback.
-            Additionally, hide Vidstack's flashing play/pause keyboard action
-            display so we don't get duplicate buttons appearing over the video. */}
+        {/* The YouTube embed renders its OWN centre play/pause button that we can't
+            remove from the cross-origin iframe. We make the iframe non-interactive
+            (only Vidstack's controls/gestures drive playback) and, when paused,
+            cover that centre button with our own overlay — so the user only ever
+            sees ONE button. Also hide Vidstack's flashing keyboard-action display. */}
         <style>{`
           .udaya-player [data-provider="youtube"] iframe, .udaya-player iframe[src*="youtube"] { pointer-events: none !important; }
           .udaya-player .vds-kb-action { display: none !important; }
@@ -404,6 +408,9 @@ export default function StudentVideoPlayerPage() {
               onCanPlay={onCanPlay}
               onTimeUpdate={onTimeUpdate}
               onEnded={onEnded}
+              onPlay={() => setIsPaused(false)}
+              onPlaying={() => setIsPaused(false)}
+              onPause={() => setIsPaused(true)}
             >
               <MediaProvider />
               <DefaultVideoLayout
@@ -449,6 +456,18 @@ export default function StudentVideoPlayerPage() {
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50 text-sm">
               <p>No video available for this lesson.</p>
+            </div>
+          )}
+
+          {/* Paused overlay (YouTube only): a soft scrim + a single play icon that
+              COVERS YouTube's own centre button, so only one button is ever visible.
+              Purely visual (pointer-events:none) — Vidstack's gesture layer handles
+              the tap-to-play and the bottom control bar still works. */}
+          {fileSrc && isYouTube && isPaused && !ytError && (
+            <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ background: 'rgba(0,0,0,0.28)' }}>
+              <div className="w-[68px] h-[68px] rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center">
+                <Play size={30} className="text-white ml-1" fill="currentColor" />
+              </div>
             </div>
           )}
 

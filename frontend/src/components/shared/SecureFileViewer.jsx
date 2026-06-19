@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Loader2, AlertTriangle, FileText, ChevronLeft, ChevronRight, Lock, Smartphone, Download, Check, Trash2, WifiOff } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Loader2, AlertTriangle, FileText, ZoomIn, ZoomOut, Lock, Smartphone, Download, Check, Trash2, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { fetchSecureBlob } from '../../lib/api';
 import ScreenshotGuard from './ScreenshotGuard';
@@ -17,6 +17,128 @@ const IS_NATIVE = Capacitor.isNativePlatform();
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+// One PDF page → its own canvas, rendered crisp at `width` CSS px (high-DPI backing
+// store, capped at 2× so big PDFs stay light). Renders independently so the first
+// pages appear while later ones are still drawing.
+function PdfPage({ doc, pageNum, width }) {
+  const canvasRef = useRef(null);
+  const [h, setH] = useState(Math.round(width * 1.414)); // A4-ish placeholder height
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !doc || !width) return;
+      try {
+        const pg = await doc.getPage(pageNum);
+        const vp1 = pg.getViewport({ scale: 1 });
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const scale = (width / vp1.width) * dpr;
+        const vp = pg.getViewport({ scale });
+        if (cancelled) return;
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${vp.height / dpr}px`;
+        setH(Math.round(vp.height / dpr));
+        await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      } catch { /* transient race; ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [doc, pageNum, width]);
+  return (
+    <canvas ref={canvasRef} draggable={false}
+      className="block mx-auto mb-2.5 bg-white shadow-xl rounded"
+      style={{ width, height: h }} />
+  );
+}
+
+// Continuous-scroll PDF reader with pinch-to-zoom + double-tap zoom + on-screen
+// zoom buttons. All pages stack vertically in one scroll area (no pager). Zoom is
+// a CSS transform on the page stack, so it's instant and needs no re-render.
+function PdfReader({ doc }) {
+  const scrollRef = useRef(null);
+  const [baseWidth, setBaseWidth] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  const pinchRef = useRef(null);
+  const pinchingRef = useRef(false);
+  const [pinching, setPinching] = useState(false);
+
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Fit-width to the container (comfortable max on desktop), re-measured on resize/rotate.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setBaseWidth(Math.min(el.clientWidth - 16, 1000));
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  // Native (non-passive) touch handlers so pinch can preventDefault the page scroll.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const onStart = (e) => {
+      if (e.touches.length === 2) {
+        pinchRef.current = { d0: dist(e.touches), z0: zoomRef.current };
+        pinchingRef.current = true; setPinching(true);
+      }
+    };
+    const onMove = (e) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault();
+        const z = Math.max(1, Math.min(4, pinchRef.current.z0 * (dist(e.touches) / pinchRef.current.d0)));
+        setZoom(z);
+      }
+    };
+    const onEnd = (e) => {
+      if (e.touches.length < 2) { pinchRef.current = null; pinchingRef.current = false; setPinching(false); }
+    };
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
+  const toggleDoubleTap = () => setZoom(z => (z > 1 ? 1 : 2.5));
+  const step = (d) => setZoom(z => Math.max(1, Math.min(4, +(z + d).toFixed(2))));
+
+  return (
+    <div className="flex-1 min-h-0 relative bg-neutral-800">
+      <div ref={scrollRef} className="absolute inset-0 overflow-auto py-4 px-1" onDoubleClick={toggleDoubleTap}>
+        <div style={{
+          transform: `scale(${zoom})`, transformOrigin: 'top center',
+          transition: pinching ? 'none' : 'transform 0.15s ease-out',
+        }}>
+          {baseWidth > 0 && Array.from({ length: doc.numPages }, (_, i) => (
+            <PdfPage key={i} doc={doc} pageNum={i + 1} width={baseWidth} />
+          ))}
+        </div>
+      </div>
+      {/* Floating zoom controls */}
+      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5">
+        <button onClick={() => step(0.5)} disabled={zoom >= 4} aria-label="Zoom in"
+          className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm text-white flex items-center justify-center hover:bg-black/75 disabled:opacity-40 transition-colors shadow-lg">
+          <ZoomIn size={18} />
+        </button>
+        <button onClick={() => step(-0.5)} disabled={zoom <= 1} aria-label="Zoom out"
+          className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm text-white flex items-center justify-center hover:bg-black/75 disabled:opacity-40 transition-colors shadow-lg">
+          <ZoomOut size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * SecureFileViewer — view-only, no-download, in-app file viewer.
@@ -41,9 +163,7 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
   const [kind, setKind]       = useState(null);   // 'pdf' | 'image' | 'html' | 'unsupported'
   const [imgUrl, setImgUrl]   = useState(null);
   const [html, setHtml]       = useState('');
-  const [pdf, setPdf]         = useState(null);    // pdf.js document
-  const [page, setPage]       = useState(1);
-  const [numPages, setNumPages] = useState(0);
+  const [pdf, setPdf]         = useState(null);    // pdf.js document (rendered by PdfReader)
 
   // Offline-in-app cache (native only; sandboxed bytes, not a device download).
   const canOffline = IS_NATIVE && !!offlineKey;
@@ -52,7 +172,6 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
   const [saving, setSaving] = useState(false);
   const [savedSize, setSavedSize] = useState(null);
 
-  const canvasRef = useRef(null);
   const objUrlRef = useRef(null);
   const pdfRef    = useRef(null);
 
@@ -70,7 +189,7 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
     if (!open || !endpoint || mustUseApp) return;  // never fetch bytes on student web
     let cancelled = false;
     setLoading(true); setError(''); setKind(null); setHtml(''); setImgUrl(null);
-    setPdf(null); setPage(1); setNumPages(0);
+    setPdf(null);
 
     (async () => {
       // Step 1 — get the bytes (network/offline errors are reported as such).
@@ -105,7 +224,7 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
           const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
           if (cancelled) return;
           pdfRef.current = doc;
-          setPdf(doc); setNumPages(doc.numPages); setKind('pdf');
+          setPdf(doc); setKind('pdf');
         } else if (t.startsWith('image/')) {
           const url = URL.createObjectURL(blob);
           objUrlRef.current = url;
@@ -156,30 +275,6 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
     setSaved(false);
     setSavedSize(null);
   };
-
-  // Render the current PDF page to the canvas.
-  const renderPage = useCallback(async () => {
-    const doc = pdfRef.current;
-    const canvas = canvasRef.current;
-    if (!doc || !canvas) return;
-    try {
-      const pg = await doc.getPage(page);
-      // Fit width to the container while staying crisp on high-DPI screens.
-      const containerW = canvas.parentElement?.clientWidth || 800;
-      const baseViewport = pg.getViewport({ scale: 1 });
-      const scale = Math.min(2.5, (containerW - 8) / baseViewport.width);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const viewport = pg.getViewport({ scale: scale * dpr });
-      const ctx = canvas.getContext('2d');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      canvas.style.width = `${viewport.width / dpr}px`;
-      canvas.style.height = `${viewport.height / dpr}px`;
-      await pg.render({ canvasContext: ctx, viewport }).promise;
-    } catch { /* ignore transient render races */ }
-  }, [page]);
-
-  useEffect(() => { if (kind === 'pdf') renderPage(); }, [kind, page, renderPage]);
 
   if (!open) return null;
 
@@ -247,43 +342,32 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
 
       {/* Body */}
       <ScreenshotGuard label={guardLabel} className="flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 overflow-auto bg-neutral-800 select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
-          {loading ? (
-            <div className="h-full flex items-center justify-center text-white/60 text-sm gap-2">
-              <Loader2 className="animate-spin" size={18} /> Loading…
-            </div>
-          ) : error ? (
-            <div className="h-full flex flex-col items-center justify-center gap-2 px-8 text-center">
-              <AlertTriangle size={28} className="text-white/40" />
-              <p className="text-white/70 text-sm">{error}</p>
-            </div>
-          ) : kind === 'pdf' ? (
-            <div className="flex flex-col items-center py-4 px-2">
-              <canvas ref={canvasRef} className="shadow-2xl rounded bg-white max-w-full" draggable={false} />
-            </div>
-          ) : kind === 'image' ? (
-            <div className="h-full flex items-center justify-center p-4">
-              <img src={imgUrl} alt={title} draggable={false} className="max-w-full max-h-full object-contain shadow-2xl rounded select-none pointer-events-none" />
-            </div>
-          ) : kind === 'html' ? (
-            <div className="max-w-3xl mx-auto my-4 bg-white rounded-lg shadow-2xl p-6 sm:p-8 prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: html }} />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center gap-2 px-8 text-center text-white/60">
-              <FileText size={28} className="text-white/30" />
-              <p className="text-sm">This file type can't be previewed in-app.</p>
-            </div>
-          )}
-        </div>
-
-        {/* PDF pager */}
-        {kind === 'pdf' && numPages > 1 && (
-          <div className="flex items-center justify-center gap-4 py-2.5 bg-neutral-900 text-white flex-shrink-0">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-              className="p-1.5 rounded-full hover:bg-white/10 disabled:opacity-30 transition-colors"><ChevronLeft size={20} /></button>
-            <span className="text-xs tabular-nums">Page {page} / {numPages}</span>
-            <button onClick={() => setPage(p => Math.min(numPages, p + 1))} disabled={page >= numPages}
-              className="p-1.5 rounded-full hover:bg-white/10 disabled:opacity-30 transition-colors"><ChevronRight size={20} /></button>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center text-white/60 text-sm gap-2 bg-neutral-800">
+            <Loader2 className="animate-spin" size={18} /> Loading…
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 px-8 text-center bg-neutral-800">
+            <AlertTriangle size={28} className="text-white/40" />
+            <p className="text-white/70 text-sm">{error}</p>
+          </div>
+        ) : kind === 'pdf' ? (
+          <PdfReader doc={pdf} />
+        ) : (
+          <div className="flex-1 min-h-0 overflow-auto bg-neutral-800 select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
+            {kind === 'image' ? (
+              <div className="min-h-full flex items-center justify-center p-4">
+                <img src={imgUrl} alt={title} draggable={false} className="max-w-full max-h-full object-contain shadow-2xl rounded select-none pointer-events-none" />
+              </div>
+            ) : kind === 'html' ? (
+              <div className="max-w-3xl mx-auto my-4 bg-white rounded-lg shadow-2xl p-6 sm:p-8 prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center gap-2 px-8 text-center text-white/60">
+                <FileText size={28} className="text-white/30" />
+                <p className="text-sm">This file type can't be previewed in-app.</p>
+              </div>
+            )}
           </div>
         )}
       </ScreenshotGuard>

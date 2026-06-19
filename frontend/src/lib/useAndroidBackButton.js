@@ -40,6 +40,19 @@ export default function useAndroidBackButton() {
     (async () => {
       const { App } = await import('@capacitor/app');
       const handle = await App.addListener('backButton', ({ canGoBack }) => {
+        // If the soft keyboard is open (a field is focused), the first Back press
+        // should just dismiss it and stay on the page — like every Android app.
+        // Blurring the active element hides the WebView keyboard. Without this,
+        // pressing Back while typing a comment navigated away mid-typing.
+        const ae = document.activeElement;
+        const isEditing = ae && (
+          ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable
+        );
+        if (isEditing) {
+          ae.blur();
+          return;
+        }
+
         const path = window.location.pathname;
         if (!ROOT_PATHS.has(path) && canGoBack) {
           window.history.back();
