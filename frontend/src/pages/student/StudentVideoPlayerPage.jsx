@@ -12,6 +12,7 @@ import { Reveal } from '../../components/bits';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import VideoComments from '../../components/student/VideoComments';
+import YouTubePlayer from '../../components/student/YouTubePlayer';
 import {
   isVideoSaved,
   saveVideoOffline,
@@ -28,36 +29,13 @@ function toMmSs(secs) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// ── YouTube IFrame API loader (singleton) ───────────────────────────────────
-// We use YouTube's NATIVE player for YouTube lessons: its own controls give a
-// reliable quality menu, captions (CC), fullscreen on every device (incl. iOS),
-// and a single play/pause — none of which the iframe-wrapper approach could do.
-let _ytApiPromise = null;
-function loadYouTubeAPI() {
-  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
-  if (_ytApiPromise) return _ytApiPromise;
-  _ytApiPromise = new Promise((resolve) => {
-    const prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => { prev && prev(); resolve(window.YT); };
-    if (!document.getElementById('yt-iframe-api')) {
-      const tag = document.createElement('script');
-      tag.id = 'yt-iframe-api';
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(tag);
-    }
-  });
-  return _ytApiPromise;
-}
-
 export default function StudentVideoPlayerPage() {
   const { classId, videoId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore(s => s.user);
 
   const playerRef = useRef(null);       // Vidstack player ref (file sources)
-  const ytPlayerRef = useRef(null);     // YT.Player instance (youtube source)
-  const ytHostRef = useRef(null);       // div the YT player mounts into
-  const ytPollRef = useRef(null);       // interval id for YT time polling
+  const ytRef = useRef(null);           // YouTubePlayer (custom controls) ref
 
   const [video, setVideo]         = useState(null);
   const [subject, setSubject]     = useState(null);
@@ -250,62 +228,12 @@ export default function StudentVideoPlayerPage() {
     if (!completed && dur > 0 && watchedRef.current >= dur * 0.9) markComplete();
   };
 
-  // ── Native YouTube player lifecycle ─────────────────────────────────────────
   const isYouTube = video?.source_type === 'youtube';
-
-  useEffect(() => {
-    if (!isYouTube || !ytToken || ytError) return;
-    let destroyed = false;
-
-    loadYouTubeAPI().then((YT) => {
-      if (destroyed || !ytHostRef.current) return;
-      ytPlayerRef.current = new YT.Player(ytHostRef.current, {
-        videoId: ytToken,
-        host: 'https://www.youtube-nocookie.com',
-        width: '100%',
-        height: '100%',
-        playerVars: {
-          rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3,
-          fs: 1, controls: 1, enablejsapi: 1, origin: window.location.origin,
-        },
-        events: {
-          onReady: (e) => {
-            const resume = video?.progress_secs || 0;
-            if (resume > 10) { try { e.target.seekTo(resume, true); lastTickRef.current = resume; } catch { /* ignore */ } }
-          },
-          onStateChange: (e) => {
-            const YTPS = window.YT.PlayerState;
-            if (e.data === YTPS.PLAYING) {
-              if (ytPollRef.current) clearInterval(ytPollRef.current);
-              ytPollRef.current = setInterval(() => {
-                const p = ytPlayerRef.current;
-                if (!p?.getCurrentTime) return;
-                tickRef.current(p.getCurrentTime() || 0, p.getDuration() || 0);
-              }, 750);
-            } else {
-              if (ytPollRef.current) { clearInterval(ytPollRef.current); ytPollRef.current = null; }
-              if (e.data === YTPS.ENDED) {
-                endedRef.current(ytPlayerRef.current?.getDuration?.() || 0);
-              }
-            }
-          },
-        },
-      });
-    });
-
-    return () => {
-      destroyed = true;
-      if (ytPollRef.current) { clearInterval(ytPollRef.current); ytPollRef.current = null; }
-      try { ytPlayerRef.current?.destroy?.(); } catch { /* ignore */ }
-      ytPlayerRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isYouTube, ytToken, ytError, video?.id]);
 
   // Chapter click → seek whichever player is active.
   const seekTo = (secs) => {
-    if (isYouTube && ytPlayerRef.current?.seekTo) {
-      try { ytPlayerRef.current.seekTo(secs, true); ytPlayerRef.current.playVideo?.(); } catch { /* ignore */ }
+    if (isYouTube && ytRef.current?.seekTo) {
+      ytRef.current.seekTo(secs);
       return;
     }
     const p = playerRef.current;
@@ -424,13 +352,21 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
-        <div className="relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
+        <div
+          className="relative bg-black w-full overflow-hidden md:rounded-b-xl select-none"
+          style={{ aspectRatio: '16 / 9' }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
           {showYouTubePlayer ? (
-            // Wrapper is React-owned; YT replaces the INNER div with its iframe, so
-            // React never tries to remove a node YouTube already swapped (avoids
-            // "removeChild" crashes on unmount).
             <div className="absolute inset-0 w-full h-full">
-              <div ref={ytHostRef} className="w-full h-full" />
+              <YouTubePlayer
+                ref={ytRef}
+                videoId={ytToken}
+                resumeSecs={video?.progress_secs || 0}
+                poster={video.thumbnail_url || undefined}
+                onTick={(t, d) => tickRef.current(t, d)}
+                onEnded={(d) => endedRef.current(d || video?.duration_secs || 0)}
+              />
             </div>
           ) : fileSrc ? (
             <MediaPlayer
