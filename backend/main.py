@@ -10966,8 +10966,11 @@ def _wa_student_score(report: dict, test_id: Optional[str] = None):
 
 # ── Config ───────────────────────────────────────────────────────────────────
 def _wa_is_configured(cfg: dict) -> bool:
-    """True when the active provider has the credentials it needs to send."""
-    provider = (cfg.get("provider") or "wanotifier").lower()
+    """True when the active provider has the credentials it needs to send. An
+    unset/unknown provider is NEVER 'configured'. WANotifier counts as configured
+    only once its adapter is verified (wanotifier_verified) — see the safety gate
+    in whatsapp.py — so the UI stops claiming a broken provider is connected."""
+    provider = (cfg.get("provider") or "").lower()
     if provider == "meta":
         return bool((cfg.get("meta_access_token") or "").strip()
                     and (cfg.get("meta_phone_number_id") or "").strip())
@@ -10975,7 +10978,9 @@ def _wa_is_configured(cfg: dict) -> bool:
         return bool((cfg.get("evolution_base_url") or "").strip()
                     and (cfg.get("evolution_api_key") or "").strip()
                     and (cfg.get("evolution_instance") or "").strip())
-    return bool((cfg.get("api_key") or "").strip())
+    if provider == "wanotifier":
+        return bool((cfg.get("api_key") or "").strip()) and bool(cfg.get("wanotifier_verified"))
+    return False
 
 
 @app.get("/api/teacher/whatsapp/config")
@@ -10984,7 +10989,7 @@ def wa_get_config(user = Depends(verify_token)):
     cfg = wa.get_wa_config()
     return {
         "configured": _wa_is_configured(cfg),
-        "provider": cfg.get("provider", "wanotifier"),
+        "provider": cfg.get("provider", ""),
         "sender": cfg.get("sender", ""),
         "api_key_masked": wa.mask_key(cfg.get("api_key")),
         # Meta Cloud API (token masked; ids are not secret)
@@ -11025,7 +11030,7 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
 async def wa_connection(user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
-    provider = (cfg.get("provider") or "wanotifier").lower()
+    provider = (cfg.get("provider") or "").lower()
     if provider == "evolution":
         prov = wa.get_provider(cfg)
         if getattr(prov, "name", "") != "evolution":
@@ -11035,6 +11040,10 @@ async def wa_connection(user = Depends(verify_token)):
         connected = state == "open"
         number = await prov.owner_number() if connected else ""
         return {"provider": provider, "connected": connected, "state": state, "number": number}
+    # WANotifier sending is paused until its adapter is verified (safety gate).
+    if provider == "wanotifier" and (cfg.get("api_key") or "").strip() and not cfg.get("wanotifier_verified"):
+        return {"provider": provider, "connected": False, "state": "setup_incomplete", "number": "",
+                "error": "WhatsApp sending is paused while setup is being finished."}
     # Meta / WANotifier don't QR-pair — "connected" just means credentials are present.
     configured = _wa_is_configured(cfg)
     return {"provider": provider, "connected": configured,
@@ -11045,7 +11054,7 @@ async def wa_connection(user = Depends(verify_token)):
 async def wa_qr(user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
-    provider = (cfg.get("provider") or "wanotifier").lower()
+    provider = (cfg.get("provider") or "").lower()
     if provider != "evolution":
         return {"state": "n/a",
                 "error": "Scan-to-connect is for the simple setup. Your provider connects with credentials under Advanced."}
@@ -11246,6 +11255,11 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
                                    language=data.language)
         return {"results": [r], "sent": 1 if r["status"] not in ("failed", "not_configured") else 0,
                 "total_cost": r["cost"], "configured": provider.configured}
+
+    # SAFETY: never let a manual send resolve to "everyone" by accident. Require an
+    # explicit recipient selection — a class (standard_ids) or specific students.
+    if data.included_student_ids is None and not data.standard_ids:
+        raise HTTPException(status_code=400, detail="Select recipients first.")
 
     recips = [r for r in _wa_resolve_recipients(teacher_id, data.standard_ids,
                                                 data.included_student_ids) if r["phone"]]
@@ -11647,6 +11661,10 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     provider = wa.get_provider()
     teacher_id = user["teacher_id"]
     lms = _wa_branding_name()
+    # SAFETY: require an explicit selection (except exam mode, which is auto-scoped
+    # to the exam's own standard) so a report send can never blast everyone.
+    if not data.test_id and data.included_student_ids is None and not data.standard_ids:
+        raise HTTPException(status_code=400, detail="Select recipients first.")
     rows = _wa_build_report_rows(teacher_id, data.standard_ids, data.included_student_ids,
                                  data.test_id, data.period, data.criteria)
     # Pre-filter to actually-sendable rows so batch progress totals are honest.
@@ -11863,6 +11881,9 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     _wa_require_teacher(user)
     provider = wa.get_provider()
     teacher_id = user["teacher_id"]
+    # SAFETY: require an explicit selection — never resolve to "everyone".
+    if data.student_ids is None and not data.standard_ids:
+        raise HTTPException(status_code=400, detail="Select recipients first.")
     recips = [r for r in _wa_resolve_recipients(teacher_id, data.standard_ids,
                                                 data.student_ids) if r["phone"]]
     if not recips:

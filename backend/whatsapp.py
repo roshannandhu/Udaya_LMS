@@ -148,9 +148,17 @@ class WANotifierProvider(WhatsAppProvider):
     configured = True
     BASE = "https://app.wanotifier.com/api/v1"
 
-    def __init__(self, api_key: str, sender: Optional[str] = None):
+    # SAFETY GATE: the current WANotifier request shapes are unverified guesses and
+    # were delivering to ALL contacts (a broadcast) instead of the single `to` number.
+    # Until the adapter is rewritten against WANotifier's real send-message API and
+    # `verified` is set true, every send is BLOCKED so no wrong messages go out.
+    _PAUSED = {"status": "not_configured", "provider_message_id": None,
+               "error": "WhatsApp sending is paused while setup is finished. Please try again shortly."}
+
+    def __init__(self, api_key: str, sender: Optional[str] = None, verified: bool = False):
         self.api_key = api_key
         self.sender = sender
+        self.verified = verified
 
     async def _post(self, path: str, payload: dict) -> dict:
         url = f"{self.BASE}/{path.lstrip('/')}"
@@ -173,6 +181,8 @@ class WANotifierProvider(WhatsAppProvider):
 
     async def send_template(self, to, template, variables=None, media_url=None,
                             media_type=None, language="en") -> dict:
+        if not self.verified:
+            return dict(self._PAUSED)
         payload: Dict[str, Any] = {
             "to": to,
             "type": "template",
@@ -189,6 +199,8 @@ class WANotifierProvider(WhatsAppProvider):
         return await self._post("messages", payload)
 
     async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+        if not self.verified:
+            return dict(self._PAUSED)
         payload: Dict[str, Any] = {"to": to, "type": "text", "text": {"body": text}}
         if self.sender:
             payload["from"] = self.sender
@@ -507,9 +519,13 @@ class EvolutionProvider(WhatsAppProvider):
 
 
 def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
-    """Factory: real provider when credentials exist, else the degrade provider."""
+    """Factory: real provider when credentials exist, else the degrade provider.
+
+    SAFETY: an UNSET or unknown `provider` resolves to UnconfiguredProvider (no
+    sends) — it must NEVER silently fall back to a real sending provider, so a
+    blank/misconfigured config can't blast anyone."""
     config = config if config is not None else get_wa_config()
-    provider = (config.get("provider") or "wanotifier").lower()
+    provider = (config.get("provider") or "").lower()
 
     if provider == "meta":
         token = (config.get("meta_access_token") or "").strip()
@@ -526,11 +542,16 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
             return EvolutionProvider(base_url, apikey, instance)
         return UnconfiguredProvider()
 
-    api_key = (config.get("api_key") or "").strip()
-    if not api_key:
-        return UnconfiguredProvider()
-    sender = config.get("sender") or None
-    return WANotifierProvider(api_key, sender)
+    if provider == "wanotifier":
+        api_key = (config.get("api_key") or "").strip()
+        if not api_key:
+            return UnconfiguredProvider()
+        sender = config.get("sender") or None
+        # Gated until the adapter is rewritten against the real API (see WANotifierProvider).
+        return WANotifierProvider(api_key, sender, verified=bool(config.get("wanotifier_verified")))
+
+    # Unset / unknown provider → no sending.
+    return UnconfiguredProvider()
 
 
 # ── Report rendering (consumes the GET /students/{id}/report/v2 shape) ────────
