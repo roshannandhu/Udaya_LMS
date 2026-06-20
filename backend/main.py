@@ -4265,6 +4265,46 @@ def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: in
     except Exception:
         pass  # libmagic unavailable → extension + size check only
 
+
+# Office binary formats LibreOffice converts to PDF so they open in the in-app
+# secure viewer. NOT docx (mammoth renders it client-side), pdf, or images.
+_OFFICE_CONVERT_EXTS = {"doc", "ppt", "pptx", "xls", "xlsx"}
+
+
+async def _maybe_convert_office_to_pdf(filename: str, data: bytes, content_type: str):
+    """If `filename` is an office binary format, render it to PDF ONCE at upload (via
+    LibreOffice headless) so students can view it in the no-download secure viewer.
+    Returns (data, ext, content_type, display_name) — converted to PDF, or the
+    originals on any failure so a conversion error never blocks the upload."""
+    ext = (filename or "").rsplit(".", 1)[-1].lower() if "." in (filename or "") else ""
+    if ext not in _OFFICE_CONVERT_EXTS:
+        return data, ext, content_type, filename
+    import tempfile
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, f"in.{ext}")
+            with open(src, "wb") as f:
+                f.write(data)
+            # Per-call UserInstallation avoids profile-lock clashes between concurrent
+            # conversions on the box.
+            proc = await asyncio.to_thread(lambda: subprocess.run(
+                ["soffice", "--headless", f"-env:UserInstallation=file://{tmp}/lo",
+                 "--convert-to", "pdf", "--outdir", tmp, src],
+                capture_output=True, timeout=120,
+            ))
+            out = os.path.join(tmp, "in.pdf")
+            if proc.returncode == 0 and os.path.exists(out):
+                with open(out, "rb") as f:
+                    pdf = f.read()
+                base = filename.rsplit(".", 1)[0] if "." in (filename or "") else (filename or "file")
+                return pdf, "pdf", "application/pdf", f"{base}.pdf"
+            print(f"[office] convert failed for {filename}: rc={proc.returncode} "
+                  f"{proc.stderr.decode(errors='replace')[:200]}")
+    except Exception as e:
+        print(f"[office] convert error for {filename}: {e}")
+    return data, ext, content_type, filename
+
+
 @app.post("/api/students/me/avatar")
 async def upload_student_avatar(file: UploadFile = File(...), user = Depends(verify_token)):
     if user["role"] != "student":
@@ -7793,11 +7833,12 @@ async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(..
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="DB not configured")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
-    path = f"{class_id}/{uuid.uuid4()}.{ext}"
     contents = await file.read()
     validate_upload(file.filename, contents, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
     ct = file.content_type or "application/octet-stream"
+    # Office files (ppt/xls/doc/…) → PDF once at upload so they open in the viewer.
+    contents, ext, ct, _ = await _maybe_convert_office_to_pdf(file.filename, contents, ct)
+    path = f"{class_id}/{uuid.uuid4()}.{ext or 'bin'}"
     # PRIVATE bucket: the file is never publicly reachable. Students view it only
     # through the authed streaming endpoint GET /api/notes/{id}/file (no URL, no
     # download). We return the storage key, not a public URL.
@@ -7952,14 +7993,15 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
 
     file_bytes = await file.read()
     validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
-    file_ext = os.path.splitext(file.filename)[1]
-    file_name = f"{uuid.uuid4()}{file_ext}"
     ct = file.content_type or "application/octet-stream"
-    # Inline chat media (photos, voice notes) stay public so they render inline in
-    # the WhatsApp-style thread. DOCUMENT attachments (PDF/doc) go to the PRIVATE
-    # bucket and are viewed only through the authed, app-only secure viewer — the
-    # `secure` flag tells the client to store the key and use /broadcasts/{id}/file.
-    is_inline_media = ct.startswith("image/") or ct.startswith("audio/")
+    # Office files → PDF once at upload so they open in the in-app viewer.
+    file_bytes, conv_ext, ct, _ = await _maybe_convert_office_to_pdf(file.filename, file_bytes, ct)
+    file_name = f"{uuid.uuid4()}.{conv_ext}" if conv_ext else f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    # Only VOICE NOTES (audio) stay public/inline in the chat. Images and documents
+    # both go to the PRIVATE bucket and are viewed only through the authed, app-only
+    # secure viewer (no download, no public URL) — the `secure` flag tells the client
+    # to store the key and open it via /broadcasts/{id}/file.
+    is_inline_media = ct.startswith("audio/")
 
     try:
         if is_inline_media:
@@ -7971,13 +8013,14 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
             public_url = await asyncio.to_thread(
                 lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, ct)
             )
-            return {"url": public_url, "type": file.content_type, "filename": file.filename, "secure": False}
+            return {"url": public_url, "type": ct, "filename": file.filename, "secure": False}
 
         # Document → private bucket; store the KEY (not a URL) in attachment_url.
+        # `type` reflects any office→PDF conversion so the viewer classifies correctly.
         await asyncio.to_thread(
             lambda: filestore.upload_private(service_supabase, "broadcasts", file_name, file_bytes, ct)
         )
-        return {"url": file_name, "type": file.content_type, "filename": file.filename, "secure": True}
+        return {"url": file_name, "type": ct, "filename": file.filename, "secure": True}
     except Exception as e:
         # Never embed the file as a base64 data: URL — that would store a large
         # binary inside the broadcasts table. Fail loudly so the file genuinely
@@ -8935,9 +8978,11 @@ async def create_assignment(
             if not file_bytes:
                 continue
             validate_upload(f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
-            safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f.filename)
-            storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
             ct = f.content_type or "application/octet-stream"
+            # Office files → PDF once at upload so students view them in the secure viewer.
+            file_bytes, _ext, ct, disp_name = await _maybe_convert_office_to_pdf(f.filename, file_bytes, ct)
+            safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in disp_name)
+            storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
             await asyncio.to_thread(
                 lambda path=storage_path, b=file_bytes, c=ct: filestore.upload_private(service_supabase, "assignments", path, b, c)
             )
@@ -8947,8 +8992,8 @@ async def create_assignment(
             att_row = service_supabase.table("assignment_attachments").insert({
                 "assignment_id": assignment_id,
                 "file_url": str(public_url),
-                "file_name": f.filename,
-                "file_type": f.content_type,
+                "file_name": disp_name,
+                "file_type": ct,
                 "storage_path": storage_path,
             }).execute()
             if att_row.data:
@@ -9069,9 +9114,11 @@ async def add_assignment_attachments(
         if not file_bytes:
             continue
         validate_upload(f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
-        safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f.filename)
-        storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
         ct = f.content_type or "application/octet-stream"
+        # Office files → PDF once at upload so students view them in the secure viewer.
+        file_bytes, _ext, ct, disp_name = await _maybe_convert_office_to_pdf(f.filename, file_bytes, ct)
+        safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in disp_name)
+        storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
         await asyncio.to_thread(
             lambda path=storage_path, b=file_bytes, c=ct: filestore.upload_private(service_supabase, "assignments", path, b, c)
         )
@@ -9081,8 +9128,8 @@ async def add_assignment_attachments(
         att_row = service_supabase.table("assignment_attachments").insert({
             "assignment_id": assignment_id,
             "file_url": str(public_url),
-            "file_name": f.filename,
-            "file_type": f.content_type,
+            "file_name": disp_name,
+            "file_type": ct,
             "storage_path": storage_path,
         }).execute()
         if att_row.data:

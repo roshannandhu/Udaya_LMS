@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Clock, Reply, Search, SmilePlus, Check, CheckCheck, Mic, Square, Copy, MoreVertical } from 'lucide-react';
+import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Clock, Reply, Search, SmilePlus, Check, CheckCheck, Mic, Square, Copy, MoreVertical, Image as ImageIcon } from 'lucide-react';
 import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
 import VoiceNotePlayer from '../shared/VoiceNotePlayer';
 import SubjectIcon, { IconPicker } from '../shared/SubjectIcon';
 import SecureFileViewer from '../shared/SecureFileViewer';
+import useBroadcastSocket from '../../hooks/useBroadcastSocket';
 import { pastelFor, pastelTokens } from '../cards/pastel';
 import { useTheme } from '../../lib/theme';
 import { resolveAvatar } from '../ui';
@@ -58,7 +59,6 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const readDetailsModalRef = useRef(null);
   const { refreshStandards, invalidate, updateStandardLocal } = useAppCache();
   const fileInputRef = useRef(null);
-  const wsRef = useRef(null);
   const inputRef = useRef(null);
   const chatBottomRef = useRef(null);
 
@@ -120,47 +120,37 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     }
   }, [broadcasts.length, std?.id]);
 
-  useEffect(() => {
-    const apiBase = getApiBaseUrl();
-    const wsBase = apiBase.replace(/^http/, 'ws');
-    const token = localStorage.getItem('tutoria_token') || '';
-    const ws = new WebSocket(`${wsBase}/ws/broadcasts/${std.id}?token=${encodeURIComponent(token)}`);
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'history') {
-        const formatted = data.data.map(b => mapBroadcast(b));
-        onUpdate(() => formatted);
-      } else if (data.type === 'new_broadcast') {
-        const newMsg = mapBroadcast(data.data);
-        onUpdate((list) => {
-          if (list.some(x => x.id === newMsg.id)) return list;
-          return [...list, newMsg];
-        });
-      } else if (data.type === 'delete_broadcast') {
-        const deletedId = data.id || data.data?.id;
-        onUpdate((list) => list.filter(x => x.id !== deletedId));
-      } else if (data.type === 'edit_broadcast') {
-        const b = data.data;
-        if (b) onUpdate((list) => list.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
-      } else if (data.type === 'read_receipt_update') {
-        // Fetch latest read counts and merge with existing state to preserve other counts
-        broadcastApi.getReadCounts(std.id)
-          .then(counts => setReadCounts(prev => ({ ...prev, ...(counts || {}) })))
+  // Live updates over an auto-reconnecting WebSocket (see useBroadcastSocket).
+  useBroadcastSocket(std?.id, (data) => {
+    if (data.type === 'history') {
+      const formatted = data.data.map(b => mapBroadcast(b));
+      onUpdate(() => formatted);
+    } else if (data.type === 'new_broadcast') {
+      const newMsg = mapBroadcast(data.data);
+      onUpdate((list) => {
+        if (list.some(x => x.id === newMsg.id)) return list;
+        return [...list, newMsg];
+      });
+    } else if (data.type === 'delete_broadcast') {
+      const deletedId = data.id || data.data?.id;
+      onUpdate((list) => list.filter(x => x.id !== deletedId));
+    } else if (data.type === 'edit_broadcast') {
+      const b = data.data;
+      if (b) onUpdate((list) => list.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
+    } else if (data.type === 'read_receipt_update') {
+      // Fetch latest read counts and merge with existing state to preserve other counts
+      broadcastApi.getReadCounts(std.id)
+        .then(counts => setReadCounts(prev => ({ ...prev, ...(counts || {}) })))
+        .catch(() => {});
+      const currentModal = readDetailsModalRef.current;
+      if (currentModal && data.broadcast_ids?.includes(currentModal)) {
+        // Refresh read details for the open modal
+        broadcastApi.getReadDetails(currentModal)
+          .then(res => setReadDetailsData({ loading: false, read_by: res.read_by || [], not_read_by: res.not_read_by || [] }))
           .catch(() => {});
-        const currentModal = readDetailsModalRef.current;
-        if (currentModal && data.broadcast_ids?.includes(currentModal)) {
-          // Refresh read details for the open modal
-          broadcastApi.getReadDetails(currentModal)
-            .then(res => setReadDetailsData({ loading: false, read_by: res.read_by || [], not_read_by: res.not_read_by || [] }))
-            .catch(() => {});
-        }
       }
-    };
-
-    wsRef.current = ws;
-    return () => ws.close();
-  }, [std.id]);
+    }
+  });
 
   function mapBroadcast(b) {
     // Timestamps come from the backend in UTC; render in the viewer's own timezone.
@@ -475,18 +465,15 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         <div className="mb-1.5 space-y-1">
                           {b.attachments.map((a, i) => (
                             <div key={i}>
-                              {a.type?.startsWith('image/') ? (
-                                <a href={a.url} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden border border-black/5">
-                                  <img src={a.url} alt="attachment" className="w-full h-auto max-h-64 object-cover" />
-                                </a>
-                              ) : a.type?.startsWith('audio/') ? (
+                              {a.type?.startsWith('audio/') ? (
                                 <VoiceNotePlayer src={a.url} isSender={isSender} />
                               ) : (
+                                // Images + documents open ONLY in the secure in-app viewer.
                                 <button onClick={() => setViewerBroadcastId(b.id)} className="w-full flex items-center gap-2 p-2 bg-black/5 hover:bg-black/10 transition-colors rounded-lg text-sm text-left">
                                   <div className="w-8 h-8 rounded-full bg-[#35b5a2]/20 flex items-center justify-center">
-                                    <FileText size={14} className="text-[#35b5a2]" />
+                                    {a.type?.startsWith('image/') ? <ImageIcon size={14} className="text-[#35b5a2]" /> : <FileText size={14} className="text-[#35b5a2]" />}
                                   </div>
-                                  <span className="flex-1 truncate font-medium text-neutral-800">{a.name || 'Document'}</span>
+                                  <span className="flex-1 truncate font-medium text-neutral-800">{a.type?.startsWith('image/') ? 'Photo — tap to view' : (a.name || 'Document')}</span>
                                 </button>
                               )}
                             </div>

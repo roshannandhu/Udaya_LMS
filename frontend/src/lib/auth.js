@@ -158,8 +158,14 @@ export const useAuthStore = create((set, get) => ({
       localStorage.setItem(ROLE_KEY, user.role || 'student');
       localStorage.setItem(NAME_KEY, user.name || '');
       set({ user, role: user.role || 'student', isLoading: false });
-      // Refresh server-stored settings for teachers on every app boot
-      if ((user.role || 'student') === 'teacher') {
+      // Re-assert screen capture lock on EVERY app boot — not just fresh login.
+      // Students reopen the app with a saved session (this path), where FLAG_SECURE
+      // was never being set, so screenshots were unblocked after the first launch.
+      if ((user.role || 'student') === 'student') {
+        enableScreenSecurity();
+      } else {
+        disableScreenSecurity();
+        // Refresh server-stored settings for teachers on every app boot
         useSettingsStore.getState().hydrateFromServer();
       }
     } catch (error) {

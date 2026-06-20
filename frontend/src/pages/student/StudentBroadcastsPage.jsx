@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Pin, FileText, Loader2, Search, X } from 'lucide-react';
+import { MessageSquare, Pin, FileText, Loader2, Search, X, Image as ImageIcon } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
-import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
+import { apiClient, broadcastApi } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import SecureFileViewer from '../../components/shared/SecureFileViewer';
+import useBroadcastSocket from '../../hooks/useBroadcastSocket';
 import { fmtTime, fmtChatDate } from '../../lib/datetime';
 
 const formatChatDate = fmtChatDate;
@@ -30,7 +31,6 @@ export default function StudentBroadcastsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewerBroadcastId, setViewerBroadcastId] = useState(null); // doc attachment open in secure viewer
-  const wsRef = useRef(null);
   const markedReadRef = useRef(new Set());
   const chatBottomRef = useRef(null);
 
@@ -81,51 +81,40 @@ export default function StudentBroadcastsPage() {
     }
   }, [broadcasts.length]);
 
-  useEffect(() => {
-    if (!standard?.id) return;
-    const apiBase = getApiBaseUrl();
-    const wsBase = apiBase.replace(/^http/, 'ws');
-    const token = localStorage.getItem('tutoria_token') || '';
-    const ws = new WebSocket(`${wsBase}/ws/broadcasts/${standard.id}?token=${encodeURIComponent(token)}`);
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'history') {
-        const now = new Date();
-        const formatted = data.data
-          .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
-          .map(mapBroadcast);
-        setBroadcasts(formatted);
-        const ids = formatted.map(b => b.id).filter(Boolean);
-        const unseen = ids.filter(id => !markedReadRef.current.has(id));
-        if (unseen.length > 0) {
-          broadcastApi.markRead(unseen).catch(() => {});
-          unseen.forEach(id => markedReadRef.current.add(id));
-        }
-      } else if (data.type === 'new_broadcast') {
-        const b = data.data;
-        if (b.deleted) return;
-        if (b.scheduled_for && new Date(b.scheduled_for) > new Date()) return;
-        const newMsg = mapBroadcast(b);
-        setBroadcasts(prev => {
-          if (prev.some(x => x.id === newMsg.id)) return prev;
-          return [...prev, newMsg];
-        });
-        if (b.id && !markedReadRef.current.has(b.id)) {
-          broadcastApi.markRead([b.id]).catch(() => {});
-          markedReadRef.current.add(b.id);
-        }
-      } else if (data.type === 'delete_broadcast') {
-        setBroadcasts(prev => prev.filter(b => b.id !== data.id));
-      } else if (data.type === 'edit_broadcast') {
-        const b = data.data;
-        setBroadcasts(prev => prev.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
+  // Live updates over an auto-reconnecting WebSocket (see useBroadcastSocket).
+  useBroadcastSocket(standard?.id, (data) => {
+    if (data.type === 'history') {
+      const now = new Date();
+      const formatted = data.data
+        .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
+        .map(mapBroadcast);
+      setBroadcasts(formatted);
+      const ids = formatted.map(b => b.id).filter(Boolean);
+      const unseen = ids.filter(id => !markedReadRef.current.has(id));
+      if (unseen.length > 0) {
+        broadcastApi.markRead(unseen).catch(() => {});
+        unseen.forEach(id => markedReadRef.current.add(id));
       }
-    };
-
-    wsRef.current = ws;
-    return () => ws.close();
-  }, [standard?.id]);
+    } else if (data.type === 'new_broadcast') {
+      const b = data.data;
+      if (b.deleted) return;
+      if (b.scheduled_for && new Date(b.scheduled_for) > new Date()) return;
+      const newMsg = mapBroadcast(b);
+      setBroadcasts(prev => {
+        if (prev.some(x => x.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+      if (b.id && !markedReadRef.current.has(b.id)) {
+        broadcastApi.markRead([b.id]).catch(() => {});
+        markedReadRef.current.add(b.id);
+      }
+    } else if (data.type === 'delete_broadcast') {
+      setBroadcasts(prev => prev.filter(b => b.id !== data.id));
+    } else if (data.type === 'edit_broadcast') {
+      const b = data.data;
+      setBroadcasts(prev => prev.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
+    }
+  });
 
   function mapBroadcast(b) {
     return {
@@ -263,18 +252,16 @@ export default function StudentBroadcastsPage() {
                           <div className="mb-1.5 space-y-1">
                             {b.attachments.map((att, i) => (
                               <div key={i}>
-                                {att.type?.startsWith('image/') ? (
-                                  <a href={att.url} target="_blank" rel="noreferrer" className="block rounded-lg overflow-hidden border border-black/5">
-                                    <img src={att.url} alt="attachment" className="w-full h-auto max-h-64 object-cover" />
-                                  </a>
-                                ) : att.type?.startsWith('audio/') ? (
+                                {att.type?.startsWith('audio/') ? (
                                   <VoiceNotePlayer src={att.url} isSender={false} />
                                 ) : (
+                                  // Images + documents open ONLY in the secure in-app viewer
+                                  // (no public URL, no download, screenshot-blocked).
                                   <button onClick={() => setViewerBroadcastId(b.id)} className="w-full flex items-center gap-2 p-2 bg-black/5 hover:bg-black/10 transition-colors rounded-lg text-sm text-left">
                                     <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
-                                      <FileText size={14} className="text-amber-500" />
+                                      {att.type?.startsWith('image/') ? <ImageIcon size={14} className="text-amber-500" /> : <FileText size={14} className="text-amber-500" />}
                                     </div>
-                                    <span className="flex-1 truncate font-medium text-neutral-800">Attachment</span>
+                                    <span className="flex-1 truncate font-medium text-neutral-800">{att.type?.startsWith('image/') ? 'Photo — tap to view' : 'Attachment'}</span>
                                   </button>
                                 )}
                               </div>

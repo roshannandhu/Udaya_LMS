@@ -6,6 +6,7 @@ import { useAuthStore, ROLES } from './lib/auth';
 import { useAppCache } from './store';
 import { useTheme } from './lib/theme';
 import useAndroidBackButton from './lib/useAndroidBackButton';
+import { enableScreenSecurity, disableScreenSecurity } from './lib/secureScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import useLiveClassEvents from './hooks/useLiveClassEvents';
 
@@ -209,6 +210,32 @@ export default function App() {
   // closing the app (no-op on web/iOS). Uses window history only, so it's safe
   // to call here outside the Router context.
   useAndroidBackButton();
+
+  // Screen-capture lock (FLAG_SECURE) follows the role on EVERY boot — the store
+  // hydrates the role from localStorage synchronously, so this fires even when a
+  // returning student opens the app offline (the case the login-only enable missed).
+  const role = useAuthStore(s => s.role);
+  useEffect(() => {
+    if (role === ROLES.STUDENT) enableScreenSecurity();
+    else if (role) disableScreenSecurity();
+  }, [role]);
+  // Re-assert on app resume (defensive — a backgrounded app returning to foreground).
+  useEffect(() => {
+    let remove = () => {};
+    (async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.getPlatform() !== 'android') return;
+        const { App: CapApp } = await import('@capacitor/app');
+        const h = await CapApp.addListener('resume', () => {
+          if (useAuthStore.getState().role === ROLES.STUDENT) enableScreenSecurity();
+        });
+        remove = () => h.remove();
+      } catch { /* not native */ }
+    })();
+    return () => remove();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthHandler />
