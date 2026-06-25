@@ -79,6 +79,7 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   const zoomRef = useRef(null);
   const startedRef = useRef(false);
   const printTimerRef = useRef(null);
+  const watchdogRef = useRef(null);
 
   // role is 0 for ALL portal watchers (teachers watch view-only too), so the
   // student lockdowns key off the explicit viewerRole prop from the caller.
@@ -144,11 +145,30 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
     }
 
     return () => {
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
       try { zoomRef.current?.leaveMeeting({}); } catch { /* ignore */ }
       const r = document.getElementById('zmmtg-root');
       if (r) r.style.display = 'none';
     };
   }, []);
+
+  // Zoom's join `success` callback can fire even when the meeting never paints
+  // (host hasn't started it, media blocked, cross-account refusal). In that case
+  // the student is left on a blank #zmmtg-root with NO error. This watchdog turns
+  // that silent blank into an actionable message after a grace period.
+  function startJoinWatchdog() {
+    if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    watchdogRef.current = setTimeout(() => {
+      const root = document.getElementById('zmmtg-root');
+      const painted = root && root.querySelector(
+        'video, canvas, #wc-container-left, [class*="meeting-client"], [class*="meeting-app"]'
+      );
+      if (!painted) {
+        setError('The class hasn’t started yet, or your connection was blocked. Ask your teacher to tap “Start class”, then rejoin.');
+        setStatus('error');
+      }
+    }, 18000);
+  }
 
   async function initZoomMeeting() {
     try {
@@ -173,6 +193,7 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
 
   function handleJoinMeeting() {
     setStatus('joining');
+    startJoinWatchdog();
     const ZoomMtg = zoomRef.current;
     if (!ZoomMtg) return;
 
@@ -200,12 +221,14 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
           zak: zak || '',
           success: () => setStatus('joined'),
           error: (e) => {
+            if (watchdogRef.current) clearTimeout(watchdogRef.current);
             setError(e?.errorMessage || e?.reason || 'Could not join the meeting. Please try again.');
             setStatus('error');
           },
         });
       },
       error: (e) => {
+        if (watchdogRef.current) clearTimeout(watchdogRef.current);
         setError(e?.errorMessage || 'Could not initialize Zoom. Please check your connection.');
         setStatus('error');
       },
@@ -213,6 +236,7 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   }
 
   function handleLeave() {
+    if (watchdogRef.current) clearTimeout(watchdogRef.current);
     try {
       zoomRef.current?.leaveMeeting({});
     } catch { /* ignore */ }

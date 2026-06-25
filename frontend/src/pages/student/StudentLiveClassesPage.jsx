@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Calendar, Clock, CheckCircle, XCircle, Loader2, Play } from 'lucide-react';
+import { Video, Calendar, Clock, CheckCircle, XCircle, Loader2, Play, X } from 'lucide-react';
 import { Btn } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
 import { liveClassApi, apiClient } from '../../lib/api';
@@ -70,6 +70,9 @@ export default function StudentLiveClassesPage() {
   const [loading, setLoading] = useState(!cache);
   const [activeJoin, setActiveJoin] = useState(null);
   const [joiningId, setJoiningId] = useState(null);
+  // A class that just flipped to LIVE over the WebSocket → drives the one-tap
+  // "Join now" banner so the student doesn't have to hunt for the card.
+  const [justLiveId, setJustLiveId] = useState(null);
   const [now, setNow] = useState(Date.now());
   const fetchSeq = useRef(0);
   // True once we've shown a list at least once (from cache or a successful fetch).
@@ -128,25 +131,44 @@ export default function StudentLiveClassesPage() {
     return () => cancel(id);
   }, []);
 
-  // Listen for real-time status updates from WebSocket
+  // Real-time: the global useLiveClassEvents hook opens ONE WebSocket and fires a
+  // `live-class-update` window event. Flip the matching card instantly; if the
+  // update is for a class we don't have yet (scheduled after this page loaded),
+  // pull the list in place (no spinner). Returning to the tab reconciles too, so
+  // newly-scheduled classes appear without a manual refresh.
   useEffect(() => {
     const handleUpdate = (e) => {
-      const { id, status } = e.detail;
-      setLiveClasses(prev => prev.map(lc => lc.id === id ? { ...lc, status } : lc));
+      const { id, status } = e.detail || {};
+      if (!id) return;
+      let known = false;
+      setLiveClasses(prev => {
+        known = prev.some(lc => lc.id === id);
+        return known ? prev.map(lc => (lc.id === id ? { ...lc, status } : lc)) : prev;
+      });
+      if (!known) fetchAll();                       // unknown class → reconcile (in place)
+      if (status === 'live') setJustLiveId(id);     // surface the "Join now" banner
+      if (status === 'ended') setJustLiveId(prev => (prev === id ? null : prev));
     };
+    const onFocus = () => { if (!document.hidden) fetchAll(); };
+
     window.addEventListener('live-class-update', handleUpdate);
-    
-    // Still update the clock every second for countdowns
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
+    // Update the clock every second for countdowns
     const clockId = setInterval(() => setNow(Date.now()), 1000);
-    
+
     return () => {
       window.removeEventListener('live-class-update', handleUpdate);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
       clearInterval(clockId);
     };
   }, []);
 
   const handleJoin = async (lc) => {
     if (joiningId) return;            // ignore double-clicks while a join is in flight
+    setJustLiveId(null);             // dismiss the "Join now" banner once acted on
     setJoiningId(lc.id);
     preloadZoomSDK();                 // start the 5.6 MB SDK download NOW, in parallel with the token fetch
     try {
@@ -173,16 +195,46 @@ export default function StudentLiveClassesPage() {
         passcode={activeJoin.passcode}
         zak={activeJoin.zak}
         viewerRole="student"
-        onLeave={() => { setActiveJoin(null); fetchAll(); }}
+        onLeave={() => { setActiveJoin(null); setJustLiveId(null); fetchAll(); }}
       />
     );
   }
+
+  // The class that just went live (if it's still live and in our list) → banner.
+  const justLiveClass = justLiveId
+    ? liveClasses.find(lc => lc.id === justLiveId && lc.status === 'live')
+    : null;
 
   return (
     <div className="pb-28 min-h-screen bg-[#F4F7F6]">
       <TopBar title="Live Classes" />
 
       <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
+        {/* Auto-open prompt: a class just went live → one tap to join. (True silent
+            auto-join isn't possible — Zoom needs a user gesture for audio.) */}
+        {justLiveClass && (
+          <div className="mb-6 flex items-center gap-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 shadow-sm">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75 animate-ping" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-extrabold text-red-700 uppercase tracking-wide leading-none">Class is live</p>
+              <p className="text-sm font-bold text-neutral-900 truncate mt-0.5">{justLiveClass.title}</p>
+            </div>
+            <button
+              onClick={() => handleJoin(justLiveClass)}
+              disabled={joiningId === justLiveClass.id}
+              className="shrink-0 px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold shadow-sm transition-colors disabled:opacity-60 flex items-center gap-1.5">
+              {joiningId === justLiveClass.id ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} fill="currentColor" />}
+              Join now
+            </button>
+            <button onClick={() => setJustLiveId(null)} className="shrink-0 p-1.5 text-red-400 hover:text-red-700 rounded-full" title="Dismiss">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-24">
             <Loader2 className="animate-spin text-neutral-400" size={24} />

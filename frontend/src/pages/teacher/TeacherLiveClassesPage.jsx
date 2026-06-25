@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2, Trash2, Play, MoreHorizontal } from 'lucide-react';
 import { Modal, Sheet, Btn, Tag, Avatar, Skeleton } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
@@ -296,16 +296,29 @@ export default function TeacherLiveClassesPage() {
     }
   };
 
+  // Keep a live ref to fetchAll so the WS event handler (mounted once) never calls
+  // a stale closure with empty `standards` (which would early-return / no-op).
+  const fetchAllRef = useRef(fetchAll);
+  fetchAllRef.current = fetchAll;
+
   // Load standards/subjects even on a direct navigation here (the cache may be cold).
   useEffect(() => { refreshStandards(); refreshSubjects(); }, []);
 
   useEffect(() => { fetchAll(); }, [standards, standardsReady]);
 
-  // Listen for real-time status updates from WebSocket
+  // Real-time status updates from the global useLiveClassEvents WebSocket. Flip the
+  // matching card instantly; an update for a class we don't have yet → silent
+  // refetch so newly-scheduled classes appear without a manual refresh.
   useEffect(() => {
     const handleUpdate = (e) => {
-      const { id, status } = e.detail;
-      setLiveClasses(prev => prev.map(lc => lc.id === id ? { ...lc, status } : lc));
+      const { id, status } = e.detail || {};
+      if (!id) return;
+      let known = false;
+      setLiveClasses(prev => {
+        known = prev.some(lc => lc.id === id);
+        return known ? prev.map(lc => (lc.id === id ? { ...lc, status } : lc)) : prev;
+      });
+      if (!known) fetchAllRef.current(true);   // silent: don't flash the skeleton
     };
     window.addEventListener('live-class-update', handleUpdate);
     return () => window.removeEventListener('live-class-update', handleUpdate);
@@ -342,6 +355,20 @@ export default function TeacherLiveClassesPage() {
       alert(err?.message || 'Could not open the live class.');
     } finally {
       setJoiningId(null);
+    }
+  };
+
+  // Start the class as HOST: open the exact meeting's Zoom start_url. This makes the
+  // teacher the real host of THE meeting students join (matching zoom_meeting_id) —
+  // not a random "New Meeting"/PMI, which would leave students staring at a blank
+  // host-less screen. On mobile the link deep-links straight into the Zoom app.
+  const handleStartClass = async (lc) => {
+    try {
+      const { start_url } = await liveClassApi.getHostLink(lc.id);
+      if (start_url) window.open(start_url, '_blank', 'noopener');
+      else alert('No Zoom start link for this class yet.');
+    } catch (err) {
+      alert(err?.message || 'Could not get the Zoom start link.');
     }
   };
 
@@ -443,10 +470,10 @@ export default function TeacherLiveClassesPage() {
                     /* stopPropagation everywhere: the card itself is clickable
                        (join as watcher) even while scheduled. */
                     <>
-                      {isScheduled && (
-                        <span className="bg-white/50 text-neutral-600 px-4 py-2.5 rounded-full text-[12px] font-semibold backdrop-blur-sm border border-white/40">
-                          Goes live when you start it in your Zoom app
-                        </span>
+                      {(isScheduled || isLive) && (
+                        <button onClick={(e) => { e.stopPropagation(); handleStartClass(lc); }} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">
+                          {isLive ? 'Open as host' : 'Start class in Zoom'}
+                        </button>
                       )}
                       {isScheduled && (
                         <button onClick={(e) => { e.stopPropagation(); handleCancelClass(lc); }} className="bg-white/60 hover:bg-white text-neutral-700 px-4 py-2.5 rounded-full text-[13px] font-bold shadow-sm transition-all hover:-translate-y-0.5">

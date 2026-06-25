@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen, Medal } from 'lucide-react';
+import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen, Medal, RotateCcw, X } from 'lucide-react';
 import { Tag } from '../../components/ui';
 import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
@@ -43,13 +43,14 @@ function fmtTestDate(d) {
 // before) gave them a new function identity every render, so the whole Tests grid
 // remounted and replayed the `fadeUp` entrance — the "cards flicker on tab return"
 // the user saw. All data is passed in via props instead of being closed over.
-function SubjectTestCard({ t, section, idx = 0, subject, myAttempts, prevSeen, navigate }) {
+function SubjectTestCard({ t, section, idx = 0, subject, myAttempts, prevSeen, navigate, reattemptStatus = {}, onRequestReattempt }) {
   const cls = subject;
   const attempt = myAttempts[t.id];
   const scorePct = attempt && t.total_marks
     ? Math.round((attempt.score / t.total_marks) * 100)
     : null;
   const theme = CARD_COLORS[idx % CARD_COLORS.length];
+  const granted = reattemptStatus[t.id] === 'approved';
 
   return (
     <motion.div variants={fadeUp} className={`rounded-2xl ${theme.bg} p-5 flex flex-col hover:shadow-md transition-all hover:-translate-y-1`}>
@@ -68,7 +69,11 @@ function SubjectTestCard({ t, section, idx = 0, subject, myAttempts, prevSeen, n
              <span className="bg-white/50 px-2 py-0.5 rounded-full">{t.total_marks} marks</span>
           </div>
         </div>
-        {section === 'available' && <span className="bg-amber-100 text-amber-800 text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0">Open</span>}
+        {section === 'available' && (
+          granted
+            ? <span className="bg-indigo-100 text-indigo-700 text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0 inline-flex items-center gap-1"><RotateCcw size={12} /> Re-attempt</span>
+            : <span className="bg-amber-100 text-amber-800 text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0">Open</span>
+        )}
         {section === 'completed' && scorePct !== null && (
           <span className={`text-[12px] font-bold px-2.5 py-1 rounded-full shadow-sm shrink-0 ${scorePct >= 75 ? 'bg-green-100 text-green-800' : scorePct >= 50 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>{scorePct}%</span>
         )}
@@ -119,6 +124,37 @@ function SubjectTestCard({ t, section, idx = 0, subject, myAttempts, prevSeen, n
           >
             <BookOpen size={14} /> Review
           </button>
+
+          {/* Re-attempt request — for when a student couldn't finish (call, cut off). */}
+          {reattemptStatus[t.id] === 'pending' ? (
+            <div className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200">
+              <Clock size={13} /> Re-attempt requested
+            </div>
+          ) : (
+            <button onClick={() => onRequestReattempt?.(t)}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-neutral-600 bg-transparent hover:bg-white/60 transition-all border border-black/10">
+              <RotateCcw size={13} /> Request re-attempt
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Missed (absent / deadline passed, never attempted) — ask the teacher to re-open. */}
+      {section === 'missed' && (
+        <div className="mt-auto pt-3">
+          {reattemptStatus[t.id] === 'pending' ? (
+            <div className="w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200">
+              <Clock size={13} /> Re-attempt requested
+            </div>
+          ) : (
+            <>
+              <p className="text-[11px] font-medium text-neutral-500 mb-2 text-center leading-relaxed">Missed this one? Ask your teacher to re-open it for you.</p>
+              <button onClick={() => onRequestReattempt?.(t)}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-neutral-700 bg-white/70 hover:bg-white transition-all border border-black/10">
+                <RotateCcw size={13} /> Request re-attempt
+              </button>
+            </>
+          )}
         </div>
       )}
     </motion.div>
@@ -155,6 +191,10 @@ export default function StudentSubjectViewPage() {
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
   const [myAttempts, setMyAttempts] = useState({});
+  const [reattemptStatus, setReattemptStatus] = useState({}); // {test_id: 'pending'|'approved'|'rejected'}
+  const [reattemptModal, setReattemptModal] = useState(null);  // the test being requested
+  const [reattemptReason, setReattemptReason] = useState('');
+  const [reattemptBusy, setReattemptBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [liveClasses, setLiveClasses] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -177,7 +217,7 @@ export default function StudentSubjectViewPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [vids, tsts, hist, subs, assigns, liveData, notesData] = await Promise.all([
+        const [vids, tsts, hist, subs, assigns, liveData, notesData, reattemptRes] = await Promise.all([
           videoApi.getVideos(classId),
           testApi.getTests(classId),
           testApi.getStudentTestHistory(),
@@ -185,9 +225,11 @@ export default function StudentSubjectViewPage() {
           assignmentApi.getByClass(classId).catch(() => ({ assignments: [] })),
           liveClassApi.getByClass(classId).catch(() => []),
           notesApi.getByClass(classId).catch(() => []),
+          testApi.getMyReattemptRequests().catch(() => ({})),
         ]);
         setVideos(vids || []);
         setTests(tsts || []);
+        setReattemptStatus((reattemptRes && typeof reattemptRes === 'object') ? reattemptRes : {});
         setAssignments(assigns?.assignments || []);
         setLiveClasses(Array.isArray(liveData) ? liveData.filter(l => l.status !== 'cancelled') : []);
         setNotes(Array.isArray(notesData) ? notesData : []);
@@ -247,7 +289,15 @@ export default function StudentSubjectViewPage() {
   // Re-fetch re-attempt status when the student returns to the tab, so a
   // teacher's approve/reject shows up without a manual reload.
   useEffect(() => {
-    const onFocus = () => { if (!document.hidden) loadAssignReattempt(); };
+    const onFocus = () => {
+      if (document.hidden) return;
+      loadAssignReattempt();
+      // Refresh test re-attempt statuses too, so a teacher's approve/reject shows
+      // up without a manual reload (a granted test jumps to "Available").
+      testApi.getMyReattemptRequests()
+        .then(m => { if (m && typeof m === 'object') setReattemptStatus(m); })
+        .catch(() => {});
+    };
     document.addEventListener('visibilitychange', onFocus);
     window.addEventListener('focus', onFocus);
     return () => {
@@ -269,6 +319,21 @@ export default function StudentSubjectViewPage() {
   }, [tab, subject?.standard_id, leaderboardLoaded]);
 
   const attempted = new Set(Object.keys(myAttempts));
+
+  const submitReattempt = async () => {
+    if (!reattemptModal) return;
+    setReattemptBusy(true);
+    try {
+      await testApi.requestReattempt(reattemptModal.id, reattemptReason.trim());
+      setReattemptStatus(prev => ({ ...prev, [reattemptModal.id]: 'pending' }));
+      setReattemptModal(null);
+      setReattemptReason('');
+    } catch (err) {
+      alert(err?.message || 'Could not send request. Please try again.');
+    } finally {
+      setReattemptBusy(false);
+    }
+  };
 
   if (activeJoin) {
     return (
@@ -443,12 +508,18 @@ export default function StudentSubjectViewPage() {
               return true;
             };
 
-            const available = tests.filter(t => isOpen(t) && !attempted.has(String(t.id)));
+            // A teacher-approved re-attempt re-opens a test (even past its deadline)
+            // → surface it under "Available" so Start works; exclude it elsewhere.
+            const isGranted = (t) => reattemptStatus[t.id] === 'approved';
+            const available = tests.filter(t => isGranted(t) || (isOpen(t) && !attempted.has(String(t.id))));
             const upcoming  = tests.filter(t => t.status === 'scheduled' && t.scheduled_for && new Date(t.scheduled_for) > now && !attempted.has(String(t.id)));
-            const completed = tests.filter(t => attempted.has(String(t.id)));
-            const missed    = tests.filter(t => (t.status === 'completed' || (t.expires_at && new Date(t.expires_at) <= now)) && !attempted.has(String(t.id)));
+            const completed = tests.filter(t => attempted.has(String(t.id)) && !isGranted(t));
+            const missed    = tests.filter(t => !isGranted(t) && (t.status === 'completed' || (t.expires_at && new Date(t.expires_at) <= now)) && !attempted.has(String(t.id)));
 
-            const cardProps = { subject, myAttempts, prevSeen, navigate };
+            const cardProps = {
+              subject, myAttempts, prevSeen, navigate, reattemptStatus,
+              onRequestReattempt: (t) => { setReattemptReason(''); setReattemptModal(t); },
+            };
 
             return (
               <div className="flex flex-col w-full">
@@ -696,6 +767,49 @@ export default function StudentSubjectViewPage() {
         offlineKey={viewerNote ? `note-${viewerNote.id}` : null}
         title={viewerNote?.title || 'Note'}
       />
+
+      {/* ── Test re-attempt request modal ── */}
+      {reattemptModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm" onClick={() => !reattemptBusy && setReattemptModal(null)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 sm:p-7" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0"><RotateCcw size={20} /></div>
+                <div>
+                  <h3 className="text-[18px] font-extrabold text-neutral-900 leading-tight">Request re-attempt</h3>
+                  <p className="text-[13px] text-neutral-500 line-clamp-1">{reattemptModal.title}</p>
+                </div>
+              </div>
+              <button onClick={() => !reattemptBusy && setReattemptModal(null)} className="p-1.5 -mr-1 text-neutral-400 hover:text-neutral-700 rounded-full hover:bg-neutral-100">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-[13px] text-neutral-600 mt-3 mb-2 leading-relaxed">
+              Tell your teacher why you need another attempt. They'll review and approve it.
+            </p>
+            <textarea
+              autoFocus
+              value={reattemptReason}
+              onChange={e => setReattemptReason(e.target.value)}
+              maxLength={500}
+              rows={4}
+              placeholder="e.g. My call disconnected and the test auto-submitted before I could finish."
+              className="w-full text-[14px] rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 outline-none focus:border-indigo-400 focus:bg-white resize-none placeholder:text-neutral-400"
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setReattemptModal(null)} disabled={reattemptBusy}
+                className="flex-1 py-3 rounded-full text-[14px] font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={submitReattempt} disabled={reattemptBusy || !reattemptReason.trim()}
+                className="flex-1 py-3 rounded-full text-[14px] font-bold text-white bg-black hover:bg-neutral-800 transition-colors disabled:opacity-40 flex items-center justify-center gap-2">
+                {reattemptBusy ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                Send request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

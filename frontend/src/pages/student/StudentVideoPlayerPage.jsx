@@ -226,8 +226,11 @@ export default function StudentVideoPlayerPage() {
   }
 
   // ── Vidstack callbacks (file sources only) ──────────────────────────────────
+  // YouTube is driven by the 1s poll below instead — its provider emits timeupdate
+  // sparsely and ignores an early `currentTime` set, so onCanPlay/onTimeUpdate are
+  // unreliable for it (the cause of broken progress/complete/resume on YT lessons).
   const onCanPlay = () => {
-    if (resumedRef.current) return;
+    if (resumedRef.current || video?.source_type === 'youtube') return;
     resumedRef.current = true;
     const resume = video?.progress_secs || 0;
     if (resume > 10 && playerRef.current) {
@@ -235,6 +238,7 @@ export default function StudentVideoPlayerPage() {
     }
   };
   const onTimeUpdate = () => {
+    if (video?.source_type === 'youtube') return;
     const p = playerRef.current;
     if (!p) return;
     handleTick(p.currentTime || 0, p.duration || video?.duration_secs || 0);
@@ -243,6 +247,31 @@ export default function StudentVideoPlayerPage() {
     const dur = playerRef.current?.duration || video?.duration_secs || 0;
     if (!completed && dur > 0 && watchedRef.current >= dur * 0.9) markComplete();
   };
+
+  // YouTube watch-tracking poll. Vidstack's YouTube provider emits timeupdate
+  // sparsely and frequently reports duration 0, so polling the player ~1s while it
+  // plays is what actually drives watch %, the 8s progress save, auto-complete and
+  // the one-time resume seek (which the provider ignores at canplay). File sources
+  // use the richer onTimeUpdate event instead.
+  useEffect(() => {
+    if (video?.source_type !== 'youtube') return;
+    const id = setInterval(() => {
+      const p = playerRef.current;
+      if (!p || p.paused) return;
+      const t = p.currentTime || 0;
+      const dur = p.duration || video?.duration_secs || 0;
+      // Apply the resume seek once the YT player is actually reporting time.
+      if (!resumedRef.current && t > 0) {
+        resumedRef.current = true;
+        const resume = video?.progress_secs || 0;
+        if (resume > 10 && Math.abs(resume - t) > 2) {
+          try { p.currentTime = resume; lastTickRef.current = resume; return; } catch { /* ignore */ }
+        }
+      }
+      handleTick(t, dur);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [video?.id]);
 
   const isYouTube = video?.source_type === 'youtube';
 

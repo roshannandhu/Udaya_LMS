@@ -40,6 +40,17 @@ export default function useAndroidBackButton() {
     (async () => {
       const { App } = await import('@capacitor/app');
       const handle = await App.addListener('backButton', ({ canGoBack }) => {
+        // If a video (or anything) is in fullscreen, Back must EXIT fullscreen and
+        // stay on the page — NOT navigate. Capacitor's backButton listener overrides
+        // the WebView's native "exit fullscreen on Back", so without this the player
+        // collapsed AND the SPA navigated to the previous page on a single press.
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fsEl) {
+          if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          return;
+        }
+
         // If the soft keyboard is open (a field is focused), the first Back press
         // should just dismiss it and stay on the page — like every Android app.
         // Blurring the active element hides the WebView keyboard. Without this,

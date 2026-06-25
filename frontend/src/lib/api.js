@@ -369,6 +369,7 @@ export const liveClassApi = {
   getByClass:    (classId)      => apiClient(`/live-classes?class_id=${classId}`),
   create:        (data)         => apiClient('/live-classes', { method: 'POST', body: JSON.stringify(data) }),
   getJoinToken:  (liveClassId)  => apiClient(`/live-classes/${liveClassId}/join-token`),
+  getHostLink:   (liveClassId)  => apiClient(`/live-classes/${liveClassId}/host-link`),
   end:           (liveClassId)  => apiClient(`/live-classes/${liveClassId}/end`, { method: 'POST' }),
   cancel:        (liveClassId)  => apiClient(`/live-classes/${liveClassId}/cancel`, { method: 'POST' }),
   remove:        (liveClassId)  => apiClient(`/live-classes/${liveClassId}`, { method: 'DELETE' }),

@@ -12,10 +12,15 @@ const getWsBaseUrl = () => {
 };
 
 export default function useLiveClassEvents() {
-  const { user, token } = useAuthStore();
+  // NOTE: read `user` only. The store has NO `token` field (the JWT lives in
+  // localStorage), so the old `const { user, token }` made `token` undefined and
+  // `if (!user || !token) return` bailed forever — the WS never connected and no
+  // live-class status ever auto-updated. The /api/ws/live-classes/{id} endpoint
+  // needs no token anyway (backend main.py).
+  const user = useAuthStore(s => s.user);
 
   useEffect(() => {
-    if (!user || !token) return;
+    if (!user) return;
 
     // Student connects to their standard_id, Teacher connects to "teacher"
     const standardId = user.role === 'teacher' ? 'teacher' : user.standard_id;
@@ -61,5 +66,5 @@ export default function useLiveClassEvents() {
         ws.close();
       }
     };
-  }, [user?.id, user?.standard_id, token]);
+  }, [user?.id, user?.standard_id, user?.role]);
 }
