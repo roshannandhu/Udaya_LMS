@@ -29,6 +29,7 @@ export default function StudentAssignmentSheet({
   const [redoBusy, setRedoBusy]         = useState(false);
   const [redoSent, setRedoSent]         = useState(false);
   const [viewerAtt, setViewerAtt]       = useState(null); // teacher file open in secure viewer
+  const [viewerSub, setViewerSub]       = useState(null); // student's own submission in secure viewer
   const cameraRef = useRef(null);
   const fileRef   = useRef(null);
 
@@ -190,12 +191,12 @@ export default function StudentAssignmentSheet({
                   </div>
                 </div>
               </div>
-              <a href={sub.file_url} target="_blank" rel="noreferrer"
+              <button type="button" onClick={() => setViewerSub(sub)}
                 className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
                 <Paperclip size={13} />
                 View your submission: {sub.file_name}
                 <ExternalLink size={12} />
-              </a>
+              </button>
 
               {/* Re-do request — for when the student wants another attempt at a
                   graded assignment. Teacher approval clears the grade so they can
@@ -260,12 +261,12 @@ export default function StudentAssignmentSheet({
                   </p>
                 </div>
               </div>
-              <a href={sub.file_url} target="_blank" rel="noreferrer"
+              <button type="button" onClick={() => setViewerSub(sub)}
                 className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
                 <Paperclip size={13} />
                 View your submission: {sub.file_name}
                 <ExternalLink size={12} />
-              </a>
+              </button>
 
               {/* Remove own submission */}
               <button
@@ -394,6 +395,14 @@ export default function StudentAssignmentSheet({
         endpoint={viewerAtt ? `/assignment-attachments/${viewerAtt.id}/file` : null}
         offlineKey={viewerAtt ? `asg-att-${viewerAtt.id}` : null}
         title={viewerAtt?.file_name || 'Attachment'}
+      />
+
+      <SecureFileViewer
+        open={!!viewerSub}
+        onClose={() => setViewerSub(null)}
+        endpoint={viewerSub ? `/assignment-submissions/${viewerSub.id}/file` : null}
+        offlineKey={viewerSub ? `sub-${viewerSub.id}` : null}
+        title={viewerSub?.file_name || 'Your submission'}
       />
     </Sheet>
   );

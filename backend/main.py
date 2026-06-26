@@ -7976,6 +7976,37 @@ async def get_assignment_attachment_file(attachment_id: str, user = Depends(veri
     )
 
 
+@app.get("/api/assignment-submissions/{submission_id}/file")
+async def get_assignment_submission_file(submission_id: str, user = Depends(verify_token),
+                                         x_udaya_client: Optional[str] = Header(None, alias="X-Udaya-Client")):
+    """View-only stream of a student's submitted file (no download, app-only for
+    students). The owning student sees only their own; the owning teacher can view
+    any submission in their class. A different student is refused even if enrolled."""
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    _require_app_for_students(user, x_udaya_client)
+    sub = await asyncio.to_thread(lambda: service_supabase.table("assignment_submissions")
+        .select("assignment_id, student_id, storage_path, file_url, file_type, file_name")
+        .eq("id", submission_id).single().execute())
+    if not sub.data:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if user["role"] == "student":
+        # Students may only ever open their OWN submission.
+        if sub.data.get("student_id") != user.get("student_id"):
+            raise HTTPException(status_code=403, detail="Not your submission")
+    else:
+        # Teacher: must own the class the assignment belongs to.
+        asg = await asyncio.to_thread(lambda: service_supabase.table("assignments")
+            .select("class_id").eq("id", sub.data["assignment_id"]).single().execute())
+        if not asg.data:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        await asyncio.to_thread(lambda: _require_class_access(asg.data["class_id"], user))
+    return await _stream_stored_file(
+        sub.data.get("storage_path"), sub.data.get("file_url"),
+        "assignments", sub.data.get("file_type"), sub.data.get("file_name") or "file",
+    )
+
+
 def _require_standard_access(standard_id: str, user: dict):
     """Raise 403 unless the user is a student in this standard or its owning teacher."""
     if user["role"] == "teacher":
@@ -9494,17 +9525,11 @@ async def get_all_student_assignments(user = Depends(verify_token)):
 
     sub_by_assign: dict = {}
     for s in (subs2_res.data or []):
-        sp2 = s.pop("storage_path", None)
-        if sp2:
-            try:
-                signed2 = await asyncio.to_thread(
-                    lambda p=sp2: filestore.signed_url_dict(service_supabase, "assignments", p, 3600)
-                )
-                url2 = (signed2 or {}).get("signedUrl") or (signed2 or {}).get("signedURL")
-                if url2:
-                    s["file_url"] = url2
-            except Exception:
-                pass
+        # Drop the private key and any downloadable URL — the student opens their
+        # own submission only through the authed, app-only, view-only endpoint
+        # /assignment-submissions/{id}/file (built from `id` on the client).
+        s.pop("storage_path", None)
+        s["file_url"] = None
         sub_by_assign[s["assignment_id"]] = s
 
     # Attach subject info and submission data to each assignment
