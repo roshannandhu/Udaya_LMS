@@ -1055,6 +1055,33 @@ async def zoom_ensure_joinable(meeting_id: str) -> None:
         print(f"[!] Zoom ensure-joinable failed (ignored): {e}")
 
 
+async def zoom_get_fresh_start_url(meeting_id: str) -> Optional[str]:
+    """Fetch a FRESH host start_url from Zoom's Get-a-Meeting endpoint.
+
+    The start_url returned at creation time embeds a host ZAK that EXPIRES (~2h),
+    so a class scheduled in advance and started later opens to a BLANK page. Zoom
+    regenerates a valid start_url on every GET /meetings/{id}, so we re-fetch at
+    'Start class' click time. Returns None on any failure so the caller can fall
+    back to the stored URL."""
+    import httpx
+    if not meeting_id:
+        return None
+    try:
+        token = await zoom_get_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://api.zoom.us/v2/meetings/{meeting_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            )
+        if resp.status_code == 200:
+            return resp.json().get("start_url") or None
+        print(f"[!] Zoom fresh start_url fetch HTTP {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"[!] Zoom fresh start_url fetch failed (ignored): {e}")
+    return None
+
+
 # Short cache of "is this meeting live?" so the frequently-polled class list
 # doesn't hammer the Zoom API. meeting_id -> (True|False|None, expires_at).
 _zoom_live_cache: dict = {}
@@ -8635,14 +8662,14 @@ async def get_host_link(live_class_id: str, user=Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Teacher only")
 
     lc_result = await asyncio.to_thread(lambda: service_supabase.table("live_classes") \
-        .select("id, class_id, status, zoom_start_url").eq("id", live_class_id).single().execute())
+        .select("id, class_id, status, zoom_meeting_id, zoom_start_url").eq("id", live_class_id).single().execute())
     if not lc_result.data:
         raise HTTPException(status_code=404, detail="Live class not found")
     lc = lc_result.data
 
     if lc["status"] in ("ended", "cancelled"):
         raise HTTPException(status_code=400, detail=f"This class has {lc['status']}")
-    if not lc.get("zoom_start_url"):
+    if not lc.get("zoom_start_url") and not lc.get("zoom_meeting_id"):
         raise HTTPException(status_code=400, detail="No Zoom start link for this class")
 
     class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
@@ -8653,7 +8680,11 @@ async def get_host_link(live_class_id: str, user=Depends(verify_token)):
     if not std_check.data:
         raise HTTPException(status_code=403, detail="Not your class")
 
-    return {"start_url": lc["zoom_start_url"]}
+    # The stored start_url's host token expires (~2h) → opening it later shows a
+    # BLANK page and the teacher never becomes host. Re-fetch a fresh one from
+    # Zoom at click time; fall back to the stored URL only if the fetch fails.
+    fresh = await zoom_get_fresh_start_url(lc.get("zoom_meeting_id"))
+    return {"start_url": fresh or lc.get("zoom_start_url")}
 
 
 async def _finalize_live_class_attendance(lc: dict) -> dict:
