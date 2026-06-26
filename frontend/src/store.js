@@ -8,6 +8,18 @@ export function useAppSelector(selector) {
   return useAppCache(useShallow(selector));
 }
 
+/* ── Exam lock ───────────────────────────────────────────────────────────────
+   Set true ONLY while a student is actively taking a test (hasStarted && not
+   submitted). StudentLayout hides the bottom dock + top nav while locked, so a
+   student can't tap the taskbar to navigate out of an exam (an anti-cheat
+   loophole that bypassed every other detector, since a router navigate() fires
+   no visibilitychange/blur/popstate). NON-persisted on purpose — a stale `true`
+   must never survive a reload; the exam page re-sets it on mount when resuming. */
+export const useExamLock = create((set) => ({
+  locked: false,
+  setLocked: (v) => set({ locked: !!v }),
+}));
+
 // Udaya's default brand logo (the Buddha mark in /public). Shown wherever no
 // custom teacher logo is set, so the app is never logo-less.
 export const DEFAULT_LMS_LOGO = '/udaya-logo.png';

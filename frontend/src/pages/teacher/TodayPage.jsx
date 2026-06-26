@@ -18,12 +18,7 @@ import SubjectIcon from '../../components/shared/SubjectIcon';
 import { pastelFor, pastelTokens } from '../../components/cards/pastel';
 import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren } from '../../lib/motion';
-import CopySuspectsCard from '../../components/teacher/dashboard/CopySuspectsCard';
 import PendingReattemptsCard from '../../components/teacher/PendingReattemptsCard';
-import VideoEngagementCard from '../../components/teacher/dashboard/VideoEngagementCard';
-import AssignmentStatusCard from '../../components/teacher/dashboard/AssignmentStatusCard';
-import LiveAbsenteesCard from '../../components/teacher/dashboard/LiveAbsenteesCard';
-import PerformanceSnapshotCard from '../../components/teacher/dashboard/PerformanceSnapshotCard';
 
 // ── sessionStorage warm-cache (instant re-render, no skeleton flash) ──────────
 const readCache = (k) => { try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch { return null; } };
@@ -335,194 +330,56 @@ export default function TodayPage() {
             </div>
           </motion.div>
 
-          {/* ── 3. TWO-COLUMN GRID ── */}
-          {/* min-w-0 on both grid items: an auto grid track otherwise sizes to its
-              content's minimum, so one long student name blows the whole page
-              past the phone viewport (grid blowout). */}
-          <div className="grid lg:grid-cols-3 gap-6">
+          {/* ── 3. TODAY & UPCOMING ── */}
+          <motion.div variants={fadeUp}>
+            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
+              <Calendar size={15} /> Today &amp; upcoming
+            </h2>
+            {(todayLive.length > 0 || upcomingTests.length > 0) ? (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {todayLive.map(l => (
+                  <EventCard
+                    key={`live-${l.id}`}
+                    color="peach"
+                    icon={Video}
+                    kicker={l.status === 'live' ? 'Live now' : 'Live class'}
+                    date={fmtWhen(l.scheduled_at)}
+                    title={l.title}
+                    body={l.subject}
+                    onClick={() => navigate('/teacher/live-classes')}
+                  />
+                ))}
+                {upcomingTests.map(t => (
+                  <EventCard
+                    key={`test-${t.id}`}
+                    color="cream"
+                    icon={FileQuestion}
+                    kicker={t.status === 'active' ? 'Test live' : 'Test scheduled'}
+                    date={t.scheduled_for ? fmtWhen(t.scheduled_for) : ''}
+                    title={t.title}
+                    body={t.subject}
+                    onClick={() => navigate('/teacher/tests')}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="py-10 text-center text-sm text-neutral-500">Nothing scheduled. Create a test or schedule a live class.</Card>
+            )}
+          </motion.div>
 
-            {/* ── LEFT ── */}
-            <div className="lg:col-span-2 flex flex-col gap-6 min-w-0">
-
-              {/* Today's schedule */}
-              <motion.div variants={fadeUp}>
-                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
-                  <Calendar size={15} /> Today &amp; upcoming
-                </h2>
-                {(todayLive.length > 0 || upcomingTests.length > 0) ? (
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {todayLive.map(l => (
-                      <EventCard
-                        key={`live-${l.id}`}
-                        color="peach"
-                        icon={Video}
-                        kicker={l.status === 'live' ? 'Live now' : 'Live class'}
-                        date={fmtWhen(l.scheduled_at)}
-                        title={l.title}
-                        body={l.subject}
-                        onClick={() => navigate('/teacher/live-classes')}
-                      />
-                    ))}
-                    {upcomingTests.map(t => (
-                      <EventCard
-                        key={`test-${t.id}`}
-                        color="cream"
-                        icon={FileQuestion}
-                        kicker={t.status === 'active' ? 'Test live' : 'Test scheduled'}
-                        date={t.scheduled_for ? fmtWhen(t.scheduled_for) : ''}
-                        title={t.title}
-                        body={t.subject}
-                        onClick={() => navigate('/teacher/tests')}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <Card className="py-10 text-center text-sm text-neutral-500">Nothing scheduled. Create a test or schedule a live class.</Card>
-                )}
-              </motion.div>
-
-              {/* Class insights — heavier endpoint, renders independently */}
-              <motion.div variants={fadeUp} className="flex flex-col gap-6">
-                {!insights ? (
-                  <div>
-                    <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
-                      <Target size={15} /> Class insights
-                    </h2>
-                    <Skeleton className="h-40 w-full rounded-card" />
-                  </div>
-                ) : (insights.copy_suspects?.count || 0) + (insights.video_laggards?.count || 0) +
-                    (insights.cold_videos?.count || 0) + (insights.assignment_status?.count || 0) +
-                    (insights.live_absentees?.count || 0) === 0 ? (
-                  <div>
-                    <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
-                      <Target size={15} /> Class insights
-                    </h2>
-                    <Card className="py-8 text-center">
-                      <p className="font-bold text-neutral-900">All clear ✨</p>
-                      <p className="text-sm text-neutral-500 mt-1">No copying suspicions, video gaps, missing assignments or skipped live classes.</p>
-                    </Card>
-                  </div>
-                ) : (
-                  <>
-                    <CopySuspectsCard data={insights.copy_suspects} />
-                    <AssignmentStatusCard data={insights.assignment_status} />
-                    <VideoEngagementCard laggards={insights.video_laggards} coldVideos={insights.cold_videos} />
-                    <LiveAbsenteesCard data={insights.live_absentees} />
-                  </>
-                )}
-              </motion.div>
-
-              {/* Recent activity */}
-              <motion.div variants={fadeUp}>
-                <Card padded={false} className="overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[#EFEDEA] flex items-center gap-2">
-                    <Activity size={14} className="text-neutral-500" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Recent activity</span>
-                  </div>
-                  {activities.length > 0 ? activities.slice(0, 5).map((a, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-[#F2F1EE] last:border-0">
-                      <Avatar name={a.student} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate"><span className="font-medium">{a.student}</span><span className="text-neutral-500"> {a.detail}</span></p>
-                        <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{a.video_title || a.test_title || 'Activity'}</p>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="p-6 text-center text-sm text-neutral-500">No recent activity yet.</div>
-                  )}
-                </Card>
-              </motion.div>
-            </div>
-
-            {/* ── RIGHT SIDEBAR ── */}
-            <div className="flex flex-col gap-6 min-w-0">
-
-              {/* Quick actions */}
-              <motion.div variants={fadeUp}>
-                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">Quick actions</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {quickActions.map((a, i) => (
-                    <Card key={i} as="button" color={a.color} interactive padded={false}
-                      onClick={() => navigate(a.to)} className="p-4 flex flex-col items-start gap-2">
+          {/* ── 4. QUICK ACTIONS ── */}
+          <motion.div variants={fadeUp}>
+            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">Quick actions</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {quickActions.map((a, i) => (
+                <Card key={i} as="button" color={a.color} interactive padded={false}
+                  onClick={() => navigate(a.to)} className="p-4 flex flex-col items-start gap-2">
                       <a.icon size={18} style={{ color: pastelTokens(a.color, dark).fgHex }} />
                       <span className="text-xs font-semibold">{a.label}</span>
                     </Card>
                   ))}
                 </div>
               </motion.div>
-
-              {/* To-dos / reminders */}
-              <motion.div variants={fadeUp}>
-                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">To-do list</h2>
-                <Card padded={false} className="overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[#EFEDEA]">
-                    <input
-                      value={newReminder}
-                      onChange={(e) => setNewReminder(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') addReminder(); }}
-                      placeholder="Add a reminder…"
-                      className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-neutral-400"
-                    />
-                    <button onClick={addReminder} disabled={addingReminder || !newReminder.trim()}
-                      className="w-7 h-7 rounded-full bg-ink text-white flex items-center justify-center disabled:opacity-30 flex-shrink-0">
-                      {addingReminder ? <Loader2 size={14} className="animate-spin" /> : <Plus size={15} />}
-                    </button>
-                  </div>
-                  {reminders.length > 0 ? reminders.slice(0, 6).map(r => (
-                    <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-[#F2F1EE] last:border-0 group">
-                      <button onClick={() => toggleReminder(r)}
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${r.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-neutral-300 hover:border-neutral-400'}`}>
-                        {r.done && <Check size={13} />}
-                      </button>
-                      <span className={`flex-1 text-sm truncate ${r.done ? 'line-through text-neutral-400' : 'text-neutral-800'}`}>{r.title}</span>
-                      <button onClick={() => removeReminder(r)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 transition-all flex-shrink-0">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )) : (
-                    <div className="p-5 text-center text-sm text-neutral-400">No reminders yet.</div>
-                  )}
-                </Card>
-              </motion.div>
-
-              {/* Weekly/monthly snapshot + top students */}
-              <motion.div variants={fadeUp}>
-                <PerformanceSnapshotCard snapshot={insights?.period_snapshot} topStudents={topStudents} />
-              </motion.div>
-
-              {/* Your classes */}
-              {standards.length > 0 && (
-                <motion.div variants={fadeUp}>
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500">Your classes</h2>
-                    <button onClick={() => navigate('/teacher/standards')} className="flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-neutral-900 transition-colors">
-                      All <ChevronRight size={13} />
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-2.5">
-                    {standards.slice(0, 5).map(s => {
-                      const c = countFor(s.id);
-                      const pastel = pastelTokens(pastelFor(s.name), dark);
-                      return (
-                        <button key={s.id} onClick={() => navigate(`/teacher/standards/${s.id}`)}
-                          className="flex items-center gap-3 p-3.5 rounded-card border border-black/5 hover:shadow-soft hover:-translate-y-0.5 transition-all text-left"
-                          style={{ background: pastel.hex }}>
-                          <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: pastel.fgHex }}>
-                            <SubjectIcon value={s.emoji} size={20} fallback="graduation" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm text-neutral-900 truncate">{s.name}</p>
-                            <p className="text-[11px] font-semibold" style={{ color: pastel.fgHex }}>{c.students} students · {c.subjects} subjects</p>
-                          </div>
-                          <ChevronRight size={16} className="text-neutral-400 flex-shrink-0" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </div>
-          </div>
         </motion.div>
       </div>
     </div>

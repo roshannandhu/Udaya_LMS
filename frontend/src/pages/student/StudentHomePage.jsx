@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { CountUp, ProgressRing } from '../../components/shared/Animated';
 import {
-  Play, Calendar, FileText, MessageSquare, ArrowRight, FileQuestion,
-  StickyNote, Activity, ChevronLeft, ChevronRight, Video, Trophy, Target,
-  CheckCircle2, ListChecks, Sparkles, Flame, Zap,
+  Play, Calendar, FileText, ArrowRight, FileQuestion,
+  ChevronRight, Video, Target,
+  CheckCircle2, ListChecks, Sparkles, Zap,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
 import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi } from '../../lib/api';
@@ -142,8 +142,6 @@ export default function StudentHomePage() {
   // not duplicated above it.
   const dateLabel = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [videoThumbnails, setVideoThumbnails] = useState({});
   const [viewerNote, setViewerNote] = useState(null);
   // XP bar fills from 0 → value once content is ready (via the `.bar-fill` CSS
   // transition). Gated on `loading` so it also animates on a cold first load,
@@ -277,31 +275,8 @@ export default function StudentHomePage() {
     return { text: `Due ${fmtWhen(d)}`, danger: false };
   };
 
-  // ── What's New: unseen content since last visit (server-tracked) ────────────
-  const whatsNew = useWhatsNew(s => s.data);
+  // prevSeen marks which videos count as "new" in the Do-now agenda below.
   const prevSeen = useWhatsNew(s => s.prevSeen);
-  const wnRows = [];
-  // Each section's rows show only while it's still unseen (count > 0); visiting
-  // the section clears them. The panel itself never marks anything seen.
-  if (whatsNew?.videos?.count > 0) (whatsNew.videos.items || []).forEach(v => wnRows.push({
-    key: `v-${v.id}`, kind: 'video', ts: v.created_at,
-    eyebrow: `New video · ${v.subject_name || 'Lesson'}`, title: v.title,
-    onClick: () => navigate(`/student/subjects/${v.class_id}/video/${v.id}`),
-  }));
-  if (whatsNew?.tests?.count > 0) (whatsNew.tests.items || []).forEach(t => wnRows.push({
-    key: `t-${t.id}`, kind: 'test', ts: t.created_at,
-    eyebrow: `New test · ${t.subject_name || 'Subject'}`, title: t.title,
-    onClick: () => navigate('/student/tests'),
-  }));
-  if (whatsNew?.live?.count > 0) (whatsNew.live.items || []).forEach(l => wnRows.push({
-    key: `l-${l.id}`, kind: 'live', ts: l.created_at,
-    eyebrow: `Live class · ${l.subject_name || 'Subject'}`,
-    title: l.scheduled_at ? `${l.title} · ${fmtWhen(l.scheduled_at)}` : l.title,
-    onClick: () => navigate('/student/live-classes'),
-  }));
-  wnRows.sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  const wnTop = wnRows.slice(0, 5);
-  const wnOverflow = wnRows.length - wnTop.length;
 
   // ── Build the "What's Next" agenda ───────────────────────────────────────────
   const doNow = [];
@@ -365,61 +340,7 @@ export default function StudentHomePage() {
   comingUp.sort((a, b) => new Date(a.date) - new Date(b.date));
   const comingUpTop = comingUp.slice(0, 5);
 
-  // ── Hero ─────────────────────────────────────────────────────────────────────
-  const heroCandidates = React.useMemo(() => {
-    const inProgress = videos.filter(v => v.progress_secs > 0 && !v.completed);
-    const notStarted = videos.filter(v => (!v.progress_secs || v.progress_secs === 0) && !v.completed);
-    return [...inProgress, ...notStarted].slice(0, 5);
-  }, [videos]);
-
-  useEffect(() => {
-    if (heroCandidates.length === 0) return;
-    setVideoThumbnails(prev => {
-      let changed = false;
-      const next = { ...prev };
-      heroCandidates.forEach(v => {
-        if (next[v.id] === undefined) { next[v.id] = v.thumbnail_url || null; changed = true; }
-      });
-      return changed ? next : prev;
-    });
-  }, [heroCandidates]);
-
-  const heroSlides = React.useMemo(() => {
-    if (heroCandidates.length === 0) {
-      return [{
-        id: 'welcome', tag: 'WELCOME', title: `Ready to learn, ${displayName}?`,
-        subtitle: 'Explore your lessons below',
-        description: 'Pick up a lesson, take a test, or check what is due — everything you need is right here.',
-        pastel: 'mint', path: '', thumbnail: null, progress: 0,
-      }];
-    }
-    return heroCandidates.map((v) => ({
-      id: v.id,
-      tag: v.progress_secs > 0 ? 'CONTINUE WATCHING' : 'UP NEXT',
-      title: v.title,
-      subtitle: getSubjectName(v.class_id),
-      description: v.description || 'Dive into this lesson and continue your learning journey.',
-      duration: v.duration_secs ? Math.round(v.duration_secs / 60) + 'm' : '',
-      pastel: pastelFor(getSubjectName(v.class_id)),
-      path: `/student/subjects/${v.class_id}/video/${v.id}`,
-      progress: v.duration_secs ? (v.progress_secs / v.duration_secs) * 100 : 0,
-      thumbnail: videoThumbnails[v.id] || null,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroCandidates, subjects, displayName, videoThumbnails]);
-
-  useEffect(() => {
-    if (heroSlides.length <= 1) return;
-    const timer = setInterval(() => setCurrentSlide(prev => (prev + 1) % heroSlides.length), 5000);
-    return () => clearInterval(timer);
-  }, [heroSlides.length]);
-
-  const nextSlide = () => setCurrentSlide(prev => (prev + 1) % heroSlides.length);
-  const prevSlide = () => setCurrentSlide(prev => (prev - 1 + heroSlides.length) % heroSlides.length);
-  const slide = heroSlides[Math.min(currentSlide, heroSlides.length - 1)] || heroSlides[0];
   const dark = useTheme(s => s.dark);
-  const heroPastel = pastelTokens(slide?.pastel || 'mint', dark);
-
   const greetWords = `${greeting}, ${displayName}!`.split(' ');
   const completedVideos = videos.filter(v => v.completed).length;
   // Course progress = % of lessons completed — drives the XP bar under the greeting.
@@ -531,212 +452,12 @@ export default function StudentHomePage() {
             </TiltCard>
           </motion.div>
 
-          {/* ── 2b. WHILE YOU WERE AWAY ── */}
-          {wnTop.length > 0 && (
-            <motion.div variants={fadeUp} className="bg-white rounded-[2rem] border border-[#EFEDEA] shadow-card p-5 sm:p-6">
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
-                  <Sparkles size={17} />
-                </div>
-                <h3 className="font-extrabold text-lg text-neutral-900 tracking-tight">While you were away</h3>
-                <span className="bg-red-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">{wnRows.length}</span>
-              </div>
-              <div className="flex flex-col">
-                {wnTop.map(r => {
-                  const k = KIND[r.kind] || KIND.video;
-                  const Icon = k.icon;
-                  return (
-                    <button key={r.key} onClick={r.onClick}
-                      className="w-full flex items-center gap-3 py-2.5 px-2 text-left rounded-xl hover:bg-[#F4F2EF] transition-colors group">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${k.tile}`}>
-                        <Icon size={15} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-extrabold uppercase tracking-widest text-neutral-400 truncate">{r.eyebrow}</p>
-                        <p className="font-bold text-sm text-neutral-900 truncate">{r.title}</p>
-                      </div>
-                      <ChevronRight size={16} className="text-neutral-300 group-hover:text-neutral-500 transition-colors flex-shrink-0" />
-                    </button>
-                  );
-                })}
-              </div>
-              {wnOverflow > 0 && (
-                <p className="text-xs text-neutral-400 font-semibold mt-1.5 px-2">
-                  +{wnOverflow} more new update{wnOverflow !== 1 ? 's' : ''}
-                </p>
-              )}
-            </motion.div>
-          )}
-
-          {/* ── 3. CONTINUE-YOUR-QUEST HERO ── */}
-          {slide && (
-            <motion.div variants={fadeUp}>
-              <motion.div
-                className="relative w-full rounded-[2.5rem] overflow-hidden shadow-lift border border-black/5 group"
-                animate={{ backgroundColor: heroPastel.hex }}
-                transition={{ duration: 0.5 }}
-                style={{ backgroundColor: heroPastel.hex }}
-              >
-                {/* floating decorative blobs */}
-                {!reduceMotion && (
-                  <>
-                    <motion.div
-                      className="absolute -top-10 -right-8 w-44 h-44 rounded-full pointer-events-none"
-                      style={{ background: heroPastel.fgHex, opacity: 0.08 }}
-                      animate={{ y: [0, 12, 0], scale: [1, 1.06, 1] }}
-                      transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-                    />
-                    <motion.div
-                      className="absolute -bottom-14 right-1/4 w-36 h-36 rounded-full pointer-events-none"
-                      style={{ background: heroPastel.fgHex, opacity: 0.06 }}
-                      animate={{ y: [0, -10, 0] }}
-                      transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-                    />
-                  </>
-                )}
-
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={currentSlide}
-                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 48 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -48 }}
-                    transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                    drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.2}
-                    onDragEnd={(e, { offset }) => { if (offset.x < -50) nextSlide(); else if (offset.x > 50) prevSlide(); }}
-                    className="relative z-10 flex flex-col md:flex-row items-stretch cursor-pointer"
-                    onClick={() => slide.path && navigate(slide.path)}
-                  >
-                    {/* Text column */}
-                    <div className="flex-1 p-7 sm:p-10 flex flex-col items-start justify-center gap-4 min-h-[300px]">
-                      <span
-                        className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest px-3 py-1.5 rounded-full bg-white/70"
-                        style={{ color: heroPastel.fgHex }}
-                      >
-                        {slide.progress > 0 ? <Flame size={12} /> : <Zap size={12} />}
-                        {slide.tag}
-                      </span>
-                      {/* Pinned to an explicit dark color (not text-neutral-900) so it
-                          stays readable on the light pastel hero in dark mode too. */}
-                      <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold tracking-tight leading-[1.08] line-clamp-2" style={{ color: heroPastel.fgHex }}>
-                        {slide.title}
-                      </h2>
-                      <div className="flex items-center flex-wrap gap-2 text-[13px] font-bold" style={{ color: heroPastel.fgHex }}>
-                        <span>{slide.subtitle}</span>
-                        {slide.duration && (<><span className="w-1 h-1 rounded-full opacity-40" style={{ background: heroPastel.fgHex }} /><span>{slide.duration}</span></>)}
-                      </div>
-                      <p className="text-sm leading-relaxed line-clamp-2 max-w-[90%] font-medium" style={{ color: dark ? '#cbd5e1' : '#52525b' }}>{slide.description}</p>
-
-                      {slide.progress > 0 && (
-                        <div className="w-full max-w-xs h-2 rounded-full bg-black/10 overflow-hidden">
-                          <motion.div
-                            className="h-full rounded-full"
-                            style={{ background: heroPastel.fgHex }}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${slide.progress}%` }}
-                            transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
-                          />
-                        </div>
-                      )}
-
-                      {slide.path && (
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          transition={springCard}
-                          className="mt-1 flex items-center justify-center gap-2 bg-ink text-white px-8 py-3.5 rounded-pill font-bold text-[15px] shadow-lift pointer-events-auto"
-                        >
-                          <Play size={18} fill="currentColor" />
-                          {slide.progress > 0 ? 'Resume Watching' : 'Start Watching'}
-                        </motion.button>
-                      )}
-                    </div>
-
-                    {/* Art column */}
-                    <div className="relative md:w-[42%] flex items-center justify-center p-6 md:p-8 min-h-[160px]">
-                      {slide.thumbnail ? (
-                        <motion.img
-                          src={slide.thumbnail} alt={slide.title} loading="lazy"
-                          onError={() => setVideoThumbnails(prev => ({ ...prev, [slide.id]: null }))}
-                          className="w-full h-44 md:h-64 object-cover rounded-[1.75rem] shadow-lift border-4 border-white pointer-events-none"
-                          initial={reduceMotion ? false : { rotate: 0, scale: 0.94, opacity: 0 }}
-                          animate={{ rotate: 2, scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.15, type: 'spring', stiffness: 200, damping: 22 }}
-                        />
-                      ) : (
-                        <motion.div
-                          className="w-28 h-28 md:w-40 md:h-40 rounded-full flex items-center justify-center bg-white/70 pointer-events-none"
-                          initial={reduceMotion ? false : { scale: 0, rotate: -20 }}
-                          animate={{ scale: 1, rotate: 0 }}
-                          transition={{ delay: 0.15, type: 'spring', stiffness: 200, damping: 16 }}
-                        >
-                          <Sparkles className="w-12 h-12 md:w-16 md:h-16" style={{ color: heroPastel.fgHex }} />
-                        </motion.div>
-                      )}
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-
-                {heroSlides.length > 1 && (
-                  <>
-                    <button onClick={(e) => { e.stopPropagation(); prevSlide(); }} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white text-neutral-900 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-card">
-                      <ChevronLeft size={22} />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); nextSlide(); }} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white text-neutral-900 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-card">
-                      <ChevronRight size={22} />
-                    </button>
-                    <div className="absolute bottom-5 right-6 sm:bottom-6 sm:right-8 flex gap-1.5 z-20">
-                      {heroSlides.map((_, idx) => (
-                        <div key={idx} onClick={(e) => { e.stopPropagation(); setCurrentSlide(idx); }}
-                          className="h-1.5 rounded-full cursor-pointer transition-all duration-500"
-                          style={{
-                            width: idx === currentSlide ? 32 : 6,
-                            background: heroPastel.fgHex,
-                            opacity: idx === currentSlide ? 0.9 : 0.3,
-                          }} />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* ── 4. CONTINUE WATCHING RAIL ── */}
-          {continueList.length > 0 && (
-            <motion.div variants={fadeUp}>
-              <VideoRail
-                title="Continue Watching"
-                items={continueList}
-                autoScroll
-                getSubjectName={getSubjectName}
-                onItemClick={(v) => navigate(`/student/subjects/${v.class_id}/video/${v.id}`)}
-              />
-            </motion.div>
-          )}
-
-          {/* ── 5. UP NEXT / NEW LESSONS RAIL ── */}
-          {upNextList.length > 0 && (
-            <motion.div variants={fadeUp}>
-              <VideoRail
-                title="Up Next · New Lessons"
-                items={upNextList}
-                autoScroll
-                getSubjectName={getSubjectName}
-                onSeeAll={() => navigate('/student/subjects')}
-                onItemClick={(v) => navigate(`/student/subjects/${v.class_id}/video/${v.id}`)}
-              />
-            </motion.div>
-          )}
-
-          {/* ── 6. WHAT'S NEXT (accordion agenda + updates) ── */}
+          {/* ── 3. WHAT'S NEXT (full-width agenda) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
             <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-4 px-2 flex items-center gap-2">
               <Sparkles size={15} /> What's Next
             </h2>
-            <div className="grid lg:grid-cols-3 gap-5">
-              {/* Primary agenda */}
-              <div className="lg:col-span-2 bg-white rounded-[2rem] shadow-card border border-black/5 overflow-hidden p-3">
+            <div className="bg-white rounded-[2rem] shadow-card border border-black/5 overflow-hidden p-3">
                 {doNow.length === 0 && comingUpTop.length === 0 ? (
                   <div className="flex flex-col items-center justify-center text-center py-16 px-6">
                     <motion.div
@@ -789,59 +510,25 @@ export default function StudentHomePage() {
                   </Accordion>
                 )}
               </div>
-
-              {/* Secondary: announcements + notes */}
-              <div className="flex flex-col gap-5">
-                <div className="bg-white rounded-[2rem] p-3 shadow-card border border-black/5 flex flex-col min-h-[150px]">
-                  <p className="px-3 pt-3 pb-1 text-[11px] font-extrabold uppercase tracking-widest text-neutral-400">Announcements</p>
-                  {latestBroadcasts.length > 0 ? latestBroadcasts.map((b, i) => (
-                    <motion.div
-                      key={b.id || i}
-                      variants={fadeUp}
-                      whileHover={{ x: 3 }}
-                      transition={springCard}
-                      className="p-3 flex items-start gap-3 rounded-2xl cursor-pointer hover:bg-[#F4F2EF]"
-                      onClick={() => navigate('/student/broadcasts')}
-                    >
-                      <MessageSquare size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm text-neutral-900 line-clamp-2">{b.message || b.text}</p>
-                        <p className="text-[10px] font-extrabold text-neutral-400 mt-1 uppercase tracking-widest">
-                          {b.created_at ? new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                        </p>
-                      </div>
-                    </motion.div>
-                  )) : (
-                    <div className="flex-1 flex items-center justify-center p-6 text-center"><p className="text-sm font-bold text-neutral-400">No new announcements</p></div>
-                  )}
-                </div>
-
-                <div className="bg-white rounded-[2rem] p-3 shadow-card border border-black/5 flex flex-col min-h-[120px]">
-                  <p className="px-3 pt-3 pb-1 text-[11px] font-extrabold uppercase tracking-widest text-neutral-400">Recent Notes</p>
-                  {recentNotes.length > 0 ? recentNotes.map((n, i) => (
-                    <motion.div
-                      key={n.id || i}
-                      variants={fadeUp}
-                      whileHover={{ x: 3 }}
-                      transition={springCard}
-                      className="p-3 flex items-start gap-3 rounded-2xl cursor-pointer hover:bg-[#F4F2EF]"
-                      onClick={() => (n.storage_path || n.file_url) && setViewerNote(n)}
-                    >
-                      <StickyNote size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm text-neutral-900 line-clamp-1">{n.title}</p>
-                        <p className="text-[10px] font-extrabold text-neutral-400 mt-1 uppercase tracking-widest">{n.file_type || 'Document'}</p>
-                      </div>
-                    </motion.div>
-                  )) : (
-                    <div className="flex-1 flex items-center justify-center p-6 text-center"><p className="text-sm font-bold text-neutral-400">No recent notes</p></div>
-                  )}
-                </div>
-              </div>
-            </div>
           </motion.div>
 
-          {/* ── 7. YOUR SUBJECTS RAIL ── */}
+          {/* ── 4. CONTINUE WATCHING / JUMP BACK IN RAIL ──
+                One rail: resume in-progress lessons, else surface new ones, so the
+                home always has a lessons rail (never a blank gap). */}
+          {(continueList.length > 0 || upNextList.length > 0) && (
+            <motion.div variants={fadeUp}>
+              <VideoRail
+                title={continueList.length > 0 ? 'Continue Watching' : 'Jump Back In'}
+                items={continueList.length > 0 ? continueList : upNextList}
+                autoScroll
+                getSubjectName={getSubjectName}
+                onSeeAll={() => navigate('/student/subjects')}
+                onItemClick={(v) => navigate(`/student/subjects/${v.class_id}/video/${v.id}`)}
+              />
+            </motion.div>
+          )}
+
+          {/* ── 5. YOUR SUBJECTS RAIL ── */}
           {subjects.length > 0 && (
             <motion.div variants={fadeUp}>
               <div className="flex items-center justify-between mb-4 px-2">
@@ -881,50 +568,6 @@ export default function StudentHomePage() {
               </motion.div>
             </motion.div>
           )}
-
-          {/* ── 8. PROGRESS PANEL ── */}
-          <motion.div variants={fadeUp} className="bg-neutral-900 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden">
-            {!reduceMotion && (
-              <motion.div
-                className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/5 pointer-events-none"
-                animate={{ scale: [1, 1.08, 1] }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            )}
-            <div className="flex items-center justify-between mb-8 relative">
-              <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-400 flex items-center gap-2">
-                <Activity size={16} /> Your Progress
-              </h2>
-              {myRankEntry?.rank && (
-                <motion.span
-                  className="inline-flex items-center gap-1.5 text-xs font-extrabold text-amber-300 bg-white/5 px-3 py-1.5 rounded-full"
-                  initial={reduceMotion ? false : { scale: 0, rotate: -15 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: 'spring', stiffness: 240, damping: 14, delay: 0.4 }}
-                >
-                  <Trophy size={13} /> Rank #{myRankEntry.rank}
-                </motion.span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-8 gap-x-4 relative">
-              <div>
-                <p className="text-3xl lg:text-4xl font-extrabold leading-none"><CountUp value={subjects.length} /></p>
-                <p className="text-[10px] lg:text-xs font-bold text-neutral-400 uppercase tracking-widest mt-2">Subjects</p>
-              </div>
-              <div>
-                <p className="text-3xl lg:text-4xl font-extrabold leading-none"><CountUp value={submittedAssignments.length} /></p>
-                <p className="text-[10px] lg:text-xs font-bold text-neutral-400 uppercase tracking-widest mt-2">Assignments done</p>
-              </div>
-              <div>
-                <p className="text-3xl lg:text-4xl font-extrabold leading-none"><CountUp value={Object.keys(myAttempts).length} /></p>
-                <p className="text-[10px] lg:text-xs font-bold text-neutral-400 uppercase tracking-widest mt-2">Tests taken</p>
-              </div>
-              <div>
-                <p className="text-3xl lg:text-4xl font-extrabold leading-none"><CountUp value={completedVideos} /></p>
-                <p className="text-[10px] lg:text-xs font-bold text-neutral-400 uppercase tracking-widest mt-2">Videos finished</p>
-              </div>
-            </div>
-          </motion.div>
 
         </motion.div>
       </div>

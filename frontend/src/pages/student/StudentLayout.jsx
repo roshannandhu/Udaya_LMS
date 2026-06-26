@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
-import { useWhatsNew } from '../../store';
+import { useWhatsNew, useExamLock } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
 
@@ -47,6 +47,11 @@ export default function StudentLayout() {
 
   const active = getActiveTab(location.pathname);
 
+  // While a student is actively taking an exam, hide BOTH navs so the taskbar
+  // can't be used to navigate out of the test (anti-cheat). Set by
+  // StudentTestTakingPage; cleared on submit/unmount.
+  const examLocked = useExamLock(s => s.locked);
+
   // Phone app-shell: the content area scrolls (not the body), so reset it to the
   // top on route change — what body-scroll used to do for free.
   const contentRef = useRef(null);
@@ -84,14 +89,14 @@ export default function StudentLayout() {
     // floor guarantees clearance on the APK; env() wins on devices that report a
     // larger notch. lg:pt-0 keeps desktop flush (the floor never applies there).
     <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[max(env(safe-area-inset-top),28px)] lg:pt-0">
-      <TopNav type="student" badges={badges} />
+      {!examLocked && <TopNav type="student" badges={badges} />}
       {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
-      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-28 lg:pb-0">
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-36 lg:pb-0">
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>
       </div>
-      <BottomNav active={active} setActive={setActive} type="student" badges={badges} />
+      {!examLocked && <BottomNav active={active} setActive={setActive} type="student" badges={badges} />}
     </div>
   );
 }

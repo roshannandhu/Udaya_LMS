@@ -5,6 +5,7 @@ import { Flag, Clock, AlertTriangle, ChevronLeft, ChevronRight, Maximize2, Loade
 import { Btn } from '../../components/ui';
 import { testApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import { useExamLock } from '../../store';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 
 function fmt(secs) {
@@ -106,6 +107,15 @@ export default function StudentTestTakingPage() {
       submitRef.current?.(true);
     }
   }, [warnCount, hasStarted, submitted]);
+
+  // Lock the chrome while the exam is live: StudentLayout hides the bottom dock +
+  // top nav when locked, so the student can't tap the taskbar to escape mid-exam.
+  // Cleared on submit AND on unmount (covers every exit: manual/timer/3-strike/
+  // terminate/route change). Re-set on mount when a refresh resumes the exam.
+  useEffect(() => {
+    useExamLock.getState().setLocked(hasStarted && !submitted);
+    return () => useExamLock.getState().setLocked(false);
+  }, [hasStarted, submitted]);
 
   const q = questions[current];
 
