@@ -38,6 +38,14 @@ export default function NotificationBell({ dark = false }) {
     fetchNotifications();
   }, [open]);
 
+  // A foreground push (or any in-app trigger) refreshes the list so the badge
+  // updates immediately, even while the panel is closed.
+  useEffect(() => {
+    const onRefresh = () => fetchNotifications();
+    window.addEventListener('udaya:notifications-refresh', onRefresh);
+    return () => window.removeEventListener('udaya:notifications-refresh', onRefresh);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const interval = setInterval(fetchNotifications, 30000);

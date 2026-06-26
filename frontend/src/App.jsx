@@ -236,6 +236,15 @@ export default function App() {
     return () => remove();
   }, []);
 
+  // Push notifications (Android app only): register the FCM token once the user is
+  // authenticated. No-op on web/iOS. unregisterPush() is called from the logout path.
+  useEffect(() => {
+    if (!role) return;
+    (async () => {
+      try { (await import('./lib/push')).initPush(); } catch { /* not native */ }
+    })();
+  }, [role]);
+
   return (
     <BrowserRouter>
       <AuthHandler />

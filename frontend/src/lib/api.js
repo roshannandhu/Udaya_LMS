@@ -335,6 +335,13 @@ export const notificationApi = {
     apiClient('/notifications/read-all', { method: 'POST' }),
 };
 
+export const deviceApi = {
+  register: (token, platform = 'android') =>
+    apiClient('/devices/register', { method: 'POST', body: JSON.stringify({ token, platform }) }),
+  unregister: (token) =>
+    apiClient('/devices/register', { method: 'DELETE', body: JSON.stringify({ token }) }),
+};
+
 export const videoApi = {
   getVideos: (classId) =>
     apiClient(`/videos?class_id=${classId}`),

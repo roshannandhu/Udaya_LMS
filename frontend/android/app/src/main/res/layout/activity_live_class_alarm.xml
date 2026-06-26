@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#0F172A"
+    android:padding="28dp">
+
+    <TextView
+        android:id="@+id/alarm_when"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Starting soon"
+        android:textColor="#FBBF24"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.04"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/alarm_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Live class"
+        android:textColor="#FFFFFF"
+        android:textSize="30sp"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/alarm_subject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#94A3B8"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/alarm_join"
+        android:layout_width="match_parent"
+        android:layout_height="58dp"
+        android:text="Join now"
+        android:textColor="#0F172A"
+        android:textStyle="bold"
+        android:textSize="17sp"
+        android:backgroundTint="#FBBF24"
+        android:layout_marginTop="48dp" />
+
+    <Button
+        android:id="@+id/alarm_dismiss"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Dismiss"
+        android:textColor="#CBD5E1"
+        android:textSize="15sp"
+        android:background="@android:color/transparent"
+        android:layout_marginTop="10dp" />
+
+</LinearLayout>

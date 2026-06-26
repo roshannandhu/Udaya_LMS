@@ -994,6 +994,37 @@ ALTER TABLE teacher_branding ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEF
 -- (tests.results_notify_dismissed, whatsapp_messages.test_id and the
 --  whatsapp_templates media_* columns already have ALTERs earlier in this file.)
 
+-- ── Migration: Push notifications (FCM) + live-class reminders ───────────────
+-- device_tokens: one row per (user, device). user_id == notifications.recipient_id
+-- (a student's id, or a teacher's auth id), so a notification can be pushed to all
+-- of that recipient's phones. token is the FCM registration token (globally unique).
+CREATE TABLE IF NOT EXISTS device_tokens (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL,
+    token       TEXT NOT NULL UNIQUE,
+    platform    TEXT NOT NULL DEFAULT 'android',
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
+ALTER TABLE device_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_device_tokens" ON device_tokens;
+CREATE POLICY "deny_anon_device_tokens" ON device_tokens FOR ALL TO anon, authenticated USING (false);
+
+-- live_class_reminders: dedup ledger so each (class, lead-time) full-screen alarm
+-- fires exactly once, even across reminder-loop ticks and server restarts.
+CREATE TABLE IF NOT EXISTS live_class_reminders (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    live_class_id UUID NOT NULL REFERENCES live_classes(id) ON DELETE CASCADE,
+    offset_min    INTEGER NOT NULL,
+    sent_at       TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (live_class_id, offset_min)
+);
+ALTER TABLE live_class_reminders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "deny_anon_live_class_reminders" ON live_class_reminders;
+CREATE POLICY "deny_anon_live_class_reminders" ON live_class_reminders FOR ALL TO anon, authenticated USING (false);
+
+
 -- ── C. Supabase Storage buckets — COMPLETE list from the live project ─────────
 -- Not SQL. The backend auto-creates missing buckets on first use. On AWS,
 -- recreate these as S3 buckets/prefixes and swap the storage layer:

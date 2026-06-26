@@ -16,6 +16,7 @@ import base64
 import hashlib
 import hmac
 import time as time_module
+import threading
 import httpx
 from pathlib import Path
 from dotenv import load_dotenv
@@ -642,6 +643,7 @@ async def startup_event():
     asyncio.create_task(_broadcast_cleanup_loop())
     asyncio.create_task(_whatsapp_scheduler_loop())
     asyncio.create_task(_backup_scheduler_loop())
+    asyncio.create_task(_live_class_reminder_loop())
 
 
 # Models
@@ -4859,6 +4861,159 @@ def get_video_viewers(video_id: str, user = Depends(verify_token)):
     result.sort(key=lambda x: (0 if x["completed"] else 1 if x["watched"] else 2, x["name"]))
     return result
 
+# ─── PUSH NOTIFICATIONS (Firebase Cloud Messaging, HTTP v1) ──────────────────
+# Dormant unless FCM_SERVICE_ACCOUNT_JSON is set (base64 or raw JSON of a Firebase
+# service-account key). All push paths are best-effort and never block or fail the
+# originating request.
+
+_fcm_sa: Optional[dict] = None          # parsed service-account dict (None = not loaded yet)
+_fcm_sa_loaded = False
+_fcm_project_id: Optional[str] = None
+_fcm_creds = None                        # google.oauth2 Credentials (caches/refreshes the OAuth token)
+_fcm_lock = threading.Lock()
+
+
+def _load_fcm_sa() -> Optional[dict]:
+    """Parse FCM_SERVICE_ACCOUNT_JSON once (accepts base64 or raw JSON)."""
+    global _fcm_sa, _fcm_sa_loaded, _fcm_project_id
+    if _fcm_sa_loaded:
+        return _fcm_sa
+    _fcm_sa_loaded = True
+    raw = (os.getenv("FCM_SERVICE_ACCOUNT_JSON") or "").strip()
+    if not raw:
+        return None
+    try:
+        txt = raw if raw.startswith("{") else base64.b64decode(raw).decode("utf-8")
+        _fcm_sa = json.loads(txt)
+        _fcm_project_id = _fcm_sa.get("project_id")
+        print(f"[fcm] service account loaded (project={_fcm_project_id})")
+    except Exception as e:
+        print(f"[fcm] bad FCM_SERVICE_ACCOUNT_JSON: {e}")
+        _fcm_sa = None
+    return _fcm_sa
+
+
+def _fcm_access_token() -> Optional[str]:
+    """Mint/refresh a short-lived OAuth token for the FCM HTTP v1 API."""
+    global _fcm_creds
+    sa = _load_fcm_sa()
+    if not sa:
+        return None
+    try:
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import Request as GAuthRequest
+        with _fcm_lock:
+            if _fcm_creds is None:
+                _fcm_creds = service_account.Credentials.from_service_account_info(
+                    sa, scopes=["https://www.googleapis.com/auth/firebase.messaging"])
+            if not _fcm_creds.valid:
+                _fcm_creds.refresh(GAuthRequest())
+            return _fcm_creds.token
+    except Exception as e:
+        print(f"[fcm] token error: {e}")
+        return None
+
+
+def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dict] = None,
+              android_high_priority: bool = False):
+    """Send one FCM message per token (HTTP v1). `notification` = {title, body} shows a
+    system-tray notification when backgrounded; pass None for data-only (the native
+    UdayaMessagingService then builds the full-screen alarm). Dead tokens are pruned.
+    Synchronous (call via _push_to_recipients / a thread)."""
+    if not _load_fcm_sa() or not _fcm_project_id or not tokens:
+        return
+    access = _fcm_access_token()
+    if not access:
+        return
+    url = f"https://fcm.googleapis.com/v1/projects/{_fcm_project_id}/messages:send"
+    headers = {"Authorization": f"Bearer {access}", "Content-Type": "application/json"}
+    str_data = {k: ("" if v is None else str(v)) for k, v in (data or {}).items()}
+    dead = []
+    try:
+        with httpx.Client(timeout=10) as client:
+            for tok in tokens:
+                android = {"priority": "high" if android_high_priority else "normal"}
+                message = {"token": tok, "data": str_data, "android": android}
+                if notification:
+                    message["notification"] = {"title": notification.get("title") or "",
+                                               "body": notification.get("body") or ""}
+                    android["notification"] = {"channel_id": "udaya_default"}
+                try:
+                    resp = client.post(url, headers=headers, json={"message": message})
+                    if resp.status_code == 200:
+                        continue
+                    body_txt = resp.text or ""
+                    if resp.status_code in (400, 403, 404):
+                        low = body_txt.lower()
+                        if ("unregistered" in low or "not-registered" in low
+                                or "not_found" in low or "invalid_argument" in low
+                                or "invalid registration" in low):
+                            dead.append(tok)
+                            continue
+                    print(f"[fcm] send {resp.status_code}: {body_txt[:200]}")
+                except Exception as e:
+                    print(f"[fcm] send error: {e}")
+    finally:
+        if dead and service_supabase:
+            try:
+                service_supabase.table("device_tokens").delete().in_("token", dead).execute()
+                print(f"[fcm] pruned {len(dead)} dead token(s)")
+            except Exception as e:
+                print(f"[fcm] prune failed: {e}")
+
+
+def _tokens_for_recipients(recipient_ids) -> list:
+    """All device tokens registered to the given recipient (user) ids."""
+    ids = [r for r in (recipient_ids or []) if r]
+    if not service_supabase or not ids:
+        return []
+    try:
+        rows = service_supabase.table("device_tokens").select("token").in_("user_id", ids).execute()
+        return [r["token"] for r in (rows.data or []) if r.get("token")]
+    except Exception as e:
+        print(f"[fcm] token lookup failed: {e}")
+        return []
+
+
+def _push_to_recipients(recipient_ids, title: str, body: str = "", data: dict = None):
+    """Fire-and-forget standard push to every device of the given recipients. Returns
+    immediately (network runs on a daemon thread) so it never delays the request."""
+    if not _load_fcm_sa() or not recipient_ids:
+        return
+
+    def _work():
+        try:
+            tokens = _tokens_for_recipients(recipient_ids)
+            if tokens:
+                _send_fcm(tokens, notification={"title": title, "body": body or ""},
+                          data={**(data or {}), "kind": (data or {}).get("kind", "notification")})
+        except Exception as e:
+            print(f"[push] fan-out failed: {e}")
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
+def _emit_notification(recipient_id: str, recipient_type: str, ntype: str,
+                       title: str, body: str = "", data: dict = None):
+    """Insert one notification row AND push it to the recipient's phone(s).
+    Best-effort: a failure here must never break the calling action."""
+    if not service_supabase or not recipient_id:
+        return
+    try:
+        service_supabase.table("notifications").insert({
+            "recipient_id": recipient_id,
+            "recipient_type": recipient_type,
+            "type": ntype,
+            "title": title,
+            "body": body,
+            "data": data or {},
+            "read": False,
+        }).execute()
+    except Exception as e:
+        print(f"Notification insert failed ({ntype}): {e}")
+    _push_to_recipients([recipient_id], title, body, {**(data or {}), "kind": ntype})
+
+
 def _notify_students_of_content(class_id: str, ntype: str, title: str, body: str = "", data: dict = None):
     """Fan out a notification row to every non-blocked student of the standard
     that owns class_id. Best-effort: content creation must never fail because
@@ -4881,6 +5036,10 @@ def _notify_students_of_content(class_id: str, ntype: str, title: str, body: str
         } for s in (students.data or []) if not s.get("blocked")]
         if rows:
             service_supabase.table("notifications").insert(rows).execute()
+            # Also push to every recipient's phone (best-effort, non-blocking).
+            _push_to_recipients([r["recipient_id"] for r in rows], title,
+                                body or subj.data.get("name") or "",
+                                {**(data or {}), "class_id": class_id, "kind": ntype})
     except Exception as e:
         print(f"Notification fan-out failed: {e}")
 
@@ -6561,15 +6720,9 @@ def request_reattempt(test_id: str, req: ReattemptRequest, user = Depends(verify
             student = service_supabase.table("students").select("name").eq("id", user["student_id"]).single().execute()
             sname = (student.data or {}).get("name") or "A student"
             ttitle = (test.data or {}).get("title") or "a test"
-            service_supabase.table("notifications").insert({
-                "recipient_id": teacher_id,
-                "recipient_type": "teacher",
-                "type": "reattempt_request",
-                "title": "Re-attempt requested",
-                "body": f"{sname} asked to re-attempt “{ttitle}”.",
-                "data": {"test_id": test_id, "student_id": user["student_id"]},
-                "read": False,
-            }).execute()
+            _emit_notification(teacher_id, "teacher", "reattempt_request",
+                "Re-attempt requested", f"{sname} asked to re-attempt “{ttitle}”.",
+                {"test_id": test_id, "student_id": user["student_id"]})
     except Exception as e:
         print(f"Re-attempt teacher notification failed: {e}")
 
@@ -6619,15 +6772,9 @@ def approve_reattempt(request_id: str, user = Depends(verify_token)):
     try:
         test = service_supabase.table("tests").select("title").eq("id", r["test_id"]).single().execute()
         ttitle = (test.data or {}).get("title") or "your test"
-        service_supabase.table("notifications").insert({
-            "recipient_id": r["student_id"],
-            "recipient_type": "student",
-            "type": "reattempt_approved",
-            "title": "Re-attempt approved",
-            "body": f"You can now re-take “{ttitle}”.",
-            "data": {"test_id": r["test_id"]},
-            "read": False,
-        }).execute()
+        _emit_notification(r["student_id"], "student", "reattempt_approved",
+            "Re-attempt approved", f"You can now re-take “{ttitle}”.",
+            {"test_id": r["test_id"]})
     except Exception as e:
         print(f"Re-attempt student notification failed: {e}")
 
@@ -6656,15 +6803,9 @@ def reject_reattempt(request_id: str, user = Depends(verify_token)):
     try:
         test = service_supabase.table("tests").select("title").eq("id", r["test_id"]).single().execute()
         ttitle = (test.data or {}).get("title") or "your test"
-        service_supabase.table("notifications").insert({
-            "recipient_id": r["student_id"],
-            "recipient_type": "student",
-            "type": "reattempt_rejected",
-            "title": "Re-attempt not approved",
-            "body": f"Your re-attempt request for “{ttitle}” was declined.",
-            "data": {"test_id": r["test_id"]},
-            "read": False,
-        }).execute()
+        _emit_notification(r["student_id"], "student", "reattempt_rejected",
+            "Re-attempt not approved", f"Your re-attempt request for “{ttitle}” was declined.",
+            {"test_id": r["test_id"]})
     except Exception as e:
         print(f"Re-attempt reject notification failed: {e}")
 
@@ -6746,15 +6887,9 @@ def request_assignment_reattempt(assignment_id: str, req: ReattemptRequest, user
             student = service_supabase.table("students").select("name").eq("id", user["student_id"]).single().execute()
             sname = (student.data or {}).get("name") or "A student"
             atitle = (a.data or {}).get("title") or "an assignment"
-            service_supabase.table("notifications").insert({
-                "recipient_id": teacher_id,
-                "recipient_type": "teacher",
-                "type": "assignment_reattempt_request",
-                "title": "Assignment re-do requested",
-                "body": f"{sname} asked to redo “{atitle}”.",
-                "data": {"assignment_id": assignment_id, "student_id": user["student_id"]},
-                "read": False,
-            }).execute()
+            _emit_notification(teacher_id, "teacher", "assignment_reattempt_request",
+                "Assignment re-do requested", f"{sname} asked to redo “{atitle}”.",
+                {"assignment_id": assignment_id, "student_id": user["student_id"]})
     except Exception as e:
         print(f"Assignment re-attempt teacher notification failed: {e}")
 
@@ -6817,15 +6952,9 @@ def approve_assignment_reattempt(request_id: str, user = Depends(verify_token)):
     try:
         a = service_supabase.table("assignments").select("title").eq("id", r["assignment_id"]).single().execute()
         atitle = (a.data or {}).get("title") or "your assignment"
-        service_supabase.table("notifications").insert({
-            "recipient_id": r["student_id"],
-            "recipient_type": "student",
-            "type": "assignment_reattempt_approved",
-            "title": "Re-do approved",
-            "body": f"You can now retract and resubmit “{atitle}”.",
-            "data": {"assignment_id": r["assignment_id"]},
-            "read": False,
-        }).execute()
+        _emit_notification(r["student_id"], "student", "assignment_reattempt_approved",
+            "Re-do approved", f"You can now retract and resubmit “{atitle}”.",
+            {"assignment_id": r["assignment_id"]})
     except Exception as e:
         print(f"Assignment re-attempt student notification failed: {e}")
 
@@ -6854,15 +6983,9 @@ def reject_assignment_reattempt(request_id: str, user = Depends(verify_token)):
     try:
         a = service_supabase.table("assignments").select("title").eq("id", r["assignment_id"]).single().execute()
         atitle = (a.data or {}).get("title") or "your assignment"
-        service_supabase.table("notifications").insert({
-            "recipient_id": r["student_id"],
-            "recipient_type": "student",
-            "type": "assignment_reattempt_rejected",
-            "title": "Re-do not approved",
-            "body": f"Your re-do request for “{atitle}” was declined.",
-            "data": {"assignment_id": r["assignment_id"]},
-            "read": False,
-        }).execute()
+        _emit_notification(r["student_id"], "student", "assignment_reattempt_rejected",
+            "Re-do not approved", f"Your re-do request for “{atitle}” was declined.",
+            {"assignment_id": r["assignment_id"]})
     except Exception as e:
         print(f"Assignment re-attempt reject notification failed: {e}")
 
@@ -7091,15 +7214,9 @@ def create_video_comment(video_id: str, req: VideoCommentCreate, user = Depends(
             student = service_supabase.table("students").select("name").eq("id", user["student_id"]).single().execute()
             sname = (student.data or {}).get("name") or "A student"
             vtitle = (vid.data or {}).get("title") or "a video"
-            service_supabase.table("notifications").insert({
-                "recipient_id": teacher_id,
-                "recipient_type": "teacher",
-                "type": "video_comment",
-                "title": "New video question",
-                "body": f"{sname} asked about “{vtitle}”.",
-                "data": {"video_id": video_id, "student_id": user["student_id"]},
-                "read": False,
-            }).execute()
+            _emit_notification(teacher_id, "teacher", "video_comment",
+                "New video question", f"{sname} asked about “{vtitle}”.",
+                {"video_id": video_id, "student_id": user["student_id"]})
     except Exception as e:
         print(f"Video comment teacher notification failed: {e}")
 
@@ -7130,15 +7247,9 @@ def reply_video_comment(comment_id: str, req: VideoCommentReply, user = Depends(
 
     # Best-effort: notify the student their question was answered.
     try:
-        service_supabase.table("notifications").insert({
-            "recipient_id": existing.data["student_id"],
-            "recipient_type": "student",
-            "type": "video_reply",
-            "title": "Teacher replied",
-            "body": "Your teacher answered your question.",
-            "data": {"video_id": existing.data.get("video_id")},
-            "read": False,
-        }).execute()
+        _emit_notification(existing.data["student_id"], "student", "video_reply",
+            "Teacher replied", "Your teacher answered your question.",
+            {"video_id": existing.data.get("video_id")})
     except Exception as e:
         print(f"Video reply student notification failed: {e}")
 
@@ -7303,6 +7414,52 @@ def mark_all_notifications_read(user = Depends(verify_token)):
         return {"ok": True}
     except Exception:
         return {"ok": True}
+
+
+# ─── DEVICE TOKENS (push notification registration) ──────────────────────────
+class DeviceTokenReq(BaseModel):
+    token: str
+    platform: str = "android"
+
+
+@app.post("/api/devices/register")
+def register_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
+    """Register/refresh this phone's FCM token for the logged-in user. Upserts by
+    token so the same device re-binds to whoever is currently logged in (shared
+    phones), and a re-login just refreshes updated_at."""
+    if not service_supabase:
+        return {"ok": True}
+    token = (req.token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="token required")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        service_supabase.table("device_tokens").upsert({
+            "user_id": user["user_id"],
+            "token": token,
+            "platform": (req.platform or "android")[:16],
+            "updated_at": now_iso,
+        }, on_conflict="token").execute()
+    except Exception as e:
+        print(f"[devices] register failed: {e}")
+        return {"ok": False}
+    return {"ok": True}
+
+
+@app.delete("/api/devices/register")
+def unregister_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
+    """Remove this phone's token (called on logout) so the previous user stops
+    receiving pushes on a shared device."""
+    if not service_supabase:
+        return {"ok": True}
+    token = (req.token or "").strip()
+    if not token:
+        return {"ok": True}
+    try:
+        service_supabase.table("device_tokens").delete().eq("token", token).execute()
+    except Exception as e:
+        print(f"[devices] unregister failed: {e}")
+    return {"ok": True}
 
 
 # --- WebSockets & Broadcasts & Uploads ---
@@ -8307,6 +8464,85 @@ def _lc_parse_when(lc: dict):
         return None, None
     end = start + timedelta(minutes=int(lc.get("duration_mins") or 60))
     return start, end
+
+
+# Lead times (minutes before scheduled_at) at which a full-screen alarm fires.
+# 0 == "starting now". One list so it's trivially tunable.
+LIVE_CLASS_REMINDER_OFFSETS = [15, 10, 5, 0]
+
+
+def _send_live_class_alarm(lc: dict, off: int):
+    """Data-only, high-priority FCM to every student of the class's standard so the
+    native UdayaMessagingService can raise a full-screen alarm. Best-effort."""
+    try:
+        subj = service_supabase.table("subject_classes").select("standard_id, name").eq("id", lc["class_id"]).single().execute()
+        if not subj.data:
+            return
+        students = service_supabase.table("students").select("id, blocked").eq("standard_id", subj.data["standard_id"]).execute()
+        ids = [s["id"] for s in (students.data or []) if not s.get("blocked")]
+        tokens = _tokens_for_recipients(ids)
+        if not tokens:
+            return
+        _send_fcm(tokens, notification=None, android_high_priority=True, data={
+            "kind": "live_class_reminder",
+            "live_class_id": lc["id"],
+            "title": lc.get("title") or subj.data.get("name") or "Live class",
+            "subject": subj.data.get("name") or "",
+            "scheduled_at": lc.get("scheduled_at") or "",
+            "offset_min": off,
+            "when": "now" if off == 0 else f"in {off} min",
+        })
+    except Exception as e:
+        print(f"[live-class reminders] send failed: {e}")
+
+
+def _run_due_live_class_reminders():
+    """Find scheduled classes whose current lead-time bracket just became due and
+    fire one alarm each. The live_class_reminders UNIQUE(live_class_id, offset_min)
+    is the lock that makes each (class, offset) fire exactly once."""
+    now = datetime.now(timezone.utc)
+    max_off = max(LIVE_CLASS_REMINDER_OFFSETS) if LIVE_CLASS_REMINDER_OFFSETS else 0
+    floor = (now - timedelta(minutes=3)).isoformat()          # catch the 0-min "now" within grace
+    ceil = (now + timedelta(minutes=max_off + 1)).isoformat()
+    res = service_supabase.table("live_classes").select(
+        "id, class_id, title, scheduled_at, duration_mins, status"
+    ).eq("status", "scheduled").gte("scheduled_at", floor).lte("scheduled_at", ceil).execute()
+    pos_offsets = sorted([o for o in LIVE_CLASS_REMINDER_OFFSETS if o > 0])
+    for lc in (res.data or []):
+        start, _end = _lc_parse_when(lc)
+        if not start:
+            continue
+        mins_until = (start - now).total_seconds() / 60.0
+        # The single "due" bracket: smallest positive offset still ahead, or 0 at start.
+        due = None
+        for off in pos_offsets:
+            if mins_until <= off:
+                due = off
+                break
+        if 0 in LIVE_CLASS_REMINDER_OFFSETS and -3 <= mins_until <= 0:
+            due = 0
+        if due is None:
+            continue
+        # Claim it — a unique-violation means another tick/instance already sent it.
+        try:
+            service_supabase.table("live_class_reminders").insert(
+                {"live_class_id": lc["id"], "offset_min": due}).execute()
+        except Exception:
+            continue
+        _send_live_class_alarm(lc, due)
+
+
+async def _live_class_reminder_loop():
+    """Every 60s, fire due full-screen live-class alarms. Dormant until FCM is
+    configured. Mirrors the other background-loop tasks."""
+    await asyncio.sleep(45)  # let startup settle
+    while True:
+        try:
+            if service_supabase and _load_fcm_sa():
+                await asyncio.to_thread(_run_due_live_class_reminders)
+        except Exception as e:
+            print(f"[live-class reminders] loop error: {e}")
+        await asyncio.sleep(60)
 
 
 async def _sync_live_class_statuses(classes: list) -> None:
