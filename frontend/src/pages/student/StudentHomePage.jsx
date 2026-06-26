@@ -452,6 +452,27 @@ export default function StudentHomePage() {
             </TiltCard>
           </motion.div>
 
+          {/* ── 2b. AI MENTOR SHORTCUT → opens the report card with AI running ── */}
+          <motion.button
+            variants={fadeUp}
+            onClick={() => navigate('/student/report?ai=1')}
+            whileHover={reduceMotion ? undefined : { scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="relative overflow-hidden text-left rounded-[2rem] p-[2px] shadow-card"
+            style={{ background: 'linear-gradient(120deg,#F1C2F7,#872792,#AD1A72)' }}
+          >
+            <div className="flex items-center gap-4 bg-[#F8E1FB] rounded-[calc(2rem-2px)] p-5">
+              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center flex-shrink-0 text-[#872792] shadow-sm">
+                <Sparkles size={22} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-extrabold text-[15px] text-[#872792] leading-tight">Ask your AI Mentor</p>
+                <p className="text-[12px] font-bold text-[#872792]/70 leading-snug">Personalised tips from your streaks, trends &amp; weak topics.</p>
+              </div>
+              <ChevronRight size={20} className="text-[#872792] flex-shrink-0" />
+            </div>
+          </motion.button>
+
           {/* ── 3. WHAT'S NEXT (full-width agenda) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
             <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-4 px-2 flex items-center gap-2">

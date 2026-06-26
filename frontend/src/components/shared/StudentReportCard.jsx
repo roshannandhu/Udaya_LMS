@@ -1040,7 +1040,7 @@ const PERIODS = [
   { id: 'overall', label: 'Overall' },
 ];
 
-export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, onDownloadPDF, canExport = true }) {
+export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, onDownloadPDF, canExport = true, autoOpenAI = false }) {
   const reduce = useReducedMotion();
   const dark = useTheme(s => s.dark);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -1216,6 +1216,21 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     setShowSuggestions(true);
     if (!suggestions) loadInsights();
   }, [showSuggestions, suggestions, loadInsights]);
+
+  // When opened via the home "AI Mentor" shortcut (?ai=1), auto-expand the box
+  // and run the analysis once, then scroll it into view. Ref-guarded so it fires
+  // a single time even as data/loadInsights identities change.
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!autoOpenAI || autoOpenedRef.current || !student?.id) return;
+    autoOpenedRef.current = true;
+    setShowSuggestions(true);
+    loadInsights();
+    const t = setTimeout(() => {
+      document.getElementById('ai-mentor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [autoOpenAI, student?.id, loadInsights]);
 
   // The cache is per-period: switching tabs must drop the old text and, if the
   // panel is open, pull the right period's analysis.
@@ -1442,6 +1457,22 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               </Section>
             )}
 
+            {/* ── AI MENTOR (prominent, full-width, near the top) ── */}
+            <Section>
+              <div id="ai-mentor" className="scroll-mt-24">
+                <AIMentorCard
+                  show={showSuggestions}
+                  onToggle={handleAnalyzePerformance}
+                  onRegenerate={runAnalysis}
+                  suggestions={suggestions}
+                  loading={suggestionsLoading}
+                  isStreaming={isStreaming}
+                  error={suggestionsError}
+                  generatedAt={generatedAt}
+                />
+              </div>
+            </Section>
+
             {/* ── 3. MAIN GRID ── */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-8">
               <div className="xl:col-span-8 space-y-5 md:space-y-8 min-w-0">
@@ -1451,20 +1482,6 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     attData={attData} testData={testData} vidData={vidData} assignData={assignHeatmapRaw}
                     subjects={subjects} heatmapSubject={heatmapSubject} setHeatmapSubject={setHeatmapSubject}
                     streak={insights.streak}
-                  />
-                </Section>
-
-                {/* AI mentor */}
-                <Section>
-                  <AIMentorCard
-                    show={showSuggestions}
-                    onToggle={handleAnalyzePerformance}
-                    onRegenerate={runAnalysis}
-                    suggestions={suggestions}
-                    loading={suggestionsLoading}
-                    isStreaming={isStreaming}
-                    error={suggestionsError}
-                    generatedAt={generatedAt}
                   />
                 </Section>
               </div>

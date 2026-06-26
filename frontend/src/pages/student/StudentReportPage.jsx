@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { reportApi } from '../../lib/api';
 import StudentReportCard from '../../components/shared/StudentReportCard';
 
 export default function StudentReportPage() {
+  const [searchParams] = useSearchParams();
+  const autoOpenAI = searchParams.get('ai') === '1'; // home "AI Mentor" shortcut
   const [period, setPeriod] = useState('overall');
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +59,7 @@ export default function StudentReportPage() {
         onPeriodChange={setPeriod}
         showHeader={true}
         canExport={false}
+        autoOpenAI={autoOpenAI}
       />
     </div>
   );
