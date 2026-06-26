@@ -20,7 +20,12 @@ const CACHE_TTL = 120_000;
 // '/broadcasts/' covers read-receipt counts, read details, and reactions — all of
 // which update live over WebSocket and must NOT be served from the stale GET cache
 // (otherwise the teacher's read tick won't turn blue until a manual refresh).
-const NO_CACHE = ['/notifications', '/auth/me', '/live-classes', '/broadcasts/'];
+// Reattempt status must be fresh: the teacher approves on a DIFFERENT device, so
+// the student's cache is never busted by that mutation — a stale 'pending' would
+// keep the exam card showing "Request re-attempt" after it was already approved.
+const NO_CACHE = ['/notifications', '/auth/me', '/live-classes', '/broadcasts/',
+  '/student/reattempt-requests', '/student/assignment-reattempt-requests',
+  '/reattempt-requests', '/assignment-reattempt-requests'];
 
 // Clear the in-memory GET cache. Called on login/logout so one account never sees
 // another account's cached /standards, /subjects, /students responses (the cache is
