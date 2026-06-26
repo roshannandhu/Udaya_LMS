@@ -321,7 +321,7 @@ function SkillRadar({ data, hasClass, classCount }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduce ? undefined : { opacity: 0, y: -6, scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            className="flex items-center gap-2.5 bg-neutral-50 border border-black/5 rounded-full px-4 py-2 mb-1"
+            className="flex items-center gap-2.5 bg-neutral-50 rounded-full px-4 py-2 mb-1"
           >
             <span className="text-[11px] font-black text-neutral-900">{sel.metric}</span>
             <span className="text-[11px] font-extrabold text-[#1A56DB]">You {Math.round(sel.value || 0)}%</span>
@@ -412,7 +412,7 @@ function StockTrend({ testTimeline, subjects }) {
   const color = stats?.up ? UP_GREEN : DOWN_RED;
 
   return (
-    <div className="bg-white rounded-[2rem] border border-black/5 shadow-card p-5 md:p-6">
+    <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6">
       <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
         <div>
           <h4 className="text-[16px] font-black text-neutral-900">Score Trend</h4>
@@ -596,7 +596,7 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
   const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <div className="bg-white rounded-[2rem] border border-black/5 shadow-card p-5 md:p-6 space-y-4">
+    <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h4 className="text-[16px] font-black text-neutral-900">Activity Calendar</h4>
@@ -866,7 +866,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
 
   return (
     <motion.div
-      className="relative rounded-[2rem] bg-white border border-[#EFEDEA] shadow-card overflow-hidden"
+      className="relative rounded-[2rem] bg-white shadow-card overflow-hidden"
       initial={reduce ? false : { opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
@@ -946,7 +946,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                       const isTimetable = /weekly timetable/i.test(s.title || '');
                       const Body = isTimetable ? TimetableBody : MentorBody;
                       const block = (
-                        <div className="bg-[#FAFAF9] rounded-2xl p-4 border border-[#EFEDEA]">
+                        <div className="bg-[#FAFAF9] rounded-2xl p-4">
                           {s.title && (
                             <p className="flex items-center gap-2 text-[13px] font-black mb-2" style={{ color: hex }}>
                               <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tint(hex, 0.12) }}>
@@ -1309,7 +1309,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   return (
     <div className={`font-sans ${showHeader ? 'bg-transparent' : 'bg-transparent'} text-neutral-900 min-h-screen`}>
       <div className={`mx-auto ${showHeader ? 'max-w-[1400px] lg:px-4 lg:py-6' : 'w-full'}`}>
-        <div className={`${showHeader ? 'bg-white shadow-[0_8px_40px_rgb(0,0,0,0.06)] lg:rounded-[3rem] border border-black/5 overflow-hidden' : ''}`}>
+        <div className={`${showHeader ? 'bg-white shadow-[0_8px_40px_rgb(0,0,0,0.06)] lg:rounded-[3rem] overflow-hidden' : ''}`}>
 
           {/* ── HEADER (dark) ── */}
           {showHeader && (
@@ -1397,7 +1397,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                       variants={reduce ? undefined : fadeUp}
                       whileHover={reduce ? undefined : { y: -4, scale: 1.02 }}
                       transition={springCard}
-                      className="rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card border border-black/5"
+                      className="rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card"
                       style={{ background: p.hex }}
                     >
                       {t.ring != null ? (
@@ -1429,7 +1429,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     const p = pastelTokens(c.pastel, dark);
                     const Icon = c.icon;
                     const chip = (
-                      <div className="flex-shrink-0 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 border border-black/5 shadow-sm bg-white">
+                      <div className="flex-shrink-0 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 shadow-sm bg-white">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: p.hex, color: p.fgHex }}>
                           <Icon size={14} />
                         </div>
@@ -1486,7 +1486,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               {/* SIDEBAR */}
               <div className="xl:col-span-4 space-y-5 md:space-y-8 min-w-0">
                 <Section>
-                  <div className="bg-white rounded-[2rem] border border-black/5 shadow-card p-5 md:p-6 flex flex-col items-center text-center">
+                  <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6 flex flex-col items-center text-center">
                     <h4 className="text-[16px] font-black text-neutral-900 mb-0.5">Skill Radar</h4>
                     <p className="text-[10px] font-bold text-neutral-400 mb-2 uppercase tracking-widest">
                       {classAvgs ? 'You vs Class Avg · tap a skill' : 'Your skill profile · tap a skill'}
@@ -1502,13 +1502,13 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     <h3 className="text-[17px] font-black text-neutral-900 tracking-tight">Focus Areas</h3>
                   </div>
                   {weakestTopics.length === 0 ? (
-                    <div className="bg-white rounded-[2rem] border border-black/5 p-6 text-center text-neutral-400 text-sm font-bold shadow-sm">No weak topics identified yet. Great job!</div>
+                    <div className="bg-white rounded-[2rem] p-6 text-center text-neutral-400 text-sm font-bold shadow-sm">No weak topics identified yet. Great job!</div>
                   ) : (
                     <div className="space-y-3">
                       {weakestTopics.slice(0, 5).map((topic, i) => {
                         const theme = CARD_COLORS[i % CARD_COLORS.length];
                         const card = (
-                          <div className={`${theme.bg} rounded-[1.5rem] p-4 shadow-sm hover:shadow-md transition-shadow border border-black/5 flex flex-col gap-2`}>
+                          <div className={`${theme.bg} rounded-[1.5rem] p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col gap-2`}>
                             <div>
                               <p className={`text-[9px] font-black uppercase tracking-widest ${theme.text} opacity-60 mb-0.5`}>{topic.subject}</p>
                               <p className={`text-[14px] font-black leading-tight ${theme.text}`}>{topic.topic}</p>
@@ -1546,7 +1546,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                       <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600"><ClipboardList size={14} strokeWidth={2.5} /></div>
                       <h3 className="text-[17px] font-black text-neutral-900 tracking-tight">Assignments</h3>
                     </div>
-                    <div className="bg-white rounded-[2rem] border border-black/5 shadow-card p-5 space-y-4">
+                    <div className="bg-white rounded-[2rem] shadow-card p-5 space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Submitted</p>
@@ -1622,7 +1622,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                       { label: 'Assignments', value: assignP, suffix: assignP != null ? `${r.assignment_submitted}/${r.assignment_total}` : '—' },
                     ];
                     const card = (
-                      <div className="bg-white rounded-[2rem] border border-black/5 shadow-card p-5">
+                      <div className="bg-white rounded-[2rem] shadow-card p-5">
                         <div className="flex items-center justify-between gap-2 mb-4">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: p.hex, color: p.fgHex }}>

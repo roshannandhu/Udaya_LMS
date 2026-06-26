@@ -29,7 +29,7 @@ export default function EventCard({
       {...(clickable ? { whileHover: { y: -2 }, whileTap: { scale: 0.99 }, transition: springCard } : {})}
       onClick={onClick}
       role={clickable ? 'button' : undefined}
-      className={`rounded-card p-4 ${pastel.bg} border border-black/5 ${clickable ? 'cursor-pointer' : ''} ${className}`}
+      className={`rounded-card p-4 ${pastel.bg}  ${clickable ? 'cursor-pointer' : ''} ${className}`}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">

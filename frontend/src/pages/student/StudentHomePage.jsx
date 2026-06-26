@@ -35,7 +35,7 @@ function StatTile({ icon: Icon, label, value, display, pastel, ringPct, onClick 
       whileHover={{ y: -4, scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
       transition={springCard}
-      className="w-full h-full rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card border border-black/5 text-left"
+      className="w-full h-full rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card text-left"
       style={{ background: p.hex }}
     >
       {ringPct != null ? (
@@ -452,7 +452,7 @@ export default function StudentHomePage() {
           {/* ── 3. WHAT'S NEXT (flat, scannable agenda — no accordion chrome) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
             <h2 className="text-[11px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-2">What's next</h2>
-            <div className="bg-white rounded-[2rem] shadow-card border border-[#EFEDEA] overflow-hidden">
+            <div className="bg-white rounded-[2rem] shadow-card overflow-hidden">
               {doNow.length === 0 && comingUpTop.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center py-14 px-6">
                   <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
@@ -528,7 +528,7 @@ export default function StudentHomePage() {
                       whileTap={{ scale: 0.96 }}
                       transition={springCard}
                       onClick={() => navigate(`/student/subjects/${c.id}`)}
-                      className="snap-start flex-shrink-0 w-44 rounded-[1.75rem] p-5 text-left shadow-card border border-black/5"
+                      className="snap-start flex-shrink-0 w-44 rounded-[1.75rem] p-5 text-left shadow-card"
                       style={{ background: pastel.hex }}
                     >
                       <div className="mb-3" style={{ color: pastel.fgHex }}>

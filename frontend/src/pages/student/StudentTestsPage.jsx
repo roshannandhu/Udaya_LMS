@@ -51,7 +51,7 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
   const granted = reattemptStatus[t.id] === 'approved';
 
   return (
-    <div className={`relative rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 flex flex-col h-full hover:shadow-xl transition-all duration-500 hover:-translate-y-2 group border border-black/5`}>
+    <div className={`relative rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 flex flex-col h-full hover:shadow-xl transition-all duration-500 hover:-translate-y-2 group`}>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -96,7 +96,7 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
 
       {section === 'completed' && attempt && (
         <div className="mt-auto pt-5">
-          <div className="grid grid-cols-4 gap-2 text-[12px] mb-5 bg-white/50 p-3 rounded-2xl shadow-inner border border-black/5">
+          <div className="grid grid-cols-4 gap-2 text-[12px] mb-5 bg-white/50 p-3 rounded-2xl shadow-inner">
             <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Score</div><div className="font-extrabold text-[15px] text-black">{attempt.score}/{t.total_marks}</div></div>
             <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Correct</div><div className="font-extrabold text-[15px] text-green-600">{attempt.correct_count}</div></div>
             <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Wrong</div><div className="font-extrabold text-[15px] text-red-600">{attempt.wrong_count}</div></div>
@@ -121,7 +121,7 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
                 }
               }
             })}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-bold text-black bg-white shadow-sm hover:shadow-md hover:bg-neutral-50 transition-all border border-black/5"
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-bold text-black bg-white shadow-sm hover:shadow-md hover:bg-neutral-50 transition-all"
           >
             <Activity size={18} /> Detailed Report
           </button>
@@ -177,7 +177,7 @@ function Section({ title, tests, section, emptyMsg, icon: Icon, cardProps }) {
         <h3 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">{title} <span className="text-neutral-400 font-semibold ml-2 text-lg">({tests.length})</span></h3>
       </div>
       {tests.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-[2.5rem] shadow-sm border border-black/5">
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-[2.5rem] shadow-sm">
           <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-400 mb-4">
             <CheckCircle2 size={32} />
           </div>
@@ -209,7 +209,7 @@ function AssignmentCard({ a, idx = 0, now, onSelect }) {
   return (
     <button
       onClick={() => onSelect(a)}
-      className={`w-full text-left p-6 sm:p-8 rounded-[2.5rem] ${theme.bg} hover:shadow-xl hover:-translate-y-2 transition-all duration-500 flex flex-col h-full border border-black/5 group`}
+      className={`w-full text-left p-6 sm:p-8 rounded-[2.5rem] ${theme.bg} hover:shadow-xl hover:-translate-y-2 transition-all duration-500 flex flex-col h-full group`}
     >
       <div className="flex items-start gap-3 flex-1 mb-4">
         <div className="flex-1 min-w-0">
@@ -257,7 +257,7 @@ function AssignmentCard({ a, idx = 0, now, onSelect }) {
               Submitted
             </span>
           ) : (
-            <span className="inline-flex px-4 py-1.5 bg-white text-black text-[13px] font-extrabold rounded-full shadow-md uppercase tracking-widest border border-black/5">
+            <span className="inline-flex px-4 py-1.5 bg-white text-black text-[13px] font-extrabold rounded-full shadow-md uppercase tracking-widest">
               Pending
             </span>
           )}
@@ -275,7 +275,7 @@ function AssignSection({ title, list, emptyMsg, icon: Icon, cardProps }) {
         <h3 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">{title} <span className="text-neutral-400 font-semibold ml-2 text-lg">({list.length})</span></h3>
       </div>
       {list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-[2.5rem] shadow-sm border border-black/5">
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-[2.5rem] shadow-sm">
           <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-400 mb-4">
             <ClipboardList size={32} />
           </div>
@@ -466,7 +466,7 @@ export default function StudentTestsPage() {
       <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
 
         {/* ── Premium Pill tabs ── */}
-        <div className="flex bg-white p-2 rounded-full mb-10 shadow-sm border border-black/5 w-full max-w-sm mx-auto md:mx-0">
+        <div className="flex bg-white p-2 rounded-full mb-10 shadow-sm w-full max-w-sm mx-auto md:mx-0">
           {[
             { id: 'tests',       label: 'Online Tests',       icon: FileQuestion },
             { id: 'assignments', label: 'Assignments',  icon: ClipboardList },
@@ -514,7 +514,7 @@ export default function StudentTestsPage() {
                       const cls = subjects.find(c => String(c.id) === String(t.class_id));
                       const theme = CARD_COLORS[idx % CARD_COLORS.length];
                       return (
-                        <Item key={t.id} className={`rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 opacity-70 border border-black/5`}>
+                        <Item key={t.id} className={`rounded-[2.5rem] ${theme.bg} p-6 sm:p-8 opacity-70`}>
                           <div className="flex items-start justify-between gap-3 mb-4">
                             <div className="min-w-0 flex-1">
                               <h4 className={`font-extrabold text-[22px] sm:text-[24px] leading-[1.15] text-neutral-900 mb-3`}>

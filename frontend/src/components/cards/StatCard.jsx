@@ -17,7 +17,7 @@ export default function StatCard({ value, label, icon: Icon, color, emphasis = f
   const dark = useTheme(s => s.dark);
   const pastel = color ? pastelTokens(color, dark) : null;
   const surface = pastel
-    ? `${pastel.bg} ${emphasis ? 'ring-2 ring-black/10' : 'border border-black/5'}`
+    ? `${pastel.bg} ${emphasis ? 'ring-2 ring-black/10' : ''}`
     : `bg-white border ${emphasis ? 'border-neutral-300 shadow-lift' : 'border-[#EFEDEA] shadow-soft'}`;
 
   return (

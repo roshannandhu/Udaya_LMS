@@ -64,7 +64,7 @@ export default function TeacherLayout() {
       <TopNav type="teacher" />
       {/* overflow-x-clip (not -hidden: that would break position:sticky headers)
           stops sideways pan; overflow-y-auto makes this the phone scroll area. */}
-      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-36 lg:pb-0">
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-44 lg:pb-0">
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
           <Outlet />
         </Suspense>

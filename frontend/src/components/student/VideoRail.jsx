@@ -115,7 +115,7 @@ export default function VideoRail({
           <button
             aria-label="Scroll left"
             onClick={() => scrollByDir(-1)}
-            className="hidden md:flex absolute left-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-neutral-700 dark:text-neutral-300 shadow-lift border border-[#EFEDEA] dark:border-slate-700 items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 dark:hover:bg-slate-700 transition-opacity"
+            className="hidden md:flex absolute left-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-neutral-700 dark:text-neutral-300 shadow-lift  dark:border-slate-700 items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 dark:hover:bg-slate-700 transition-opacity"
           >
             <ChevronLeft size={20} />
           </button>
@@ -125,7 +125,7 @@ export default function VideoRail({
           <button
             aria-label="Scroll right"
             onClick={() => scrollByDir(1)}
-            className="hidden md:flex absolute right-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-neutral-700 dark:text-neutral-300 shadow-lift border border-[#EFEDEA] dark:border-slate-700 items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 dark:hover:bg-slate-700 transition-opacity"
+            className="hidden md:flex absolute right-1 top-[78px] -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-neutral-700 dark:text-neutral-300 shadow-lift  dark:border-slate-700 items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-neutral-50 dark:hover:bg-slate-700 transition-opacity"
           >
             <ChevronRight size={20} />
           </button>
@@ -148,7 +148,7 @@ export default function VideoRail({
                 className="snap-start flex-shrink-0 w-60 md:w-72 text-left group/card focus:outline-none"
               >
                 {/* Thumbnail */}
-                <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 shadow-card border border-black/5 dark:border-white/5">
+                <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 shadow-card  dark:border-white/5">
                   {v.thumbnail_url ? (
                     <img
                       src={v.thumbnail_url}

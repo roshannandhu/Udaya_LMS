@@ -89,7 +89,7 @@ export default function LeaderboardPanel({ standardId, highlightId, defaultPerio
       <div className={`transition-opacity duration-200 ${loading && loaded ? 'opacity-50 pointer-events-none' : ''}`}>
         {/* My rank badge (student portal) */}
         {myRank && (
-          <div className="rounded-card p-4 mb-6 flex items-center gap-4 bg-pastel-cream border border-black/5">
+          <div className="rounded-card p-4 mb-6 flex items-center gap-4 bg-pastel-cream ">
             <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-soft">
               <Trophy size={22} className="text-amber-600" />
             </div>

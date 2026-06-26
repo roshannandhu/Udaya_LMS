@@ -23,8 +23,8 @@ export default function Card({
 }) {
   const pastel = color ? PASTEL[color] : null;
   const base = pastel
-    ? `${pastel.bg} border border-black/5`
-    : 'bg-white border border-[#EFEDEA] shadow-soft';
+    ? `${pastel.bg}`
+    : 'bg-white shadow-soft';
   const Comp = motion[as] || motion.div;
 
   return (
