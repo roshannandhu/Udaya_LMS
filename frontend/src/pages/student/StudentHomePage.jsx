@@ -5,7 +5,7 @@ import { CountUp, ProgressRing } from '../../components/shared/Animated';
 import {
   Play, Calendar, FileText, ArrowRight, FileQuestion,
   ChevronRight, Video, Target,
-  CheckCircle2, ListChecks, Sparkles, Zap,
+  CheckCircle2, ListChecks, Zap,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
 import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi } from '../../lib/api';
@@ -19,9 +19,6 @@ import { pastelFor, pastelTokens } from '../../components/cards/pastel';
 import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren, springCard } from '../../lib/motion';
 import { ShinyText, TiltCard } from '../../components/bits';
-import {
-  Accordion, AccordionItem, AccordionTrigger, AccordionContent,
-} from '@/components/animate-ui/components/radix/accordion';
 
 let homeCache = null;
 
@@ -402,7 +399,7 @@ export default function StudentHomePage() {
           </motion.div>
 
           {/* ── 1b. XP / COURSE-PROGRESS BAR ── */}
-          <motion.div variants={fadeUp} className="-mt-3">
+          <motion.div variants={fadeUp}>
             <div className="flex items-center justify-between mb-1.5">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-neutral-500">
                 <Zap size={13} className="text-indigo-500" /> Course progress
@@ -452,85 +449,43 @@ export default function StudentHomePage() {
             </TiltCard>
           </motion.div>
 
-          {/* ── 2b. AI MENTOR SHORTCUT → opens the report card with AI running ── */}
-          <motion.button
-            variants={fadeUp}
-            onClick={() => navigate('/student/report?ai=1')}
-            whileHover={reduceMotion ? undefined : { scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="relative overflow-hidden text-left rounded-[2rem] p-[2px] shadow-card"
-            style={{ background: 'linear-gradient(120deg,#F1C2F7,#872792,#AD1A72)' }}
-          >
-            <div className="flex items-center gap-4 bg-[#F8E1FB] rounded-[calc(2rem-2px)] p-5">
-              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center flex-shrink-0 text-[#872792] shadow-sm">
-                <Sparkles size={22} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-extrabold text-[15px] text-[#872792] leading-tight">Ask your AI Mentor</p>
-                <p className="text-[12px] font-bold text-[#872792]/70 leading-snug">Personalised tips from your streaks, trends &amp; weak topics.</p>
-              </div>
-              <ChevronRight size={20} className="text-[#872792] flex-shrink-0" />
-            </div>
-          </motion.button>
-
-          {/* ── 3. WHAT'S NEXT (full-width agenda) ── */}
+          {/* ── 3. WHAT'S NEXT (flat, scannable agenda — no accordion chrome) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
-            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-4 px-2 flex items-center gap-2">
-              <Sparkles size={15} /> What's Next
-            </h2>
-            <div className="bg-white rounded-[2rem] shadow-card border border-black/5 overflow-hidden p-3">
-                {doNow.length === 0 && comingUpTop.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center text-center py-16 px-6">
-                    <motion.div
-                      className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-4"
-                      initial={reduceMotion ? false : { scale: 0, rotate: -30 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.2 }}
-                    >
-                      <CheckCircle2 size={26} />
-                    </motion.div>
-                    <p className="font-bold text-neutral-900">You're all caught up</p>
-                    <p className="text-sm text-neutral-500 mt-1">No pending tasks. Keep watching your lessons!</p>
+            <h2 className="text-[11px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-2">What's next</h2>
+            <div className="bg-white rounded-[2rem] shadow-card border border-[#EFEDEA] overflow-hidden">
+              {doNow.length === 0 && comingUpTop.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-14 px-6">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
+                    <CheckCircle2 size={24} />
                   </div>
-                ) : (
-                  <Accordion type="multiple" defaultValue={['do-now', 'coming-up']}>
-                    {doNow.length > 0 && (
-                      <AccordionItem value="do-now" className="border-black/5">
-                        <AccordionTrigger className="px-3">
-                          <span className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-neutral-500">
-                            Do now
-                            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-pastel-mint text-pastel-mint-fg text-[10px] font-extrabold normal-case">
-                              {doNow.length}
-                            </span>
-                          </span>
-                        </AccordionTrigger>
-                        <AccordionContent className="pb-2">
-                          <motion.div variants={staggerChildren} initial="hidden" animate="show">
-                            {doNow.map(item => <AgendaRow key={item.id} item={item} />)}
-                          </motion.div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
-                    {comingUpTop.length > 0 && (
-                      <AccordionItem value="coming-up" className="border-black/5">
-                        <AccordionTrigger className="px-3">
-                          <span className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-neutral-500">
-                            Coming up
-                            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-pastel-sky text-pastel-sky-fg text-[10px] font-extrabold normal-case">
-                              {comingUpTop.length}
-                            </span>
-                          </span>
-                        </AccordionTrigger>
-                        <AccordionContent className="pb-2">
-                          <motion.div variants={staggerChildren} initial="hidden" animate="show">
-                            {comingUpTop.map(item => <AgendaRow key={item.id} item={item} />)}
-                          </motion.div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
-                  </Accordion>
-                )}
-              </div>
+                  <p className="font-bold text-neutral-900">You're all caught up</p>
+                  <p className="text-sm text-neutral-500 mt-1">No pending tasks. Keep watching your lessons.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#F2F1EE]">
+                  {doNow.length > 0 && (
+                    <div className="p-2">
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold uppercase tracking-widest text-neutral-400">
+                        Do now · {doNow.length}
+                      </p>
+                      <motion.div variants={staggerChildren} initial="hidden" animate="show">
+                        {doNow.map(item => <AgendaRow key={item.id} item={item} />)}
+                      </motion.div>
+                    </div>
+                  )}
+                  {comingUpTop.length > 0 && (
+                    <div className="p-2">
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold uppercase tracking-widest text-neutral-400">
+                        Coming up · {comingUpTop.length}
+                      </p>
+                      <motion.div variants={staggerChildren} initial="hidden" animate="show">
+                        {comingUpTop.map(item => <AgendaRow key={item.id} item={item} />)}
+                      </motion.div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </motion.div>
 
           {/* ── 4. CONTINUE WATCHING / JUMP BACK IN RAIL ──
@@ -552,8 +507,8 @@ export default function StudentHomePage() {
           {/* ── 5. YOUR SUBJECTS RAIL ── */}
           {subjects.length > 0 && (
             <motion.div variants={fadeUp}>
-              <div className="flex items-center justify-between mb-4 px-2">
-                <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500">Your Subjects</h2>
+              <div className="flex items-center justify-between mb-3 px-2">
+                <h2 className="text-[11px] font-extrabold uppercase tracking-widest text-neutral-500">Your subjects</h2>
                 <button onClick={() => navigate('/student/subjects')} className="flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-neutral-900 transition-colors">
                   See all <ArrowRight size={13} />
                 </button>

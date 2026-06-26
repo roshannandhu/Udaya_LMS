@@ -866,52 +866,49 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
 
   return (
     <motion.div
-      className="relative rounded-[2rem] p-[2px] overflow-hidden"
-      initial={reduce ? false : { opacity: 0, y: 28, scale: 0.97 }}
-      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      className="relative rounded-[2rem] bg-white border border-[#EFEDEA] shadow-card overflow-hidden"
+      initial={reduce ? false : { opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
-      transition={{ type: 'spring', stiffness: 90, damping: 18, mass: 0.9 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
-      {/* conic border sweep while the answer streams in */}
-      {active && !reduce ? (
-        <motion.div
-          className="absolute left-1/2 top-1/2 w-[300%] aspect-square pointer-events-none"
-          style={{
-            x: '-50%', y: '-50%',
-            background: 'conic-gradient(from 0deg, #F1C2F7 0%, #872792 18%, #F1C2F7 32%, #F1C2F7 60%, #AD1A72 78%, #F1C2F7 100%)',
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 3.2, repeat: Infinity, ease: 'linear' }}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-[#F1C2F7]" />
-      )}
-
-      <div className="relative bg-[#F8E1FB] rounded-[calc(2rem-2px)] p-5 sm:p-6 overflow-hidden">
-        <div className="flex items-start justify-between gap-3">
+      {/* Subtle indigo top accent — a slow shimmer while the answer streams in,
+          a quiet static line otherwise. Transform-only, reduced-motion aware. */}
+      <div className="absolute inset-x-0 top-0 h-[3px] overflow-hidden">
+        {active && !reduce ? (
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.15, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <h3 className="text-[20px] font-black text-[#872792] leading-tight flex items-center gap-2 mb-1">
-              {reduce ? <Sparkles size={20} /> : (
-                <motion.span animate={{ scale: [1, 1.18, 1], rotate: [0, 8, 0] }} transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex">
-                  <Sparkles size={20} />
-                </motion.span>
-              )}
-              AI Mentor Analysis
+            className="h-full w-1/2 bg-gradient-to-r from-transparent via-[#6D28D9] to-transparent"
+            animate={{ x: ['-120%', '320%'] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-r from-transparent via-[#6D28D9]/35 to-transparent" />
+        )}
+      </div>
+
+      <div className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[16px] font-extrabold text-neutral-900 leading-tight flex items-center gap-2 mb-1">
+              <span className="w-7 h-7 rounded-xl bg-[#6D28D9]/10 text-[#6D28D9] flex items-center justify-center flex-shrink-0">
+                {reduce ? <Sparkles size={15} /> : (
+                  <motion.span animate={{ scale: [1, 1.12, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex">
+                    <Sparkles size={15} />
+                  </motion.span>
+                )}
+              </span>
+              AI Mentor
             </h3>
-            <p className="text-[12px] font-bold leading-snug" style={{ color: mentorHex('#872792', dark), opacity: 0.75 }}>Personalized coaching based on your streaks, trends and weak topics.</p>
-          </motion.div>
+            <p className="text-[12px] font-semibold text-neutral-500 leading-snug">Personalised coaching from your streaks, trends &amp; weak topics.</p>
+          </div>
           <motion.button
             onClick={onToggle}
-            whileHover={reduce ? undefined : { scale: 1.08 }}
-            whileTap={reduce ? undefined : { scale: 0.92 }}
-            className="flex-shrink-0 w-10 h-10 bg-white rounded-full flex items-center justify-center text-[#872792] shadow-sm border border-[#F1C2F7]/50"
+            whileHover={reduce ? undefined : { scale: 1.06 }}
+            whileTap={reduce ? undefined : { scale: 0.94 }}
+            aria-label={show ? 'Collapse AI Mentor' : 'Open AI Mentor'}
+            className="flex-shrink-0 w-9 h-9 bg-neutral-900 rounded-full flex items-center justify-center text-white shadow-sm"
           >
-            {show ? <ChevronUp size={18} strokeWidth={3} /> : <Play size={16} fill="currentColor" className="ml-0.5" />}
+            {show ? <ChevronUp size={17} strokeWidth={2.5} /> : <Play size={15} fill="currentColor" className="ml-0.5" />}
           </motion.button>
         </div>
 
@@ -925,18 +922,18 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
               transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
               className="overflow-hidden"
             >
-              <div className="mt-5 pt-4 border-t border-[#872792]/10">
+              <div className="mt-5 pt-4 border-t border-[#EFEDEA]">
                 {loading && !suggestions ? (
                   <div className="space-y-3">
                     <ThinkingDots />
                     {[80, 95, 60].map((w, i) => (
-                      <motion.div key={i} className="h-3 rounded-full bg-[#872792]/10" style={{ width: `${w}%` }}
+                      <motion.div key={i} className="h-3 rounded-full bg-neutral-200" style={{ width: `${w}%` }}
                         animate={reduce ? undefined : { opacity: [0.4, 0.9, 0.4] }}
                         transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.2 }} />
                     ))}
                   </div>
                 ) : error ? (
-                  <div className="p-3 bg-white/60 rounded-xl text-[12px] font-bold text-red-600 flex items-center gap-2">
+                  <div className="p-3 bg-red-50 rounded-xl text-[12px] font-bold text-red-600 flex items-center gap-2">
                     <AlertTriangle size={14} /> {error}
                   </div>
                 ) : suggestions ? (
@@ -944,12 +941,12 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                     {sections.map((s, i) => {
                       const meta = MENTOR_SECTIONS.find(m => m.title.toLowerCase() === (s.title || '').toLowerCase());
                       const Icon = meta?.icon || Sparkles;
-                      const hex = mentorHex(meta?.hex || '#872792', dark);
+                      const hex = mentorHex(meta?.hex || '#6D28D9', dark);
                       const isLastSection = i === sections.length - 1;
                       const isTimetable = /weekly timetable/i.test(s.title || '');
                       const Body = isTimetable ? TimetableBody : MentorBody;
                       const block = (
-                        <div className="bg-white/65 rounded-2xl p-4 border border-white/80">
+                        <div className="bg-[#FAFAF9] rounded-2xl p-4 border border-[#EFEDEA]">
                           {s.title && (
                             <p className="flex items-center gap-2 text-[13px] font-black mb-2" style={{ color: hex }}>
                               <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tint(hex, 0.12) }}>
@@ -982,16 +979,16 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                         transition={{ delay: 0.2 }}
                       >
                         <button onClick={onRegenerate}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white text-[#872792] text-[11px] font-extrabold shadow-sm border border-[#F1C2F7]/60 hover:bg-[#FDF4FE] transition-colors">
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-neutral-900 text-white text-[11px] font-extrabold shadow-sm hover:bg-neutral-800 transition-colors">
                           <RefreshCw size={12} /> Regenerate
                         </button>
                         <button onClick={copyAI}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white text-[#872792] text-[11px] font-extrabold shadow-sm border border-[#F1C2F7]/60 hover:bg-[#FDF4FE] transition-colors">
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white text-neutral-700 text-[11px] font-extrabold shadow-sm border border-[#EBEAE7] hover:bg-neutral-50 transition-colors">
                           {copiedAI ? <CheckCircle2 size={12} className="text-emerald-600" /> : <Copy size={12} />}
                           {copiedAI ? 'Copied' : 'Copy'}
                         </button>
                         {generatedAt && (
-                          <span className="text-[10px] font-extrabold text-[#872792]/50 ml-0.5">
+                          <span className="text-[10px] font-extrabold text-neutral-400 ml-0.5">
                             Generated {timeAgo(generatedAt)}
                           </span>
                         )}
@@ -999,8 +996,8 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                     )}
                   </motion.div>
                 ) : (
-                  <div className="flex items-center gap-2 text-[13px] font-extrabold text-[#872792]">
-                    <CheckCircle2 size={16} /> Looking sharp! Keep up the good work.
+                  <div className="flex items-center gap-2 text-[13px] font-extrabold text-neutral-700">
+                    <CheckCircle2 size={16} className="text-emerald-600" /> Looking sharp! Keep up the good work.
                   </div>
                 )}
               </div>
