@@ -15,7 +15,13 @@ import { ArrowLeft, AlertCircle, Loader, Video } from 'lucide-react';
  * don't use it.
  */
 
-const ZOOM_VERSION = '6.0.2';
+// Pinned to 3.13.2: Zoom's CDN stopped publishing the Client-View CSS
+// (css/bootstrap.css + css/react-select.css) for all 6.x versions — they 403 with
+// text/plain and get CORB-blocked, so the meeting JS loads but renders unstyled
+// (blank/black page). 3.13.2 serves a complete, consistent set (JS + vendor
+// globals + AV wasm + CSS, all 200/correct-MIME). The CSS <link>s in index.html
+// MUST match this version.
+const ZOOM_VERSION = '3.13.2';
 const ZOOM_CDN = `https://source.zoom.us/${ZOOM_VERSION}`;
 
 // Vendor globals MUST load before the meeting bundle (which references window.Redux etc.).
@@ -135,10 +141,11 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
   }, [isStudent]);
 
   useEffect(() => {
-    // Reveal the full-screen #zmmtg-root that lives in index.html (outside React).
-    const root = document.getElementById('zmmtg-root');
-    if (root) root.style.display = 'block';
-
+    // NOTE: #zmmtg-root (Zoom's full-screen, black meeting container, styled by
+    // Zoom's bootstrap.css) is revealed in handleJoinMeeting — NOT here. Showing
+    // it on mount paints a black full-screen layer OVER our light "Enter
+    // Classroom" screen, hiding the join button so the student is stuck on a
+    // black page (never reaches the click). Reveal it only once they click join.
     if (!startedRef.current) {
       startedRef.current = true;
       initZoomMeeting();
@@ -193,6 +200,10 @@ export default function ZoomMeetingView({ meeting_id, signature, sdk_key, role, 
 
   function handleJoinMeeting() {
     setStatus('joining');
+    // Reveal Zoom's full-screen #zmmtg-root only now — after the user clicked
+    // "Enter Classroom" — so its black container never covers the join button.
+    const root = document.getElementById('zmmtg-root');
+    if (root) root.style.display = 'block';
     startJoinWatchdog();
     const ZoomMtg = zoomRef.current;
     if (!ZoomMtg) return;

@@ -26,8 +26,11 @@
     <link rel="preconnect" href="https://source.zoom.us" crossorigin />
     <link rel="dns-prefetch" href="https://source.zoom.us" />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link type="text/css" rel="stylesheet" href="https://source.zoom.us/6.0.2/css/bootstrap.css" />
-    <link type="text/css" rel="stylesheet" href="https://source.zoom.us/6.0.2/css/react-select.css" />
+    <!-- Zoom Client-View CSS. Pinned to 3.13.2 to match ZOOM_VERSION in
+         ZoomMeetingView.jsx — 6.x CSS 403s on Zoom's CDN (CORB-blocked) and the
+         meeting renders blank/unstyled. Keep this version in sync with the component. -->
+    <link type="text/css" rel="stylesheet" href="https://source.zoom.us/3.13.2/css/bootstrap.css" />
+    <link type="text/css" rel="stylesheet" href="https://source.zoom.us/3.13.2/css/react-select.css" />
     <title>Udaya</title>
   </head>
     <script>
