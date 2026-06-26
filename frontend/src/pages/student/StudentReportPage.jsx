@@ -55,6 +55,7 @@ export default function StudentReportPage() {
         period={period}
         onPeriodChange={setPeriod}
         showHeader={true}
+        canExport={false}
       />
     </div>
   );

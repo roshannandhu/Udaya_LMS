@@ -36,7 +36,7 @@ export default function StudentDetailPage() {
   const handleDownloadPDF = async () => {
     if (!reportData) return;
     const { default: jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const s = reportData.student || {};
     const subjectRadar = reportData.subject_radar || [];
@@ -50,7 +50,7 @@ export default function StudentDetailPage() {
     );
     if (subjectRadar.length > 0) {
       doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
-      doc.autoTable({
+      autoTable(doc, {
         startY: 56,
         head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
         body: subjectRadar.map(r => [

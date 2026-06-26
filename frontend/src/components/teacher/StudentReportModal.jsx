@@ -35,7 +35,7 @@ export default function StudentReportModal({ open, onClose, studentId }) {
     if (!reportData) return;
     try {
       const jsPDFModule = await import('jspdf');
-      await import('jspdf-autotable');
+      const { default: autoTable } = await import('jspdf-autotable');
       const JsPDFConstructor = jsPDFModule.default || jsPDFModule.jsPDF;
       const doc = new JsPDFConstructor();
       const s = reportData.student || {};
@@ -49,7 +49,7 @@ export default function StudentReportModal({ open, onClose, studentId }) {
     const subjectRadar = reportData.subject_radar || [];
     if (subjectRadar.length > 0) {
       doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
-      doc.autoTable({
+      autoTable(doc, {
         startY: 56,
         head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
         body: subjectRadar.map(r => [

@@ -1040,7 +1040,7 @@ const PERIODS = [
   { id: 'overall', label: 'Overall' },
 ];
 
-export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, onDownloadPDF }) {
+export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, onDownloadPDF, canExport = true }) {
   const reduce = useReducedMotion();
   const dark = useTheme(s => s.dark);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -1234,7 +1234,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     if (onDownloadPDF) { onDownloadPDF(data); return; }
     try {
       const jsPDFModule = await import('jspdf');
-      await import('jspdf-autotable');
+      const { default: autoTable } = await import('jspdf-autotable');
       const JsPDFConstructor = jsPDFModule.default || jsPDFModule.jsPDF;
       const doc = new JsPDFConstructor();
       const s = student || {};
@@ -1247,7 +1247,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
       if (subjectRadar && subjectRadar.length > 0) {
         doc.setFontSize(14); doc.text('Subject Performance', 14, 58);
-        doc.autoTable({
+        autoTable(doc, {
           startY: 62,
           head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance', 'Assignments']],
           body: subjectRadar.map(r => [
@@ -1355,9 +1355,11 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     {copied ? <CheckCircle2 size={15} className="text-emerald-400" /> : <Share2 size={15} />}
                     {copied ? 'Copied' : 'Share'}
                   </button>
-                  <button onClick={handleDownloadPDF} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-extrabold bg-white hover:bg-neutral-100 text-[#0f1014] rounded-full shadow-sm transition-all">
-                    <Download size={15} /> Export PDF
-                  </button>
+                  {canExport && (
+                    <button onClick={handleDownloadPDF} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-extrabold bg-white hover:bg-neutral-100 text-[#0f1014] rounded-full shadow-sm transition-all">
+                      <Download size={15} /> Export PDF
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

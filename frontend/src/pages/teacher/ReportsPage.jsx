@@ -57,7 +57,7 @@ export default function ReportsPage() {
   const handleExportPDF = async () => {
     if (!analytics || !currentStd) return;
     const { default: jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const now = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -82,7 +82,7 @@ export default function ReportsPage() {
         s.points || 0,
       ]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 44,
       head: [['#', 'Name', 'Avg Score', 'Attendance', 'Points']],
       body: rows,
@@ -96,7 +96,7 @@ export default function ReportsPage() {
       doc.setFontSize(13);
       doc.text('Subject Performance', 14, finalY);
       const subRows = analytics.subject_performance.map(s => [s.subject_name, `${s.avg_score}%`, `${s.avg_attendance}%`]);
-      doc.autoTable({
+      autoTable(doc, {
         startY: finalY + 6,
         head: [['Subject', 'Avg Score', 'Avg Attendance']],
         body: subRows,
