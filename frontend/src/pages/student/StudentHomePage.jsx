@@ -439,7 +439,7 @@ export default function StudentHomePage() {
   return (
     <div className="min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900">
       <div className="w-full max-w-[1100px] mx-auto px-5 pt-8">
-        <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-8 lg:gap-10 pb-[150px]">
+        <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-6 lg:gap-8 pb-8">
 
           {/* ── 1. GREETING HERO STRIP ── */}
           <motion.div variants={fadeUp} className="flex items-end justify-between gap-4">
@@ -736,7 +736,7 @@ export default function StudentHomePage() {
             </h2>
             <div className="grid lg:grid-cols-3 gap-5">
               {/* Primary agenda */}
-              <div className="lg:col-span-2 bg-white rounded-[2rem] shadow-card border border-black/5 overflow-hidden px-3 py-2">
+              <div className="lg:col-span-2 bg-white rounded-[2rem] shadow-card border border-black/5 overflow-hidden p-3">
                 {doNow.length === 0 && comingUpTop.length === 0 ? (
                   <div className="flex flex-col items-center justify-center text-center py-16 px-6">
                     <motion.div
@@ -792,7 +792,7 @@ export default function StudentHomePage() {
 
               {/* Secondary: announcements + notes */}
               <div className="flex flex-col gap-5">
-                <div className="bg-white rounded-[2rem] p-2 shadow-card border border-black/5 flex flex-col min-h-[150px]">
+                <div className="bg-white rounded-[2rem] p-3 shadow-card border border-black/5 flex flex-col min-h-[150px]">
                   <p className="px-3 pt-3 pb-1 text-[11px] font-extrabold uppercase tracking-widest text-neutral-400">Announcements</p>
                   {latestBroadcasts.length > 0 ? latestBroadcasts.map((b, i) => (
                     <motion.div
@@ -816,7 +816,7 @@ export default function StudentHomePage() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-[2rem] p-2 shadow-card border border-black/5 flex flex-col min-h-[120px]">
+                <div className="bg-white rounded-[2rem] p-3 shadow-card border border-black/5 flex flex-col min-h-[120px]">
                   <p className="px-3 pt-3 pb-1 text-[11px] font-extrabold uppercase tracking-widest text-neutral-400">Recent Notes</p>
                   {recentNotes.length > 0 ? recentNotes.map((n, i) => (
                     <motion.div

@@ -455,7 +455,7 @@ export default function TodayPage() {
               <motion.div variants={fadeUp}>
                 <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">To-do list</h2>
                 <Card padded={false} className="overflow-hidden">
-                  <div className="flex items-center gap-2 p-3 border-b border-[#EFEDEA]">
+                  <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[#EFEDEA]">
                     <input
                       value={newReminder}
                       onChange={(e) => setNewReminder(e.target.value)}
@@ -505,7 +505,7 @@ export default function TodayPage() {
                       const pastel = pastelTokens(pastelFor(s.name), dark);
                       return (
                         <button key={s.id} onClick={() => navigate(`/teacher/standards/${s.id}`)}
-                          className="flex items-center gap-3 p-3 rounded-card border border-black/5 hover:shadow-soft hover:-translate-y-0.5 transition-all text-left"
+                          className="flex items-center gap-3 p-3.5 rounded-card border border-black/5 hover:shadow-soft hover:-translate-y-0.5 transition-all text-left"
                           style={{ background: pastel.hex }}>
                           <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: pastel.fgHex }}>
                             <SubjectIcon value={s.emoji} size={20} fallback="graduation" />

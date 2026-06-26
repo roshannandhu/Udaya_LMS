@@ -55,10 +55,12 @@ export default function TeacherLayout() {
     // browser toolbar can't collapse on scroll, so the fixed bottom dock stops
     // drifting. Desktop (lg) keeps normal body scroll, unchanged.
     // pt-[env(safe-area-inset-top)]: on the Android APK (edge-to-edge, targetSdk 36)
-    // the WebView draws under the status bar. Padding the shell top by the inset
-    // pushes TopNav/content/headers below the clock/network/notification icons.
-    // env() is 0 on desktop/non-notched, so this is inert there.
-    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[env(safe-area-inset-top)] lg:pt-0">
+    // the WebView draws under the status bar, and Android's WebView reports
+    // env(safe-area-inset-top) as 0 even with viewport-fit=cover — so the bare
+    // inset was inert and headers got clipped under the clock/icons. The 28px
+    // floor guarantees clearance on the APK; env() wins on larger-notch devices.
+    // lg:pt-0 keeps desktop flush (the floor never applies there).
+    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[max(env(safe-area-inset-top),28px)] lg:pt-0">
       <TopNav type="teacher" />
       {/* overflow-x-clip (not -hidden: that would break position:sticky headers)
           stops sideways pan; overflow-y-auto makes this the phone scroll area. */}
