@@ -13,7 +13,11 @@ import android.os.Build;
  *  defensively before posting, since a channel must exist on Android 8+ for a
  *  notification to show. */
 public final class NotificationChannels {
-    public static final String DEFAULT = "udaya_default";   // normal pushes
+    // NOTE: a channel's sound/importance is LOCKED at creation — Android ignores later
+    // edits. The original "udaya_default" shipped without an explicit sound, so we use a
+    // NEW id here to guarantee the sound-enabled settings actually take effect on devices
+    // that already created the old one. Must match FCM_DEFAULT_CHANNEL in backend/main.py.
+    public static final String DEFAULT = "udaya_messages";  // normal pushes (with sound)
     public static final String ALARM   = "udaya_alarm";     // full-screen live-class reminders
 
     private NotificationChannels() {}
@@ -23,11 +27,23 @@ public final class NotificationChannels {
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);
         if (nm == null) return;
 
+        // Remove the old soundless channel so it doesn't linger in app settings.
+        try { nm.deleteNotificationChannel("udaya_default"); } catch (Exception ignored) {}
+
         if (nm.getNotificationChannel(DEFAULT) == null) {
             NotificationChannel def = new NotificationChannel(
                 DEFAULT, "General", NotificationManager.IMPORTANCE_HIGH);
             def.setDescription("Class updates, replies and reminders");
             def.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            if (sound != null) {
+                AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build();
+                def.setSound(sound, attrs);
+            }
+            def.enableVibration(true);
             nm.createNotificationChannel(def);
         }
 

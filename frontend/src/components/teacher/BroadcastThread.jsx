@@ -375,7 +375,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-2 relative" onClick={() => { setMenuId(null); setShowEmojiPicker(false); }}>
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 md:px-8 space-y-2 relative" onClick={() => { setMenuId(null); setShowEmojiPicker(false); }}>
         {visibleBroadcasts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
             <div className="bg-[#fff9c4] text-[#8a7e00] px-4 py-2 rounded-xl text-xs shadow-sm max-w-[280px]">

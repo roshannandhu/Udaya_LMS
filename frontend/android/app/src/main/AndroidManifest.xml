@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -29,16 +28,13 @@
             android:launchMode="singleInstance"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/AlarmTheme" />
+            android:theme="@style/AlarmTheme"
+        />
 
         <!-- Our FCM service replaces the plugin's so it can raise full-screen alarms.
              It extends the plugin's MessagingService, so normal pushes still work. -->
-        <service
-            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
-            tools:node="remove" />
-        <service
-            android:name=".UdayaMessagingService"
-            android:exported="false">
+        <service android:name="com.capacitorjs.plugins.pushnotifications.MessagingService" tools:node="remove" />
+        <service android:name=".UdayaMessagingService" android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
@@ -47,10 +43,12 @@
         <!-- Default channel + small icon for normal pushes -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="udaya_default" />
+            android:value="udaya_messages"
+        />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_stat_notify" />
+            android:resource="@drawable/ic_stat_notify"
+        />
 
         <provider
             android:name="androidx.core.content.FileProvider"

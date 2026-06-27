@@ -162,7 +162,7 @@ export default function BroadcastsPage() {
       <div className="flex flex-1 min-h-0 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 lg:h-[calc(100vh-120px)]">
 
         {/* Standards list pane (Sidebar) */}
-        <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col w-full md:w-[350px] lg:w-[400px] bg-white border-r border-neutral-200 flex-shrink-0`}>
+        <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col min-h-0 w-full md:w-[350px] lg:w-[400px] bg-white border-r border-neutral-200 flex-shrink-0`}>
           {/* Sidebar Header */}
           <div className="hidden md:flex items-center justify-between px-4 py-3 bg-[#f0f2f5] border-b border-neutral-200">
             <h2 className="text-lg font-bold text-neutral-800">Broadcasts</h2>
@@ -206,7 +206,7 @@ export default function BroadcastsPage() {
         </div>
 
         {/* Thread pane (Chat Area) */}
-        <div className={`${showThread ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-w-0 bg-[#efeae2] relative`}>
+        <div className={`${showThread ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-w-0 min-h-0 bg-[#efeae2] relative`}>
           {std ? (
             <BroadcastThread
               key={activeStdId}

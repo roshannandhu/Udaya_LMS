@@ -20,6 +20,30 @@ const isAndroid = () => {
   try { return Capacitor.getPlatform() === 'android'; } catch { return false; }
 };
 
+// Short two-tone "ding" via Web Audio — no bundled asset. Used when a push arrives
+// while the app is in the foreground (the OS stays silent for foreground pushes).
+function playDing() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ac = new Ctx();
+    const now = ac.currentTime;
+    [[880, 0], [1175, 0.13]].forEach(([freq, at]) => {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + at);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.18);
+      osc.connect(gain).connect(ac.destination);
+      osc.start(now + at);
+      osc.stop(now + at + 0.2);
+    });
+    setTimeout(() => { try { ac.close(); } catch { /* ignore */ } }, 600);
+  } catch { /* ignore */ }
+}
+
 // Map a notification's data payload to an in-app route. Best-effort; falls back to
 // the role home. push.js runs outside the Router, so we navigate via the URL.
 function routeForData(data = {}) {
@@ -66,9 +90,11 @@ export async function initPush() {
     _handles.push(await PushNotifications.addListener('registrationError', (e) =>
       console.warn('[push] registration error', e)));
 
-    // Foreground message → refresh the in-app bell (background/closed messages are
-    // shown by the OS / native service, not here).
+    // Foreground message → the OS shows nothing for foreground pushes, so make it
+    // audible in-app (a short ding) and refresh the bell. Background/closed messages
+    // are shown + sounded by the OS via the udaya_messages channel.
     _handles.push(await PushNotifications.addListener('pushNotificationReceived', () => {
+      playDing();
       try { window.dispatchEvent(new CustomEvent('udaya:notifications-refresh')); } catch { /* ignore */ }
     }));
 

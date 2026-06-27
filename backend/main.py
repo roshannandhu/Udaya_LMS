@@ -4914,17 +4914,23 @@ def _fcm_access_token() -> Optional[str]:
         return None
 
 
+# Notification channel id — MUST match NotificationChannels.DEFAULT in the Android app.
+FCM_DEFAULT_CHANNEL = "udaya_messages"
+
+
 def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dict] = None,
               android_high_priority: bool = False):
     """Send one FCM message per token (HTTP v1). `notification` = {title, body} shows a
-    system-tray notification when backgrounded; pass None for data-only (the native
-    UdayaMessagingService then builds the full-screen alarm). Dead tokens are pruned.
-    Synchronous (call via _push_to_recipients / a thread)."""
+    system-tray notification when backgrounded (on the udaya_messages channel, which has
+    sound); pass None for data-only (the native UdayaMessagingService then builds the
+    full-screen alarm). Dead tokens are pruned. Returns a list of per-token
+    {token, status, error} so callers (the diagnostic endpoint) can report results."""
+    results = []
     if not _load_fcm_sa() or not _fcm_project_id or not tokens:
-        return
+        return results
     access = _fcm_access_token()
     if not access:
-        return
+        return results
     url = f"https://fcm.googleapis.com/v1/projects/{_fcm_project_id}/messages:send"
     headers = {"Authorization": f"Bearer {access}", "Content-Type": "application/json"}
     str_data = {k: ("" if v is None else str(v)) for k, v in (data or {}).items()}
@@ -4937,12 +4943,22 @@ def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dic
                 if notification:
                     message["notification"] = {"title": notification.get("title") or "",
                                                "body": notification.get("body") or ""}
-                    android["notification"] = {"channel_id": "udaya_default"}
+                    # Channel carries the sound on Android 8+; sound/priority here make
+                    # it ring + heads-up reliably (and cover pre-O devices).
+                    android["notification"] = {
+                        "channel_id": FCM_DEFAULT_CHANNEL,
+                        "sound": "default",
+                        "default_sound": True,
+                        "notification_priority": "PRIORITY_HIGH",
+                    }
+                tail = tok[-8:]
                 try:
                     resp = client.post(url, headers=headers, json={"message": message})
                     if resp.status_code == 200:
+                        results.append({"token": tail, "status": 200})
                         continue
                     body_txt = resp.text or ""
+                    results.append({"token": tail, "status": resp.status_code, "error": body_txt[:160]})
                     if resp.status_code in (400, 403, 404):
                         low = body_txt.lower()
                         if ("unregistered" in low or "not-registered" in low
@@ -4952,6 +4968,7 @@ def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dic
                             continue
                     print(f"[fcm] send {resp.status_code}: {body_txt[:200]}")
                 except Exception as e:
+                    results.append({"token": tail, "status": "error", "error": str(e)[:160]})
                     print(f"[fcm] send error: {e}")
     finally:
         if dead and service_supabase:
@@ -4960,6 +4977,7 @@ def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dic
                 print(f"[fcm] pruned {len(dead)} dead token(s)")
             except Exception as e:
                 print(f"[fcm] prune failed: {e}")
+    return results
 
 
 def _tokens_for_recipients(recipient_ids) -> list:
@@ -4986,7 +5004,8 @@ def _push_to_recipients(recipient_ids, title: str, body: str = "", data: dict = 
             tokens = _tokens_for_recipients(recipient_ids)
             if tokens:
                 _send_fcm(tokens, notification={"title": title, "body": body or ""},
-                          data={**(data or {}), "kind": (data or {}).get("kind", "notification")})
+                          data={**(data or {}), "kind": (data or {}).get("kind", "notification")},
+                          android_high_priority=True)
         except Exception as e:
             print(f"[push] fan-out failed: {e}")
 
@@ -7485,6 +7504,47 @@ def unregister_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
     except Exception as e:
         print(f"[devices] unregister failed: {e}")
     return {"ok": True}
+
+
+@app.get("/api/admin/push-debug")
+def push_debug(test: int = 0, user = Depends(verify_token)):
+    """Diagnose push delivery. Reports whether FCM is configured server-side and how
+    many device tokens the caller has; with ?test=1 it sends a real test notification to
+    the caller's own phones and returns the raw per-token FCM result so the exact failure
+    (permission / token / project / auth) is visible without guessing. Teacher only."""
+    if user["role"] not in ("teacher", "sub_teacher"):
+        raise HTTPException(status_code=403, detail="Teacher only")
+    configured = bool(_load_fcm_sa())
+    out = {
+        "fcm_configured": configured,
+        "project_id": _fcm_project_id,
+        "my_user_id": user["user_id"],
+        "my_token_count": 0,
+        "tested": False,
+    }
+    if service_supabase:
+        try:
+            rows = service_supabase.table("device_tokens").select("token, platform, updated_at").eq("user_id", user["user_id"]).execute()
+            toks = [r["token"] for r in (rows.data or []) if r.get("token")]
+            out["my_token_count"] = len(toks)
+            out["platforms"] = list({r.get("platform") for r in (rows.data or [])})
+        except Exception as e:
+            out["token_lookup_error"] = str(e)[:160]
+            toks = []
+    else:
+        toks = []
+    if test and configured and toks:
+        out["tested"] = True
+        out["results"] = _send_fcm(
+            toks,
+            notification={"title": "Udaya test", "body": "Push notifications are working 🎉"},
+            data={"kind": "test"}, android_high_priority=True,
+        )
+    elif test:
+        out["tested"] = False
+        out["test_skipped_reason"] = ("fcm not configured" if not configured
+                                      else "no device tokens for this user — log in on the phone first")
+    return out
 
 
 # --- WebSockets & Broadcasts & Uploads ---
