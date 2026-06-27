@@ -168,7 +168,7 @@ export default function BroadcastsPage() {
             <h2 className="text-lg font-bold text-neutral-800">Broadcasts</h2>
           </div>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             {standards.map(s => {
               const broadcasts = (broadcastsByStandard[s.id] || []).filter(b => !b.deleted);
               const lastMsg = broadcasts[broadcasts.length - 1];
