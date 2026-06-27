@@ -4915,7 +4915,7 @@ def _fcm_access_token() -> Optional[str]:
 
 
 # Notification channel id — MUST match NotificationChannels.DEFAULT in the Android app.
-FCM_DEFAULT_CHANNEL = "udaya_messages"
+FCM_DEFAULT_CHANNEL = "udaya_messages_v2"
 
 
 def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dict] = None,

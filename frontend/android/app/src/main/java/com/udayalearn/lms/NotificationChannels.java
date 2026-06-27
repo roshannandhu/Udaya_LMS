@@ -17,8 +17,8 @@ public final class NotificationChannels {
     // edits. The original "udaya_default" shipped without an explicit sound, so we use a
     // NEW id here to guarantee the sound-enabled settings actually take effect on devices
     // that already created the old one. Must match FCM_DEFAULT_CHANNEL in backend/main.py.
-    public static final String DEFAULT = "udaya_messages";  // normal pushes (with sound)
-    public static final String ALARM   = "udaya_alarm";     // full-screen live-class reminders
+    public static final String DEFAULT = "udaya_messages_v2"; // normal pushes (with sound)
+    public static final String ALARM   = "udaya_alarm";       // full-screen live-class reminders
 
     private NotificationChannels() {}
 
@@ -27,8 +27,9 @@ public final class NotificationChannels {
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);
         if (nm == null) return;
 
-        // Remove the old soundless channel so it doesn't linger in app settings.
+        // Remove older channels so they don't linger soundless in app settings.
         try { nm.deleteNotificationChannel("udaya_default"); } catch (Exception ignored) {}
+        try { nm.deleteNotificationChannel("udaya_messages"); } catch (Exception ignored) {}
 
         if (nm.getNotificationChannel(DEFAULT) == null) {
             NotificationChannel def = new NotificationChannel(
