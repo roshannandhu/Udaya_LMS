@@ -13,12 +13,32 @@ import { Capacitor } from '@capacitor/core';
 import { deviceApi } from './api';
 
 const LAST_TOKEN_KEY = 'udaya_fcm_token';
+const STATUS_KEY = 'udaya_push_status';
 let _initialized = false;
 let _handles = [];
 
 const isAndroid = () => {
   try { return Capacitor.getPlatform() === 'android'; } catch { return false; }
 };
+
+// Persist a readable push status so the in-app "Notifications" panel can show the
+// real device state (granted/denied/token/error) — turns blind rebuilds into a
+// one-screen diagnosis.
+function setStatus(patch) {
+  let cur = {};
+  try { cur = JSON.parse(localStorage.getItem(STATUS_KEY) || '{}'); } catch { /* ignore */ }
+  const next = { ...cur, ...patch, at: Date.now() };
+  try { localStorage.setItem(STATUS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  try { window.dispatchEvent(new CustomEvent('udaya:push-status', { detail: next })); } catch { /* ignore */ }
+  return next;
+}
+
+export function getPushStatus() {
+  if (!isAndroid()) return { platform: 'web', supported: false };
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(STATUS_KEY) || '{}'); } catch { /* ignore */ }
+  return { platform: 'android', supported: true, ...s };
+}
 
 // Short two-tone "ding" via Web Audio — no bundled asset. Used when a push arrives
 // while the app is in the foreground (the OS stays silent for foreground pushes).
@@ -70,7 +90,12 @@ async function syncToken(token) {
   try {
     await deviceApi.register(token, 'android');
     localStorage.setItem(LAST_TOKEN_KEY, token);
-  } catch { /* best-effort; will retry next launch */ }
+    setStatus({ permission: 'granted', registered: true, error: null,
+                tokenTail: String(token).slice(-10) });
+  } catch (e) {
+    setStatus({ permission: 'granted', registered: false,
+                error: 'token-registered-but-server-save-failed' });
+  }
 }
 
 export async function initPush() {
@@ -84,11 +109,14 @@ export async function initPush() {
     if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
       perm = await PushNotifications.requestPermissions();
     }
+    setStatus({ permission: perm.receive });
     if (perm.receive !== 'granted') { _initialized = false; return; }
 
     _handles.push(await PushNotifications.addListener('registration', (t) => syncToken(t?.value)));
-    _handles.push(await PushNotifications.addListener('registrationError', (e) =>
-      console.warn('[push] registration error', e)));
+    _handles.push(await PushNotifications.addListener('registrationError', (e) => {
+      console.warn('[push] registration error', e);
+      setStatus({ registered: false, error: 'fcm-registration-error: ' + (e?.error || JSON.stringify(e)) });
+    }));
 
     // Foreground message → the OS shows nothing for foreground pushes, so make it
     // audible in-app (a short ding) and refresh the bell. Background/closed messages
@@ -109,6 +137,29 @@ export async function initPush() {
     console.warn('[push] init failed', e);
     _initialized = false;
   }
+}
+
+// User-triggered: force a fresh registration attempt (re-requests permission). If
+// the OS reports permission permanently denied, returns {needsSettings:true} so the
+// UI can guide the user to system settings. Returns the latest status.
+export async function enablePush() {
+  if (!isAndroid()) return { supported: false };
+  _initialized = false;            // allow a fresh attempt
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive !== 'granted') perm = await PushNotifications.requestPermissions();
+    setStatus({ permission: perm.receive });
+    if (perm.receive === 'denied') {
+      // Permanently denied — the prompt won't show again; user must enable in the
+      // phone's app settings. The UI shows guidance when needsSettings is true.
+      return { ...getPushStatus(), needsSettings: true };
+    }
+  } catch (e) {
+    setStatus({ error: 'enable-failed: ' + (e?.message || String(e)) });
+  }
+  await initPush();
+  return getPushStatus();
 }
 
 export async function unregisterPush() {
