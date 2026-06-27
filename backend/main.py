@@ -7559,9 +7559,24 @@ def push_debug(test: int = 0, test_all: int = 0, user = Depends(verify_token)):
         except Exception as e:
             out["token_lookup_error"] = str(e)[:160]
         try:
-            allrows = service_supabase.table("device_tokens").select("token").execute()
-            all_toks = [r["token"] for r in (allrows.data or []) if r.get("token")]
+            allrows = service_supabase.table("device_tokens").select("token, user_id, platform, updated_at").execute()
+            all_rows = allrows.data or []
+            all_toks = [r["token"] for r in all_rows if r.get("token")]
             out["total_tokens"] = len(all_toks)
+            # Label each token's owner as student vs teacher so we can see if any
+            # STUDENT is actually registered (broadcasts push to students).
+            uids = list({r.get("user_id") for r in all_rows if r.get("user_id")})
+            student_ids = set()
+            if uids:
+                srows = service_supabase.table("students").select("id").in_("id", uids).execute()
+                student_ids = {r["id"] for r in (srows.data or [])}
+            out["tokens_detail"] = [{
+                "user": (r.get("user_id") or "")[:8],
+                "role": "student" if r.get("user_id") in student_ids else "teacher/other",
+                "platform": r.get("platform"),
+                "updated_at": r.get("updated_at"),
+            } for r in all_rows]
+            out["student_token_count"] = sum(1 for r in all_rows if r.get("user_id") in student_ids)
         except Exception as e:
             out["all_token_lookup_error"] = str(e)[:160]
 
