@@ -638,6 +638,8 @@ async def _deferred_startup_migrations():
 async def startup_event():
     await _ensure_plain_password_column()
     await _ensure_live_class_columns()
+    if not _load_fcm_sa():
+        print("[!] Android push disabled: FCM_SERVICE_ACCOUNT_JSON is not configured")
     # Fire-and-forget: do NOT await — these must not delay login readiness.
     asyncio.create_task(_deferred_startup_migrations())
     asyncio.create_task(_broadcast_cleanup_loop())
@@ -7422,7 +7424,7 @@ def delete_reminder(reminder_id: str, user = Depends(verify_token)):
 @app.get("/api/notifications")
 def get_notifications(user = Depends(verify_token)):
     if not service_supabase:
-        return []
+        raise HTTPException(status_code=503, detail="Notification database unavailable")
     try:
         response = service_supabase.table("notifications").select("*")\
             .eq("recipient_id", user["user_id"])\
@@ -7430,34 +7432,37 @@ def get_notifications(user = Depends(verify_token)):
             .limit(30)\
             .execute()
         return response.data or []
-    except Exception:
-        return []
+    except Exception as e:
+        print(f"[notifications] list failed: {e}")
+        raise HTTPException(status_code=503, detail="Notifications are temporarily unavailable")
 
 @app.patch("/api/notifications/{notification_id}/read")
 def mark_notification_read(notification_id: str, user = Depends(verify_token)):
     if not service_supabase:
-        return {"ok": True}
+        raise HTTPException(status_code=503, detail="Notification database unavailable")
     try:
         service_supabase.table("notifications").update({"read": True})\
             .eq("id", notification_id)\
             .eq("recipient_id", user["user_id"])\
             .execute()
         return {"ok": True}
-    except Exception:
-        return {"ok": True}
+    except Exception as e:
+        print(f"[notifications] mark read failed: {e}")
+        raise HTTPException(status_code=503, detail="Could not update notification")
 
 @app.post("/api/notifications/read-all")
 def mark_all_notifications_read(user = Depends(verify_token)):
     if not service_supabase:
-        return {"ok": True}
+        raise HTTPException(status_code=503, detail="Notification database unavailable")
     try:
         service_supabase.table("notifications").update({"read": True})\
             .eq("recipient_id", user["user_id"])\
             .eq("read", False)\
             .execute()
         return {"ok": True}
-    except Exception:
-        return {"ok": True}
+    except Exception as e:
+        print(f"[notifications] mark all read failed: {e}")
+        raise HTTPException(status_code=503, detail="Could not update notifications")
 
 
 # ─── DEVICE TOKENS (push notification registration) ──────────────────────────
@@ -7472,7 +7477,7 @@ def register_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
     token so the same device re-binds to whoever is currently logged in (shared
     phones), and a re-login just refreshes updated_at."""
     if not service_supabase:
-        return {"ok": True}
+        raise HTTPException(status_code=503, detail="Device registration database unavailable")
     token = (req.token or "").strip()
     if not token:
         raise HTTPException(status_code=400, detail="token required")
@@ -7486,7 +7491,7 @@ def register_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
         }, on_conflict="token").execute()
     except Exception as e:
         print(f"[devices] register failed: {e}")
-        return {"ok": False}
+        raise HTTPException(status_code=503, detail="Could not register this device for notifications")
     return {"ok": True}
 
 
@@ -7495,7 +7500,7 @@ def unregister_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
     """Remove this phone's token (called on logout) so the previous user stops
     receiving pushes on a shared device."""
     if not service_supabase:
-        return {"ok": True}
+        raise HTTPException(status_code=503, detail="Device registration database unavailable")
     token = (req.token or "").strip()
     if not token:
         return {"ok": True}
@@ -7503,15 +7508,17 @@ def unregister_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
         service_supabase.table("device_tokens").delete().eq("token", token).execute()
     except Exception as e:
         print(f"[devices] unregister failed: {e}")
+        raise HTTPException(status_code=503, detail="Could not unregister this device")
     return {"ok": True}
 
 
 @app.get("/api/admin/push-debug")
-def push_debug(test: int = 0, user = Depends(verify_token)):
-    """Diagnose push delivery. Reports whether FCM is configured server-side and how
-    many device tokens the caller has; with ?test=1 it sends a real test notification to
-    the caller's own phones and returns the raw per-token FCM result so the exact failure
-    (permission / token / project / auth) is visible without guessing. Teacher only."""
+def push_debug(test: int = 0, test_all: int = 0, user = Depends(verify_token)):
+    """Diagnose push delivery. Reports whether FCM is configured, the caller's token
+    count, and the TOTAL token count across all users. With ?test=1 sends to the caller's
+    own phones; with ?test_all=1 sends a test to EVERY registered token and returns the
+    raw per-token FCM result — so the true failure (API-not-enabled / auth / sender
+    mismatch / 200-delivered) is visible without guessing. Teacher only."""
     if user["role"] not in ("teacher", "sub_teacher"):
         raise HTTPException(status_code=403, detail="Teacher only")
     configured = bool(_load_fcm_sa())
@@ -7520,30 +7527,42 @@ def push_debug(test: int = 0, user = Depends(verify_token)):
         "project_id": _fcm_project_id,
         "my_user_id": user["user_id"],
         "my_token_count": 0,
+        "total_tokens": 0,
         "tested": False,
     }
+    # Surface OAuth-mint health explicitly (a None token = SA/scope/clock problem).
+    if configured:
+        out["oauth_token_ok"] = bool(_fcm_access_token())
+
+    toks, all_toks = [], []
     if service_supabase:
         try:
-            rows = service_supabase.table("device_tokens").select("token, platform, updated_at").eq("user_id", user["user_id"]).execute()
+            rows = service_supabase.table("device_tokens").select("token, platform, user_id").eq("user_id", user["user_id"]).execute()
             toks = [r["token"] for r in (rows.data or []) if r.get("token")]
             out["my_token_count"] = len(toks)
             out["platforms"] = list({r.get("platform") for r in (rows.data or [])})
         except Exception as e:
             out["token_lookup_error"] = str(e)[:160]
-            toks = []
-    else:
-        toks = []
-    if test and configured and toks:
+        try:
+            allrows = service_supabase.table("device_tokens").select("token").execute()
+            all_toks = [r["token"] for r in (allrows.data or []) if r.get("token")]
+            out["total_tokens"] = len(all_toks)
+        except Exception as e:
+            out["all_token_lookup_error"] = str(e)[:160]
+
+    target = all_toks if test_all else toks
+    if (test or test_all) and configured and target:
         out["tested"] = True
+        out["tested_token_count"] = len(target)
         out["results"] = _send_fcm(
-            toks,
+            target,
             notification={"title": "Udaya test", "body": "Push notifications are working 🎉"},
             data={"kind": "test"}, android_high_priority=True,
         )
-    elif test:
+    elif test or test_all:
         out["tested"] = False
         out["test_skipped_reason"] = ("fcm not configured" if not configured
-                                      else "no device tokens for this user — log in on the phone first")
+                                      else "no device tokens to send to")
     return out
 
 
