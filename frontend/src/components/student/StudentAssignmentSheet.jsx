@@ -142,7 +142,7 @@ export default function StudentAssignmentSheet({
         {assignment.description && (
           <div>
             <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Question</p>
-            <p className="text-sm text-neutral-800 whitespace-pre-wrap leading-relaxed bg-neutral-50 rounded-xl p-4 border border-neutral-100">
+            <p className="text-sm text-neutral-800 whitespace-pre-wrap leading-relaxed bg-neutral-50 rounded-xl p-4">
               {assignment.description}
             </p>
           </div>

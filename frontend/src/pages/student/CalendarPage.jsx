@@ -210,7 +210,7 @@ export default function CalendarPage() {
         <div className="flex-1">
           
           {/* Controls */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-neutral-100">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm">
             <div className="flex items-center justify-between w-full sm:w-auto gap-2 sm:gap-4">
               <button onClick={handlePrev} className="p-2 hover:bg-neutral-100 rounded-full transition-colors text-neutral-600">
                 <ChevronLeft size={20} />
@@ -231,7 +231,7 @@ export default function CalendarPage() {
           </div>
 
           {/* Calendar Rendering */}
-          <div className="bg-white p-3 md:p-6 rounded-3xl shadow-sm border border-neutral-100 relative min-h-[300px]">
+          <div className="bg-white p-3 md:p-6 rounded-3xl shadow-sm relative min-h-[300px]">
             {loading && (
               <div className="absolute inset-0 z-10 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-3xl">
                 <Loader2 size={32} className="animate-spin text-[#00acc1]" />
@@ -317,7 +317,7 @@ export default function CalendarPage() {
 
         {/* Right Side: Daily Agenda */}
         <div className="w-full md:w-96 flex-shrink-0">
-          <div className="bg-white rounded-3xl shadow-sm border border-neutral-100 p-6 sticky top-32">
+          <div className="bg-white rounded-3xl shadow-sm p-6 sticky top-32">
             <h3 className="text-xl font-bold text-neutral-900 mb-6 flex items-center gap-2">
               Agenda for {format(selectedDate, 'MMM d, yyyy')}
               {isToday(selectedDate) && <span className="bg-[#e0f7fa] text-[#00acc1] text-xs px-2 py-0.5 rounded-md ml-2">Today</span>}
@@ -375,7 +375,7 @@ export default function CalendarPage() {
                       variants={reduce ? undefined : { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } } }}
                       whileHover={reduce ? undefined : { y: -2, scale: 1.005 }}
                       whileTap={reduce ? undefined : { scale: 0.985 }}
-                      className="flex gap-4 p-4 rounded-2xl border border-neutral-100 hover:shadow-md transition-shadow bg-white cursor-pointer"
+                      className="flex gap-4 p-4 rounded-2xl hover:shadow-md transition-shadow bg-white cursor-pointer"
                       onClick={() => handleEventClick(evt)}
                     >
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${bgColor} ${iconColor}`}>

@@ -420,7 +420,7 @@ export default function StudentHomePage() {
           </motion.div>
 
           {/* ── 2. GAMIFIED STAT TILES ── */}
-          <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <TiltCard variants={fadeUp} className="h-full">
               <StatTile
                 icon={ListChecks} label={tasksPending === 1 ? 'Task pending' : 'Tasks pending'} value={tasksPending} pastel="mint"
@@ -496,6 +496,21 @@ export default function StudentHomePage() {
               <VideoRail
                 title={continueList.length > 0 ? 'Continue Watching' : 'Jump Back In'}
                 items={continueList.length > 0 ? continueList : upNextList}
+                autoScroll
+                getSubjectName={getSubjectName}
+                onSeeAll={() => navigate('/student/subjects')}
+                onItemClick={(v) => navigate(`/student/subjects/${v.class_id}/video/${v.id}`)}
+              />
+            </motion.div>
+          )}
+
+          {/* ── 4b. RECOMMENDED RAIL (auto-scrolling) — only when the first rail
+                showed Continue Watching, so this surfaces new lessons separately. */}
+          {continueList.length > 0 && upNextList.length > 0 && (
+            <motion.div variants={fadeUp}>
+              <VideoRail
+                title="Recommended for you"
+                items={upNextList}
                 autoScroll
                 getSubjectName={getSubjectName}
                 onSeeAll={() => navigate('/student/subjects')}

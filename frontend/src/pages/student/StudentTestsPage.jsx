@@ -134,7 +134,7 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
           ) : (
             <button
               onClick={() => onRequestReattempt(t)}
-              className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-neutral-600 bg-transparent hover:bg-white/60 transition-all border border-black/10"
+              className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-neutral-600 bg-transparent hover:bg-white/60 transition-all"
             >
               <RotateCcw size={15} /> Request re-attempt
             </button>
@@ -157,7 +157,7 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
               </p>
               <button
                 onClick={() => onRequestReattempt(t)}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-neutral-700 bg-white/70 hover:bg-white transition-all border border-black/10"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-[13px] font-bold text-neutral-700 bg-white/70 hover:bg-white transition-all"
               >
                 <RotateCcw size={15} /> Request re-attempt
               </button>

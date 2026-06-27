@@ -105,7 +105,7 @@ export default function StudentSubjectsPage() {
                 <motion.div
                   onClick={() => navigate(`/student/subjects/${c.id}`)}
                   whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} transition={springCard}
-                  className="group rounded-card p-5 cursor-pointer border border-black/5 flex flex-col h-full"
+                  className="group rounded-card p-5 cursor-pointer flex flex-col h-full"
                   style={{ background: pastel.hex }}>
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: pastel.fgHex }}>

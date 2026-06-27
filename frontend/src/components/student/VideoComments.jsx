@@ -137,7 +137,7 @@ export default function VideoComments({ videoId }) {
               {/* Teacher's reply (left-aligned) */}
               {c.teacher_reply && (
                 <div className="flex flex-col items-start">
-                  <div className="max-w-[85%] bg-white dark:bg-slate-800 border border-[#EFEDEA] dark:border-slate-700 text-neutral-900 dark:text-white text-sm rounded-2xl rounded-tl-md px-3.5 py-2 shadow-sm whitespace-pre-wrap break-words">
+                  <div className="max-w-[85%] bg-white dark:bg-slate-800 text-neutral-900 dark:text-white text-sm rounded-2xl rounded-tl-md px-3.5 py-2 shadow-sm whitespace-pre-wrap break-words">
                     <span className="block text-[11px] font-semibold text-blue-600 dark:text-blue-400 mb-0.5">Teacher</span>
                     {c.teacher_reply}
                   </div>

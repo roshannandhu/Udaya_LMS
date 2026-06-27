@@ -132,7 +132,7 @@ function SubjectTestCard({ t, section, idx = 0, subject, myAttempts, prevSeen, n
             </div>
           ) : (
             <button onClick={() => onRequestReattempt?.(t)}
-              className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-neutral-600 bg-transparent hover:bg-white/60 transition-all border border-black/10">
+              className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-neutral-600 bg-transparent hover:bg-white/60 transition-all">
               <RotateCcw size={13} /> Request re-attempt
             </button>
           )}
@@ -150,7 +150,7 @@ function SubjectTestCard({ t, section, idx = 0, subject, myAttempts, prevSeen, n
             <>
               <p className="text-[11px] font-medium text-neutral-500 mb-2 text-center leading-relaxed">Missed this one? Ask your teacher to re-open it for you.</p>
               <button onClick={() => onRequestReattempt?.(t)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-neutral-700 bg-white/70 hover:bg-white transition-all border border-black/10">
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-bold text-neutral-700 bg-white/70 hover:bg-white transition-all">
                 <RotateCcw size={13} /> Request re-attempt
               </button>
             </>
@@ -379,7 +379,7 @@ export default function StudentSubjectViewPage() {
             <button onClick={() => navigate('/student/subjects')} className="p-2 -ml-2 rounded-full text-neutral-500 hover:text-neutral-900 hover:bg-black/5 transition-colors shrink-0">
               <ArrowLeft size={18} />
             </button>
-            <div className="w-12 h-12 rounded-2xl bg-white/70 backdrop-blur border border-neutral-100 shadow-sm flex items-center justify-center text-neutral-700 shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-white/70 backdrop-blur shadow-sm flex items-center justify-center text-neutral-700 shrink-0">
               <SubjectIcon value={subject?.emoji} size={26} />
             </div>
             <div className="flex-1 min-w-0">
@@ -419,7 +419,7 @@ export default function StudentSubjectViewPage() {
 
           {tab === 'Videos' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {videos.length === 0 && <p className="col-span-full text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-2xl border border-neutral-100 shadow-sm">No videos yet.</p>}
+              {videos.length === 0 && <p className="col-span-full text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-2xl shadow-sm">No videos yet.</p>}
               {videos.map(v => {
                 const isYT = v.source_type === 'youtube';
                 const thumbUrl = v.thumbnail_url || null;
@@ -432,7 +432,7 @@ export default function StudentSubjectViewPage() {
                     variants={fadeUp}
                     key={v.id}
                     onClick={() => navigate(`/student/subjects/${classId}/video/${v.id}`)}
-                    className="group text-left rounded-2xl overflow-hidden bg-white border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
+                    className="group text-left rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
                   >
                     <div className="relative overflow-hidden bg-neutral-900 w-full" style={{ aspectRatio: '16/9' }}>
                       {/* Gradient base is always rendered, so it shows through whenever the
@@ -524,7 +524,7 @@ export default function StudentSubjectViewPage() {
             return (
               <div className="flex flex-col w-full">
                 {tests.length === 0 ? (
-                  <div className="text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-2xl border border-neutral-100 shadow-sm w-full">No tests yet.</div>
+                  <div className="text-sm font-bold text-neutral-500 text-center py-12 bg-white rounded-2xl shadow-sm w-full">No tests yet.</div>
                 ) : (
                   <>
                     <SubjectTestSection title="Available now" list={available} section="available" emptyMsg="No tests available right now." cardProps={cardProps} />
@@ -571,7 +571,7 @@ export default function StudentSubjectViewPage() {
           {tab === 'Assignments' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {assignments.length === 0 && (
-                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                <div className="col-span-full text-center py-16 bg-white rounded-2xl shadow-sm">
                   <ClipboardList size={32} className="mx-auto mb-4 text-neutral-300" />
                   <p className="text-sm font-bold text-neutral-500">No assignments yet.</p>
                 </div>
@@ -585,7 +585,7 @@ export default function StudentSubjectViewPage() {
                 const isPast = due && due < now;
 
                 return (
-                  <motion.button variants={fadeUp} key={a.id} onClick={() => setSelectedAssignment(a)} className="text-left bg-white p-6 rounded-2xl border border-neutral-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col">
+                  <motion.button variants={fadeUp} key={a.id} onClick={() => setSelectedAssignment(a)} className="text-left bg-white p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col">
                     <div className="flex items-start justify-between mb-4">
                       <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-colors">
                         <ClipboardList size={24} />
@@ -648,7 +648,7 @@ export default function StudentSubjectViewPage() {
           {tab === 'Live' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {liveClasses.length === 0 && (
-                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                <div className="col-span-full text-center py-16 bg-white rounded-2xl shadow-sm">
                   <Radio size={32} className="mx-auto mb-4 text-neutral-300" />
                   <p className="text-sm font-bold text-neutral-500">No live classes scheduled yet.</p>
                 </div>
@@ -694,13 +694,13 @@ export default function StudentSubjectViewPage() {
           {tab === 'Notes' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {notes.length === 0 ? (
-                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                <div className="col-span-full text-center py-16 bg-white rounded-2xl shadow-sm">
                   <StickyNote size={32} className="mx-auto mb-4 text-neutral-300" />
                   <p className="text-sm font-bold text-neutral-500">No notes yet. Check back later.</p>
                 </div>
               ) : (
                 [...notes].sort((a,b) => (b.is_pinned?1:0)-(a.is_pinned?1:0)).map(note => (
-                  <motion.div variants={fadeUp} key={note.id} className={`rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${note.is_pinned ? 'bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200' : 'bg-white border border-neutral-100'}`}>
+                  <motion.div variants={fadeUp} key={note.id} className={`rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${note.is_pinned ? 'bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200' : 'bg-white'}`}>
                     {note.is_pinned && <div className="absolute top-0 right-0 w-16 h-16 bg-amber-200 rounded-full blur-2xl opacity-50"></div>}
                     <div className="flex items-start gap-3 mb-2 relative z-10">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${note.is_pinned ? 'bg-amber-100 text-amber-600' : 'bg-neutral-50 text-neutral-500'}`}>
@@ -724,7 +724,7 @@ export default function StudentSubjectViewPage() {
           )}
 
           {tab === 'Leaderboard' && (
-            <motion.div variants={fadeUp} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-neutral-100">
+            <motion.div variants={fadeUp} className="bg-white rounded-2xl overflow-hidden shadow-sm">
               {leaderboardRows.length === 0 ? (
                 <div className="text-center py-16">
                   <Trophy size={32} className="mx-auto mb-4 text-neutral-300" />
@@ -736,7 +736,7 @@ export default function StudentSubjectViewPage() {
                     const isMe = row.id === user?.id;
                     return (
                       <div key={row.id ?? i} className={`flex items-center gap-4 px-6 py-5 transition-colors ${isMe ? 'bg-[#FFF4E5]' : 'hover:bg-neutral-50'}`}>
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm ${i === 0 ? 'bg-amber-100' : i === 1 ? 'bg-neutral-200' : i === 2 ? 'bg-orange-100' : 'bg-white border border-neutral-100'}`}>
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm ${i === 0 ? 'bg-amber-100' : i === 1 ? 'bg-neutral-200' : i === 2 ? 'bg-orange-100' : 'bg-white'}`}>
                           {i === 0 ? <Trophy size={22} className="text-amber-400" fill="currentColor" /> : i === 1 ? <Medal size={22} className="text-neutral-400" /> : i === 2 ? <Medal size={22} className="text-amber-700" /> : <span className="text-base font-black text-neutral-400">{i + 1}</span>}
                         </div>
                         <div className="flex-1 min-w-0">

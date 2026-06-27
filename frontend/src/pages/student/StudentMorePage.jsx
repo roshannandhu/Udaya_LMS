@@ -42,7 +42,7 @@ export default function StudentMorePage() {
               <p className="font-semibold text-sm text-neutral-800">Appearance</p>
               <p className="text-xs text-neutral-500 mt-0.5">Switch between light and dark</p>
             </div>
-            <ThemeToggle showLabel className="border border-[#EFEDEA]" />
+            <ThemeToggle showLabel className="" />
           </div>
         </Item>
       </AnimatedPage>

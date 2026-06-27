@@ -545,7 +545,7 @@ export default function StudentVideoPlayerPage() {
               )}
 
               {saving && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#EFEDEA] dark:border-slate-800 text-sm text-neutral-600 dark:text-neutral-300 min-w-[130px]">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg dark:border-slate-800 text-sm text-neutral-600 dark:text-neutral-300 min-w-[130px]">
                   <Loader2 size={13} className="animate-spin flex-shrink-0" />
                   <div className="flex-1">
                     <div className="text-xs mb-0.5">{saveProgress !== null ? `${saveProgress}%` : 'Downloading…'}</div>
@@ -563,7 +563,7 @@ export default function StudentVideoPlayerPage() {
                     <Wifi size={13} /> Saved{cachedSize ? ` · ${cachedSize}` : ''}
                   </span>
                   <button onClick={handleRemoveOffline} title="Remove offline copy"
-                    className="p-2 rounded-lg border border-[#EFEDEA] dark:border-slate-800 text-neutral-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                    className="p-2 rounded-lg dark:border-slate-800 text-neutral-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
                     <Trash2 size={13} />
                   </button>
                 </div>

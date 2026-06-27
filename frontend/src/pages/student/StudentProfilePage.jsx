@@ -139,7 +139,7 @@ export default function StudentProfilePage() {
         <motion.div variants={staggerChildren} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-12 gap-6 auto-rows-max">
           
           {/* ── 1. IDENTITY BENTO ── */}
-          <motion.div variants={fadeUp} className="lg:col-span-4 bg-white rounded-[2.5rem] p-8 border border-neutral-100 shadow-sm relative overflow-hidden flex flex-col items-center text-center group">
+          <motion.div variants={fadeUp} className="lg:col-span-4 bg-white rounded-[2.5rem] p-8 shadow-sm relative overflow-hidden flex flex-col items-center text-center group">
             {/* Pastel Blob Background */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#fce4ec] rounded-full mix-blend-multiply filter blur-3xl opacity-50 translate-x-1/3 -translate-y-1/2 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-3xl opacity-50 -translate-x-1/3 translate-y-1/2 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
@@ -251,7 +251,7 @@ export default function StudentProfilePage() {
           )}
 
           {/* ── 4. LEARNING STATS BENTO ── */}
-          <motion.div variants={fadeUp} className="lg:col-span-12 bg-white rounded-[2.5rem] p-8 border border-neutral-100 shadow-sm">
+          <motion.div variants={fadeUp} className="lg:col-span-12 bg-white rounded-[2.5rem] p-8 shadow-sm">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-6 flex items-center gap-2">
               <Activity size={16} /> Performance Metrics
             </h2>
@@ -274,13 +274,13 @@ export default function StudentProfilePage() {
           </motion.div>
 
           {/* ── 5. ACCOUNT ACTIONS & DETAILS ── */}
-          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 border border-neutral-100 shadow-sm">
+          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 shadow-sm">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-6 flex items-center gap-2">
               <Settings size={16} /> Contact Info
             </h2>
             <div className="space-y-4">
               {displayStudent?.email && (
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-50 border border-neutral-100">
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-50">
                   <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-neutral-400">
                     <Mail size={18} />
                   </div>
@@ -291,7 +291,7 @@ export default function StudentProfilePage() {
                 </div>
               )}
               {student?.phone && (
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-50 border border-neutral-100">
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-50">
                   <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-neutral-400">
                     <Phone size={18} />
                   </div>
@@ -304,18 +304,18 @@ export default function StudentProfilePage() {
             </div>
           </motion.div>
 
-          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 border border-neutral-100 shadow-sm flex flex-col gap-4">
+          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 shadow-sm flex flex-col gap-4">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-2">
               <Lock size={16} /> Security & Appearance
             </h2>
-            <div className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50 border border-neutral-100">
+            <div className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50">
               <div>
                 <p className="text-sm font-bold text-neutral-900">Appearance</p>
                 <p className="text-xs text-neutral-500 font-medium">Switch between light and dark</p>
               </div>
-              <ThemeToggle showLabel className="border border-[#EFEDEA] bg-white" />
+              <ThemeToggle showLabel className="bg-white" />
             </div>
-            <button onClick={() => navigate('/student/change-password')} className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50 hover:bg-neutral-100 transition-colors border border-neutral-100 group">
+            <button onClick={() => navigate('/student/change-password')} className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50 hover:bg-neutral-100 transition-colors group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-neutral-600 group-hover:scale-110 transition-transform">
                   <Lock size={20} />
@@ -344,7 +344,7 @@ export default function StudentProfilePage() {
 
           {/* ── 6. MY VIDEOS ACCORDION ── */}
           {myVideos.length > 0 && (
-            <motion.div variants={fadeUp} className="lg:col-span-12 bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-neutral-100">
+            <motion.div variants={fadeUp} className="lg:col-span-12 bg-white rounded-[2.5rem] overflow-hidden shadow-sm">
               <button className="w-full flex items-center justify-between p-8 hover:bg-neutral-50 transition-colors" onClick={() => setVideosExpanded(x => !x)}>
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-500">

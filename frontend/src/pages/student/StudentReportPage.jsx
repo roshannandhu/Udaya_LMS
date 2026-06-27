@@ -48,7 +48,7 @@ export default function StudentReportPage() {
     <div className={`relative transition-opacity duration-200 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
       {loading && (
         <div className="fixed top-4 inset-x-0 flex justify-center z-50">
-          <span className="inline-flex items-center gap-2 bg-white shadow-card border border-black/5 rounded-full px-3 py-1.5 text-[11px] font-bold text-neutral-500">
+          <span className="inline-flex items-center gap-2 bg-white shadow-card rounded-full px-3 py-1.5 text-[11px] font-bold text-neutral-500">
             <Loader2 size={13} className="animate-spin" /> Updating…
           </span>
         </div>
