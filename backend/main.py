@@ -4895,11 +4895,15 @@ def _load_fcm_sa() -> Optional[dict]:
     return _fcm_sa
 
 
+_fcm_last_error: Optional[str] = None  # last OAuth-mint error, surfaced by push-debug
+
+
 def _fcm_access_token() -> Optional[str]:
     """Mint/refresh a short-lived OAuth token for the FCM HTTP v1 API."""
-    global _fcm_creds
+    global _fcm_creds, _fcm_last_error
     sa = _load_fcm_sa()
     if not sa:
+        _fcm_last_error = "no service account loaded"
         return None
     try:
         from google.oauth2 import service_account
@@ -4910,8 +4914,10 @@ def _fcm_access_token() -> Optional[str]:
                     sa, scopes=["https://www.googleapis.com/auth/firebase.messaging"])
             if not _fcm_creds.valid:
                 _fcm_creds.refresh(GAuthRequest())
+            _fcm_last_error = None
             return _fcm_creds.token
     except Exception as e:
+        _fcm_last_error = f"{type(e).__name__}: {e}"
         print(f"[fcm] token error: {e}")
         return None
 
@@ -7533,6 +7539,15 @@ def push_debug(test: int = 0, test_all: int = 0, user = Depends(verify_token)):
     # Surface OAuth-mint health explicitly (a None token = SA/scope/clock problem).
     if configured:
         out["oauth_token_ok"] = bool(_fcm_access_token())
+        if not out["oauth_token_ok"]:
+            out["oauth_error"] = _fcm_last_error
+        # Confirm the google-auth dependency is actually importable in this image.
+        try:
+            import google.oauth2.service_account  # noqa: F401
+            out["google_auth_installed"] = True
+        except Exception as e:
+            out["google_auth_installed"] = False
+            out["google_auth_import_error"] = f"{type(e).__name__}: {e}"
 
     toks, all_toks = [], []
     if service_supabase:
