@@ -345,7 +345,7 @@ export default function StudentHomePage() {
 
   if (loading) {
     return (
-      <div className="px-5 md:px-8 py-8 max-w-[1100px] mx-auto space-y-8 min-h-screen">
+      <div className="px-3 md:px-8 py-8 max-w-[1100px] mx-auto space-y-8 min-h-screen">
         <Skeleton className="h-16 w-full rounded-[2rem]" />
         <Skeleton className="h-[360px] w-full rounded-[2.5rem]" />
         <Skeleton className="h-[220px] w-full rounded-[2.5rem]" />
@@ -356,7 +356,7 @@ export default function StudentHomePage() {
 
   return (
     <div className="font-sans selection:bg-indigo-100 selection:text-indigo-900">
-      <div className="w-full max-w-[1100px] mx-auto px-5 pt-8">
+      <div className="w-full max-w-[1100px] mx-auto px-3 pt-8">
         <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-6 lg:gap-8 pb-8">
 
           {/* ── 1. GREETING HERO STRIP ── */}

@@ -105,7 +105,7 @@ export default function StudentProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] pb-20">
-        <div className="px-5 md:px-8 pt-10 pb-4 max-w-[1200px] mx-auto">
+        <div className="px-3 md:px-8 pt-10 pb-4 max-w-[1200px] mx-auto">
           <Skeleton className="h-[400px] w-full rounded-[2.5rem]" />
         </div>
       </div>
@@ -122,7 +122,7 @@ export default function StudentProfilePage() {
       
       {/* Top Navigation Bar */}
       <div className="sticky top-0 z-30 bg-[#F8F9FA] border-b border-black/5 mb-8">
-        <div className="max-w-[1200px] mx-auto px-5 md:px-8 py-4 flex items-center justify-between">
+        <div className="max-w-[1200px] mx-auto px-3 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-500 flex items-center justify-center">
               <User size={20} />
@@ -135,11 +135,11 @@ export default function StudentProfilePage() {
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-5 md:px-8">
+      <div className="max-w-[1200px] mx-auto px-3 md:px-8">
         <motion.div variants={staggerChildren} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-12 gap-6 auto-rows-max">
           
           {/* ── 1. IDENTITY BENTO ── */}
-          <motion.div variants={fadeUp} className="lg:col-span-4 bg-white rounded-[2.5rem] p-8 shadow-sm relative overflow-hidden flex flex-col items-center text-center group">
+          <motion.div variants={fadeUp} className="lg:col-span-4 bg-white rounded-[2rem] p-5 shadow-sm relative overflow-hidden flex flex-col items-center text-center group">
             {/* Pastel Blob Background */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#fce4ec] rounded-full mix-blend-multiply filter blur-3xl opacity-50 translate-x-1/3 -translate-y-1/2 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-3xl opacity-50 -translate-x-1/3 translate-y-1/2 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
@@ -202,7 +202,7 @@ export default function StudentProfilePage() {
           </motion.div>
 
           {/* ── 2. GAMIFICATION BENTO ── */}
-          <motion.div variants={fadeUp} onClick={() => navigate('/student/leaderboard')} className="lg:col-span-8 bg-gradient-to-br from-[#FFF4E5] to-[#FFE8CC] rounded-[2.5rem] p-8 md:p-12 border border-orange-100 shadow-sm relative overflow-hidden flex flex-col md:flex-row items-center justify-between cursor-pointer group">
+          <motion.div variants={fadeUp} onClick={() => navigate('/student/leaderboard')} className="lg:col-span-8 bg-gradient-to-br from-[#FFF4E5] to-[#FFE8CC] rounded-[2rem] p-5 md:p-12 border border-orange-100 shadow-sm relative overflow-hidden flex flex-col md:flex-row items-center justify-between cursor-pointer group">
             <div className="absolute -right-20 -top-20 w-64 h-64 bg-orange-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 group-hover:scale-150 transition-transform duration-700 pointer-events-none"></div>
             
             <div className="relative z-10 text-center md:text-left mb-8 md:mb-0">
@@ -227,7 +227,7 @@ export default function StudentProfilePage() {
 
           {/* ── 3. AI MENTOR BENTO ── */}
           {studentsCanViewReport && (
-            <motion.div variants={fadeUp} onClick={() => navigate('/student/report')} className="lg:col-span-12 bg-neutral-900 rounded-[2.5rem] p-8 md:p-12 shadow-sm relative overflow-hidden group cursor-pointer">
+            <motion.div variants={fadeUp} onClick={() => navigate('/student/report')} className="lg:col-span-12 bg-neutral-900 rounded-[2rem] p-5 md:p-12 shadow-sm relative overflow-hidden group cursor-pointer">
               <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 opacity-50 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
               
               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
@@ -251,7 +251,7 @@ export default function StudentProfilePage() {
           )}
 
           {/* ── 4. LEARNING STATS BENTO ── */}
-          <motion.div variants={fadeUp} className="lg:col-span-12 bg-white rounded-[2.5rem] p-8 shadow-sm">
+          <motion.div variants={fadeUp} className="lg:col-span-12 bg-white rounded-[2rem] p-5 shadow-sm">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-6 flex items-center gap-2">
               <Activity size={16} /> Performance Metrics
             </h2>
@@ -262,7 +262,7 @@ export default function StudentProfilePage() {
                 { icon: CheckCircle2, color: 'text-blue-500',   bg: 'bg-blue-50',     value: attendancePct !== null ? `${Math.round(attendancePct)}%` : '—', label: 'Attendance' },
                 { icon: BookOpen,     color: 'text-purple-500', bg: 'bg-purple-50',   value: subjects.length,                                                label: 'Subjects'   },
               ].map((s, i) => (
-                <div key={i} className="flex flex-col p-6 rounded-3xl bg-neutral-50 hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-md transition-all group">
+                <div key={i} className="flex flex-col p-4 rounded-2xl bg-neutral-50 hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-md transition-all group">
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${s.bg} group-hover:scale-110 transition-transform`}>
                     <s.icon size={20} className={s.color} />
                   </div>
@@ -274,7 +274,7 @@ export default function StudentProfilePage() {
           </motion.div>
 
           {/* ── 5. ACCOUNT ACTIONS & DETAILS ── */}
-          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 shadow-sm">
+          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2rem] p-5 shadow-sm">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-6 flex items-center gap-2">
               <Settings size={16} /> Contact Info
             </h2>
@@ -304,18 +304,18 @@ export default function StudentProfilePage() {
             </div>
           </motion.div>
 
-          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2.5rem] p-8 shadow-sm flex flex-col gap-4">
+          <motion.div variants={fadeUp} className="lg:col-span-6 bg-white rounded-[2rem] p-5 shadow-sm flex flex-col gap-4">
             <h2 className="text-xs font-extrabold uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-2">
               <Lock size={16} /> Security & Appearance
             </h2>
-            <div className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-neutral-50">
               <div>
                 <p className="text-sm font-bold text-neutral-900">Appearance</p>
                 <p className="text-xs text-neutral-500 font-medium">Switch between light and dark</p>
               </div>
               <ThemeToggle showLabel className="bg-white" />
             </div>
-            <button onClick={() => navigate('/student/change-password')} className="flex items-center justify-between p-6 rounded-3xl bg-neutral-50 hover:bg-neutral-100 transition-colors group">
+            <button onClick={() => navigate('/student/change-password')} className="flex items-center justify-between p-4 rounded-2xl bg-neutral-50 hover:bg-neutral-100 transition-colors group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-neutral-600 group-hover:scale-110 transition-transform">
                   <Lock size={20} />
@@ -328,7 +328,7 @@ export default function StudentProfilePage() {
               <ArrowRight size={20} className="text-neutral-400 group-hover:translate-x-1 transition-transform" />
             </button>
             
-            <button onClick={handleLogout} className="flex items-center justify-between p-6 rounded-3xl bg-[#fff0f2] hover:bg-[#ffe4e8] transition-colors border border-[#ffccd5] group">
+            <button onClick={handleLogout} className="flex items-center justify-between p-4 rounded-2xl bg-[#fff0f2] hover:bg-[#ffe4e8] transition-colors border border-[#ffccd5] group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
                   <LogOut size={20} />
