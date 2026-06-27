@@ -26,9 +26,10 @@ function routeForData(data = {}) {
   const kind = data.kind || data.type || '';
   const classId = data.class_id;
   if (kind === 'live_class_reminder' || kind === 'new_live_class') return '/student/live-classes';
+  if (kind === 'broadcast') return '/student/broadcasts';
   if (kind === 'new_test' || kind === 'reattempt_approved' || kind === 'reattempt_rejected') return '/student/tests';
   if (kind === 'new_video' || kind === 'video_reply') return classId ? `/student/subjects/${classId}` : '/student';
-  if (kind.startsWith('assignment_')) return classId ? `/student/subjects/${classId}` : '/student';
+  if (kind === 'new_note' || kind === 'new_assignment' || kind.startsWith('assignment_')) return classId ? `/student/subjects/${classId}` : '/student';
   if (classId) return `/student/subjects/${classId}`;
   return null;
 }

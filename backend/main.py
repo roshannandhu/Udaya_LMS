@@ -5043,6 +5043,31 @@ def _notify_students_of_content(class_id: str, ntype: str, title: str, body: str
     except Exception as e:
         print(f"Notification fan-out failed: {e}")
 
+
+def _notify_standard_students(standard_id: str, ntype: str, title: str, body: str = "", data: dict = None):
+    """Standard-level sibling of _notify_students_of_content (for broadcasts, which
+    target a standard not a class). Fans a notification row to every non-blocked
+    student of the standard and pushes it. Best-effort."""
+    if not service_supabase or not standard_id:
+        return
+    try:
+        students = service_supabase.table("students").select("id, blocked").eq("standard_id", standard_id).execute()
+        rows = [{
+            "recipient_id": s["id"],
+            "recipient_type": "student",
+            "type": ntype,
+            "title": title,
+            "body": body or "",
+            "data": {**(data or {}), "standard_id": standard_id},
+            "read": False,
+        } for s in (students.data or []) if not s.get("blocked")]
+        if rows:
+            service_supabase.table("notifications").insert(rows).execute()
+            _push_to_recipients([r["recipient_id"] for r in rows], title, body or "",
+                                {**(data or {}), "standard_id": standard_id, "kind": ntype})
+    except Exception as e:
+        print(f"Notification fan-out (standard) failed: {e}")
+
 @app.post("/api/videos/youtube")
 async def create_youtube_video(video: YouTubeVideo, user=Depends(verify_token)):
     if user["role"] != "teacher":
@@ -7586,6 +7611,10 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
         asyncio.create_task(asyncio.to_thread(_save_scheduled))
     else:
         await manager.broadcast_to_standard(req.standard_id, payload)
+        # Notify + push every student in the standard (best-effort, non-blocking).
+        snippet = (req.message or ("📎 Attachment" if req.attachment_url else "New message"))[:120]
+        await asyncio.to_thread(_notify_standard_students, req.standard_id, "broadcast",
+            "New message", snippet, {"standard_id": req.standard_id})
 
     return {"status": "success", "data": payload}
 
@@ -7976,7 +8005,11 @@ async def create_note(req: NoteCreate, user = Depends(verify_token)):
         "created_by": user["user_id"],
     }
     result = await asyncio.to_thread(lambda: service_supabase.table("notes").insert(row).execute())
-    return (result.data or [{}])[0]
+    created = (result.data or [{}])[0]
+    # Notify + push every student of the class (best-effort, non-blocking).
+    await asyncio.to_thread(_notify_students_of_content, req.class_id, "new_note",
+        f"New note: {req.title}", "", {"note_id": created.get("id")})
+    return created
 
 @app.patch("/api/notes/{note_id}")
 async def update_note(note_id: str, req: NoteUpdate, user = Depends(verify_token)):
@@ -9298,6 +9331,9 @@ async def create_assignment(
                 attachments.append(att_row.data[0])
 
     assignment["assignment_attachments"] = attachments
+    # Notify + push every student of the class (best-effort, non-blocking).
+    await asyncio.to_thread(_notify_students_of_content, class_id, "new_assignment",
+        f"New assignment: {title.strip()}", "", {"assignment_id": assignment_id})
     return assignment
 
 
