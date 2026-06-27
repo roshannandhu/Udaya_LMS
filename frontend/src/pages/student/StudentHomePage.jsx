@@ -420,7 +420,7 @@ export default function StudentHomePage() {
           </motion.div>
 
           {/* ── 2. GAMIFIED STAT TILES ── */}
-          <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <TiltCard variants={fadeUp} className="h-full">
               <StatTile
                 icon={ListChecks} label={tasksPending === 1 ? 'Task pending' : 'Tasks pending'} value={tasksPending} pastel="mint"
