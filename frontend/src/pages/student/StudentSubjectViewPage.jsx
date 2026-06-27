@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useBackDismissable } from '../../lib/useBackDismissable';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Play, FileQuestion, Trophy, Clock, Lock, CheckCircle, ChevronRight, Loader2, CalendarClock, ClipboardList, Star, Paperclip, ExternalLink, Radio, StickyNote, FileText, Calendar, Pin, BookOpen, Medal, RotateCcw, X } from 'lucide-react';
 import { Tag } from '../../components/ui';
@@ -195,6 +196,7 @@ export default function StudentSubjectViewPage() {
   const [reattemptModal, setReattemptModal] = useState(null);  // the test being requested
   const [reattemptReason, setReattemptReason] = useState('');
   const [reattemptBusy, setReattemptBusy] = useState(false);
+  useBackDismissable(!!reattemptModal, () => { if (!reattemptBusy) setReattemptModal(null); });
   const [loading, setLoading] = useState(true);
   const [liveClasses, setLiveClasses] = useState([]);
   const [notes, setNotes] = useState([]);

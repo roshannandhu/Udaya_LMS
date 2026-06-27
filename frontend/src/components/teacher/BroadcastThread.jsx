@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useBackDismissable } from '../../lib/useBackDismissable';
 import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Clock, Reply, Search, SmilePlus, Check, CheckCheck, Mic, Square, Copy, MoreVertical, Image as ImageIcon } from 'lucide-react';
 import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
 import { useAppCache } from '../../store';
@@ -52,6 +53,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [readDetailsModal, setReadDetailsModal] = useState(null);
+  useBackDismissable(!!readDetailsModal, () => setReadDetailsModal(null));
   const [readDetailsData, setReadDetailsData] = useState({ loading: false, read_by: [], not_read_by: [] });
   const [readDetailsTab, setReadDetailsTab] = useState('read');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);

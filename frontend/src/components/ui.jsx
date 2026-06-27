@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { popIn } from '../lib/motion';
+import { useBackDismissable } from '../lib/useBackDismissable';
 
 export const Btn = ({ children, variant = 'default', size = 'md', icon: Icon, onClick, className = '', disabled = false, type = 'button', ...rest }) => {
   const variants = {
@@ -149,6 +150,7 @@ export const SectionHeader = ({ title, action, count }) => (
 );
 
 export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
+  useBackDismissable(open, onClose); // Android back closes this modal first
   useEffect(() => {
     if (!open) return;
     const onEsc = (e) => { if (e.key === 'Escape') onClose(); };
@@ -182,6 +184,7 @@ export const Skeleton = ({ className = '' }) => (
 );
 
 export const Sheet = ({ open, onClose, title, children }) => {
+  useBackDismissable(open, onClose); // Android back closes this sheet first
   useEffect(() => {
     if (!open) return;
     const onEsc = (e) => { if (e.key === 'Escape') onClose(); };

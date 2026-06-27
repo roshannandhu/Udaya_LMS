@@ -836,10 +836,10 @@ function TimetableBody({ lines, color, cursor }) {
 
 function ThinkingDots() {
   return (
-    <div className="flex items-center gap-2 text-[13px] font-extrabold text-[#872792]/70">
+    <div className="flex items-center gap-2 text-[13px] font-extrabold text-[#6D28D9]/70">
       <span className="flex gap-1">
         {[0, 1, 2].map(i => (
-          <motion.span key={i} className="w-1.5 h-1.5 rounded-full bg-[#872792]"
+          <motion.span key={i} className="w-1.5 h-1.5 rounded-full bg-[#6D28D9]"
             animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
             transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }} />
         ))}
@@ -937,7 +937,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                     <AlertTriangle size={14} /> {error}
                   </div>
                 ) : suggestions ? (
-                  <motion.div layout className="space-y-3">
+                  <div className="space-y-3">
                     {sections.map((s, i) => {
                       const meta = MENTOR_SECTIONS.find(m => m.title.toLowerCase() === (s.title || '').toLowerCase());
                       const Icon = meta?.icon || Sparkles;
@@ -959,13 +959,14 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                         </div>
                       );
                       if (reduce) return <div key={s.title || i}>{block}</div>;
+                      // One-time gentle fade-in per section (NO `layout` — that
+                      // re-animated on every streamed token and made the text jitter).
                       return (
                         <motion.div
                           key={s.title || i}
-                          layout
-                          initial={{ opacity: 0, y: 16, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 240, damping: 24 }}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
                         >
                           {block}
                         </motion.div>
@@ -994,7 +995,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                         )}
                       </motion.div>
                     )}
-                  </motion.div>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2 text-[13px] font-extrabold text-neutral-700">
                     <CheckCircle2 size={16} className="text-emerald-600" /> Looking sharp! Keep up the good work.

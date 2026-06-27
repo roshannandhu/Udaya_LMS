@@ -20,6 +20,26 @@ export const useExamLock = create((set) => ({
   setLocked: (v) => set({ locked: !!v }),
 }));
 
+/* ── Overlay stack ────────────────────────────────────────────────────────────
+   LIFO registry of open, dismissable overlays (modals, sheets, file/image
+   viewers). The Android back button (useAndroidBackButton) calls closeTop()
+   BEFORE navigating, so back closes the open overlay first instead of leaving
+   the page — e.g. a broadcast image/attachment viewer. Overlays register via
+   useBackDismissable(open, onClose). Non-persisted. */
+export const useOverlayStack = create((set, get) => ({
+  stack: [],
+  push: (id, close) => set((s) => ({ stack: [...s.stack.filter((o) => o.id !== id), { id, close }] })),
+  remove: (id) => set((s) => ({ stack: s.stack.filter((o) => o.id !== id) })),
+  closeTop: () => {
+    const s = get().stack;
+    const top = s[s.length - 1];
+    if (!top) return false;
+    get().remove(top.id);
+    try { top.close(); } catch { /* ignore */ }
+    return true;
+  },
+}));
+
 // Udaya's default brand logo (the Buddha mark in /public). Shown wherever no
 // custom teacher logo is set, so the app is never logo-less.
 export const DEFAULT_LMS_LOGO = '/udaya-logo.png';

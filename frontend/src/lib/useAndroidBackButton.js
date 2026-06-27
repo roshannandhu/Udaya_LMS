@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { useOverlayStack } from '../store';
 
 // Root tabs where Back should not leave the app silently — instead it offers to
 // exit ("press back again"). Everywhere else, Back walks the SPA history.
@@ -63,6 +64,10 @@ export default function useAndroidBackButton() {
           ae.blur();
           return;
         }
+
+        // Close the top open overlay (modal / sheet / file or image viewer) first,
+        // so Back dismisses e.g. a broadcast attachment instead of leaving the page.
+        if (useOverlayStack.getState().closeTop()) return;
 
         const path = window.location.pathname;
         if (!ROOT_PATHS.has(path) && canGoBack) {

@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core';
 import { fetchSecureBlob } from '../../lib/api';
 import ScreenshotGuard from './ScreenshotGuard';
 import { useAuthStore } from '../../lib/auth';
+import { useBackDismissable } from '../../lib/useBackDismissable';
 import {
   isFileSaved, saveFileOffline, removeFileOffline, getCachedFile, formatBytes,
 } from '../../lib/offlineFiles';
@@ -153,6 +154,7 @@ function PdfReader({ doc }) {
  *        offlineKey? (stable id, e.g. `note-123`, to enable "save for offline").
  */
 export default function SecureFileViewer({ open, onClose, endpoint, title = 'Document', offlineKey = null }) {
+  useBackDismissable(open, onClose); // Android back closes the viewer first
   const user = useAuthStore(s => s.user);
   const role = useAuthStore(s => s.role);
   // Students may only view protected files inside the app (where screenshots are

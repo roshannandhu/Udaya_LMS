@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useBackDismissable } from '../../lib/useBackDismissable';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   FileQuestion, Clock, CheckCircle2, Loader2, Trophy,
@@ -312,6 +313,7 @@ export default function StudentTestsPage() {
   const [reattemptModal, setReattemptModal] = useState(null); // the test being requested
   const [reattemptReason, setReattemptReason] = useState('');
   const [reattemptBusy, setReattemptBusy] = useState(false);
+  useBackDismissable(!!reattemptModal, () => { if (!reattemptBusy) setReattemptModal(null); });
   const [loading, setLoading]     = useState(!cache);
   const subjects = useAppCache(s => s.subjects);
   // NEW pills compare against the session baseline; visiting clears the nav badge.
