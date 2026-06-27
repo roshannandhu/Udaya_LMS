@@ -91,7 +91,7 @@ export default function StudentLayout() {
     <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[max(env(safe-area-inset-top),28px)] lg:pt-0">
       {!examLocked && <TopNav type="student" badges={badges} />}
       {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
-      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-44 lg:pb-0">
+      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-48 lg:pb-0">
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>

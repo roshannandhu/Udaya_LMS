@@ -5,7 +5,7 @@ import { CountUp, ProgressRing } from '../../components/shared/Animated';
 import {
   Play, Calendar, FileText, ArrowRight, FileQuestion,
   ChevronRight, Video, Target,
-  CheckCircle2, ListChecks, Zap,
+  CheckCircle2, ListChecks, Zap, Sparkles,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
 import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi } from '../../lib/api';
@@ -35,7 +35,7 @@ function StatTile({ icon: Icon, label, value, display, pastel, ringPct, onClick 
       whileHover={{ y: -4, scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
       transition={springCard}
-      className="w-full h-full rounded-[1.75rem] p-4 flex items-center gap-3 shadow-card text-left"
+      className="w-full h-full rounded-[1.75rem] p-4 flex flex-col items-start gap-3 shadow-card text-left"
       style={{ background: p.hex }}
     >
       {ringPct != null ? (
@@ -43,15 +43,15 @@ function StatTile({ icon: Icon, label, value, display, pastel, ringPct, onClick 
           <Target size={16} style={{ color: p.fgHex }} />
         </ProgressRing>
       ) : (
-        <div className="w-12 h-12 rounded-full bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: p.fgHex }}>
+        <div className="w-11 h-11 rounded-2xl bg-white/70 flex items-center justify-center flex-shrink-0" style={{ color: p.fgHex }}>
           <Icon size={20} />
         </div>
       )}
-      <div className="min-w-0">
-        <p className="text-2xl font-extrabold leading-none" style={{ color: p.fgHex }}>
+      <div className="w-full min-w-0">
+        <p className="text-[26px] font-extrabold leading-none" style={{ color: p.fgHex }}>
           {display != null ? display : <CountUp value={value} />}
         </p>
-        <p className="text-[10px] font-extrabold uppercase tracking-widest mt-1.5 truncate" style={{ color: p.fgHex, opacity: 0.7 }}>
+        <p className="text-[11px] font-extrabold uppercase tracking-wide mt-1.5 leading-tight" style={{ color: p.fgHex, opacity: 0.7 }}>
           {label}
         </p>
       </div>
@@ -286,7 +286,7 @@ export default function StudentHomePage() {
   }));
   availableTests.forEach(t => doNow.push({
     id: `test-${t.id}`, kind: 'test',
-    eyebrow: 'Test available', title: t.title,
+    eyebrow: 'Test available', title: t.title || 'Untitled test',
     subject: getSubjectName(t.class_id),
     meta: `${t.duration_mins} min · ${t.total_marks} marks`,
     badge: t.expires_at ? { text: `Closes ${fmtWhen(t.expires_at)}`, danger: (new Date(t.expires_at) - now) < 6 * 36e5 } : null,
@@ -294,7 +294,7 @@ export default function StudentHomePage() {
   }));
   soonAssignments.forEach(a => doNow.push({
     id: `ass-${a.id}`, kind: 'assignment',
-    eyebrow: 'Assignment', title: a.title,
+    eyebrow: 'Assignment', title: a.title || 'Assignment',
     subject: a.subject_name || getSubjectName(a.class_id),
     badge: dueBadge(a.due_date),
     cta: 'Submit', onClick: () => navigate(`/student/subjects/${a.class_id}`),
@@ -355,7 +355,7 @@ export default function StudentHomePage() {
   }
 
   return (
-    <div className="min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="font-sans selection:bg-indigo-100 selection:text-indigo-900">
       <div className="w-full max-w-[1100px] mx-auto px-5 pt-8">
         <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-6 lg:gap-8 pb-8">
 
@@ -423,19 +423,19 @@ export default function StudentHomePage() {
           <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <TiltCard variants={fadeUp} className="h-full">
               <StatTile
-                icon={ListChecks} label={tasksPending === 1 ? 'Task pending' : 'Tasks pending'} value={tasksPending} pastel="mint"
+                icon={ListChecks} label="Tasks" value={tasksPending} pastel="mint"
                 onClick={() => document.getElementById('whats-next')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               />
             </TiltCard>
             <TiltCard variants={fadeUp} className="h-full">
               <StatTile
-                icon={FileQuestion} label="Tests open" value={availableTests.length} pastel="sky"
+                icon={FileQuestion} label="Tests" value={availableTests.length} pastel="sky"
                 onClick={() => navigate('/student/tests')}
               />
             </TiltCard>
             <TiltCard variants={fadeUp} className="h-full">
               <StatTile
-                icon={Video} label="Live today" value={liveNow.length + futureLives.length} pastel="peach"
+                icon={Video} label="Live" value={liveNow.length + futureLives.length} pastel="peach"
                 onClick={() => navigate('/student/live-classes')}
               />
             </TiltCard>
@@ -448,6 +448,24 @@ export default function StudentHomePage() {
               />
             </TiltCard>
           </motion.div>
+
+          {/* ── 2b. AI MENTOR (professional) → opens report with AI running ── */}
+          <motion.button
+            variants={fadeUp}
+            onClick={() => navigate('/student/report?ai=1')}
+            whileHover={reduceMotion ? undefined : { scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="flex items-center gap-4 bg-white rounded-[1.75rem] p-4 shadow-card text-left"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-[#6D28D9]/10 flex items-center justify-center flex-shrink-0 text-[#6D28D9]">
+              <Sparkles size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-extrabold text-[15px] text-neutral-900 leading-tight">AI Mentor</p>
+              <p className="text-[12px] font-semibold text-neutral-500 leading-snug">Personalised insights from your performance.</p>
+            </div>
+            <ChevronRight size={20} className="text-neutral-400 flex-shrink-0" />
+          </motion.button>
 
           {/* ── 3. WHAT'S NEXT (flat, scannable agenda — no accordion chrome) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
