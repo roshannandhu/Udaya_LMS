@@ -4951,10 +4951,14 @@ def _send_fcm(tokens, *, notification: Optional[dict] = None, data: Optional[dic
                 if notification:
                     message["notification"] = {"title": notification.get("title") or "",
                                                "body": notification.get("body") or ""}
-                    # Channel carries the sound on Android 8+; sound/priority here make
-                    # it ring + heads-up reliably (and cover pre-O devices).
+                    # Do NOT force a specific channel_id: if the installed APK is older
+                    # than that channel, Android 8+ SILENTLY DROPS the notification. By
+                    # omitting it, each install falls back to its own manifest
+                    # `default_notification_channel_id` (which that app guarantees to
+                    # create) — strictly more compatible across APK versions. The latest
+                    # app's default channel still carries the sound; `sound:"default"`
+                    # covers pre-O devices and the SDK's fallback channel.
                     android["notification"] = {
-                        "channel_id": FCM_DEFAULT_CHANNEL,
                         "sound": "default",
                         "default_sound": True,
                         "notification_priority": "PRIORITY_HIGH",
