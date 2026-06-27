@@ -206,10 +206,10 @@ export default function StudentLiveClassesPage() {
     : null;
 
   return (
-    <div className="pb-28 min-h-screen bg-[#F4F7F6]">
+    <div className="bg-[#F4F7F6]">
       <TopBar title="Live Classes" />
 
-      <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
+      <div className="px-5 md:px-8 pt-8 pb-[calc(96px+env(safe-area-inset-bottom))] lg:pb-8 max-w-6xl mx-auto">
         {/* Auto-open prompt: a class just went live → one tap to join. (True silent
             auto-join isn't possible — Zoom needs a user gesture for audio.) */}
         {justLiveClass && (

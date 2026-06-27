@@ -123,17 +123,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-[#F4F7F6] relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center py-8 px-6 bg-[#F4F7F6] relative overflow-hidden">
       
       {/* Decorative Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#F8E1FB] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 animate-pulse" style={{ animationDuration: '8s' }} />
       <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#EAF3EB] rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-pulse" style={{ animationDuration: '10s' }} />
       <div className="absolute top-[20%] right-[10%] w-[300px] h-[300px] bg-[#FFF6D8] rounded-full mix-blend-multiply filter blur-[60px] opacity-60 animate-pulse" style={{ animationDuration: '7s' }} />
 
-      <div className="w-full max-w-[420px] relative z-10">
-        
+      <div className="w-full max-w-[420px] relative z-10 my-auto">
+
         {/* Branding */}
-        <div className="flex flex-col items-center gap-5 mb-10 justify-center">
+        <div className="flex flex-col items-center gap-4 mb-7 justify-center">
           <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-20 h-20 rounded-[24px] object-cover shadow-md border-[4px] border-white bg-white" />
           <span 
             className="font-extrabold text-[40px] tracking-tight text-neutral-900 text-center drop-shadow-sm leading-none"

@@ -12,6 +12,7 @@ import { Reveal } from '../../components/bits';
 import { useAuthStore } from '../../lib/auth';
 import ScreenshotGuard from '../../components/shared/ScreenshotGuard';
 import VideoComments from '../../components/student/VideoComments';
+import VideoRail from '../../components/student/VideoRail';
 import {
   isVideoSaved,
   saveVideoOffline,
@@ -37,8 +38,13 @@ export default function StudentVideoPlayerPage() {
   const playerBoxRef = useRef(null);    // container — to reach the YouTube iframe + settings menu
 
   const [video, setVideo]         = useState(null);
+  const [videos, setVideos]       = useState([]);   // all class videos (for "Up next")
   const [subject, setSubject]     = useState(null);
   const [loading, setLoading]     = useState(true);
+
+  // Autoplay-next countdown (null = inactive; otherwise remaining seconds)
+  const [nextCountdown, setNextCountdown] = useState(null);
+  const countdownRef = useRef(null);
 
   const [completed, setCompleted] = useState(false);
 
@@ -97,6 +103,7 @@ export default function StudentVideoPlayerPage() {
           videoApi.getVideos(classId),
           apiClient('/subjects'),
         ]);
+        setVideos(vids || []);
         const v = (vids || []).find(x => String(x.id) === String(videoId));
         setVideo(v || null);
         if (v?.my_completed) setCompleted(true);
@@ -165,6 +172,8 @@ export default function StudentVideoPlayerPage() {
     lastSavedRef.current = 0;
     setWatchedPct(0);
     setCc(false);
+    cancelAutoNext();   // stop any pending auto-advance from the previous video
+    return () => cancelAutoNext();
   }, [video?.id]);
 
   // Hide the "Accessibility" item from Vidstack's settings (gear) menu. Vidstack
@@ -186,11 +195,43 @@ export default function StudentVideoPlayerPage() {
     return () => obs.disconnect();
   }, [video?.id]);
 
+  // The next video in curriculum order (null if this is the last one).
+  function getNextVideo() {
+    if (!videos.length || !video) return null;
+    const idx = videos.findIndex(x => String(x.id) === String(video.id));
+    return idx >= 0 && idx < videos.length - 1 ? videos[idx + 1] : null;
+  }
+
+  function cancelAutoNext() {
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+    setNextCountdown(null);
+  }
+
+  // Hotstar-style auto-advance: count down, then navigate to the next class video.
+  function startAutoNext(next) {
+    if (!next) return;
+    cancelAutoNext();
+    let n = 5;
+    setNextCountdown(n);
+    countdownRef.current = setInterval(() => {
+      n -= 1;
+      if (n <= 0) {
+        cancelAutoNext();
+        navigate(`/student/subjects/${classId}/video/${next.id}`);
+      } else {
+        setNextCountdown(n);
+      }
+    }, 1000);
+  }
+
   function markComplete() {
     if (completed || completeFiredRef.current) return;
     completeFiredRef.current = true;
     videoApi.markComplete(video.id)
-      .then(() => setCompleted(true))
+      .then(() => {
+        setCompleted(true);
+        if (navigator.onLine) startAutoNext(getNextVideo());  // auto-advance on genuine finish
+      })
       .catch(err => { completeFiredRef.current = false; console.error('markComplete failed:', err); });
   }
 
@@ -643,10 +684,44 @@ export default function StudentVideoPlayerPage() {
             </div>
           )}
 
+          {/* Up next — auto-scrolling rail of other videos in this class (Hotstar-style). */}
+          {isOnline && videos.filter(v => String(v.id) !== String(videoId)).length > 0 && (
+            <VideoRail
+              title="Up next"
+              items={videos.filter(v => String(v.id) !== String(videoId))}
+              autoScroll
+              getSubjectName={() => subject?.name || ''}
+              onItemClick={(v) => navigate(`/student/subjects/${classId}/video/${v.id}`)}
+            />
+          )}
+
           {/* Private comments — students see only their own; teacher sees all. */}
           {isOnline && <VideoComments videoId={videoId} />}
         </div>
       </div>
+
+      {/* Autoplay-next countdown — appears when a video finishes and another follows. */}
+      {nextCountdown != null && getNextVideo() && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] w-[calc(100%-2rem)] max-w-md">
+          <div className="flex items-center gap-3 rounded-2xl bg-neutral-900/95 backdrop-blur text-white px-4 py-3 shadow-2xl border border-white/10">
+            <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0 font-bold tabular-nums">
+              {nextCountdown}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] uppercase tracking-wide text-white/50 font-bold leading-none">Up next</p>
+              <p className="text-sm font-semibold truncate mt-0.5">{getNextVideo()?.title}</p>
+            </div>
+            <button onClick={cancelAutoNext}
+              className="shrink-0 px-3 py-1.5 rounded-full text-xs font-bold text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+              Cancel
+            </button>
+            <button onClick={() => { const n = getNextVideo(); cancelAutoNext(); if (n) navigate(`/student/subjects/${classId}/video/${n.id}`); }}
+              className="shrink-0 px-4 py-1.5 rounded-full text-xs font-bold bg-white text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1">
+              <Play size={12} fill="currentColor" /> Play
+            </button>
+          </div>
+        </div>
+      )}
     </div>
     </ScreenshotGuard>
   );
