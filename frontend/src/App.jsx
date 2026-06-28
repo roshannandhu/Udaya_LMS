@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 
 import LoginPage from './pages/LoginPage';
@@ -8,6 +8,7 @@ import { useTheme } from './lib/theme';
 import useAndroidBackButton from './lib/useAndroidBackButton';
 import { enableScreenSecurity, disableScreenSecurity } from './lib/secureScreen';
 import ErrorBoundary from './components/ErrorBoundary';
+import SplashScreen from './components/SplashScreen';
 import useLiveClassEvents from './hooks/useLiveClassEvents';
 import { startNotificationSync, stopNotificationSync } from './lib/notifications';
 
@@ -206,6 +207,16 @@ function RoutedBoundary({ children }) {
 
 export default function App() {
   useLiveClassEvents();
+
+  // Show the splash screen once per browser session.
+  const [showSplash, setShowSplash] = useState(
+    () => !sessionStorage.getItem('udaya_splash_shown')
+  );
+  const handleSplashDone = () => {
+    sessionStorage.setItem('udaya_splash_shown', '1');
+    setShowSplash(false);
+  };
+
   // Apply the saved/system theme as early as possible (sets html.dark).
   useEffect(() => { useTheme.getState().init(); }, []);
   // Android APK: make the hardware Back button navigate the SPA instead of
@@ -276,6 +287,8 @@ export default function App() {
   }, [role]);
 
   return (
+    <>
+      {showSplash && <SplashScreen onDone={handleSplashDone} duration={1800} />}
     <BrowserRouter>
       <AuthHandler />
       <RoutedBoundary>
@@ -335,5 +348,6 @@ export default function App() {
       </Routes>
       </RoutedBoundary>
     </BrowserRouter>
+    </>
   );
 }
