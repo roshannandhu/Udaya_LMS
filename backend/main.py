@@ -11239,21 +11239,40 @@ def _wa_credentials_body(name: str, student_code: str, password: str, lms: str) 
 
 def _wa_fetch_students(standard_ids: List[str]) -> list:
     """Fetch students for the given standards, tolerating a DB without the
-    whatsapp_opt_out column yet (graceful-degrade)."""
+    whatsapp_opt_out or parent_phone columns yet (graceful-degrade)."""
     if not standard_ids:
         return []
+    
+    # 1. Try to select all columns (fully migrated DB)
     try:
-        rows = service_supabase.table("students").select(
+        return service_supabase.table("students").select(
             "id, name, username, phone, parent_phone, student_code, standard_id, whatsapp_opt_out, attendance_pct, avg_score, points, plain_password"
         ).in_("standard_id", standard_ids).execute().data or []
     except Exception:
+        pass
+
+    # 2. Try to select without whatsapp_opt_out (parent_phone exists, opt_out doesn't)
+    try:
+        rows = service_supabase.table("students").select(
+            "id, name, username, phone, parent_phone, student_code, standard_id, attendance_pct, avg_score, points, plain_password"
+        ).in_("standard_id", standard_ids).execute().data or []
+        for r in rows:
+            r["whatsapp_opt_out"] = False
+        return rows
+    except Exception:
+        pass
+
+    # 3. Try to select without parent_phone and whatsapp_opt_out (old baseline DB)
+    try:
         rows = service_supabase.table("students").select(
             "id, name, username, phone, student_code, standard_id, attendance_pct, avg_score, points, plain_password"
         ).in_("standard_id", standard_ids).execute().data or []
         for r in rows:
             r["whatsapp_opt_out"] = False
             r["parent_phone"] = None
-    return rows
+        return rows
+    except Exception:
+        return []
 
 
 def _wa_fetch_standard_events(standard_ids: List[str]) -> dict:
@@ -12285,11 +12304,24 @@ def wa_pending(user = Depends(verify_token)):
     # Keep only students with a phone and not opted out (the real notifiable parents).
     try:
         srows = service_supabase.table("students").select(
-            "id, phone, whatsapp_opt_out").in_("id", list(student_ids)).execute().data or []
+            "id, phone, parent_phone, whatsapp_opt_out").in_("id", list(student_ids)).execute().data or []
     except Exception:
-        srows = []
+        try:
+            srows = service_supabase.table("students").select(
+                "id, phone, parent_phone").in_("id", list(student_ids)).execute().data or []
+            for s in srows:
+                s["whatsapp_opt_out"] = False
+        except Exception:
+            try:
+                srows = service_supabase.table("students").select(
+                    "id, phone").in_("id", list(student_ids)).execute().data or []
+                for s in srows:
+                    s["whatsapp_opt_out"] = False
+                    s["parent_phone"] = None
+            except Exception:
+                srows = []
     eligible = {s["id"] for s in srows
-                if (s.get("phone") or "").strip() and not s.get("whatsapp_opt_out")}
+                if (s.get("parent_phone") or s.get("phone") or "").strip() and not s.get("whatsapp_opt_out")}
 
     # Already-notified (test_id, student_id) pairs — needs the migrated test_id column.
     # Only count real sends: a failed/not_configured row must NOT clear the parent,
@@ -12420,13 +12452,33 @@ async def _wa_auto_welcome(student_id: str):
         cfg = wa.get_wa_config()
         if not cfg.get("auto_welcome"):
             return
-        rows = service_supabase.table("students").select(
-            "id, name, phone, standard_id, student_code, plain_password, whatsapp_opt_out").eq(
-            "id", student_id).limit(1).execute().data or []
+        rows = []
+        try:
+            rows = service_supabase.table("students").select(
+                "id, name, phone, parent_phone, standard_id, student_code, plain_password, whatsapp_opt_out").eq(
+                "id", student_id).limit(1).execute().data or []
+        except Exception:
+            try:
+                rows = service_supabase.table("students").select(
+                    "id, name, phone, parent_phone, standard_id, student_code, plain_password").eq(
+                    "id", student_id).limit(1).execute().data or []
+                for s in rows:
+                    s["whatsapp_opt_out"] = False
+            except Exception:
+                try:
+                    rows = service_supabase.table("students").select(
+                        "id, name, phone, standard_id, student_code, plain_password").eq(
+                        "id", student_id).limit(1).execute().data or []
+                    for s in rows:
+                        s["whatsapp_opt_out"] = False
+                        s["parent_phone"] = None
+                except Exception:
+                    pass
+
         if not rows:
             return
         s = rows[0]
-        phone = (s.get("phone") or "").strip()
+        phone = (s.get("parent_phone") or s.get("phone") or "").strip()
         if not phone or s.get("whatsapp_opt_out"):
             return
         std = (service_supabase.table("standards").select("id, name, teacher_id").eq(
