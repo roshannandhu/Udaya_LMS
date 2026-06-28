@@ -6,6 +6,7 @@ import { Avatar, Btn, Skeleton } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
 import { apiClient } from '../../lib/api';
 import { useAppCache } from '../../store';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import LeaderboardPanel from '../../components/shared/LeaderboardPanel';
 import StudentReportModal from '../../components/teacher/StudentReportModal';
@@ -53,6 +54,13 @@ export default function ReportsPage() {
     load();
     return () => { alive = false; };
   }, [activeStd]);
+
+  // Live refresh: silently re-pull the current standard's analytics on focus /
+  // visibility / data-changed (e.g. students just submitted) — no skeleton flash.
+  useAutoRefresh(() => {
+    if (!activeStd) return;
+    apiClient(`/reports/standard/${activeStd}/analytics`).then(setAnalytics).catch(() => {});
+  });
 
   const handleExportPDF = async () => {
     if (!analytics || !currentStd) return;

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import { motion } from 'framer-motion';
 import { Play, FileQuestion, ArrowRight } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
@@ -38,9 +39,8 @@ export default function StudentSubjectsPage() {
   const newVideoItems = useWhatsNew(s => s.data?.videos?.items) || [];
   useEffect(() => { useWhatsNew.getState().markSeen('videos'); }, []);
 
-  useEffect(() => {
-    const load = async () => {
-      if (!cache) setLoading(true);
+  const load = useCallback(async ({ showSkeleton = false } = {}) => {
+      if (showSkeleton) setLoading(true);
       try {
         const [vids, tests] = await Promise.all([
           apiClient('/videos'),
@@ -72,9 +72,11 @@ export default function StudentSubjectsPage() {
       } finally {
         setLoading(false);
       }
-    };
-    load();
-  }, []);
+  }, [user?.id]);
+
+  useEffect(() => { load({ showSkeleton: !cache }); }, [load]);
+  // Live refresh on focus / visibility / data-changed (e.g. teacher adds a video/test).
+  useAutoRefresh(() => load());
 
   return (
     <div>

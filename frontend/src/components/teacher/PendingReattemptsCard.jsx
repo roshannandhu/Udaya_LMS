@@ -4,6 +4,7 @@ import { RotateCcw, Check, X, Loader2, FileQuestion, ClipboardList } from 'lucid
 import { Avatar } from '../ui';
 import { testApi, assignmentApi } from '../../lib/api';
 import { fadeUp } from '../../lib/motion';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 
 // Unified dashboard surface for ALL pending re-attempt requests (tests +
 // assignments) across the teacher's classes, with one-tap approve/reject.
@@ -42,16 +43,9 @@ export default function PendingReattemptsCard({ onCountChange }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  // Refresh when the teacher returns to the tab (a student may have just asked).
-  useEffect(() => {
-    const onFocus = () => { if (!document.hidden) load(); };
-    document.addEventListener('visibilitychange', onFocus);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', onFocus);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [load]);
+  // Live refresh on focus / visibility / data-changed signal — a student filing a
+  // new request shows up on its own (the approve/reject path keeps optimistic removal).
+  useAutoRefresh(load);
 
   useEffect(() => { onCountChange?.(rows.length); }, [rows.length, onCountChange]);
 

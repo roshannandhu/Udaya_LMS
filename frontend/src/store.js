@@ -42,7 +42,7 @@ export const useOverlayStack = create((set, get) => ({
 
 // Udaya's default brand logo (the Buddha mark in /public). Shown wherever no
 // custom teacher logo is set, so the app is never logo-less.
-export const DEFAULT_LMS_LOGO = '/udaya-logo.png';
+export const DEFAULT_LMS_LOGO = '/logo.jpeg';
 
 /* ─── Teacher settings store ─────────────────────────────────────
    localStorage is only an instant cache so the UI doesn't flash defaults
@@ -249,6 +249,14 @@ export const useAppCache = create(
       /* ── Invalidate (call after mutations) ── */
       invalidate:         () => set({ standardsTs: null, subjectsTs: null, studentsTs: null }),
       invalidateStudents: () => set({ studentsTs: null }),
+
+      /* ── Force a fresh pull regardless of TTL — driven by the app-wide
+            'udaya:data-changed' signal so store-backed pages (students / subjects /
+            standards / attendance) update live without per-page wiring. ── */
+      forceRefreshAll: async () => {
+        set({ standardsTs: null, subjectsTs: null, studentsTs: null });
+        await get().prefetchAll();
+      },
 
       /* ── Full reset (call on login/logout so one account never shows another
             account's cached standards / subjects / students). ── */

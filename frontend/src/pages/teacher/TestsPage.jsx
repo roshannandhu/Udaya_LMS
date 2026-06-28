@@ -7,6 +7,7 @@ import SubjectIcon from '../../components/shared/SubjectIcon';
 import TestResultsSheet from '../../components/teacher/TestResultsSheet';
 import { testApi } from '../../lib/api';
 import { useAppCache } from '../../store';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 
 const CARD_COLORS = [
   { bg: 'bg-[#EAF3EB]', text: 'text-green-950', badge: 'bg-white/50 text-green-900' },
@@ -72,6 +73,9 @@ export default function TestsPage() {
     refreshSubjects();
     refreshStandards();
   }, []);
+
+  // Live refresh on focus / visibility / data-changed (e.g. a student submits).
+  useAutoRefresh(fetchTests);
 
   const filtered = useMemo(() => {
     if (filter === 'all') return tests;
