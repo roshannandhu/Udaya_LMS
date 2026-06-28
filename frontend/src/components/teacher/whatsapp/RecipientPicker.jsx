@@ -20,7 +20,7 @@ export default function RecipientPicker({ groups = [], selected, onChange, onStu
     setOpen(next);
   };
 
-  const eligible = (s) => s.parent_phone && !s.opted_out;
+  const eligible = (s) => s.phone && s.phone.trim() !== '' && !s.opted_out;
 
   const toggleStudent = (id) => {
     const next = new Set(selected);

@@ -80,7 +80,7 @@ export default function WhatsAppCenterPage() {
   const rates = config?.rates || { utility: 0.14, marketing: 0.78, auth: 0.13 };
   const currency = config?.currency || 'INR';
   const provider = config?.provider;
-  const parentCount = groups.flatMap(g => g.students).filter(s => (s.parent_phone || s.phone) && !s.opted_out).length;
+  const parentCount = groups.flatMap(g => g.students).filter(s => s.phone && s.phone.trim() !== '' && !s.opted_out).length;
 
   const goHome = () => { setScreen('home'); setExamId(null); };
   // OverviewTab quick-actions speak the old tab language — translate it.
