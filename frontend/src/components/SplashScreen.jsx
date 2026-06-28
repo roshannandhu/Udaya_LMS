@@ -1,68 +1,31 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import logoSrc from '/iconn.jpeg';
 
 /**
  * SplashScreen
  * ────────────
  * Phone  → pure white, logo + text fade/slide in, thin progress bar, screen fades out.
- * PC     → frosted-glass white, same intro, then:
- *            1. text dissolves (blur + fade letter by letter)
- *            2. logo shrinks and flies to the browser-tab position (top-left)
- *            3. everything fades out, app loads
+ * PC     → frosted-glass white, same intro and same simple fade-out.
  *
  * Props:
- *   onDone  — callback fired when the outro finishes (parent should unmount this).
- *   duration — approx ms before outro starts (default 1800).
+ *   onDone   — callback fired when the outro finishes (parent should unmount this).
+ *   duration — approx ms before fade-out starts (default 1800).
  */
 export default function SplashScreen({ onDone, duration = 1800 }) {
   const isDesktop = window.matchMedia('(min-width: 768px)').matches;
 
-  // ── Phase state ──────────────────────────────────────────────────────────────
-  // 'intro' → 'hold' → 'dissolve-text' (desktop) → 'fly-logo' (desktop) → 'fade-out'
+  // 'intro' → 'fade-out' (same on both phone and desktop)
   const [phase, setPhase] = useState('intro');
-  const logoRef   = useRef(null);
-  const textRef   = useRef(null);
-  const wrapRef   = useRef(null);
 
   useEffect(() => {
-    // Phase timeline
     const t1 = setTimeout(() => {
-      if (isDesktop) {
-        setPhase('dissolve-text');
-        const t2 = setTimeout(() => {
-          setPhase('fly-logo');
-          const t3 = setTimeout(() => {
-            setPhase('fade-out');
-            const t4 = setTimeout(() => onDone?.(), 600);
-            return () => clearTimeout(t4);
-          }, 800);
-          return () => clearTimeout(t3);
-        }, 600);
-        return () => clearTimeout(t2);
-      } else {
-        setPhase('fade-out');
-        const t2 = setTimeout(() => onDone?.(), 600);
-        return () => clearTimeout(t2);
-      }
+      setPhase('fade-out');
+      const t2 = setTimeout(() => onDone?.(), 600);
+      return () => clearTimeout(t2);
     }, duration);
-
     return () => clearTimeout(t1);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Logo target: browser tab top-left corner ─────────────────────────────────
-  // We estimate the favicon sits at roughly (16px, 10px) from viewport top-left.
-  // The logo is centered at (50vw, 50vh). So delta = -(50vw - 16) , -(50vh - 10).
-  const flyStyle = phase === 'fly-logo' ? {
-    transform: `translate(calc(-50vw + 24px), calc(-50vh + 12px)) scale(0.07)`,
-    opacity: 0,
-    transition: 'transform 0.8s cubic-bezier(0.4, 0, 0.8, 1), opacity 0.8s ease 0.3s',
-  } : {
-    transform: 'translate(0,0) scale(1)',
-    opacity: 1,
-    transition: 'transform 0.8s ease, opacity 0.4s ease',
-  };
-
-  // ── Text chars for staggered dissolve ────────────────────────────────────────
   const title = 'Udaya Tuition Home';
 
   return (
@@ -153,17 +116,6 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
           animation: textIn 0.5s ease 0.55s both;
         }
 
-        /* ── Char dissolve (desktop outro) ── */
-        .splash-char {
-          display: inline-block;
-          transition: opacity 0.35s ease, filter 0.35s ease, transform 0.35s ease;
-        }
-        .dissolve-text .splash-char {
-          opacity: 0;
-          filter: blur(6px);
-          transform: translateY(-6px) scale(0.9);
-        }
-
         /* ── Sub-label ── */
         .splash-sub {
           margin-top: 8px;
@@ -202,20 +154,14 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
       `}</style>
 
       <div
-        ref={wrapRef}
         className={[
           'splash-root',
           isDesktop ? 'desktop' : 'phone',
           phase === 'fade-out' ? 'fade-out' : '',
-          phase === 'dissolve-text' ? 'dissolve-text' : '',
         ].join(' ')}
       >
-        {/* Logo — wrapped so we can animate independently on desktop */}
-        <div
-          ref={logoRef}
-          className="splash-logo-wrap"
-          style={isDesktop ? flyStyle : {}}
-        >
+        {/* Logo */}
+        <div className="splash-logo-wrap">
           <img
             src={logoSrc}
             alt="Udaya logo"
@@ -225,22 +171,8 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
         </div>
 
         {/* Title + subtitle */}
-        <div ref={textRef} className="splash-title-wrap">
-          <div className="splash-title" aria-label={title}>
-            {title.split('').map((ch, i) => (
-              <span
-                key={i}
-                className="splash-char"
-                style={
-                  phase === 'dissolve-text'
-                    ? { transitionDelay: `${i * 22}ms` }
-                    : { transitionDelay: `0ms` }
-                }
-              >
-                {ch === ' ' ? '\u00a0' : ch}
-              </span>
-            ))}
-          </div>
+        <div className="splash-title-wrap">
+          <div className="splash-title">{title}</div>
           <div className="splash-sub">Powered by Udaya</div>
         </div>
 
