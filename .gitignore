@@ -80,5 +80,7 @@ keystore_base64.txt
 # Secret-bearing helper scripts (contain keystore passwords + R2 keys in plaintext).
 # NEVER commit — set the values as GitHub Secrets, then delete the script.
 upload_secrets.bat
+push_secrets.py
 *secrets*.bat
 *secrets*.sh
+*secrets*.py
