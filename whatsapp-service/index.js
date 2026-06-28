@@ -8,6 +8,7 @@
 import express from 'express';
 import pino from 'pino';
 import qrcode from 'qrcode';
+import fs from 'fs';
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -145,6 +146,35 @@ app.post('/send', requireToken, (req, res) => {
   }
   const result = queue.enqueue({ phone, text, mediaUrl, mediaType, dedupeKey });
   res.json(result);
+});
+
+app.post('/disconnect', requireToken, async (_req, res) => {
+  try {
+    connected = false;
+    latestQrDataUrl = null;
+    if (sock) {
+      try {
+        await sock.logout();
+      } catch (e) {
+        console.warn('[wa] sock.logout failed, force ending:', e.message);
+      }
+      try {
+        sock.end();
+      } catch (e) {}
+      sock = null;
+    }
+    // Delete session files
+    try {
+      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('[wa] failed to clear session dir:', e.message);
+    }
+    res.json({ success: true });
+    // Restart socket to get a fresh QR code
+    setTimeout(() => startSock().catch((e) => console.error(e)), 2000);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(PORT, () => {

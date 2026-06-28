@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, MessageSquare, ListOrdered, Wifi, WifiOff, QrCode, Smartphone } from 'lucide-react';
+import { RefreshCw, MessageSquare, ListOrdered, Wifi, WifiOff, QrCode, Smartphone, Loader2 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Tag, Skeleton } from '../../components/ui';
 import { apiClient } from '../../lib/api';
@@ -49,6 +49,7 @@ export default function WhatsAppStatus() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [enabling, setEnabling] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const aliveRef = useRef(true);
 
   const fetchStatus = useCallback(async (showSpinner = false) => {
@@ -92,8 +93,21 @@ export default function WhatsAppStatus() {
     }
   };
 
+  const handleDisconnect = async () => {
+    if (!window.confirm('Are you sure you want to disconnect WhatsApp? Outgoing messages will be buffered.')) return;
+    setDisconnecting(true);
+    try {
+      await apiClient('/teacher/whatsapp/disconnect', { method: 'POST' });
+      await fetchStatus(true);
+    } catch (err) {
+      alert(err.message || 'Could not disconnect');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   const showQr = isBaileys && !connected && data?.qr;
-  const needsEnable = data && !data.provider;
+  const needsEnable = data && data.provider !== 'baileys';
 
   return (
     <div className="pb-24">
@@ -156,20 +170,35 @@ export default function WhatsAppStatus() {
                   {enabling ? 'Enabling…' : 'Connect WhatsApp'}
                 </Btn>
               )}
+              {connected && isBaileys && (
+                <Btn variant="danger" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
+                  {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                </Btn>
+              )}
             </div>
 
             {/* QR pairing card */}
-            {showQr && (
+            {isBaileys && !connected && (
               <div className="bg-white border border-[#EFEDEA] rounded-2xl p-5 shadow-card flex flex-col items-center text-center">
                 <div className="flex items-center gap-2 text-sm font-medium mb-3">
                   <QrCode size={16} /> Scan to connect
                 </div>
-                <img src={data.qr} alt="WhatsApp QR code" width={240} height={240}
-                     className="rounded-xl border border-[#EFEDEA]" />
-                <p className="text-xs text-neutral-500 mt-3 max-w-xs">
-                  On your <strong>dedicated</strong> phone: WhatsApp → <strong>Linked Devices</strong> →
-                  Link a device → scan this code. You only do this once.
-                </p>
+                {data?.qr ? (
+                  <>
+                    <img src={data.qr} alt="WhatsApp QR code" width={240} height={240}
+                         className="rounded-xl border border-[#EFEDEA]" />
+                    <p className="text-xs text-neutral-500 mt-3 max-w-xs">
+                      On your <strong>dedicated</strong> phone: WhatsApp → <strong>Linked Devices</strong> →
+                      Link a device → scan this code. You only do this once.
+                    </p>
+                  </>
+                ) : (
+                  <div className="w-[240px] h-[240px] bg-neutral-50 rounded-xl border border-[#EFEDEA] flex flex-col items-center justify-center p-4">
+                    <Loader2 className="animate-spin text-neutral-400 mb-2" size={24} />
+                    <p className="text-xs text-neutral-500">Generating QR code...</p>
+                    <p className="text-[10px] text-neutral-400 mt-1 max-w-[200px]">Waiting for Baileys socket to initialize pairing flow.</p>
+                  </div>
+                )}
               </div>
             )}
 

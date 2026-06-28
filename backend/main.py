@@ -11549,6 +11549,19 @@ async def wa_connection(user = Depends(verify_token)):
 @app.post("/api/teacher/whatsapp/disconnect")
 async def wa_disconnect(user = Depends(verify_token)):
     _wa_require_teacher(user)
+    cfg = wa.get_wa_config()
+    provider = (cfg.get("provider") or "").lower()
+    if provider == "baileys":
+        import httpx
+        import whatsapp_client as client
+        try:
+            async with httpx.AsyncClient(timeout=10) as http_client:
+                headers = {"Content-Type": "application/json"}
+                if client.SHARED_TOKEN:
+                    headers["X-Service-Token"] = client.SHARED_TOKEN
+                await http_client.post(f"{client.WHATSAPP_SERVICE_URL}/disconnect", headers=headers)
+        except Exception as e:
+            print(f"[wa] baileys disconnect failed: {e}")
     return {"success": True}
 
 
