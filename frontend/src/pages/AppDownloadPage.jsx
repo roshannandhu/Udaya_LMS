@@ -41,13 +41,21 @@ const PAGE_CSS = `
   @keyframes uWiggle { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
   .u-reveal { opacity:0; transform:translateY(40px); transition:opacity .7s ease, transform .8s cubic-bezier(.16,.84,.44,1); }
   @media (max-width:820px){
-    .u-hero-grid{ grid-template-columns:1fr !important; }
+    .u-hero-grid{ grid-template-columns:1fr !important; gap:8px !important; }
     .u-fgrid{ grid-template-columns:1fr 1fr !important; }
-    .u-steps{ grid-template-columns:1fr !important; }
-    .u-phonewrap{ order:-1; }
+    .u-steps{ grid-template-columns:1fr !important; max-width:360px; margin:0 auto; }
+    /* Copy + download stay first; the phone visual sits below it. */
+    .u-phonewrap{ margin-top:14px; }
+    /* No mouse on phones → straighten the device so it never looks skewed/clipped. */
+    .u-phone3d{ transform:none !important; }
   }
   @media (max-width:520px){
     .u-fgrid{ grid-template-columns:1fr !important; }
+    /* Scale the mockup to fit small screens without horizontal scroll. */
+    .u-phonewrap{ transform:scale(0.86); transform-origin:top center; height:520px; }
+  }
+  @media (max-width:360px){
+    .u-phonewrap{ transform:scale(0.76); }
   }
 `;
 
@@ -216,7 +224,7 @@ export default function AppDownloadPage() {
             </div>
 
             <div style={{ animation: 'uFloat 6s ease-in-out infinite' }}>
-              <div ref={phoneRef} style={{ transform: 'rotateX(6deg) rotateY(-14deg)', transformStyle: 'preserve-3d', transition: 'transform .25s ease-out', width: 286, height: 590, borderRadius: 44, background: '#2A2350', padding: 11, boxShadow: '0 40px 70px rgba(42,35,80,0.34), inset 0 0 0 2px rgba(255,255,255,0.06)' }}>
+              <div ref={phoneRef} className="u-phone3d" style={{ transform: 'rotateX(6deg) rotateY(-14deg)', transformStyle: 'preserve-3d', transition: 'transform .25s ease-out', width: 286, height: 590, borderRadius: 44, background: '#2A2350', padding: 11, boxShadow: '0 40px 70px rgba(42,35,80,0.34), inset 0 0 0 2px rgba(255,255,255,0.06)' }}>
                 <div style={{ width: '100%', height: '100%', borderRadius: 34, background: 'linear-gradient(180deg,#FFFDF8,#FFF2E4)', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', width: 96, height: 22, background: '#2A2350', borderRadius: 999, zIndex: 5 }} />
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 22px 6px', fontSize: 11, fontWeight: 800, color: '#2A2350' }}><span>9:41</span><span>📶 ⚡ 100%</span></div>
