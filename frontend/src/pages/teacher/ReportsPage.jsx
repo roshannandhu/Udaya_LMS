@@ -132,7 +132,7 @@ export default function ReportsPage() {
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
+        <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
           <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md transition-colors">
             <ArrowLeft size={16} />
           </button>
@@ -143,7 +143,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto space-y-8 pb-20">
+      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto space-y-8 pb-20">
         
         {/* Standard Selector */}
         {loadingStandards ? (

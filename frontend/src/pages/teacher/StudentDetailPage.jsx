@@ -219,7 +219,7 @@ export default function StudentDetailPage() {
     return (
       <div>
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
             <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
             <Skeleton className="h-5 w-40" />
           </div>
@@ -236,12 +236,12 @@ export default function StudentDetailPage() {
     return (
       <div>
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
             <button onClick={() => navigate('/teacher/students')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
             <h1 className="text-lg md:text-xl font-semibold">Done</h1>
           </div>
         </div>
-        <div className="px-5 md:px-8 py-16 max-w-5xl mx-auto text-center">
+        <div className="px-3 md:px-8 py-16 max-w-5xl mx-auto text-center">
           <CheckCircle2 size={32} className="mx-auto mb-3 text-green-500" />
           <h3 className="font-medium mb-1">{student?.name} removed from {standard?.name}</h3>
           <p className="text-sm text-neutral-500 mb-5">Their account and history are preserved.</p>

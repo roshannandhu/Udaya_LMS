@@ -211,7 +211,7 @@ export default function SettingsPage() {
     return (
       <div>
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+          <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
             <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><MdArrowBack className="w-4 h-4" /></button>
             <h1 className="text-lg md:text-xl font-semibold flex-1">Settings</h1>
           </div>
@@ -377,13 +377,13 @@ export default function SettingsPage() {
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+        <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><MdArrowBack className="w-4 h-4" /></button>
           <h1 className="text-lg md:text-xl font-semibold flex-1">Settings</h1>
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-6 max-w-5xl mx-auto">
+      <div className="px-3 md:px-8 py-6 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-6 max-w-5xl mx-auto">
 
         {/* Team Members */}
         <div className="mb-6">

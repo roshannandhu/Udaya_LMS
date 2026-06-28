@@ -71,7 +71,7 @@ export default function QuestionBankPage() {
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+        <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
@@ -81,7 +81,7 @@ export default function QuestionBankPage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto space-y-4">
+      <div className="px-3 md:px-8 py-6 max-w-5xl mx-auto space-y-4">
         {/* Search */}
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />

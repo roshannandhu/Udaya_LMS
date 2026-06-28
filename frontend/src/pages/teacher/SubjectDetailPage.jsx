@@ -324,12 +324,12 @@ export default function SubjectDetailPage() {
     return (
       <div>
         <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
+          <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
             <Skeleton className="w-8 h-8" />
             <Skeleton className="h-5 w-32" />
           </div>
         </div>
-        <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
+        <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto">
           <Skeleton className="h-10 w-64 mb-6" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[1,2,3,4].map(i => <Skeleton key={i} className="aspect-video rounded-2xl" />)}
@@ -343,7 +343,7 @@ export default function SubjectDetailPage() {
     <div className="pb-28">
       {/* Sticky top bar — same pattern as StandardDetailPage */}
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
+        <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-6xl mx-auto">
           <button onClick={() => navigate(`/teacher/standards/${standardId}`)}
             className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
@@ -356,7 +356,7 @@ export default function SubjectDetailPage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
+      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto">
         {/* Quick add — one compact row on phone, lives in the right rail on laptop */}
         <div className="flex gap-2 mb-5 lg:hidden">
           {QUICK_ADD.map(q => {

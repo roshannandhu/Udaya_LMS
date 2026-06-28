@@ -127,7 +127,7 @@ export default function BroadcastsPage() {
     return (
       <div>
         <TopBar title="Inbox" />
-        <div className="px-5 md:px-8 py-4 max-w-5xl mx-auto space-y-2">
+        <div className="px-3 md:px-8 py-4 max-w-5xl mx-auto space-y-2">
           {[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
       </div>
@@ -138,7 +138,7 @@ export default function BroadcastsPage() {
     return (
       <div>
         <TopBar title="Inbox" />
-        <div className="px-5 md:px-8 py-20 max-w-5xl mx-auto text-center">
+        <div className="px-3 md:px-8 py-20 max-w-5xl mx-auto text-center">
           <MessageSquare size={36} className="mx-auto mb-3 text-neutral-300" />
           <h3 className="font-medium text-neutral-600 mb-1">No standards yet</h3>
           <p className="text-sm text-neutral-500">Create a standard first to send broadcasts.</p>

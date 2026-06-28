@@ -97,14 +97,14 @@ export default function RemindersPage() {
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+        <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><ArrowLeft size={16} /></button>
           <h1 className="text-lg md:text-xl font-semibold flex-1">Reminders</h1>
           <Btn variant="primary" size="sm" icon={Plus} onClick={() => setModalOpen(true)}>Add</Btn>
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto space-y-6">
+      <div className="px-3 md:px-8 py-6 max-w-5xl mx-auto space-y-6">
         {loading ? (
           <div className="space-y-2">
             {[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}

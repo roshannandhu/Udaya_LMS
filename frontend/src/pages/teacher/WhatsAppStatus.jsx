@@ -121,7 +121,7 @@ export default function WhatsAppStatus() {
         }
       />
 
-      <div className="px-5 md:px-8 max-w-5xl mx-auto space-y-4">
+      <div className="px-3 md:px-8 max-w-5xl mx-auto space-y-4">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
             {error}

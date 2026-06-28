@@ -210,7 +210,7 @@ export default function TodayPage() {
 
   if (loading && !overview) {
     return (
-      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto space-y-6">
+      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto space-y-6">
         <Skeleton className="h-12 w-64 rounded-card" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-card" />)}</div>
         <Skeleton className="h-56 w-full rounded-card" />
@@ -237,7 +237,7 @@ export default function TodayPage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-6xl mx-auto">
+      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto">
         <motion.div variants={staggerChildren} initial="hidden" animate="show" className="flex flex-col gap-6">
 
           {/* ── Header (desktop) ── */}

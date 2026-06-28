@@ -113,7 +113,7 @@ export default function TeacherProfilePage() {
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
+        <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
           <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md">
             <ArrowLeft size={16} />
           </button>
@@ -121,7 +121,7 @@ export default function TeacherProfilePage() {
         </div>
       </div>
 
-      <div className="px-5 md:px-8 py-6 max-w-5xl mx-auto space-y-6">
+      <div className="px-3 md:px-8 py-6 max-w-5xl mx-auto space-y-6">
 
         {/* Avatar + name header */}
         <div className="glass-panel border-white/60 shadow-sm rounded-xl p-6 flex items-center gap-5">

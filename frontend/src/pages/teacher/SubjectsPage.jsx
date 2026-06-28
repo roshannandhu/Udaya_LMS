@@ -241,7 +241,7 @@ export default function SubjectsPage() {
       {/* Hide the default TopBar since we are building a custom Bento header */}
       <div className="hidden"><TopBar title="Classes" /></div>
       
-      <div className="px-5 md:px-8 py-8 max-w-[1400px] mx-auto">
+      <div className="px-3 md:px-8 py-8 max-w-[1400px] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* LEFT COLUMN: Main Content */}

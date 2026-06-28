@@ -61,7 +61,7 @@ export default function AttendancePage() {
     <div className="min-h-screen pb-24">
       {/* Sticky header */}
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-5 md:px-8 py-4 max-w-5xl mx-auto">
+        <div className="px-3 md:px-8 py-4 max-w-5xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-2xl bg-pastel-sky flex items-center justify-center flex-shrink-0">

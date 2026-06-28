@@ -102,7 +102,7 @@ export default function StudentsPage() {
   return (
     <div>
       <TopBar title="Students" subtitle={loading ? '…' : `${filtered.length} of ${students.length}`} />
-      <div className={`px-5 md:px-8 py-6 mx-auto ${view === 'manage' ? 'max-w-7xl' : 'max-w-5xl'}`}>
+      <div className={`px-3 md:px-8 py-6 mx-auto ${view === 'manage' ? 'max-w-7xl' : 'max-w-5xl'}`}>
 
         {/* List / Manage toggle */}
         <div className="inline-flex items-center gap-1 p-1 mb-4 rounded-pill bg-[#F1F1EF] border border-[#EFEDEA]">
