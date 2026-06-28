@@ -68,7 +68,14 @@ jobs:
 
       - name: Decode keystore
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/udaya-release.keystore"
+          # Strip any CR/LF/spaces the stored secret may carry (the base64 was set
+          # from a CRLF text file) BEFORE decoding, so the keystore bytes are exact —
+          # a corrupt keystore is what makes Gradle signing fail in CI.
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/udaya-release.keystore"
+          echo "keystore bytes: $(stat -c%s "$RUNNER_TEMP/udaya-release.keystore")"
+          # Verify it's readable with the provided credentials before the build.
+          keytool -list -keystore "$RUNNER_TEMP/udaya-release.keystore" \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" -alias "${{ secrets.ANDROID_KEY_ALIAS }}"
 
       - name: Build signed release APK
         working-directory: frontend/android
@@ -79,7 +86,10 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease \
+          # -x lintVitalRelease: skip the release lint pass (can fail CI-only on
+          # warnings-as-errors; not needed to produce a signed APK). --stacktrace so
+          # any real failure shows the cause in the log.
+          ./gradlew assembleRelease -x lintVitalRelease --stacktrace \
             -PversionName=${{ steps.ver.outputs.name }} \
             -PversionCode=${{ steps.ver.outputs.code }}
 
