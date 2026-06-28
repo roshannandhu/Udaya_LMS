@@ -275,12 +275,15 @@ export default function LoginPage() {
         <p className="text-center text-[13px] font-semibold text-neutral-400 mt-8 tracking-wide">
           {lmsName || 'Udaya'} · Built for modern learning
         </p>
-        <a
-          href="/app"
-          className="mt-4 mx-auto flex items-center justify-center gap-2 w-max px-4 py-2 rounded-full bg-white/70 border-2 border-white shadow-sm text-[13px] font-bold text-neutral-700 hover:bg-white transition-colors"
-        >
-          <Smartphone size={15} /> Get the Android app
-        </a>
+        {/* Hide the download prompt when already running inside the Android app. */}
+        {!window.__UDAYA_NATIVE__ && (
+          <a
+            href="/app"
+            className="mt-4 mx-auto flex items-center justify-center gap-2 w-max px-4 py-2 rounded-full bg-white/70 border-2 border-white shadow-sm text-[13px] font-bold text-neutral-700 hover:bg-white transition-colors"
+          >
+            <Smartphone size={15} /> Get the Android app
+          </a>
+        )}
       </div>
     </div>
   );

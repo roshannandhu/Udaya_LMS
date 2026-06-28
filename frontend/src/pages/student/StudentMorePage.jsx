@@ -74,7 +74,8 @@ export default function StudentMorePage() {
     { icon: MdAssignment, label: 'Tests',       sub: 'Take tests and view results',       onClick: () => navigate('/student/tests') },
     { icon: MdEmojiEvents,       label: 'Leaderboard', sub: 'View class rankings',               onClick: () => navigate('/student/leaderboard') },
     { icon: MdBarChart,     label: 'Report Card', sub: 'View your performance report card', onClick: () => navigate('/student/report') },
-    { icon: MdSystemUpdate, label: 'Download Android app', sub: 'Get or update the official app', onClick: () => navigate('/app') },
+    // Only show the app-download entry on the web — pointless inside the installed app.
+    ...(!window.__UDAYA_NATIVE__ ? [{ icon: MdSystemUpdate, label: 'Download Android app', sub: 'Get or update the official app', onClick: () => navigate('/app') }] : []),
   ];
 
   return (
