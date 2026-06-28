@@ -10225,10 +10225,11 @@ def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current
 @app.get("/api/branding")
 def get_branding():
     """Public — login page reads this so the logo/name show on any device,
-    before the user has authenticated."""
+    before the user has authenticated. Falls back to the default institute name so
+    the brand shows correctly everywhere even before it's set in Settings."""
     settings = get_teacher_settings()
     return {
-        "lms_name": settings.get("lms_name") or "",
+        "lms_name": (settings.get("lms_name") or "").strip() or _DEFAULT_INSTITUTE_NAME,
         "lms_logo": settings.get("lms_logo") or "",
     }
 
@@ -11081,6 +11082,9 @@ def _wa_require_teacher(user):
         raise HTTPException(status_code=503, detail="Database not available")
 
 
+_DEFAULT_INSTITUTE_NAME = "Udaya Tuition Home"
+
+
 def _wa_branding_name() -> str:
     try:
         return (get_teacher_settings().get("lms_name") or "").strip()
@@ -11093,6 +11097,21 @@ def _wa_login_url() -> str:
         return (get_teacher_settings().get("login_url") or "").strip()
     except Exception:
         return ""
+
+
+# Public APK download URL used by the {App Download Link} variable. Overridable via
+# the teacher settings ("app_download_url"); defaults to the live R2 link.
+_DEFAULT_APP_DOWNLOAD_URL = "https://files.udaya-learn.com/app/udaya-latest.apk"
+
+
+def _wa_app_download_url() -> str:
+    try:
+        custom = (get_teacher_settings().get("app_download_url") or "").strip()
+        if custom:
+            return custom
+    except Exception:
+        pass
+    return _DEFAULT_APP_DOWNLOAD_URL
 
 
 # ── Variables (single source of truth) ────────────────────────────────────────
@@ -11114,7 +11133,9 @@ WA_VARIABLES = [
     {"name": "Latest Assignment",  "kind": "auto", "group": "Academics",   "example": "Algebra Worksheet","description": "Most recent assignment"},
     {"name": "Study Material",     "kind": "auto", "group": "Academics",   "example": "Chapter 5 Notes",  "description": "Latest study material"},
     {"name": "Live Class",         "kind": "auto", "group": "Academics",   "example": "Physics Doubts",   "description": "Upcoming live class"},
-    {"name": "Institute Name",     "kind": "auto", "group": "General",     "example": "Udaya Academy",    "description": "Your institute's name"},
+    {"name": "Latest Video",       "kind": "auto", "group": "Academics",   "example": "Trigonometry Ch.1","description": "Most recent video lesson"},
+    {"name": "Institute Name",     "kind": "auto", "group": "General",     "example": "Udaya Tuition Home","description": "Your institute's name"},
+    {"name": "App Download Link",  "kind": "auto", "group": "General",     "example": "app download link","description": "Link to download the Android app"},
     {"name": "Date",               "kind": "auto", "group": "General",     "example": "08 Jun 2026",      "description": "Today's date"},
     {"name": "Time",               "kind": "auto", "group": "General",     "example": "03:45 PM",         "description": "Current time"},
     {"name": "Fee Amount",         "kind": "ask",  "group": "You type this", "example": "5000",           "description": "You'll type this before sending"},
@@ -11129,8 +11150,8 @@ WA_VARIABLES = [
 _WA_AUTO_KEYS = {
     "student name", "student id", "class", "username", "password", "login link",
     "institute name", "attendance", "score", "points", "latest exam",
-    "latest assignment", "study material", "live class", "date", "time",
-    "month", "year", "parent name", "student phone",
+    "latest assignment", "study material", "live class", "latest video", "date", "time",
+    "month", "year", "parent name", "student phone", "app download link",
 }
 
 # Legacy / loose spellings → canonical auto key. Keeps old templates and snake-case
@@ -11147,7 +11168,12 @@ _WA_ALIAS = {
     "assignment": "latest assignment", "homework": "latest assignment", "latest_assignment": "latest assignment",
     "study_material": "study material", "material": "study material", "notes": "study material",
     "live_class": "live class", "zoom": "live class", "meeting": "live class",
+    "latest_video": "latest video", "video": "latest video", "lesson": "latest video",
     "marks": "score", "average": "score", "percentage": "score",
+    "app_download_link": "app download link", "app link": "app download link",
+    "app_link": "app download link", "apk": "app download link",
+    "download link": "app download link", "download_link": "app download link",
+    "app": "app download link",
 }
 
 
@@ -11161,7 +11187,7 @@ def _wa_auto_value(key: str, recip: dict) -> str:
         "username":          recip.get("username") or "",
         "password":          recip.get("plain_password") or "******",
         "login link":        _wa_login_url() or "",
-        "institute name":    _wa_branding_name() or "our institute",
+        "institute name":    _wa_branding_name() or _DEFAULT_INSTITUTE_NAME,
         "parent name":       "Parent",
         "student phone":     recip.get("phone") or "",
         "attendance":        f"{recip.get('attendance_pct') or 0}%",
@@ -11171,6 +11197,8 @@ def _wa_auto_value(key: str, recip: dict) -> str:
         "latest assignment": recip.get("latest_assignment") or "",
         "study material":    recip.get("latest_material") or "",
         "live class":        recip.get("upcoming_live_class") or "",
+        "latest video":      recip.get("latest_video") or "",
+        "app download link": _wa_app_download_url(),
         "date":              now.strftime("%d %b %Y"),
         "time":              now.strftime("%I:%M %p"),
         "month":             now.strftime("%B"),
@@ -12060,21 +12088,41 @@ def _wa_header_from_media(media_type: Optional[str]) -> str:
     return "document"
 
 
-_WA_TEMPLATE_MEDIA_OK = False
+_WA_TEMPLATE_COLS_OK: dict = {}  # column name -> bool (cached "does this column exist")
+
+
+def _wa_templates_have_col(col: str) -> bool:
+    """True once whatsapp_templates has `col`. Self-heals after the one-time ALTER
+    (see migrations/whatsapp_templates_fix.sql) so template saves never crash on a
+    column an older table predates."""
+    if _WA_TEMPLATE_COLS_OK.get(col):
+        return True
+    try:
+        service_supabase.table("whatsapp_templates").select(col).limit(1).execute()
+        _WA_TEMPLATE_COLS_OK[col] = True
+    except Exception:
+        _WA_TEMPLATE_COLS_OK[col] = False
+    return _WA_TEMPLATE_COLS_OK[col]
 
 
 def _wa_templates_have_media() -> bool:
-    """True once whatsapp_templates has the media columns. Self-heals after the
-    one-time ALTER (see schema.sql) so template saves never crash before it's run."""
-    global _WA_TEMPLATE_MEDIA_OK
-    if _WA_TEMPLATE_MEDIA_OK:
-        return True
-    try:
-        service_supabase.table("whatsapp_templates").select("media_url").limit(1).execute()
-        _WA_TEMPLATE_MEDIA_OK = True
-    except Exception:
-        _WA_TEMPLATE_MEDIA_OK = False
-    return _WA_TEMPLATE_MEDIA_OK
+    return _wa_templates_have_col("media_url")
+
+
+# Columns the template endpoints write beyond the always-present core
+# (teacher_id, name, body_text). Each is included only if it actually exists.
+_WA_TEMPLATE_OPTIONAL_COLS = (
+    "category", "language", "header_type", "variables", "status",
+    "provider_template_id", "media_url", "media_type", "media_name",
+)
+
+
+def _wa_template_row_existing(full_row: dict) -> dict:
+    """Drop keys for columns that don't exist on this DB, so an insert/update with a
+    pre-migration table never fails on a missing column."""
+    core = {"teacher_id", "name", "body_text", "id"}
+    return {k: v for k, v in full_row.items()
+            if k in core or k not in _WA_TEMPLATE_OPTIONAL_COLS or _wa_templates_have_col(k)}
 
 
 async def _wa_meta_create(provider, name, category, language, body_text, header_type):
@@ -12097,6 +12145,8 @@ def wa_list_templates(user = Depends(verify_token)):
 @app.post("/api/teacher/whatsapp/templates")
 async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
     body = _wa_normalize_body(data.body_text)
     header_type = _wa_header_from_media(data.media_type)
     row = {
@@ -12108,9 +12158,8 @@ async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_
         "body_text": body,
         "variables": _wa_parse_variables(body),
         "status": "draft",
+        "media_url": data.media_url, "media_type": data.media_type, "media_name": data.media_name,
     }
-    if _wa_templates_have_media():
-        row.update({"media_url": data.media_url, "media_type": data.media_type, "media_name": data.media_name})
     submit_error = None
     if data.submit:
         provider = wa.get_provider()
@@ -12119,16 +12168,29 @@ async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_
         row["provider_template_id"] = res.get("provider_template_id")
         row["status"] = res.get("status", "pending") if res.get("status") != "not_configured" else "draft"
         submit_error = res.get("error")
+    safe_row = _wa_template_row_existing(row)
     try:
-        ins = service_supabase.table("whatsapp_templates").insert(row).execute()
-        return {"template": (ins.data or [row])[0], "error": submit_error}
+        ins = service_supabase.table("whatsapp_templates").insert(safe_row).execute()
+        return {"template": (ins.data or [safe_row])[0], "error": submit_error}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not save template: {e}")
+        # Last-resort retry with only the always-present core columns, so a missing
+        # optional column on an un-migrated table can never block creating a template.
+        print(f"[wa] template insert failed ({e}); retrying core-only")
+        core = {"teacher_id": user["teacher_id"], "name": data.name.strip(),
+                "body_text": body, "status": "draft"}
+        try:
+            ins = service_supabase.table("whatsapp_templates").insert(core).execute()
+            return {"template": (ins.data or [core])[0],
+                    "error": submit_error or "Saved (run migrations/whatsapp_templates_fix.sql to enable all fields)."}
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"Could not save template: {e2}")
 
 
 @app.put("/api/teacher/whatsapp/templates/{template_id}")
 async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
     body = _wa_normalize_body(data.body_text)
     header_type = _wa_header_from_media(data.media_type)
     update = {
@@ -12141,9 +12203,8 @@ async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user
         # Editing the wording invalidates any prior Meta approval — back to draft.
         "status": "draft",
         "provider_template_id": None,
+        "media_url": data.media_url, "media_type": data.media_type, "media_name": data.media_name,
     }
-    if _wa_templates_have_media():
-        update.update({"media_url": data.media_url, "media_type": data.media_type, "media_name": data.media_name})
     submit_error = None
     if data.submit:
         provider = wa.get_provider()
@@ -12152,8 +12213,9 @@ async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user
         update["provider_template_id"] = res.get("provider_template_id")
         update["status"] = res.get("status", "pending") if res.get("status") != "not_configured" else "draft"
         submit_error = res.get("error")
+    safe_update = _wa_template_row_existing(update)
     try:
-        upd = service_supabase.table("whatsapp_templates").update(update).eq(
+        upd = service_supabase.table("whatsapp_templates").update(safe_update).eq(
             "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
         if not upd.data:
             raise HTTPException(status_code=404, detail="Template not found")
@@ -12161,7 +12223,20 @@ async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not update template: {e}")
+        # Retry with core columns only (missing optional column can't block an edit).
+        print(f"[wa] template update failed ({e}); retrying core-only")
+        try:
+            upd = service_supabase.table("whatsapp_templates").update(
+                {"name": data.name.strip(), "body_text": body, "status": "draft"}).eq(
+                "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
+            if not upd.data:
+                raise HTTPException(status_code=404, detail="Template not found")
+            return {"template": _wa_template_out(upd.data[0]),
+                    "error": submit_error or "Saved (run migrations/whatsapp_templates_fix.sql to enable all fields)."}
+        except HTTPException:
+            raise
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"Could not update template: {e2}")
 
 
 @app.post("/api/teacher/whatsapp/templates/{template_id}/submit")

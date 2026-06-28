@@ -62,8 +62,11 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
       setOpen(false);
       setForm(BLANK);
       reload();
-      if (submit && res?.error) alert(`Saved, but submitting to WhatsApp failed:\n\n${res.error}`);
-    } catch (e) { alert(e.message); } finally { setBusy(false); }
+      if (res?.error) alert(submit ? `Saved, but submitting to WhatsApp failed:\n\n${res.error}` : res.error);
+    } catch (e) {
+      // Never fail silently — always surface something the teacher can act on.
+      alert(e?.message || 'Could not save the template. Please try again.');
+    } finally { setBusy(false); }
   };
 
   const submit = async (id) => {

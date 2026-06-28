@@ -12,7 +12,12 @@ fixed template stays faithful but never invents data.
 from typing import Optional
 
 
-SIGNATURE = "— Udaya LMS"
+DEFAULT_BRAND = "Udaya Tuition Home"
+
+
+def _sig(brand: Optional[str] = None) -> str:
+    """Sign-off line using the configured institute/branding name."""
+    return f"— {(brand or DEFAULT_BRAND).strip()}"
 
 
 def _fmt(val, suffix: str = "", dash: str = "—") -> str:
@@ -38,7 +43,8 @@ def _subject_score(radar: list, *names: str, dash: str = "—") -> str:
 
 
 def report_card(*, parent_name: str, student_name: str, term: str,
-                radar: list, attendance, grade, pdf_url: str) -> str:
+                radar: list, attendance, grade, pdf_url: str,
+                brand: Optional[str] = None) -> str:
     """REPORT CARD template. `radar` is the report's subject_radar list."""
     maths = _subject_score(radar, "Mathematics", "Maths", "Math")
     science = _subject_score(radar, "Science")
@@ -52,12 +58,12 @@ def report_card(*, parent_name: str, student_name: str, term: str,
         f"Attendance: {_fmt(attendance, '%')}\n"
         f"Overall Grade: {_fmt(grade)}\n\n"
         f"View full report: {pdf_url}\n\n"
-        f"{SIGNATURE}"
+        f"{_sig(brand)}"
     )
 
 
 def attendance_alert(*, parent_name: str, student_name: str, date: str,
-                     attendance) -> str:
+                     attendance, brand: Optional[str] = None) -> str:
     """ATTENDANCE ALERT template (sent when a student is absent)."""
     return (
         f"Hello {parent_name},\n\n"
@@ -65,12 +71,12 @@ def attendance_alert(*, parent_name: str, student_name: str, date: str,
         f"{student_name} was absent today ({date}).\n"
         f"Current attendance: {_fmt(attendance, '%')}\n\n"
         f"Please contact us if needed.\n"
-        f"{SIGNATURE}"
+        f"{_sig(brand)}"
     )
 
 
 def exam_result(*, parent_name: str, student_name: str, subject: str,
-                score, total, grade) -> str:
+                score, total, grade, brand: Optional[str] = None) -> str:
     """EXAM RESULT template."""
     return (
         f"Hello {parent_name},\n\n"
@@ -79,11 +85,12 @@ def exam_result(*, parent_name: str, student_name: str, subject: str,
         f"Subject: {_fmt(subject)}\n"
         f"Score: {_fmt(score)}/{_fmt(total)}\n"
         f"Grade: {_fmt(grade)}\n\n"
-        f"{SIGNATURE}"
+        f"{_sig(brand)}"
     )
 
 
-def fee_reminder(*, parent_name: str, student_name: str, amount, date: str) -> str:
+def fee_reminder(*, parent_name: str, student_name: str, amount, date: str,
+                 brand: Optional[str] = None) -> str:
     """FEE REMINDER template."""
     return (
         f"Hello {parent_name},\n\n"
@@ -91,15 +98,16 @@ def fee_reminder(*, parent_name: str, student_name: str, amount, date: str) -> s
         f"Student: {student_name}\n"
         f"Amount due: ₹{_fmt(amount)}\n"
         f"Due date: {_fmt(date)}\n\n"
-        f"{SIGNATURE}"
+        f"{_sig(brand)}"
     )
 
 
-def broadcast(*, parent_name: str, message: str) -> str:
+def broadcast(*, parent_name: str, message: str, brand: Optional[str] = None) -> str:
     """BROADCAST template (a teacher's free message to all parents)."""
+    label = (brand or DEFAULT_BRAND).strip()
     return (
         f"Hello {parent_name},\n\n"
-        f"📢 *Message from Udaya LMS*\n\n"
+        f"📢 *Message from {label}*\n\n"
         f"{message}\n\n"
-        f"{SIGNATURE}"
+        f"{_sig(brand)}"
     )

@@ -184,6 +184,7 @@ async def _send_report_card(main, provider, teacher_id, user, student, term,
         radar=report.get("subject_radar") or [],
         attendance=fields.get("attendance_pct"),
         grade=_grade(fields.get("avg_score")),
+        brand=lms or None,
         pdf_url=pdf_url or "(report unavailable)",
     )
     res = await main._wa_send_and_log(
@@ -239,7 +240,8 @@ async def send_attendance_alert(student_id: str, body: Optional[AttendanceBody] 
     provider = wa.get_provider()
     body_text = T.attendance_alert(
         parent_name="Parent", student_name=recip["name"] or "your child",
-        date=date, attendance=student.get("attendance_pct"))
+        date=date, attendance=student.get("attendance_pct"),
+        brand=main._wa_branding_name() or None)
     res = await main._wa_send_and_log(
         provider, user["teacher_id"], recip, mode="freeform", body_text=body_text,
         category="utility", standard_id=recip["standard_id"])
@@ -278,7 +280,7 @@ async def send_exam_result(exam_id: str, student_id: str,
     body_text = T.exam_result(
         parent_name="Parent", student_name=recip["name"] or "your child",
         subject=subject or test.get("title") or "", score=score, total=total,
-        grade=_grade(pct))
+        grade=_grade(pct), brand=main._wa_branding_name() or None)
     # test_id ties into the existing exam-result dedup (12h window + test_id column).
     res = await main._wa_send_and_log(
         provider, user["teacher_id"], recip, mode="freeform", body_text=body_text,
@@ -351,7 +353,8 @@ async def send_broadcast_to_parents(body: BroadcastBody, user=Depends(current_te
         results = []
         for r in recips:
             try:
-                text = T.broadcast(parent_name="Parent", message=body.message.strip())
+                text = T.broadcast(parent_name="Parent", message=body.message.strip(),
+                                   brand=main._wa_branding_name() or None)
                 res = await main._wa_send_and_log(
                     provider, teacher_id, r, mode="freeform", body_text=text,
                     category="utility", standard_id=r["standard_id"])

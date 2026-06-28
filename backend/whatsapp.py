@@ -410,6 +410,16 @@ class BaileysProvider(WhatsAppProvider):
         # _wa_send_and_log's body_text path, so this is only hit defensively.
         return await self.send_freeform(to, template or "", media_url, media_type)
 
+    async def create_template(self, name, category, language, body_text,
+                              header_type="none", variables=None) -> dict:
+        # Baileys has no Meta-style template approval — never throw; the message is
+        # just sent as normal text. (The UI hides "Save & submit" off Meta anyway.)
+        return {"status": "not_configured", "provider_template_id": None,
+                "error": "Templates don't need approval on this provider — just save and use it."}
+
+    async def get_template_status(self, provider_template_id: str) -> dict:
+        return {"status": "approved"}
+
 
 def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
     """Factory: real provider when credentials exist, else the degrade provider.
