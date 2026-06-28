@@ -68,10 +68,10 @@ jobs:
 
       - name: Decode keystore
         run: |
-          # Strip any CR/LF/spaces the stored secret may carry (the base64 was set
-          # from a CRLF text file) BEFORE decoding, so the keystore bytes are exact —
-          # a corrupt keystore is what makes Gradle signing fail in CI.
-          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/udaya-release.keystore"
+          # Keep ONLY base64 alphabet chars before decoding — robust against any
+          # CR/LF/BOM/whitespace/encoding artifact the secret may carry, whatever set
+          # it. A corrupt keystore is what makes Gradle signing fail in CI.
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | tr -dc 'A-Za-z0-9+/=' | base64 -d > "$RUNNER_TEMP/udaya-release.keystore"
           echo "keystore bytes: $(stat -c%s "$RUNNER_TEMP/udaya-release.keystore")"
           # Verify it's readable with the provided credentials before the build.
           keytool -list -keystore "$RUNNER_TEMP/udaya-release.keystore" \
