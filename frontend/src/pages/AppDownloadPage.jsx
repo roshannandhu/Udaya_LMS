@@ -1,47 +1,78 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Download, ShieldCheck, Smartphone, Settings, CheckCircle2,
-  MapPin, Mail, Sparkles, ArrowRight,
-} from 'lucide-react';
+  MdMenuBook, MdAssignment, MdVideocam, MdChatBubble, MdEmojiEvents, MdBarChart,
+} from 'react-icons/md';
+import { Play } from 'lucide-react';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
 import { apiClient } from '../lib/api';
 
-const LOCATION_URL = 'https://share.google/M9oZS4oVP6281fzOi';
-const CONTACT_EMAIL = 'udayatuitionhome@gmail.com';
-// Public R2 base — the APK + version.json live here. Used as a direct fallback so
-// the download works even if the backend's /api/app/version is empty/misconfigured.
+// ── Constants (real, working) ──────────────────────────────────────────────────
 const R2_BASE = 'https://files.udaya-learn.com';
 const FALLBACK_APK = `${R2_BASE}/app/udaya-latest.apk`;
+const LOCATION_URL = 'https://share.google/M9oZS4oVP6281fzOi';
+const CONTACT_EMAIL = 'udayatuitionhome@gmail.com';
 
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return null;
-  const mb = bytes / (1024 * 1024);
-  return `${mb.toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
-  show: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: 0.06 * i, duration: 0.4, ease: [0.22, 1, 0.36, 1] } }),
-};
-
-const STEPS = [
-  { icon: Download, title: 'Download the app', body: 'Tap the button above. The Udaya .apk file saves to your phone.' },
-  { icon: Settings, title: 'Allow the install', body: 'Open the file. If Android warns you, tap "Settings" → enable "Allow from this source", then go back.' },
-  { icon: CheckCircle2, title: 'Open & sign in', body: 'Tap Install, then Open. Log in with your Student ID and password.' },
+// Real student-app features (the app's actual capabilities) with the app's own icons.
+const FEATURES = [
+  { Icon: MdMenuBook,   grad: 'linear-gradient(135deg,#4DA6FF,#2E7DFF)', sh: 'rgba(77,166,255,0.35)',  title: 'Subjects & lessons',     body: 'Every subject in one place, with video lessons you can watch and resume anytime.' },
+  { Icon: Play,         grad: 'linear-gradient(135deg,#FF6B6B,#FF8FB1)', sh: 'rgba(255,107,107,0.35)', title: 'Video lessons',          body: 'Stream class videos, pick up right where you left off, and track what you finished.' },
+  { Icon: MdAssignment, grad: 'linear-gradient(135deg,#FFC93C,#FFAE2E)', sh: 'rgba(255,201,60,0.4)',   title: 'Tests & instant results',body: 'Take quizzes and exams, then see your score, rank and answers straight away.' },
+  { Icon: MdVideocam,   grad: 'linear-gradient(135deg,#28C7A0,#16A77F)', sh: 'rgba(40,199,160,0.35)',  title: 'Live classes',           body: 'Join live online classes right from your phone — never miss a session.' },
+  { Icon: MdChatBubble, grad: 'linear-gradient(135deg,#9B6BFF,#6A3CFF)', sh: 'rgba(155,107,255,0.38)', title: 'Class updates',          body: 'Announcements, notes and important messages from your teacher in one feed.' },
+  { Icon: MdEmojiEvents,grad: 'linear-gradient(135deg,#FF8FB1,#FF6B9D)', sh: 'rgba(255,143,177,0.4)',  title: 'Leaderboard & ranking',  body: 'Earn points, climb the class leaderboard and see how you rank among friends.' },
 ];
+
+const PAGE_CSS = `
+  .u-page * { box-sizing: border-box; }
+  @keyframes uBlob {
+    0%{transform:translate(0,0) scale(1) rotate(0)} 33%{transform:translate(40px,-30px) scale(1.12) rotate(20deg)}
+    66%{transform:translate(-30px,25px) scale(.94) rotate(-15deg)} 100%{transform:translate(0,0) scale(1) rotate(0)}
+  }
+  @keyframes uFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-22px)} }
+  @keyframes uFloatSm { 0%,100%{transform:translateY(0) rotate(-6deg)} 50%{transform:translateY(-14px) rotate(6deg)} }
+  @keyframes uTwinkle { 0%,100%{opacity:.35;transform:scale(.7)} 50%{opacity:1;transform:scale(1.1)} }
+  @keyframes uBob { 0%,100%{transform:translateY(0) rotate(0)} 50%{transform:translateY(-12px) rotate(1.5deg)} }
+  @keyframes uProgress { from{width:0%} to{width:68%} }
+  @keyframes uWiggle { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
+  .u-reveal { opacity:0; transform:translateY(40px); transition:opacity .7s ease, transform .8s cubic-bezier(.16,.84,.44,1); }
+  @media (max-width:820px){
+    .u-hero-grid{ grid-template-columns:1fr !important; }
+    .u-fgrid{ grid-template-columns:1fr 1fr !important; }
+    .u-steps{ grid-template-columns:1fr !important; }
+    .u-phonewrap{ order:-1; }
+  }
+  @media (max-width:520px){
+    .u-fgrid{ grid-template-columns:1fr !important; }
+  }
+`;
 
 export default function AppDownloadPage() {
   const { lmsName, lmsLogo, applyBranding } = useSettingsStore();
   const [info, setInfo] = useState(null);
+  const rootRef = useRef(null);
+  const phoneRef = useRef(null);
 
   useEffect(() => { document.title = `Get the ${lmsName || 'Udaya'} app`; }, [lmsName]);
 
-  // Public branding (logo/name) + latest app version — both work without login.
+  // Load the playful fonts once.
+  useEffect(() => {
+    const id = 'u-fonts';
+    if (!document.getElementById(id)) {
+      const l = document.createElement('link');
+      l.id = id; l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap';
+      document.head.appendChild(l);
+    }
+  }, []);
+
+  // Branding + live app version (with a direct-R2 fallback so the button always works).
   useEffect(() => {
     apiClient('/branding').then(applyBranding).catch(() => {});
-    // Prefer the backend (same-origin), but fall back to reading version.json
-    // straight from R2 so the page never gets stuck when /api/app/version is empty.
     apiClient('/app/version')
       .then(d => {
         if (d && typeof d === 'object' && d.apkUrl) { setInfo(d); return; }
@@ -54,136 +85,251 @@ export default function AppDownloadPage() {
       });
   }, [applyBranding]);
 
-  // Always have a working download target: real apkUrl if known, else the latest
-  // APK on R2 directly (confirmed public). An <a download> needs no CORS.
+  // Scroll reveals + mouse parallax + phone tilt (ported from the design prototype).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const reveals = Array.from(root.querySelectorAll('[data-reveal]'));
+    const show = (el) => {
+      if (el._shown) return; el._shown = true;
+      el.style.transitionDelay = (parseInt(el.dataset.delay || '0', 10)) + 'ms';
+      el.style.opacity = '1'; el.style.transform = 'none';
+    };
+    const checkReveals = () => {
+      const h = window.innerHeight || document.documentElement.clientHeight;
+      reveals.forEach((el) => {
+        if (el._shown) return;
+        const r = el.getBoundingClientRect();
+        if (r.top < h * 0.92 && r.bottom > 0) show(el);
+      });
+    };
+    checkReveals();
+    window.addEventListener('scroll', checkReveals, { passive: true, capture: true });
+    window.addEventListener('resize', checkReveals, { passive: true });
+    const fallback = setTimeout(() => reveals.forEach(show), 1200);
+
+    const parallaxEls = Array.from(root.querySelectorAll('[data-parallax]'));
+    let mx = 0, my = 0, raf = null;
+    const tick = () => {
+      raf = null;
+      const p = phoneRef.current;
+      if (p) p.style.transform = `rotateX(${(6 - my * 14).toFixed(2)}deg) rotateY(${(-14 + mx * 18).toFixed(2)}deg)`;
+      parallaxEls.forEach((el) => {
+        const d = parseFloat(el.dataset.parallax) || 20;
+        el.style.translate = `${(mx * d).toFixed(1)}px ${(my * d).toFixed(1)}px`;
+      });
+    };
+    const onMove = (ev) => {
+      const r = root.getBoundingClientRect();
+      mx = (ev.clientX - r.left) / r.width - 0.5;
+      my = (ev.clientY - r.top) / r.height - 0.5;
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', checkReveals, { capture: true });
+      window.removeEventListener('resize', checkReveals);
+      window.removeEventListener('mousemove', onMove);
+      clearTimeout(fallback);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   const apkUrl = info?.apkUrl || info?.apkLatestUrl || FALLBACK_APK;
-  const size = formatSize(info?.sizeBytes);
+  const versionName = info?.versionName || '1.1.2';
+  const size = formatSize(info?.sizeBytes) || '6.5 MB';
   const name = lmsName || 'Udaya';
-  const logo = lmsLogo || DEFAULT_LMS_LOGO;
+  const hasLogo = !!lmsLogo;
+
+  // Reusable bits
+  const Brand = ({ big }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+      {hasLogo ? (
+        <img src={lmsLogo} alt={name} style={{ width: big ? 38 : 34, height: big ? 38 : 34, borderRadius: 11, objectFit: 'cover', boxShadow: '0 6px 16px rgba(255,107,107,0.25)' }} />
+      ) : (
+        <div style={{ width: big ? 38 : 34, height: big ? 38 : 34, borderRadius: 11, background: 'linear-gradient(135deg,#FFC93C,#FF6B6B)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(255,107,107,0.35)', transform: 'rotate(-6deg)' }}>
+          <div style={{ width: big ? 14 : 12, height: big ? 14 : 12, background: '#fff', borderRadius: 4, transform: 'rotate(45deg)' }} />
+        </div>
+      )}
+      <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: big ? 24 : 20, letterSpacing: '-0.5px', color: '#2A2350' }}>{name}</span>
+    </div>
+  );
+
+  const reveal = (delay = 0) => ({ 'data-reveal': true, 'data-delay': delay, className: 'u-reveal' });
 
   return (
-    <div className="min-h-dvh bg-[#FAFAF9] text-neutral-900 flex flex-col">
-      <main className="flex-1 w-full max-w-md mx-auto px-5 pt-12 pb-10">
+    <div ref={rootRef} className="u-page" style={{ fontFamily: "'Nunito',sans-serif", color: '#2A2350', background: '#FFF9F0', overflowX: 'hidden', position: 'relative', minHeight: '100dvh' }}>
+      <style>{PAGE_CSS}</style>
 
-        {/* ── Hero (splash styling: white, centered logo, animated) ── */}
-        <motion.section
-          initial="hidden" animate="show"
-          className="flex flex-col items-center text-center"
-        >
-          <motion.img
-            variants={{ hidden: { opacity: 0, scale: 0.78 }, show: { opacity: 1, scale: 1, transition: { duration: 0.55, ease: [0.34, 1.56, 0.64, 1], delay: 0.1 } } }}
-            src={logo} alt={`${name} logo`} draggable={false}
-            className="w-24 h-24 rounded-[28px] object-cover shadow-card border-[4px] border-white bg-white"
-          />
-          <motion.h1
-            custom={1} variants={fadeUp}
-            className="mt-6 text-[28px] font-extrabold tracking-tight leading-none"
-          >
-            {name}
-          </motion.h1>
-          <motion.p
-            custom={2} variants={fadeUp}
-            className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400"
-          >
-            Android App · Powered by Udaya
-          </motion.p>
+      {/* NAV */}
+      <nav style={{ position: 'sticky', top: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px clamp(20px,5vw,64px)', backdropFilter: 'blur(10px)', background: 'rgba(255,249,240,0.72)', borderBottom: '1px solid rgba(42,35,80,0.06)' }}>
+        <Brand big />
+        <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#fff', textDecoration: 'none', background: '#2A2350', padding: '11px 20px', borderRadius: 999, boxShadow: '0 8px 18px rgba(42,35,80,0.22)' }}>Get the app</a>
+      </nav>
 
-          {/* Primary CTA — the one and only primary action on the page */}
-          <motion.a
-            custom={3} variants={fadeUp}
-            href={apkUrl || undefined}
-            aria-disabled={!apkUrl}
-            className={`mt-7 w-full inline-flex items-center justify-center gap-2.5 rounded-2xl px-6 py-4 text-[15px] font-bold shadow-card transition-colors ${
-              apkUrl
-                ? 'bg-ink text-white hover:bg-neutral-800'
-                : 'bg-neutral-200 text-neutral-400 cursor-not-allowed pointer-events-none'
-            }`}
-          >
-            <Download size={19} strokeWidth={2.4} />
-            {apkUrl ? 'Download for Android' : 'Preparing download…'}
-          </motion.a>
+      {/* HERO */}
+      <section style={{ position: 'relative', padding: 'clamp(40px,7vw,84px) clamp(20px,5vw,64px) clamp(60px,8vw,100px)', overflow: 'hidden' }}>
+        <div data-parallax="26" style={{ position: 'absolute', top: -80, left: -60, width: 380, height: 380, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%,#9B6BFF,#6A3CFF)', filter: 'blur(8px)', opacity: 0.32, animation: 'uBlob 16s ease-in-out infinite', zIndex: 0 }} />
+        <div data-parallax="40" style={{ position: 'absolute', top: 40, right: -40, width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%,#4DA6FF,#28C7A0)', filter: 'blur(8px)', opacity: 0.30, animation: 'uBlob 20s ease-in-out infinite reverse', zIndex: 0 }} />
+        <div data-parallax="18" style={{ position: 'absolute', bottom: -100, left: '40%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%,#FFC93C,#FF6B6B)', filter: 'blur(10px)', opacity: 0.28, animation: 'uBlob 18s ease-in-out infinite', zIndex: 0 }} />
+        <div data-parallax="60" style={{ position: 'absolute', top: '18%', left: '8%', fontSize: 26, animation: 'uTwinkle 3.5s ease-in-out infinite', zIndex: 1 }}>✦</div>
+        <div data-parallax="50" style={{ position: 'absolute', top: '30%', right: '10%', width: 22, height: 22, background: '#28C7A0', borderRadius: 7, transform: 'rotate(20deg)', animation: 'uFloatSm 6s ease-in-out infinite', zIndex: 1 }} />
+        <div data-parallax="70" style={{ position: 'absolute', bottom: '14%', right: '16%', fontSize: 22, color: '#FFC93C', animation: 'uTwinkle 4s ease-in-out infinite', zIndex: 1 }}>★</div>
 
-          <motion.div custom={4} variants={fadeUp} className="mt-3 flex items-center gap-2 text-xs text-neutral-500">
-            {info?.versionName && (
-              <span className="inline-flex items-center gap-1 bg-white border border-[#EBEAE7] rounded-full px-2.5 py-1 font-semibold">
-                <Sparkles size={12} /> v{info.versionName}
-              </span>
-            )}
-            {size && <span className="text-neutral-400">{size}</span>}
-            <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
-              <ShieldCheck size={13} /> Official app
-            </span>
-          </motion.div>
-        </motion.section>
-
-        {/* ── Install guide ── */}
-        <section className="mt-12">
-          <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-4 px-1">
-            How to install
-          </h2>
-          <ol className="space-y-3">
-            {STEPS.map((s, i) => (
-              <motion.li
-                key={s.title}
-                initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ delay: 0.05 * i, duration: 0.35 }}
-                className="flex items-start gap-3.5 bg-white border border-[#EBEAE7] rounded-2xl p-4 shadow-card"
-              >
-                <span className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#F4F2EF] flex items-center justify-center text-neutral-700">
-                  <s.icon size={18} strokeWidth={2} />
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-neutral-400">STEP {i + 1}</span>
-                  </div>
-                  <p className="font-semibold text-[15px] leading-snug">{s.title}</p>
-                  <p className="text-[13px] text-neutral-500 leading-relaxed mt-0.5">{s.body}</p>
-                </div>
-              </motion.li>
-            ))}
-          </ol>
-          <p className="text-[12px] text-neutral-400 leading-relaxed mt-3 px-1">
-            The "unknown sources" warning is normal for apps installed outside the Play Store —
-            it's the official {name} app, safe to install.
-          </p>
-        </section>
-
-        {/* ── Trust strip ── */}
-        <section className="mt-8 grid grid-cols-3 gap-2.5">
-          {[
-            { icon: ShieldCheck, label: 'Safe & official' },
-            { icon: Smartphone, label: 'Lightweight' },
-            { icon: Sparkles, label: 'Auto-updates' },
-          ].map((t) => (
-            <div key={t.label} className="bg-white border border-[#EBEAE7] rounded-2xl p-3 flex flex-col items-center text-center gap-1.5 shadow-card">
-              <t.icon size={18} className="text-neutral-700" />
-              <span className="text-[11px] font-semibold text-neutral-600 leading-tight">{t.label}</span>
+        <div className="u-hero-grid" style={{ position: 'relative', zIndex: 2, maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.05fr 0.95fr', gap: 'clamp(24px,4vw,56px)', alignItems: 'center' }}>
+          {/* left copy */}
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', padding: '7px 14px 7px 8px', borderRadius: 999, boxShadow: '0 6px 16px rgba(42,35,80,0.08)', marginBottom: 22 }}>
+              <span style={{ background: 'linear-gradient(135deg,#FFC93C,#FF6B6B)', color: '#fff', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 12, padding: '3px 10px', borderRadius: 999 }}>NEW</span>
+              <span style={{ fontWeight: 700, fontSize: 13.5, color: '#6B6593' }}>The official {name} app</span>
             </div>
-          ))}
-        </section>
-      </main>
-
-      {/* ── Footer ── */}
-      <footer className="border-t border-[#EBEAE7] bg-white">
-        <div className="max-w-md mx-auto px-5 py-5 flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-2.5">
-            <a
-              href={LOCATION_URL} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#EBEAE7] bg-[#FAFAF9] px-4 py-3 text-[13px] font-semibold text-neutral-700 hover:bg-[#F4F2EF] transition-colors"
-            >
-              <MapPin size={16} /> Get directions
-            </a>
-            <a
-              href={`mailto:${CONTACT_EMAIL}`}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#EBEAE7] bg-[#FAFAF9] px-4 py-3 text-[13px] font-semibold text-neutral-700 hover:bg-[#F4F2EF] transition-colors"
-            >
-              <Mail size={16} /> Contact us
-            </a>
+            <h1 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(40px,6vw,68px)', lineHeight: 1.02, letterSpacing: '-1.5px', margin: '0 0 20px', color: '#2A2350' }}>
+              Learning that feels like <span style={{ position: 'relative', display: 'inline-block', color: '#FF6B6B' }}>play<span style={{ position: 'absolute', left: 0, bottom: 4, width: '100%', height: 12, background: '#FFC93C', opacity: 0.55, borderRadius: 999, zIndex: -1 }} /></span>.
+            </h1>
+            <p style={{ fontSize: 'clamp(16px,1.5vw,19px)', lineHeight: 1.55, color: '#6B6593', fontWeight: 600, maxWidth: 470, margin: '0 0 32px' }}>
+              Video lessons, tests, live classes and rankings for <strong style={{ color: '#2A2350' }}>classes 8, 9 &amp; 10</strong> — all in one app. Download once, learn anywhere.
+            </p>
+            <div id="download" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
+              <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: 'linear-gradient(135deg,#FF6B6B,#FF8FB1)', color: '#fff', textDecoration: 'none', padding: '16px 26px', borderRadius: 18, boxShadow: '0 14px 30px rgba(255,107,107,0.4)', transform: 'rotate(-1deg)' }}>
+                <span style={{ fontSize: 26 }}>⬇</span>
+                <span style={{ textAlign: 'left', lineHeight: 1.1 }}>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 700, opacity: 0.85 }}>Direct download</span>
+                  <span style={{ display: 'block', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 19 }}>Get the APK</span>
+                </span>
+              </a>
+              <div style={{ lineHeight: 1.3 }}>
+                <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#2A2350' }}>Android • Free</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>v{versionName} · {size} · no ads</div>
+              </div>
+            </div>
           </div>
-          <a href="/login" className="inline-flex items-center justify-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 transition-colors">
-            Open in browser instead <ArrowRight size={14} />
-          </a>
-          <p className="text-center text-[11px] text-neutral-400 mt-1">© {name} · Powered by Udaya</p>
+
+          {/* right phone */}
+          <div className="u-phonewrap" style={{ perspective: 1300, display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+            <div data-parallax="34" style={{ position: 'absolute', top: -6, left: '4%', zIndex: 6, background: '#fff', padding: '10px 14px', borderRadius: 16, boxShadow: '0 14px 26px rgba(42,35,80,0.16)', display: 'flex', alignItems: 'center', gap: 9, animation: 'uBob 5s ease-in-out infinite' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg,#28C7A0,#4DA6FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800 }}>✓</div>
+              <div style={{ lineHeight: 1.1 }}><div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, color: '#2A2350' }}>Test done!</div><div style={{ fontSize: 11, fontWeight: 700, color: '#9590B5' }}>+20 points</div></div>
+            </div>
+            <div data-parallax="46" style={{ position: 'absolute', bottom: 28, right: '0%', zIndex: 6, background: '#2A2350', color: '#fff', padding: '12px 16px', borderRadius: 16, boxShadow: '0 14px 26px rgba(42,35,80,0.28)', animation: 'uBob 6s ease-in-out infinite', animationDelay: '.6s' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>Day streak</div>
+              <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, display: 'flex', alignItems: 'center', gap: 6 }}>🔥 14</div>
+            </div>
+
+            <div style={{ animation: 'uFloat 6s ease-in-out infinite' }}>
+              <div ref={phoneRef} style={{ transform: 'rotateX(6deg) rotateY(-14deg)', transformStyle: 'preserve-3d', transition: 'transform .25s ease-out', width: 286, height: 590, borderRadius: 44, background: '#2A2350', padding: 11, boxShadow: '0 40px 70px rgba(42,35,80,0.34), inset 0 0 0 2px rgba(255,255,255,0.06)' }}>
+                <div style={{ width: '100%', height: '100%', borderRadius: 34, background: 'linear-gradient(180deg,#FFFDF8,#FFF2E4)', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', width: 96, height: 22, background: '#2A2350', borderRadius: 999, zIndex: 5 }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 22px 6px', fontSize: 11, fontWeight: 800, color: '#2A2350' }}><span>9:41</span><span>📶 ⚡ 100%</span></div>
+                  <div style={{ padding: '10px 18px 0', flex: 1, overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                      <div><div style={{ fontSize: 12, fontWeight: 700, color: '#9590B5' }}>Ready to learn 🌤</div><div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 21, color: '#2A2350' }}>Hey Aarav 👋</div></div>
+                      <div style={{ width: 40, height: 40, borderRadius: 14, background: 'linear-gradient(135deg,#FFC93C,#FF6B6B)' }} />
+                    </div>
+                    <div style={{ marginTop: 16, background: 'linear-gradient(135deg,#9B6BFF,#6A3CFF)', borderRadius: 22, padding: 16, color: '#fff', position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: -20, right: -10, width: 80, height: 80, background: 'rgba(255,255,255,.14)', borderRadius: '50%' }} />
+                      <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.85 }}>KEEP GOING</div>
+                      <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 17, margin: '3px 0 12px' }}>Algebra · Lesson 4</div>
+                      <div style={{ height: 8, background: 'rgba(255,255,255,.28)', borderRadius: 999, overflow: 'hidden' }}><div style={{ height: '100%', width: '68%', background: '#FFC93C', borderRadius: 999, animation: 'uProgress 1.6s 0.4s both ease-out' }} /></div>
+                      <div style={{ fontSize: 11, fontWeight: 700, marginTop: 7, opacity: 0.9 }}>68% complete</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 2px 10px' }}><span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#2A2350' }}>Your subjects</span><span style={{ fontSize: 12, fontWeight: 800, color: '#9B6BFF' }}>See all</span></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}>
+                      {[['➗', 'Maths', '#FFE3E3'], ['🔬', 'Science', '#D8F7EE'], ['📖', 'English', '#DCECFF'], ['🌍', 'Social', '#FFF1CC']].map(([e, t, bg]) => (
+                        <div key={t} style={{ background: '#fff', borderRadius: 18, padding: 13, boxShadow: '0 6px 14px rgba(42,35,80,0.06)' }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 11, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{e}</div>
+                          <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, marginTop: 8, color: '#2A2350' }}>{t}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#9590B5' }}>lessons</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '14px 18px 18px', background: '#fff', borderTop: '1px solid rgba(42,35,80,0.05)' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 10, background: 'linear-gradient(135deg,#FF6B6B,#FF8FB1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 15 }}>⌂</div>
+                    <div style={{ fontSize: 17, opacity: 0.4 }}>📚</div>
+                    <div style={{ fontSize: 17, opacity: 0.4 }}>🏆</div>
+                    <div style={{ fontSize: 17, opacity: 0.4 }}>👤</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FEATURES — real app features with the app's icons */}
+      <section id="features" style={{ padding: 'clamp(50px,7vw,90px) clamp(20px,5vw,64px)', position: 'relative' }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div {...reveal()} style={{ textAlign: 'center', marginBottom: 'clamp(36px,5vw,60px)' }}>
+            <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, color: '#9B6BFF', letterSpacing: 1 }}>WHY STUDENTS LOVE IT</div>
+            <h2 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,4.5vw,52px)', letterSpacing: '-1px', margin: '8px 0 0', color: '#2A2350' }}>Everything in one app</h2>
+          </div>
+          <div className="u-fgrid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 'clamp(16px,2vw,24px)' }}>
+            {FEATURES.map((f, i) => (
+              <div key={f.title} {...reveal((i % 3) * 80)} style={{ background: '#fff', borderRadius: 26, padding: 28, boxShadow: '0 16px 36px rgba(42,35,80,0.07)' }}>
+                <div style={{ width: 58, height: 58, borderRadius: 18, background: f.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 10px 20px ${f.sh}`, marginBottom: 18 }}>
+                  <f.Icon size={28} color="#fff" />
+                </div>
+                <h3 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 21, margin: '0 0 8px', color: '#2A2350' }}>{f.title}</h3>
+                <p style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.5, color: '#6B6593', margin: 0 }}>{f.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section style={{ padding: 'clamp(50px,7vw,90px) clamp(20px,5vw,64px)', background: 'linear-gradient(180deg,#FFF9F0,#FFF1E2)' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+          <div {...reveal()} style={{ textAlign: 'center', marginBottom: 'clamp(36px,5vw,56px)' }}>
+            <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, color: '#FF6B6B', letterSpacing: 1 }}>SO EASY</div>
+            <h2 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,4.5vw,52px)', letterSpacing: '-1px', margin: '8px 0 0', color: '#2A2350' }}>Up and learning in 3 taps</h2>
+          </div>
+          <div className="u-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 'clamp(18px,2.5vw,28px)' }}>
+            {[
+              { emoji: '⬇️', n: 1, c: '#FF6B6B', sh: 'rgba(255,107,107,0.18)', t: 'Tap Download APK', b: `Grab the file straight from this page. It's tiny — about ${size}.` },
+              { emoji: '📲', n: 2, c: '#28C7A0', sh: 'rgba(40,199,160,0.18)', t: 'Install in seconds', b: 'Open it, allow install from this source, and you\'re done.' },
+              { emoji: '🚀', n: 3, c: '#9B6BFF', sh: 'rgba(155,107,255,0.18)', t: 'Sign in & dive in', b: 'Log in with your Student ID and your subjects are ready.' },
+            ].map((s, i) => (
+              <div key={s.n} {...reveal(i * 120)} style={{ textAlign: 'center' }}>
+                <div style={{ width: 96, height: 96, margin: '0 auto 20px', borderRadius: 30, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 42, boxShadow: `0 18px 34px ${s.sh}`, animation: `uWiggle 4s ease-in-out ${i * 0.5}s infinite` }}>{s.emoji}</div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', background: s.c, color: '#fff', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, marginBottom: 12 }}>{s.n}</div>
+                <h3 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 22, margin: '0 0 8px', color: '#2A2350' }}>{s.t}</h3>
+                <p style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.5, color: '#6B6593', margin: '0 auto', maxWidth: 240 }}>{s.b}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA BAND */}
+      <section style={{ padding: 'clamp(40px,5vw,70px) clamp(20px,5vw,64px) clamp(60px,7vw,90px)' }}>
+        <div {...reveal()} style={{ maxWidth: 1080, margin: '0 auto', position: 'relative', overflow: 'hidden', borderRadius: 40, background: 'linear-gradient(135deg,#9B6BFF,#6A3CFF)', padding: 'clamp(40px,6vw,72px) clamp(24px,5vw,64px)', textAlign: 'center', boxShadow: '0 30px 60px rgba(106,60,255,0.35)' }}>
+          <div style={{ position: 'absolute', top: -40, left: -20, width: 160, height: 160, background: 'rgba(255,255,255,.12)', borderRadius: '50%', animation: 'uFloat 7s ease-in-out infinite' }} />
+          <div style={{ position: 'absolute', bottom: -50, right: -10, width: 200, height: 200, background: 'rgba(255,201,60,.22)', borderRadius: '50%', animation: 'uFloat 9s ease-in-out infinite reverse' }} />
+          <div style={{ position: 'relative', zIndex: 2 }}>
+            <div style={{ fontSize: 38, marginBottom: 8 }}>🎉</div>
+            <h2 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4.5vw,48px)', letterSpacing: '-1px', color: '#fff', margin: '0 0 14px' }}>Ready to learn the fun way?</h2>
+            <p style={{ fontWeight: 700, fontSize: 17, color: 'rgba(255,255,255,0.85)', margin: '0 auto 30px', maxWidth: 470 }}>Start learning with {name} today — free, light and made for classes 8, 9 &amp; 10.</p>
+            <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: '#fff', color: '#6A3CFF', textDecoration: 'none', padding: '17px 30px', borderRadius: 18, boxShadow: '0 16px 30px rgba(0,0,0,0.18)' }}>
+              <span style={{ fontSize: 24 }}>⬇</span>
+              <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20 }}>Download the APK</span>
+            </a>
+            <div style={{ marginTop: 16, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Android • v{versionName} · {size} · no ads, ever</div>
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ padding: '36px clamp(20px,5vw,64px) 48px', borderTop: '1px solid rgba(42,35,80,0.07)' }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', justifyContent: 'space-between' }}>
+          <Brand />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22 }}>
+            <a href="#features" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Features</a>
+            <a href={apkUrl} style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Download</a>
+            <a href={LOCATION_URL} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Get directions</a>
+            <a href={`mailto:${CONTACT_EMAIL}`} style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Contact</a>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>Made with <span style={{ color: '#FF6B6B' }}>♥</span> for students of {name}.</div>
         </div>
       </footer>
     </div>

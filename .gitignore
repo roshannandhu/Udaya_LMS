@@ -84,3 +84,5 @@ push_secrets.py
 *secrets*.bat
 *secrets*.sh
 *secrets*.py
+r2-upload/
+_design_handoff/
