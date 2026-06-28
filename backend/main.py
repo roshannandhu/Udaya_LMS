@@ -752,6 +752,7 @@ class CreateStudentRequest(BaseModel):
     name: str
     username: str
     standard_id: Optional[str] = None
+    parent_phone: Optional[str] = None
 
 class ResetPasswordRequest(BaseModel):
     new_password: Optional[str] = None
@@ -3909,6 +3910,14 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
             service_supabase.table("students").update({"plain_password": request.password}).eq("id", response.user.id).execute()
         except Exception:
             pass
+        # parent_phone via guarded post-insert update (like plain_password) so a DB
+        # without the column never blocks student creation. See add_parent_phone.sql.
+        if request.parent_phone:
+            try:
+                service_supabase.table("students").update(
+                    {"parent_phone": request.parent_phone}).eq("id", response.user.id).execute()
+            except Exception:
+                pass
 
         student_code = assign_student_code(response.user.id, request.standard_id)
 
@@ -8399,6 +8408,7 @@ class BulkStudentItem(BaseModel):
     username: str
     email: Optional[str] = None
     phone: Optional[str] = None
+    parent_phone: Optional[str] = None
     standard_id: str
     temp_password: str
 
@@ -8471,6 +8481,15 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                     {"plain_password": s.temp_password}).eq("id", auth_user_id).execute()
             except Exception:
                 pass
+
+            # parent_phone via guarded post-insert update — a DB without the column
+            # must never block the import. See migrations/add_parent_phone.sql.
+            if s.parent_phone:
+                try:
+                    service_supabase.table("students").update(
+                        {"parent_phone": s.parent_phone}).eq("id", auth_user_id).execute()
+                except Exception:
+                    pass
 
             # 3. Generate + persist the student code (post-insert, like single create)
             student_code = assign_student_code(auth_user_id, s.standard_id, seq_cache=seq_cache)
@@ -12821,6 +12840,13 @@ async def wa_run_job_now(job_id: str, user = Depends(verify_token)):
     if not res.data:
         raise HTTPException(status_code=404, detail="Job not found")
     return await _wa_execute_job(res.data, force=True)
+
+
+# ── Parent WhatsApp notifications (additive; reuses the pipeline above) ─────────
+# Endpoints live in whatsapp_parent_routes.py and lazy-import the _wa_* helpers
+# defined above, so this include must come after they are all declared.
+from whatsapp_parent_routes import router as parent_wa_router  # noqa: E402
+app.include_router(parent_wa_router)
 
 
 if __name__ == "__main__":
