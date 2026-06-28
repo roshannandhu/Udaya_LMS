@@ -8445,6 +8445,56 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
     for s in req.students:
         auth_user_id = None
         try:
+            # 0. Check if student already exists by username or email to update instead of skipping
+            existing = []
+            if s.username:
+                existing = service_supabase.table("students").select("id, student_code").eq("username", s.username).execute().data or []
+            if not existing and s.email:
+                existing = service_supabase.table("students").select("id, student_code").eq("email", s.email).execute().data or []
+            
+            if existing:
+                auth_user_id = existing[0]["id"]
+                student_code = existing[0].get("student_code") or ""
+                
+                # Update base student info
+                update_data = {
+                    "name": s.name,
+                    "standard_id": s.standard_id,
+                }
+                if s.email:
+                    update_data["email"] = s.email
+                if s.phone:
+                    update_data["phone"] = s.phone
+                service_supabase.table("students").update(update_data).eq("id", auth_user_id).execute()
+                
+                if s.parent_phone:
+                    try:
+                        service_supabase.table("students").update({"parent_phone": s.parent_phone}).eq("id", auth_user_id).execute()
+                    except Exception:
+                        pass
+                
+                if s.temp_password:
+                    try:
+                        service_supabase.table("students").update({"plain_password": s.temp_password}).eq("id", auth_user_id).execute()
+                        service_supabase.auth.admin.update_user_by_id(auth_user_id, {"password": s.temp_password})
+                    except Exception:
+                        pass
+                
+                created.append({
+                    "id": auth_user_id,
+                    "standard_id": s.standard_id,
+                    "name": s.name,
+                    "username": s.username,
+                    "student_code": student_code,
+                    "email": s.email,
+                    "phone": s.phone,
+                    "parent_phone": s.parent_phone or "",
+                    "standard_name": std_name_map.get(s.standard_id),
+                    "temp_password": s.temp_password,
+                })
+                success_count += 1
+                continue
+
             # 1. Create Supabase Auth user
             email_to_use = s.email if s.email else f"{s.username}@tutoria.internal"
             auth_res = service_supabase.auth.admin.create_user({
@@ -8508,6 +8558,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 "student_code": student_code,
                 "email": s.email,
                 "phone": s.phone,
+                "parent_phone": s.parent_phone or "",
                 "standard_name": std_name_map.get(s.standard_id),
                 "temp_password": s.temp_password,
             })

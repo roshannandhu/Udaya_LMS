@@ -48,6 +48,18 @@ async function rawSend(phone, text, media) {
   const jid = jidFor(phone);
   if (!normalizeIn(phone)) throw new Error('Invalid phone number');
 
+  // Simulate human composing status to drastically reduce ban risk
+  try {
+    await sock.sendPresenceUpdate('composing', jid);
+    // Simulate typing delay: ~15ms per character (clamped between 1.0s and 2.5s)
+    const delay = Math.min(2500, Math.max(1000, (text || '').length * 15));
+    await new Promise((r) => setTimeout(r, delay));
+    await sock.sendPresenceUpdate('paused', jid);
+  } catch (e) {
+    // Graceful degrade: continue sending if presence update fails
+    console.warn('[wa] presence update failed:', e.message);
+  }
+
   let content;
   if (media?.url) {
     const isImage = String(media.type || '').startsWith('image');

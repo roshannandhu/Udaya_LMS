@@ -163,7 +163,9 @@ export class MessageQueue {
       }
 
       await this._process(item);
-      await sleep(this.delayMs); // exactly 4s between sends
+      // Randomize the delay slightly to look more human (delayMs + random 0 to 2.5 seconds jitter)
+      const jitter = Math.floor(Math.random() * 2500);
+      await sleep(this.delayMs + jitter);
     }
   }
 
