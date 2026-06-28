@@ -352,6 +352,61 @@ class MetaCloudProvider(WhatsAppProvider):
         return {"status": (data[0].get("status", "pending").lower()) if data else "pending"}
 
 
+class BaileysProvider(WhatsAppProvider):
+    """Unofficial WhatsApp-Web transport via the Baileys Node microservice.
+
+    This adapter is intentionally thin: the FastAPI side has already rendered the
+    full message text (parent_templates.py), so we just hand text/media to the Node
+    service, which owns the WhatsApp connection, the 4s-paced queue, the warm-up
+    cap, dedupe and retry. ``dedupe_key`` lets the queue drop exact repeats.
+
+    Note: Baileys has no native message templates — ``send_template`` just sends the
+    already-rendered body as a normal message.
+    """
+
+    name = "baileys"
+    configured = True  # "wired up"; live connection state is surfaced via /status
+
+    @staticmethod
+    def _map(reply: dict) -> dict:
+        # The queue accepts and will deliver → treat as 'queued'. A refused duplicate
+        # is not an error (the original is already on its way / delivered).
+        if reply.get("duplicate"):
+            return {"status": "sent", "provider_message_id": None, "error": None}
+        if reply.get("queued"):
+            return {"status": "queued", "provider_message_id": reply.get("id"), "error": None}
+        return {"status": "failed", "provider_message_id": None,
+                "error": reply.get("error") or "send rejected"}
+
+    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+        import hashlib
+        import whatsapp_client as client
+        # Stable (process-independent) dedupe key: digits + content digest. Built-in
+        # hash() is salted per-process, so it would break cross-restart dedup.
+        digits = "".join(c for c in (to or "") if c.isdigit())
+        digest = hashlib.md5((text or media_url or "").encode("utf-8")).hexdigest()[:16]
+        dedupe_key = f"{digits}:{digest}"
+        try:
+            reply = await client.send(to, text or "", media_url=media_url,
+                                      media_type=media_type, dedupe_key=dedupe_key)
+        except client.ServiceDownError:
+            # Node service briefly unreachable — buffer for delivery on recovery
+            # rather than dropping the message. Counts as queued, not failed.
+            import whatsapp_outbox
+            whatsapp_outbox.append(to, text or "", media_url=media_url,
+                                   media_type=media_type, dedupe_key=dedupe_key)
+            return {"status": "queued", "provider_message_id": None, "error": None}
+        except Exception as e:
+            return {"status": "failed", "provider_message_id": None, "error": str(e)}
+        return self._map(reply)
+
+    async def send_template(self, to, template, variables=None, media_url=None,
+                            media_type=None, language="en") -> dict:
+        # No native templates on Baileys — caller passes the rendered body via
+        # _wa_send_and_log's body_text path, so this is only hit defensively.
+        return await self.send_freeform(to, template or "", media_url, media_type)
+
+
 def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
     """Factory: real provider when credentials exist, else the degrade provider.
 
@@ -360,6 +415,11 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
     blank/misconfigured config can't blast anyone."""
     config = config if config is not None else get_wa_config()
     provider = (config.get("provider") or "").lower()
+
+    if provider == "baileys":
+        import whatsapp_client as client
+        # Only a sending provider when the Node service URL is actually configured.
+        return BaileysProvider() if client.is_enabled() else UnconfiguredProvider()
 
     if provider == "meta":
         token = (config.get("meta_access_token") or "").strip()

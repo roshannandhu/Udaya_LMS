@@ -8,9 +8,12 @@ duplicated. main.py declares all `_wa_*` helpers (and `verify_token`) before it
 includes this router, so we lazy-import main inside the auth dependency and each
 handler to avoid a circular import at load time.
 
-No Baileys / Node microservice: the repo deliberately dropped the unofficial
-QR-based Evolution provider (commit e7e81ff); Baileys is the same category and is
-not used. See README-WHATSAPP.md.
+Transport is pluggable via `whatsapp.get_provider()`. When the active provider is
+`baileys`, sends route through the Node microservice (whatsapp-service/) over
+`whatsapp_client`; this module also surfaces that service's live connection + QR in
+`/status`, lets the teacher switch it on via `/enable-baileys`, and buffers sends to
+`whatsapp_outbox.json` when the Node service is briefly unreachable. See
+README-WHATSAPP.md.
 """
 import asyncio
 import os
@@ -391,11 +394,53 @@ async def status(user=Depends(current_teacher)):
     except Exception as e:
         print(f"[parent-wa] recent fetch failed: {e}")
 
-    return {
+    provider = (cfg.get("provider") or "").lower()
+    out = {
         "connected": main._wa_is_configured(cfg),
-        "provider": cfg.get("provider", ""),
+        "provider": provider,
+        "qr": None,
         "today_count": _today_count(main, teacher_id),
         "daily_limit": _daily_limit(),
         "queue_length": queue_length,
+        "warmup_limit": None,
         "recent": recent,
     }
+
+    # Baileys transport: overlay the Node service's live connection + QR + counters.
+    if provider == "baileys":
+        import whatsapp_client as client
+        try:
+            svc = await client.status()
+            out["connected"] = bool(svc.get("connected"))
+            out["qr"] = svc.get("qr")  # data-URL while pairing, else null
+            out["today_count"] = svc.get("today_count", out["today_count"])
+            out["queue_length"] = svc.get("queue_length", out["queue_length"])
+            out["warmup_limit"] = svc.get("warmup_limit")
+        except client.ServiceDownError:
+            out["connected"] = False
+            out["service_down"] = True
+        except Exception as e:
+            print(f"[parent-wa] baileys status failed: {e}")
+            out["connected"] = False
+    return out
+
+
+# ── Baileys: enable + connection ────────────────────────────────────────────────
+@router.post("/enable-baileys")
+async def enable_baileys(user=Depends(current_teacher)):
+    """Switch the active WhatsApp provider to the Baileys transport so the QR
+    pairing flow + parent sends route through the Node microservice."""
+    import whatsapp_client as client
+    if not client.is_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="WHATSAPP_SERVICE_URL is not set — the Baileys service isn't wired up.")
+    cfg = wa.get_wa_config()
+    cfg["provider"] = "baileys"
+    wa.save_wa_config(cfg)
+    return {"success": True, "provider": "baileys"}
+
+
+# Node-down buffering lives in whatsapp_outbox.py: BaileysProvider appends there
+# when the microservice is briefly unreachable, and a background loop drains it
+# once /health recovers. Nothing else to wire here.

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, MessageSquare, ListOrdered, Wifi, WifiOff } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { RefreshCw, MessageSquare, ListOrdered, Wifi, WifiOff, QrCode, Smartphone } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Tag, Skeleton } from '../../components/ui';
 import { apiClient } from '../../lib/api';
@@ -48,36 +48,52 @@ export default function WhatsAppStatus() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [enabling, setEnabling] = useState(false);
+  const aliveRef = useRef(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchStatus = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     try {
       const res = await apiClient('/whatsapp/status');
-      setData(res);
+      if (aliveRef.current) { setData(res); setError(null); }
     } catch (err) {
-      setError(err?.message || 'Failed to load WhatsApp status');
+      if (aliveRef.current) setError(err?.message || 'Failed to load WhatsApp status');
     } finally {
-      setLoading(false);
+      if (aliveRef.current && showSpinner) setLoading(false);
     }
   }, []);
 
+  // Initial load.
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await apiClient('/whatsapp/status');
-        if (alive) setData(res);
-      } catch (err) {
-        if (alive) setError(err?.message || 'Failed to load WhatsApp status');
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+    aliveRef.current = true;
+    fetchStatus(true).finally(() => { if (aliveRef.current) setLoading(false); });
+    return () => { aliveRef.current = false; };
+  }, [fetchStatus]);
 
+  // While not connected (e.g. waiting for a QR scan), poll every 4s so the dot
+  // flips to green and the QR refreshes/clears without a manual reload.
   const connected = !!data?.connected;
+  const isBaileys = data?.provider === 'baileys';
+  useEffect(() => {
+    if (connected) return;
+    const t = setInterval(() => fetchStatus(false), 4000);
+    return () => clearInterval(t);
+  }, [connected, fetchStatus]);
+
+  const enableBaileys = async () => {
+    setEnabling(true);
+    try {
+      await apiClient('/whatsapp/enable-baileys', { method: 'POST' });
+      await fetchStatus(true);
+    } catch (err) {
+      setError(err?.message || 'Could not enable Baileys');
+    } finally {
+      setEnabling(false);
+    }
+  };
+
+  const showQr = isBaileys && !connected && data?.qr;
+  const needsEnable = data && !data.provider;
 
   return (
     <div className="pb-24">
@@ -85,7 +101,7 @@ export default function WhatsAppStatus() {
         title="WhatsApp Status"
         subtitle="Parent notification service"
         action={
-          <Btn variant="default" size="sm" icon={RefreshCw} onClick={load} disabled={loading}>
+          <Btn variant="default" size="sm" icon={RefreshCw} onClick={() => fetchStatus(true)} disabled={loading}>
             Refresh
           </Btn>
         }
@@ -123,15 +139,39 @@ export default function WhatsAppStatus() {
                 <div className="flex items-center gap-2 font-medium">
                   <span className="inline-block w-2.5 h-2.5 rounded-full"
                         style={{ background: connected ? '#25D366' : '#C2410C' }} />
-                  {connected ? 'Connected' : 'Not configured'}
+                  {connected ? 'Connected' : (data.service_down ? 'Service offline' : 'Not connected')}
                 </div>
                 <div className="text-xs text-neutral-500 mt-0.5">
                   {connected
                     ? `Provider: ${data.provider || '—'} · ready to send to parents`
-                    : 'Set up a provider in WhatsApp → Settings before sending.'}
+                    : data.service_down
+                      ? 'The WhatsApp microservice is unreachable. Messages are buffered until it returns.'
+                      : isBaileys
+                        ? 'Scan the QR below from your dedicated WhatsApp number to connect.'
+                        : 'No WhatsApp transport is active yet.'}
                 </div>
               </div>
+              {needsEnable && (
+                <Btn variant="primary" size="sm" icon={Smartphone} onClick={enableBaileys} disabled={enabling}>
+                  {enabling ? 'Enabling…' : 'Connect WhatsApp'}
+                </Btn>
+              )}
             </div>
+
+            {/* QR pairing card */}
+            {showQr && (
+              <div className="bg-white border border-[#EFEDEA] rounded-2xl p-5 shadow-card flex flex-col items-center text-center">
+                <div className="flex items-center gap-2 text-sm font-medium mb-3">
+                  <QrCode size={16} /> Scan to connect
+                </div>
+                <img src={data.qr} alt="WhatsApp QR code" width={240} height={240}
+                     className="rounded-xl border border-[#EFEDEA]" />
+                <p className="text-xs text-neutral-500 mt-3 max-w-xs">
+                  On your <strong>dedicated</strong> phone: WhatsApp → <strong>Linked Devices</strong> →
+                  Link a device → scan this code. You only do this once.
+                </p>
+              </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-2 gap-4">
@@ -139,7 +179,7 @@ export default function WhatsAppStatus() {
                 icon={MessageSquare}
                 label="Messages today"
                 value={data.today_count ?? 0}
-                sub={`Daily limit: ${data.daily_limit ?? '—'}`}
+                sub={`Limit: ${data.warmup_limit ?? data.daily_limit ?? '—'}${data.warmup_limit ? ' (warm-up)' : ''}`}
               />
               <StatCard
                 icon={ListOrdered}

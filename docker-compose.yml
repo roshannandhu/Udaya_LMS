@@ -14,8 +14,39 @@ services:
     env_file: ./backend/.env          # secrets live here on the box (kept off the public IP)
     environment:
       - PORT=8001
+      # Reach the Baileys microservice over the internal compose network (not public).
+      - WHATSAPP_SERVICE_URL=http://whatsapp:3100
+      # Shared with the whatsapp service via the repo-root .env (compose substitution).
+      # Empty is fine — the internal-only service just skips token auth then.
+      - SHARED_TOKEN=${SHARED_TOKEN:-}
     ports:
       - "127.0.0.1:8001:8001"         # loopback only — host-local curl works, not public
+    depends_on:
+      - whatsapp
+    restart: unless-stopped
+
+  # Baileys WhatsApp transport — INTERNAL only (no published ports). FastAPI calls
+  # it at http://whatsapp:3100. The QR login + warm-up/dedupe state live on the
+  # wa_session volume so the every-2-min autodeploy rebuilds never force a re-scan.
+  #
+  # Config comes via `environment` (not an env_file) so a missing file can never
+  # abort the deploy, and so this networked Baileys process is NOT handed the
+  # Supabase keys from backend/.env. Set SHARED_TOKEN / DAILY_MESSAGE_LIMIT in the
+  # repo-root .env on the box; both default safely if unset.
+  whatsapp:
+    build:
+      context: ./whatsapp-service
+      dockerfile: Dockerfile
+    environment:
+      - PORT=3100
+      - SHARED_TOKEN=${SHARED_TOKEN:-}
+      - DAILY_MESSAGE_LIMIT=${DAILY_MESSAGE_LIMIT:-50}
+      - WARMUP_ENABLED=${WARMUP_ENABLED:-true}
+      - SESSION_DIR=./session
+      - LOG_FILE=./logs/messages.log
+    volumes:
+      - wa_session:/app/session       # WhatsApp credentials + warm-up/dedupe state
+      - wa_logs:/app/logs             # messages.log
     restart: unless-stopped
 
   caddy:
@@ -35,3 +66,5 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  wa_session:
+  wa_logs:
