@@ -72,3 +72,13 @@ frontend/udaya-dist.zip
 *.apk
 *.aab
 frontend/android/.idea/
+
+# Keystore files
+udaya-release.keystore
+keystore_base64.txt
+
+# Secret-bearing helper scripts (contain keystore passwords + R2 keys in plaintext).
+# NEVER commit — set the values as GitHub Secrets, then delete the script.
+upload_secrets.bat
+*secrets*.bat
+*secrets*.sh
