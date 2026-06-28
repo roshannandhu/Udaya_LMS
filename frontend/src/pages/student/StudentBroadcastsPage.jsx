@@ -200,7 +200,7 @@ export default function StudentBroadcastsPage() {
           </div>
         )}
         
-      <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:pb-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full">
+      <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(86px+max(2rem,env(safe-area-inset-bottom)))] lg:pb-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full">
           {broadcasts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="bg-[#fff9c4] text-[#8a7e00] px-4 py-2 rounded-xl text-xs shadow-sm max-w-[280px]">
