@@ -50,6 +50,33 @@ public class LiveAlarmPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void checkPermissions(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean canUse = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // API 34
+            NotificationManager nm = getContext().getSystemService(NotificationManager.class);
+            if (nm != null) {
+                canUse = nm.canUseFullScreenIntent();
+            }
+        }
+        ret.put("granted", canUse);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestPermissions(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            try {
+                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT);
+                intent.setData(android.net.Uri.parse("package:" + getContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+            } catch (Exception ignored) {}
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
     public void cancelAll(PluginCall call) {
         cancelAllInternal(getContext());
         getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)

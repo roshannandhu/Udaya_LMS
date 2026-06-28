@@ -95,7 +95,7 @@ export default function SendWizard({
     setExamsLoading(true);
     (async () => {
       try { const r = await testApi.getTests(); setExams(r?.tests || r || []); }
-      catch { setExams([]); }
+      catch (e) { alert(e.message || 'Could not load exams.'); setExams([]); }
       finally { setExamsLoading(false); }
     })();
   }, [task]);
@@ -141,7 +141,7 @@ export default function SendWizard({
     let ignore = false;
     whatsappApi.previewCriteria(reportPayload())
       .then(p => { if (!ignore) setExamPreview(p); })
-      .catch(() => { if (!ignore) setExamPreview(null); });
+      .catch(e => { if (!ignore) { alert(e.message || 'Could not load exam preview.'); setExamPreview(null); } });
     return () => { ignore = true; };
   }, [task, step, examId, count]); // eslint-disable-line react-hooks/exhaustive-deps
 

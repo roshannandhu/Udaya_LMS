@@ -308,12 +308,18 @@ async def send_bulk_reports(body: BulkReportsBody, user=Depends(current_teacher)
     async def run(batch_id=None):
         results = []
         for r in recips:
-            s = students.get(r["id"])
-            if not s:
-                continue
-            res = await _send_report_card(main, provider, teacher_id, user, s, term,
-                                          std_name, batch_id)
-            results.append(res)
+            try:
+                s = students.get(r["id"])
+                if not s:
+                    continue
+                res = await _send_report_card(main, provider, teacher_id, user, s, term,
+                                              std_name, batch_id)
+                results.append(res)
+            except Exception as e:
+                print(f"[wa] skipping report for {r.get('id')}: {e}")
+                err_res = {"student_id": r.get("id"), "status": "failed", "error": f"Internal error: {str(e)}"}
+                results.append(err_res)
+                main._wa_batch_track(batch_id, err_res)
         return results
 
     if len(recips) > main.WA_BATCH_THRESHOLD:
@@ -344,12 +350,18 @@ async def send_broadcast_to_parents(body: BroadcastBody, user=Depends(current_te
     async def run(batch_id=None):
         results = []
         for r in recips:
-            text = T.broadcast(parent_name="Parent", message=body.message.strip())
-            res = await main._wa_send_and_log(
-                provider, teacher_id, r, mode="freeform", body_text=text,
-                category="utility", standard_id=r["standard_id"])
-            main._wa_batch_track(batch_id, res)
-            results.append(res)
+            try:
+                text = T.broadcast(parent_name="Parent", message=body.message.strip())
+                res = await main._wa_send_and_log(
+                    provider, teacher_id, r, mode="freeform", body_text=text,
+                    category="utility", standard_id=r["standard_id"])
+                main._wa_batch_track(batch_id, res)
+                results.append(res)
+            except Exception as e:
+                print(f"[wa] skipping broadcast for {r.get('id')}: {e}")
+                err_res = {"student_id": r.get("id"), "status": "failed", "error": f"Internal error: {str(e)}"}
+                results.append(err_res)
+                main._wa_batch_track(batch_id, err_res)
         return results
 
     if len(recips) > main.WA_BATCH_THRESHOLD:

@@ -17,6 +17,19 @@ const isAndroid = () => {
 
 let _syncing = false;
 
+export async function checkAlarmPermissions() {
+  if (!isAndroid()) return true;
+  try {
+    const res = await LiveAlarm.checkPermissions();
+    return res.granted !== false;
+  } catch { return true; }
+}
+
+export async function requestAlarmPermissions() {
+  if (!isAndroid()) return;
+  try { await LiveAlarm.requestPermissions(); } catch { /* ignore */ }
+}
+
 export async function syncLiveAlarms() {
   if (!isAndroid() || _syncing) return;
   const { role, user } = useAuthStore.getState();

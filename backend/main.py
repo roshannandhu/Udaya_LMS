@@ -12466,21 +12466,27 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     async def run(batch_id=None):
         results = []
         for idx, r in enumerate(recips):
-            if data.message:
-                body = data.message
-            elif data.include_credentials:
-                c = creds.get(r["id"], {})
-                pwd = (c.get("plain_password") or "").strip() or default_pwd
-                body = _wa_credentials_body(r["name"], c.get("student_code") or r.get("student_code"), pwd, lms)
-            else:
-                body = (f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
-                        f"Student ID: {r['student_code']}.")
-            mode = "template" if template_name else "freeform"
-            res = await _wa_send_and_log(
-                provider, teacher_id, r, mode=mode, template_name=template_name,
-                body_text=body, category=data.category, standard_id=r["standard_id"])
-            results.append(res)
-            _wa_batch_track(batch_id, res)
+            try:
+                if data.message:
+                    body = data.message
+                elif data.include_credentials:
+                    c = creds.get(r["id"], {})
+                    pwd = (c.get("plain_password") or "").strip() or default_pwd
+                    body = _wa_credentials_body(r["name"], c.get("student_code") or r.get("student_code"), pwd, lms)
+                else:
+                    body = (f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
+                            f"Student ID: {r['student_code']}.")
+                mode = "template" if template_name else "freeform"
+                res = await _wa_send_and_log(
+                    provider, teacher_id, r, mode=mode, template_name=template_name,
+                    body_text=body, category=data.category, standard_id=r["standard_id"])
+                results.append(res)
+                _wa_batch_track(batch_id, res)
+            except Exception as e:
+                print(f"[wa] skipping welcome for {r.get('id')}: {e}")
+                err_res = {"student_id": r.get("id"), "status": "failed", "error": f"Internal error: {str(e)}"}
+                results.append(err_res)
+                _wa_batch_track(batch_id, err_res)
         return results
 
     if len(recips) > WA_BATCH_THRESHOLD:
