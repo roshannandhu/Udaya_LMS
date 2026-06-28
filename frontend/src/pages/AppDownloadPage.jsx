@@ -41,21 +41,26 @@ const PAGE_CSS = `
   @keyframes uWiggle { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
   .u-reveal { opacity:0; transform:translateY(40px); transition:opacity .7s ease, transform .8s cubic-bezier(.16,.84,.44,1); }
   @media (max-width:820px){
-    .u-hero-grid{ grid-template-columns:1fr !important; gap:8px !important; }
+    .u-hero-grid{ grid-template-columns:1fr !important; gap:32px !important; }
+    .u-hero-left { text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .u-hero-btn-wrap { justify-content: center; text-align: left; }
     .u-fgrid{ grid-template-columns:1fr 1fr !important; }
     .u-steps{ grid-template-columns:1fr !important; max-width:360px; margin:0 auto; }
     /* Copy + download stay first; the phone visual sits below it. */
     .u-phonewrap{ margin-top:14px; }
     /* No mouse on phones → straighten the device so it never looks skewed/clipped. */
     .u-phone3d{ transform:none !important; }
+    .u-footer { flex-direction: column !important; gap: 24px !important; text-align: center; }
+    .u-footer-links { justify-content: center !important; }
   }
   @media (max-width:520px){
+    .u-hero-title { font-size: 36px !important; }
     .u-fgrid{ grid-template-columns:1fr !important; }
     /* Scale the mockup to fit small screens without horizontal scroll. */
-    .u-phonewrap{ transform:scale(0.86); transform-origin:top center; height:520px; }
+    .u-phonewrap{ transform:scale(0.82); transform-origin:top center; height:500px; }
   }
   @media (max-width:360px){
-    .u-phonewrap{ transform:scale(0.76); }
+    .u-phonewrap{ transform:scale(0.72); height: 440px; }
   }
 `;
 
@@ -186,18 +191,18 @@ export default function AppDownloadPage() {
 
         <div className="u-hero-grid" style={{ position: 'relative', zIndex: 2, maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.05fr 0.95fr', gap: 'clamp(24px,4vw,56px)', alignItems: 'center' }}>
           {/* left copy */}
-          <div>
+          <div className="u-hero-left">
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', padding: '7px 14px 7px 8px', borderRadius: 999, boxShadow: '0 6px 16px rgba(42,35,80,0.08)', marginBottom: 22 }}>
               <span style={{ background: 'linear-gradient(135deg,#FFC93C,#FF6B6B)', color: '#fff', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 12, padding: '3px 10px', borderRadius: 999 }}>NEW</span>
               <span style={{ fontWeight: 700, fontSize: 13.5, color: '#6B6593' }}>The official {name} app</span>
             </div>
-            <h1 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(40px,6vw,68px)', lineHeight: 1.02, letterSpacing: '-1.5px', margin: '0 0 20px', color: '#2A2350' }}>
+            <h1 className="u-hero-title" style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(40px,6vw,68px)', lineHeight: 1.02, letterSpacing: '-1.5px', margin: '0 0 20px', color: '#2A2350' }}>
               Learning that feels like <span style={{ position: 'relative', display: 'inline-block', color: '#FF6B6B' }}>play<span style={{ position: 'absolute', left: 0, bottom: 4, width: '100%', height: 12, background: '#FFC93C', opacity: 0.55, borderRadius: 999, zIndex: -1 }} /></span>.
             </h1>
             <p style={{ fontSize: 'clamp(16px,1.5vw,19px)', lineHeight: 1.55, color: '#6B6593', fontWeight: 600, maxWidth: 470, margin: '0 0 32px' }}>
               Video lessons, tests, live classes and rankings for <strong style={{ color: '#2A2350' }}>classes 8, 9 &amp; 10</strong> — all in one app. Download once, learn anywhere.
             </p>
-            <div id="download" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
+            <div id="download" className="u-hero-btn-wrap" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
               <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: 'linear-gradient(135deg,#FF6B6B,#FF8FB1)', color: '#fff', textDecoration: 'none', padding: '16px 26px', borderRadius: 18, boxShadow: '0 14px 30px rgba(255,107,107,0.4)', transform: 'rotate(-1deg)' }}>
                 <span style={{ fontSize: 26 }}>⬇</span>
                 <span style={{ textAlign: 'left', lineHeight: 1.1 }}>
@@ -329,9 +334,9 @@ export default function AppDownloadPage() {
 
       {/* FOOTER */}
       <footer style={{ padding: '36px clamp(20px,5vw,64px) 48px', borderTop: '1px solid rgba(42,35,80,0.07)' }}>
-        <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="u-footer" style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', justifyContent: 'space-between' }}>
           <Brand />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22 }}>
+          <div className="u-footer-links" style={{ display: 'flex', flexWrap: 'wrap', gap: 22 }}>
             <a href="#features" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Features</a>
             <a href={apkUrl} style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Download</a>
             <a href={LOCATION_URL} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Get directions</a>
