@@ -618,8 +618,10 @@ export const whatsappApi = {
   getConfig:    ()     => apiClient('/teacher/whatsapp/config'),
   setConfig:    (data) => apiClient('/teacher/whatsapp/config', { method: 'POST', body: JSON.stringify(data) }),
 
-  // Connection (credential-based providers: Meta / WANotifier)
+  // Connection. For Baileys this returns the live socket state + a `qr` data-URL
+  // while pairing; enableBaileys switches the active provider to the QR transport.
   getConnection: () => apiClient('/teacher/whatsapp/connection'),
+  enableBaileys: () => apiClient('/whatsapp/enable-baileys', { method: 'POST' }),
   disconnect:    () => apiClient('/teacher/whatsapp/disconnect', { method: 'POST' }),
 
   // Recipients grouped by class

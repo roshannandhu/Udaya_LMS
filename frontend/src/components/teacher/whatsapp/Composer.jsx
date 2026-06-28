@@ -209,7 +209,8 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
             value={value.body_text || ''} onChange={(e) => set({ body_text: e.target.value })} />
           <VariablePicker variables={variables} onInsert={insertTag} />
 
-          {(
+          {/* Cost categories only matter for the paid Meta provider — hidden on the free QR path. */}
+          {isMeta && (
             <div>
               <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Message type (affects cost)</label>
               <div className="flex flex-wrap gap-2">

@@ -114,17 +114,6 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
           animation: textIn 0.5s ease 0.55s both;
         }
 
-        /* ── Sub-label ── */
-        .splash-sub {
-          margin-top: 8px;
-          font-size: 0.7rem;
-          font-weight: 400;
-          letter-spacing: 0.12em;
-          color: #a3a3a3;
-          text-transform: uppercase;
-          animation: textIn 0.5s ease 0.75s both;
-        }
-
         /* ── Progress bar (phone only) ── */
         @keyframes progress {
           from { width: 0%; }
@@ -168,10 +157,9 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
           />
         </div>
 
-        {/* Title + subtitle */}
+        {/* Title */}
         <div className="splash-title-wrap">
           <div className="splash-title">{title}</div>
-          <div className="splash-sub">Powered by Udaya</div>
         </div>
 
         {/* Phone-only progress bar */}

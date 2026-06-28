@@ -4,9 +4,16 @@
 > module after the beginner-friendly rebuild: the idea, the architecture, the UI, every
 > endpoint, the database — and the **actual logic/algorithms** behind each flow.
 >
-> **Branch:** `whatsapp-message-controller` · **Route:** `/teacher/whatsapp`
-> **Stack:** FastAPI (`backend/main.py` + `backend/whatsapp.py`) · React + Vite + Tailwind ·
-> Supabase (Postgres + Storage) · Evolution API (default provider) / Meta Cloud API / WANotifier.
+> **Route:** `/teacher/whatsapp` (console) · `/teacher/whatsapp/status` (connection/QR)
+> **Stack:** FastAPI (`backend/main.py` + `backend/whatsapp.py` + `backend/whatsapp_parent_routes.py`) ·
+> React + Vite + Tailwind · Supabase (Postgres + Storage) ·
+> **Baileys** self-hosted Node service (`whatsapp-service/`, default, free, QR-paired) /
+> Meta Cloud API / WANotifier.
+>
+> **Note (kept current):** the simple default transport is **Baileys**, not Evolution. Evolution
+> was never implemented; a legacy `provider: "evolution"` config now self-heals to Baileys
+> (`get_provider()` in `whatsapp.py`, `_wa_resolve_provider()` in `main.py`). Sections below that
+> still say "Evolution" should be read as **Baileys** — same QR-paired, free, send-as-your-own-number model.
 
 ---
 
@@ -43,9 +50,11 @@ with each student's real data filled in automatically. It is built so a **first-
 user understands the whole flow in under two minutes**. Everything technical (providers,
 tokens, approval, cost categories) is hidden behind an **Advanced** area.
 
-The simple path uses the **Evolution** provider, which links by **QR code like WhatsApp Web**
-and sends from the institute's own number — no Meta business verification, no template
-approval, no per-message cost.
+The simple path uses the **Baileys** transport (the `whatsapp-service/` Node app), which links by
+**QR code like WhatsApp Web** and sends from the institute's own number — no Meta business
+verification, no template approval, no per-message cost. The teacher connects it from the
+**Connect WhatsApp** card in Settings (or the dedicated `/teacher/whatsapp/status` page): tap
+**Connect**, scan the QR once on the institute's phone, done.
 
 ---
 
@@ -82,16 +91,18 @@ currentStep = !hasMessage ? 1 : (selectedCount === 0 ? 2 : 3)
                                                      │  └──────────┬─────────────┘  │
                               Supabase (Postgres)                 │ provider API
                        templates / messages / jobs / inbox        ▼
-                                                       ┌───────────────────────┐
-                                                       │ Evolution API server   │ → WhatsApp
-                                                       │ (or Meta / WANotifier) │
-                                                       └───────────────────────┘
+                                                       ┌────────────────────────────┐
+                                                       │ Baileys Node service        │ → WhatsApp
+                                                       │ (whatsapp-service/)         │
+                                                       │ (or Meta / WANotifier)      │
+                                                       └────────────────────────────┘
 ```
 
 - The frontend never talks to WhatsApp directly — it calls the backend; the backend calls the
   active **provider**, which calls WhatsApp.
-- Secrets (provider keys, Evolution server address) live server-side in `whatsapp_config.json`,
-  masked before reaching the browser (`mask_key`).
+- The Baileys path needs no secrets in `whatsapp_config.json` — only the Node service URL via env.
+  Meta/WANotifier keys (when used) live server-side in `whatsapp_config.json`, masked before
+  reaching the browser (`mask_key`).
 - Every endpoint requires a teacher JWT (`verify_token` + `_wa_require_teacher`), except the
   provider webhook.
 
@@ -105,62 +116,67 @@ currentStep = !hasMessage ? 1 : (selectedCount === 0 ? 2 : 3)
 
 | Provider | Class | Links by | Templates | Cost |
 |----------|-------|----------|-----------|------|
-| **Evolution** (default/simple) | `EvolutionProvider` | **QR scan** | sent as normal text | **free** |
+| **Baileys** (default/simple) | `BaileysProvider` (→ `whatsapp-service/` Node app via `whatsapp_client`) | **QR scan** | sent as normal text | **free** |
 | **Meta Cloud API** | `MetaCloudProvider` | token + phone-id + WABA-id | real approved templates `{{1}}` | per-msg |
-| **WANotifier** | `WANotifierProvider` | api key + sender | Meta-style templates | per-msg |
+| **WANotifier** | `WANotifierProvider` | api key + sender (gated until `wanotifier_verified`) | Meta-style templates | per-msg |
 | **Unconfigured** | `UnconfiguredProvider` | — | — | — (returns `not_configured`, never crashes) |
 
 **Factory logic** (`get_provider`):
 ```
-provider = config.provider or "wanotifier"
-if provider == "meta":      return Meta if (token and phone_id) else Unconfigured
-if provider == "evolution": return Evolution if (base_url and api_key and instance) else Unconfigured
-else (wanotifier):          return WANotifier if api_key else Unconfigured
+provider = config.provider (lowercased)
+# self-heal: a legacy/unknown/blank provider → "baileys" when the Node service URL is set
+if provider not in {baileys, meta, wanotifier} and whatsapp_client.is_enabled(): provider = "baileys"
+if provider == "baileys":    return Baileys if whatsapp_client.is_enabled() else Unconfigured
+if provider == "meta":       return Meta    if (token and phone_id)            else Unconfigured
+if provider == "wanotifier": return WANotifier(verified=wanotifier_verified) if api_key else Unconfigured
+else:                        return Unconfigured   # never auto-falls-back to a credentialed sender
 ```
+The self-heal is safe: Baileys sends nothing until a phone is explicitly QR-paired on the Node
+service, so a stray config can't blast anyone. `_wa_is_configured()` / `_wa_resolve_provider()` in
+`main.py` apply the identical normalization so the config + connection endpoints report truthfully.
 
 ---
 
 ## 5. Connecting WhatsApp — QR setup (logic)
 
-The Evolution **server** (address + key + instance) is configured **once by a developer** in
-`whatsapp_config.json`; the teacher only **scans a QR**.
+The Baileys **Node service** (`whatsapp-service/`) owns the actual WhatsApp Web connection, the
+4s-paced queue, warm-up cap, dedupe and retry. It runs on the internal compose network
+(`WHATSAPP_SERVICE_URL=http://whatsapp:3100`, see `docker-compose.yml`); the teacher only **taps
+Connect and scans a QR**. The QR login + session persist on the `wa_session` volume, so redeploys
+never force a re-scan.
 
-**Backend (Evolution API v2 calls in `EvolutionProvider`):**
+**Backend (`whatsapp_client.py` → the Node service):**
 ```
-connection_state(): GET /instance/connectionState/{instance} → "open" | "connecting" | "close"
-ensure_instance():  GET /instance/fetchInstances?instanceName=… ; if missing → POST /instance/create
-get_qr():           ensure_instance(); GET /instance/connect/{instance} → { base64 (QR image), pairingCode }
-owner_number():     GET /instance/fetchInstances?instanceName=… → linked number (strip @s.whatsapp.net)
-logout():           DELETE /instance/logout/{instance}
+is_enabled():  True when WHATSAPP_SERVICE_URL is set (Baileys is wired up)
+status():      GET /status → { connected, qr (data-URL while pairing), today_count, queue_length, warmup_limit }
+send():        POST /send  → enqueue { phone, text, mediaUrl, mediaType, dedupeKey }  (raises ServiceDownError if unreachable)
+health():      GET /health → bool
 ```
 
 **Endpoint logic:**
 ```
-GET /connection:
-    if provider == evolution and server configured:
-        state = connection_state(); connected = (state == "open")
-        number = owner_number() if connected else ""
-        return {provider, connected, state, number}
+GET /api/teacher/whatsapp/connection  (and the richer GET /api/whatsapp/status):
+    provider = resolve(provider)                       # legacy/unknown → baileys when wired
+    if provider == baileys:
+        svc = whatsapp_client.status()                 # live socket
+        return {connected: svc.connected, qr: svc.qr, number, state}
+        on ServiceDownError → {connected:false, state:"service_down"}   # sends buffered to whatsapp_outbox.json
     else (meta/wanotifier): connected = credentials present  (no QR)
 
-GET /qr:
-    if provider != evolution: return {error: "use credentials under Advanced"}
-    if server not configured: return {state: "no_server", error: "ask your admin"}
-    if connection_state() == "open": return {state:"open"}     # already linked
-    return get_qr()  → {qr_base64, pairing_code}
-
-POST /disconnect: evolution → logout()
+POST /api/whatsapp/enable-baileys:  set provider="baileys" (503 if WHATSAPP_SERVICE_URL unset)
+POST /api/teacher/whatsapp/disconnect:  baileys → POST {service}/disconnect (logout + fresh QR)
 ```
 
-**Frontend logic** (`SettingsTab` → "Connect WhatsApp" card):
+**Frontend logic** (`SettingsScreen` → "Connect WhatsApp" card in `WhatsAppCenterPage`, mirrored by
+the standalone `WhatsAppStatus` page):
 ```
 on open: getConnection()
-if not connected → "Connect" → getQr() → show <img src=qr_base64> + pairing code + steps
-while QR visible: every 3s → getConnection(); if connected → hide QR, refresh banner
-if connected → green "Connected ✓ +number" + Send-test + Disconnect
+if not connected → "Connect" → enableBaileys() → poll getConnection() every 3.5s
+    when conn.qr present → show <img src=conn.qr> + "Linked Devices → Link a device" steps
+    when connected → green "Connected ✓ +number" + Send-test + Disconnect
 ```
-The page-level banner ("WhatsApp isn't connected — scan the QR") is keyed on the **live
-connection state**, not on whether credentials exist.
+The home banner ("WhatsApp isn't connected — scan the QR") is keyed on the **live connection
+state** from the Node service, not on whether any config exists.
 
 ---
 
@@ -432,17 +448,14 @@ mark-read on open (`POST /inbox/mark-read`). Replies are sent from the WhatsApp 
 
 ```
 backend estimate_cost(count, category):
-    if provider == evolution: return amount 0          # self-hosted = free
-    else: amount = count × rates[category]              # utility 0.14 / marketing 0.78 / auth 0.13 (INR, editable)
+    if get_provider() is BaileysProvider: return amount 0   # send-as-your-own-number = free
+    else: amount = count × rates[category]                  # utility 0.14 / marketing 0.78 / auth 0.13 (INR, editable)
 
-frontend estimateFor(category):
-    if provider == evolution: return { rate:0, amount:0 }
-    else: { rate, amount: selectedCount × rate }
-
-CostEstimate.jsx: if amount === 0 → show "N parents · Ready to send" + plain "Send" (no ₹)
+frontend: Composer hides the utility/marketing category chips unless provider === "meta";
+CostEstimate.jsx: if amount === 0 → "N parents · Ready to send" + plain "Send" (no ₹)
                   else → "N parents · est. ₹X" + "Send (₹X)"
 ```
-Because Evolution returns 0, the **entire** UI drops ₹ and the utility/marketing/auth category
+Because Baileys returns 0, the **entire** UI drops ₹ and the utility/marketing/auth category
 chips on the simple path. Actual spend = sum of billable `whatsapp_messages.cost_amount`.
 
 ---
@@ -496,9 +509,13 @@ All under `/api/teacher/whatsapp`, teacher-auth required (except the public webh
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET / POST | `/config` | Read (masked) / save config (never wipes a secret with a blank/masked value). |
-| GET | `/connection` | Live status `{connected, state, number}`. |
-| GET | `/qr` | QR image + pairing code (Evolution). |
-| POST | `/disconnect` | Log the phone out (Evolution). |
+| GET | `/connection` | Live status `{connected, state, number, qr}` — Baileys queries the Node socket and returns a `qr` data-URL while pairing. |
+| POST | `/disconnect` | Log the phone out (Baileys → Node `/disconnect`). |
+
+> Baileys connection extras live on the parent router (`/api/whatsapp`): **`GET /status`** (live
+> socket + QR + counters + recent log) and **`POST /enable-baileys`** (switch the active provider to
+> the QR transport). The `WhatsAppStatus` page and the console's Connect card use these.
+
 | GET | `/recipients` | Students grouped by class (phone/opt-out). |
 | GET | `/variables` | The variable registry. |
 | POST | `/upload-media` | Upload a file → Supabase `whatsapp` bucket (base64 fallback). |
@@ -534,22 +551,22 @@ All under `/api/teacher/whatsapp`, teacher-auth required (except the public webh
 
 ## 18. Configuration & environment
 
-**Server-only** — `backend/whatsapp_config.json` (never sent to the browser):
+**Server-only** — `backend/whatsapp_config.json` (gitignored, never sent to the browser). The
+simple/default shape is just:
 ```json
 {
-  "provider": "evolution",
-  "evolution_base_url": "http://<host>:8080",
-  "evolution_api_key": "…",
-  "evolution_instance": "udaya-lms",
-  "meta_access_token": "…", "meta_phone_number_id": "…", "meta_waba_id": "…",
-  "api_key": "…", "sender": "…",
+  "provider": "baileys",
   "currency": "INR",
   "rates": { "utility": 0.14, "marketing": 0.78, "auth": 0.13 },
   "auto_welcome": false, "welcome_template": "", "quiet_hours": {}
 }
 ```
-`{Institute Name}` / `{Login Link}` come from **teacher settings** (`lms_name`, `login_url`) via
-`_wa_branding_name()` / `_wa_login_url()`.
+Baileys needs **no secrets in this file** — the transport is configured by env
+(`WHATSAPP_SERVICE_URL`, optional `SHARED_TOKEN`, `DAILY_MESSAGE_LIMIT`; see `backend/.env.example`
+and `docker-compose.yml`). Meta/WANotifier add their own keys here only if you switch to them under
+**Advanced** (`meta_access_token` / `meta_phone_number_id` / `meta_waba_id`, or `api_key` / `sender`
++ `wanotifier_verified`). `{Institute Name}` / `{Login Link}` come from **teacher settings**
+(`lms_name`, `login_url`) via `_wa_branding_name()` / `_wa_login_url()`.
 
 **Run locally:** `cd backend && uvicorn main:app --reload --port 8001` · `cd frontend && npm run dev`
 (→ http://localhost:3001).
@@ -595,7 +612,7 @@ missing columns and degrades gracefully (no crash).
 **Backend**
 - `backend/main.py` — all `whatsapp/*` endpoints + the variable engine + send/report/job/inbox
   logic + the scheduler loop + Pydantic models.
-- `backend/whatsapp.py` — provider adapters (Evolution/Meta/WANotifier/Unconfigured), QR/
+- `backend/whatsapp.py` — provider adapters (Baileys/Meta/WANotifier/Unconfigured), QR/
   connection methods, report builders, cost helper, config I/O.
 - `backend/schema.sql` — `whatsapp_*` tables + RLS (+ the template media ALTERs).
 - `backend/whatsapp_config.json` — server-only secrets.

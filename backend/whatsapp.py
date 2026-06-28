@@ -64,11 +64,15 @@ def get_rates(config: Optional[dict] = None) -> Dict[str, float]:
 
 def estimate_cost(recipient_count: int, category: str = "utility",
                   config: Optional[dict] = None) -> dict:
-    """Live cost estimate: count × per-category rate."""
+    """Live cost estimate: count × per-category rate. The Baileys QR transport
+    sends from your own number at no per-message cost, so it always estimates 0 —
+    which lets the whole UI drop the ₹ / category chips on the free path."""
     config = config if config is not None else get_wa_config()
+    currency = config.get("currency") or DEFAULT_CURRENCY
+    if type(get_provider(config)).__name__ == "BaileysProvider":
+        return {"count": recipient_count, "rate": 0, "amount": 0, "currency": currency}
     rates = get_rates(config)
     rate = float(rates.get(category, DEFAULT_RATES.get(category, 0.14)))
-    currency = config.get("currency") or DEFAULT_CURRENCY
     amount = round(recipient_count * rate, 2)
     return {"count": recipient_count, "rate": rate, "amount": amount, "currency": currency}
 
@@ -415,6 +419,15 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
     blank/misconfigured config can't blast anyone."""
     config = config if config is not None else get_wa_config()
     provider = (config.get("provider") or "").lower()
+
+    # Self-heal a legacy/unknown/blank provider (e.g. an old "evolution" config)
+    # to Baileys whenever the Node service is wired. Safe: Baileys sends nothing
+    # until a phone is explicitly QR-paired, so this never auto-blasts via a
+    # credentialed provider (the invariant that guards Meta/WANotifier below).
+    if provider not in ("baileys", "meta", "wanotifier"):
+        import whatsapp_client as client
+        if client.is_enabled():
+            provider = "baileys"
 
     if provider == "baileys":
         import whatsapp_client as client

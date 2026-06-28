@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import {
   History, Inbox, Clock, LayoutTemplate, Settings as SettingsIcon,
   LayoutDashboard, ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
-  SlidersHorizontal, IndianRupee,
+  SlidersHorizontal, IndianRupee, Smartphone, WifiOff,
 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Input, Skeleton, Tag } from '../../components/ui';
@@ -293,6 +293,9 @@ function SettingsScreen({ config, reload, onConnected }) {
   const [testing, setTesting] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
+
   const refreshConn = async () => {
     try { const c = await whatsappApi.getConnection(); setConn(c); return c; }
     catch { setConn({ connected: false, state: 'error' }); return null; }
@@ -300,8 +303,27 @@ function SettingsScreen({ config, reload, onConnected }) {
   };
   useEffect(() => { refreshConn(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // While waiting for a QR scan, poll so the QR appears and the card flips to
+  // "Connected" without a manual reload.
+  const connected = conn?.connected;
+  useEffect(() => {
+    if (connected || loadingConn) return;
+    const t = setInterval(refreshConn, 3500);
+    return () => clearInterval(t);
+  }, [connected, loadingConn]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (connected) onConnected?.(); }, [connected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Connect WhatsApp": make Baileys the active transport, then start polling for
+  // the QR. The backend returns a `qr` data-URL on /connection while pairing.
+  const connect = async () => {
+    setConnecting(true); setConnectError('');
+    try { await whatsappApi.enableBaileys(); await reload?.(); await refreshConn(); }
+    catch (e) { setConnectError(e?.message || 'Could not start WhatsApp connection.'); }
+    finally { setConnecting(false); }
+  };
+
   const disconnect = async () => {
-    if (!confirm('Disconnect WhatsApp?')) return;
+    if (!confirm('Disconnect WhatsApp? Outgoing messages will be buffered until you reconnect.')) return;
     setBusy(true);
     try { await whatsappApi.disconnect(); await refreshConn(); onConnected?.(); }
     catch (e) { alert(e.message); } finally { setBusy(false); }
@@ -319,7 +341,8 @@ function SettingsScreen({ config, reload, onConnected }) {
     } catch (e) { alert(e.message); } finally { setTesting(false); }
   };
 
-  const connected = conn?.connected;
+  const serviceDown = conn?.state === 'service_down';
+  const showQr = !connected && !!conn?.qr;
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -339,9 +362,45 @@ function SettingsScreen({ config, reload, onConnected }) {
           <Btn size="sm" variant="danger" onClick={disconnect} disabled={busy}>Disconnect</Btn>
         </div>
       ) : (
-        <div className="rounded-card border border-[#EBEAE7] bg-neutral-50 p-4 text-sm text-neutral-600">
-          Your WhatsApp isn’t set up yet. Open <span className="font-medium">Advanced (for developers)</span> below,
-          choose your provider (<span className="font-medium">Meta WhatsApp Cloud API</span> recommended) and enter your credentials.
+        <div className="rounded-card border border-[#EBEAE7] bg-white p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+              {serviceDown ? <WifiOff size={18} /> : <QrCode size={18} />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-neutral-800 leading-tight">
+                {serviceDown ? 'WhatsApp service offline' : 'Connect WhatsApp'}
+              </p>
+              <p className="text-xs text-neutral-500">
+                {serviceDown
+                  ? 'The service is unreachable right now. Messages are buffered until it returns.'
+                  : 'Scan one QR code from your institute’s phone — then everything sends from your own number. Free, no Meta setup.'}
+              </p>
+            </div>
+            {!serviceDown && !showQr && (
+              <Btn icon={Smartphone} onClick={connect} disabled={connecting}>
+                {connecting ? 'Starting…' : 'Connect'}
+              </Btn>
+            )}
+          </div>
+
+          {connectError && <p className="text-xs text-red-600">{connectError}</p>}
+
+          {showQr && (
+            <div className="flex flex-col items-center text-center border-t border-[#EFEDEA] pt-4">
+              <img src={conn.qr} alt="WhatsApp QR code" width={232} height={232}
+                   className="rounded-xl border border-[#EFEDEA]" />
+              <p className="text-xs text-neutral-500 mt-3 max-w-xs">
+                On your institute’s phone: WhatsApp → <strong>Linked Devices</strong> →
+                <strong> Link a device</strong> → scan this code. You only do this once.
+              </p>
+            </div>
+          )}
+          {connecting && !showQr && (
+            <div className="flex items-center gap-2 text-xs text-neutral-400 border-t border-[#EFEDEA] pt-3">
+              <Loader2 className="animate-spin" size={13} /> Waiting for the QR code…
+            </div>
+          )}
         </div>
       )}
 
@@ -358,7 +417,7 @@ function SettingsScreen({ config, reload, onConnected }) {
 
       <details className="group">
         <summary className="cursor-pointer text-xs font-medium text-neutral-500 hover:text-neutral-800 select-none flex items-center gap-1">
-          <SlidersHorizontal size={12} /> Advanced (for developers)
+          <SlidersHorizontal size={12} /> Advanced — other providers (Meta / WANotifier)
         </summary>
         <div className="mt-3 border-l-2 border-[#EFEDEA] pl-3">
           <AdvancedSettings config={config} reload={reload} />
@@ -370,7 +429,7 @@ function SettingsScreen({ config, reload, onConnected }) {
 
 function AdvancedSettings({ config, reload }) {
   const [form, setForm] = useState({
-    provider: config?.provider || 'meta',
+    provider: config?.provider || 'baileys',
     api_key: '',
     sender: config?.sender || '',
     meta_access_token: '',
@@ -424,10 +483,13 @@ function AdvancedSettings({ config, reload }) {
         <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Provider</label>
         <select value={form.provider} onChange={(e) => set({ provider: e.target.value })}
           className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
-          <option value="meta">Meta WhatsApp Cloud API (recommended)</option>
+          <option value="baileys">WhatsApp QR — your own number (recommended, free)</option>
+          <option value="meta">Meta WhatsApp Cloud API (official, paid)</option>
           <option value="wanotifier">WANotifier</option>
-          <option value="baileys">Baileys (Self-Hosted Node Service)</option>
         </select>
+        <p className="text-[11px] text-neutral-400 mt-1">
+          Most institutes use the free QR option — connect it from the card above. Pick Meta only if you need official, billable template messaging.
+        </p>
       </div>
 
       {form.provider === 'meta' && (
@@ -472,34 +534,29 @@ function AdvancedSettings({ config, reload }) {
         </>
       )}
       {form.provider === 'baileys' && (
-        <div className="glass-panel border border-whatsapp-green-fg/20 bg-whatsapp-green-light/10 rounded-xl p-4 space-y-3">
+        <div className="glass-panel border border-whatsapp-green-fg/20 bg-whatsapp-green-light/10 rounded-xl p-4 space-y-2">
           <p className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
-            <CheckCircle2 size={16} className="text-whatsapp-green-fg" /> Baileys Node Service Active
+            <CheckCircle2 size={16} className="text-whatsapp-green-fg" /> Free QR transport (recommended)
           </p>
           <p className="text-xs text-neutral-600 leading-relaxed">
-            Routes all outgoing WhatsApp notifications through a local self-hosted Node.js service using your own paired WhatsApp number.
+            Sends from your institute’s own paired WhatsApp number — no per-message cost, no Meta setup.
+            Connect or disconnect it from the <strong>Connect WhatsApp</strong> card at the top of this page,
+            or open the full <Link to="/teacher/whatsapp/status" className="text-whatsapp-green-fg font-medium hover:underline">Status page</Link>.
           </p>
-          <p className="text-xs text-neutral-600 leading-relaxed">
-            Connection sessions, QR codes, and device linking must be managed from the Status page.
-          </p>
-          <div className="pt-1.5">
-            <Link to="/teacher/whatsapp/status"
-              className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-whatsapp-green text-white hover:bg-whatsapp-green/90 shadow-sm transition-colors">
-              <QrCode size={13} /> Open WhatsApp Status &amp; Link Device
-            </Link>
-          </div>
         </div>
       )}
 
-      <div>
-        <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Per-message rates ({form.currency})</label>
-        <div className="grid grid-cols-3 gap-2">
-          {['utility', 'marketing', 'auth'].map(k => (
-            <Input key={k} label={k} type="number" value={form.rates[k]}
-              onChange={(e) => set({ rates: { ...form.rates, [k]: Number(e.target.value) } })} />
-          ))}
+      {form.provider === 'meta' && (
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Per-message rates ({form.currency})</label>
+          <div className="grid grid-cols-3 gap-2">
+            {['utility', 'marketing', 'auth'].map(k => (
+              <Input key={k} label={k} type="number" value={form.rates[k]}
+                onChange={(e) => set({ rates: { ...form.rates, [k]: Number(e.target.value) } })} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Input label="Quiet hours — send from" type="time" value={form.quiet_hours?.start || ''}
