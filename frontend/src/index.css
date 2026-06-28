@@ -81,6 +81,9 @@ h1, h2, h3 {
   color: #ffffff;
   border-radius: 1.5rem;
   box-shadow: 0 10px 30px rgba(17, 24, 39, 0.12);
+  /* GPU layer: the dock magnification + tab transition animate on the compositor */
+  will-change: transform;
+  contain: layout style;
 }
 
 /* Dotted connector for the learning-journey roadmap. */
@@ -137,10 +140,10 @@ h1, h2, h3 {
 
 /* Generic page fade-slide for non-Framer spots. */
 @keyframes fadeSlide { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-.fade-slide { animation: fadeSlide 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.fade-slide { animation: fadeSlide 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; will-change: opacity, transform; }
 
 /* Load-fill progress bars (XP + per-subject). Set width 0 then to target on mount. */
-.bar-fill { transition: width 1.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.bar-fill { transition: width 1.6s cubic-bezier(0.22, 1, 0.36, 1); will-change: width; }
 
 /* Holographic glass card (faux — no backdrop-filter). Used by GlassCard. */
 .glass-card {
@@ -151,8 +154,9 @@ h1, h2, h3 {
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(129, 140, 248, 0.12);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
+  will-change: transform;
 }
-.glass-card:hover { transform: translateY(-5px); box-shadow: 0 16px 44px rgba(129, 140, 248, 0.20); }
+.glass-card:hover { transform: translateY(-4px); box-shadow: 0 16px 44px rgba(129, 140, 248, 0.20); }
 .glass-card::after {
   content: '';
   position: absolute;

@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
+import PageTransition from '../../components/shared/PageTransition';
 
 function getActiveTab(path) {
   if (path === '/teacher' || path === '/teacher/') return 'today';
@@ -70,7 +71,7 @@ export default function TeacherLayout() {
         className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto pb-48 lg:pb-0 lg:overflow-visible'}`}
       >
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
-          <Outlet />
+          <PageTransition><Outlet /></PageTransition>
         </Suspense>
       </div>
       <BottomNav active={active} setActive={setActive} type="teacher" />

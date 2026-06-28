@@ -4,6 +4,7 @@ import { useAuthStore } from '../../lib/auth';
 import { useWhatsNew, useExamLock } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
+import PageTransition from '../../components/shared/PageTransition';
 
 function getActiveTab(path) {
   if (path === '/student' || path === '/student/') return 'home';
@@ -97,7 +98,7 @@ export default function StudentLayout() {
         className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto pb-48 lg:pb-0 lg:overflow-visible'}`}
       >
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
-          <Outlet />
+          <PageTransition><Outlet /></PageTransition>
         </Suspense>
       </div>
       {!examLocked && <BottomNav active={active} setActive={setActive} type="student" badges={badges} />}

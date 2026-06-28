@@ -18,12 +18,12 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
   const [phase, setPhase] = useState('intro');
 
   useEffect(() => {
+    let t2;
     const t1 = setTimeout(() => {
       setPhase('fade-out');
-      const t2 = setTimeout(() => onDone?.(), 600);
-      return () => clearTimeout(t2);
+      t2 = setTimeout(() => onDone?.(), 600);
     }, duration);
-    return () => clearTimeout(t1);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = 'Udaya Tuition Home';
@@ -31,8 +31,6 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-
         .splash-root {
           position: fixed;
           inset: 0;
@@ -109,8 +107,8 @@ export default function SplashScreen({ onDone, duration = 1800 }) {
           gap: 0;
         }
         @keyframes textIn {
-          from { opacity: 0; transform: translateY(18px); filter: blur(4px); }
-          to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+          from { opacity: 0; transform: translateY(18px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
         .splash-title-wrap {
           animation: textIn 0.5s ease 0.55s both;

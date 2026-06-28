@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -13,6 +13,8 @@ import EventCard from '../../components/cards/EventCard';
 import { dashboardApi, joinRequestApi, reminderApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import { useAppCache } from '../../store';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
+import { useShallow } from 'zustand/react/shallow';
 import NotificationBell from '../../components/shared/NotificationBell';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { pastelFor, pastelTokens } from '../../components/cards/pastel';
@@ -59,12 +61,15 @@ export default function TodayPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const dark = useTheme(s => s.dark);
-  const standards        = useAppCache(s => s.standards);
-  const subjects         = useAppCache(s => s.subjects);
-  const students         = useAppCache(s => s.students);
-  const refreshStandards = useAppCache(s => s.refreshStandards);
-  const refreshSubjects  = useAppCache(s => s.refreshSubjects);
-  const refreshStudents  = useAppCache(s => s.refreshStudents);
+  const { standards, subjects, students, refreshStandards, refreshSubjects, refreshStudents } =
+    useAppCache(useShallow(s => ({
+      standards:        s.standards,
+      subjects:         s.subjects,
+      students:         s.students,
+      refreshStandards: s.refreshStandards,
+      refreshSubjects:  s.refreshSubjects,
+      refreshStudents:  s.refreshStudents,
+    })));
 
   const [overview, setOverview]   = useState(() => readCache('tutoria_dash_overview'));
   const [activities, setActivities] = useState(() => readCache('tutoria_dash_activity') || []);
@@ -79,34 +84,40 @@ export default function TodayPage() {
   const displayName = user?.name?.split(' ')[0] || 'Teacher';
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
-  useEffect(() => {
+  const loadDashboard = useCallback(async () => {
     refreshStandards?.();
     refreshSubjects?.();
     refreshStudents?.();
-    (async () => {
-      try {
-        const [ov, act, rem] = await Promise.all([
-          dashboardApi.getOverview(),
-          dashboardApi.getActivity().catch(() => ({ activities: [] })),
-          reminderApi.list().catch(() => []),
-        ]);
-        setOverview(ov);             writeCache('tutoria_dash_overview', ov);
-        const acts = act?.activities || [];
-        setActivities(acts);         writeCache('tutoria_dash_activity', acts);
-        const rems = Array.isArray(rem) ? rem : [];
-        setReminders(rems);          writeCache('tutoria_dash_reminders', rems);
-      } catch (err) {
-        console.error('Dashboard error:', err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-    // The insights endpoint is heavier (answer-similarity etc.) — fetch it
-    // independently so the page never blocks on it.
+    let cancelled = false;
+    try {
+      const [ov, act, rem] = await Promise.all([
+        dashboardApi.getOverview(),
+        dashboardApi.getActivity().catch(() => ({ activities: [] })),
+        reminderApi.list().catch(() => []),
+      ]);
+      if (cancelled) return;
+      setOverview(ov);             writeCache('tutoria_dash_overview', ov);
+      const acts = act?.activities || [];
+      setActivities(acts);         writeCache('tutoria_dash_activity', acts);
+      const rems = Array.isArray(rem) ? rem : [];
+      setReminders(rems);          writeCache('tutoria_dash_reminders', rems);
+    } catch (err) {
+      console.error('Dashboard error:', err);
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+    // Insights: heavier endpoint, fetch independently so page never blocks on it.
+    const ac = new AbortController();
     dashboardApi.getInsights()
-      .then(ins => { setInsights(ins); writeCache('tutoria_dash_insights', ins); })
+      .then(ins => { if (!cancelled) { setInsights(ins); writeCache('tutoria_dash_insights', ins); } })
       .catch(err => console.error('Insights error:', err));
-  }, []);
+    return () => { cancelled = true; ac.abort(); };
+  }, [refreshStandards, refreshSubjects, refreshStudents]);
+
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  // Refresh dashboard data on window focus / server data-changed events.
+  useAutoRefresh(loadDashboard);
 
   const standardIdForClass = (classId) => subjects.find(s => s.id === classId)?.standard_id;
 

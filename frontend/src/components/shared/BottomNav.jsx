@@ -15,14 +15,14 @@ const BottomNav = memo(function BottomNav({ active, setActive, type = 'teacher',
           const badge = badges?.[item.id] || 0;
           return (
             <div key={item.id} className="relative flex-shrink-0">
-              {/* Plain static tab — no dock magnification animation. */}
               <button
                 type="button"
                 onClick={() => setActive(item.id)}
                 title={item.label}
-                className={`w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0 ${
-                  isActive ? 'bg-white text-black' : 'text-neutral-400'
-                }`}
+                className={`w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0
+                  transition-all duration-200 ease-out will-change-transform
+                  active:scale-90
+                  ${isActive ? 'bg-white text-black scale-105' : 'text-neutral-400 hover:text-white'}`}
               >
                 <item.icon className="w-6 h-6" />
               </button>
@@ -36,6 +36,7 @@ const BottomNav = memo(function BottomNav({ active, setActive, type = 'teacher',
         })}
       </nav>
     </div>
+
   );
 });
 
