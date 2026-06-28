@@ -4385,8 +4385,10 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
         )
         return {"avatar_url": versioned_url}
     except Exception as e:
-        print("Avatar upload error:", e)
-        raise HTTPException(status_code=500, detail="Upload failed")
+        print("Avatar upload error:", repr(e))
+        # Surface the reason (e.g. storage backend not configured) instead of a
+        # flat "Upload failed" so the failure is diagnosable from the client/logs.
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
 
 @app.get("/api/teacher/thumbnail")
@@ -10251,8 +10253,12 @@ async def get_app_version():
     if not base:
         return {}
     try:
+        # Cache-bust + no-cache so Cloudflare's edge can't serve a stale 404 it cached
+        # before version.json existed (the reason the page stuck on "Preparing…").
         async with httpx.AsyncClient(timeout=8) as client:
-            resp = await client.get(f"{base}/app/version.json")
+            resp = await client.get(f"{base}/app/version.json",
+                                    params={"t": int(now)},
+                                    headers={"Cache-Control": "no-cache"})
         data = resp.json() if resp.status_code == 200 else {}
     except Exception:
         data = _APP_VERSION_CACHE["data"] or {}  # keep last good value on a blip
