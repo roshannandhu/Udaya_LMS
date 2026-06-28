@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Register native plugins before bridge starts
         registerPlugin(SecureScreenPlugin.class);
+        registerPlugin(LiveAlarmPlugin.class);
         super.onCreate(savedInstanceState);
         // FLAG_SECURE is ON for EVERYONE, always (like Google Pay) — blocks OS
         // screenshots, screen recording, and the recents thumbnail. Set here at

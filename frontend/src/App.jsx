@@ -9,6 +9,7 @@ import useAndroidBackButton from './lib/useAndroidBackButton';
 import { enableScreenSecurity, disableScreenSecurity } from './lib/secureScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import useLiveClassEvents from './hooks/useLiveClassEvents';
+import { startNotificationSync, stopNotificationSync } from './lib/notifications';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
@@ -216,6 +217,15 @@ export default function App() {
   // returning student opens the app offline (the case the login-only enable missed).
   const role = useAuthStore(s => s.role);
   useEffect(() => {
+    if (!role) {
+      stopNotificationSync();
+      return;
+    }
+    startNotificationSync();
+    return () => stopNotificationSync();
+  }, [role]);
+
+  useEffect(() => {
     if (role === ROLES.STUDENT) enableScreenSecurity();
     else if (role) disableScreenSecurity();
   }, [role]);
@@ -228,13 +238,24 @@ export default function App() {
         if (Capacitor.getPlatform() !== 'android') return;
         const { App: CapApp } = await import('@capacitor/app');
         const h = await CapApp.addListener('resume', () => {
-          if (useAuthStore.getState().role === ROLES.STUDENT) enableScreenSecurity();
+          if (useAuthStore.getState().role === ROLES.STUDENT) {
+            enableScreenSecurity();
+            import('./lib/liveAlarms').then(m => m.syncLiveAlarms()).catch(() => {});
+          }
         });
         remove = () => h.remove();
       } catch { /* not native */ }
     })();
     return () => remove();
   }, []);
+
+  // On-device live-class alarms (Android student): (re)schedule local AlarmManager
+  // reminders whenever a student is logged in, so the full-screen alarm fires at the
+  // exact time even if the app is closed/offline.
+  useEffect(() => {
+    if (role !== ROLES.STUDENT) return;
+    import('./lib/liveAlarms').then(m => m.syncLiveAlarms()).catch(() => {});
+  }, [role]);
 
   // Push notifications (Android app only): register the FCM token once the user is
   // authenticated. No-op on web/iOS. unregisterPush() is called from the logout path.

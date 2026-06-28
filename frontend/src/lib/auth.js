@@ -214,6 +214,8 @@ export const useAuthStore = create((set, get) => ({
     // Remove this device's push token first (needs the still-valid auth token) so a
     // shared phone stops receiving pushes for the user who just logged out.
     try { await (await import('./push')).unregisterPush(); } catch (e) {}
+    // Cancel any scheduled on-device live-class alarms for this user.
+    try { await (await import('./liveAlarms')).clearLiveAlarms(); } catch (e) {}
     try {
       const token = localStorage.getItem(TOKEN_KEY);
       await fetch(`${API_BASE}/auth/logout`, {

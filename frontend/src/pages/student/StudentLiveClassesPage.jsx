@@ -108,6 +108,8 @@ export default function StudentLiveClassesPage() {
       setLiveClasses(filtered);
       hydratedRef.current = true; // from now on, refreshes update in place (no spinner)
       liveClassesCache = { userId: user?.id, list: filtered };
+      // Re-arm on-device full-screen alarms whenever the list changes (new/edited classes).
+      import('../../lib/liveAlarms').then(m => m.syncLiveAlarms()).catch(() => {});
     } catch (err) {
       console.error(err);
     } finally {

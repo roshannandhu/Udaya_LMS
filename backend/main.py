@@ -645,7 +645,10 @@ async def startup_event():
     asyncio.create_task(_broadcast_cleanup_loop())
     asyncio.create_task(_whatsapp_scheduler_loop())
     asyncio.create_task(_backup_scheduler_loop())
-    asyncio.create_task(_live_class_reminder_loop())
+    # Live-class reminders are now scheduled ON-DEVICE (AlarmManager, see the Android
+    # LiveAlarm plugin) for reliable full-screen alarms even when the app is closed.
+    # The push-based loop is left in place but NOT started, to avoid double alarms.
+    # asyncio.create_task(_live_class_reminder_loop())
 
 
 # Models
@@ -10893,10 +10896,6 @@ class WhatsAppConfigInput(BaseModel):
     meta_access_token: Optional[str] = None    # secret — only overwritten when sent non-empty
     meta_phone_number_id: Optional[str] = None
     meta_waba_id: Optional[str] = None
-    # Evolution API
-    evolution_base_url: Optional[str] = None
-    evolution_api_key: Optional[str] = None    # secret
-    evolution_instance: Optional[str] = None
 
 class WhatsAppEstimateInput(BaseModel):
     standard_ids: Optional[List[str]] = None
@@ -11313,7 +11312,6 @@ def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=N
             "standard_id": std_id,
             "standard_name": std_name.get(std_id, ""),
             "opted_out": bool(r.get("whatsapp_opt_out")),
-            "session_open": getattr(wa.get_provider(), 'name', '') == 'evolution',
             "attendance_pct": r.get("attendance_pct") or 0,
             "avg_score": r.get("avg_score") or 0,
             "points": r.get("points") or 0,
@@ -11373,7 +11371,7 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
     The message body (named {Tags}) is rendered once via the single _wa_render engine.
     A true Meta template is only used when the active provider is Meta AND the named
     template has a Meta-approved counterpart; otherwise the rendered text is sent as a
-    normal message (the beginner/Evolution path)."""
+    normal message."""
     to = (recipient.get("phone") or "").strip()
     if not to:
         return {"student_id": recipient.get("id"), "name": recipient.get("name"),
@@ -11462,10 +11460,6 @@ def _wa_is_configured(cfg: dict) -> bool:
     if provider == "meta":
         return bool((cfg.get("meta_access_token") or "").strip()
                     and (cfg.get("meta_phone_number_id") or "").strip())
-    if provider == "evolution":
-        return bool((cfg.get("evolution_base_url") or "").strip()
-                    and (cfg.get("evolution_api_key") or "").strip()
-                    and (cfg.get("evolution_instance") or "").strip())
     if provider == "wanotifier":
         return bool((cfg.get("api_key") or "").strip()) and bool(cfg.get("wanotifier_verified"))
     return False
@@ -11484,10 +11478,6 @@ def wa_get_config(user = Depends(verify_token)):
         "meta_phone_number_id": cfg.get("meta_phone_number_id", ""),
         "meta_waba_id": cfg.get("meta_waba_id", ""),
         "meta_token_masked": wa.mask_key(cfg.get("meta_access_token")),
-        # Evolution API
-        "evolution_base_url": cfg.get("evolution_base_url", ""),
-        "evolution_instance": cfg.get("evolution_instance", ""),
-        "evolution_key_masked": wa.mask_key(cfg.get("evolution_api_key")),
         "rates": wa.get_rates(cfg),
         "currency": cfg.get("currency", wa.DEFAULT_CURRENCY),
         "auto_welcome": bool(cfg.get("auto_welcome")),
@@ -11502,7 +11492,7 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
     cfg = wa.get_wa_config()
     patch = data.model_dump(exclude_unset=True)
     # Never wipe a stored secret with a blank/masked value.
-    for secret in ("api_key", "meta_access_token", "evolution_api_key"):
+    for secret in ("api_key", "meta_access_token"):
         if secret in patch:
             new_val = (patch.pop(secret) or "").strip()
             if new_val and not new_val.startswith("••••"):
@@ -11519,15 +11509,6 @@ async def wa_connection(user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
     provider = (cfg.get("provider") or "").lower()
-    if provider == "evolution":
-        prov = wa.get_provider(cfg)
-        if getattr(prov, "name", "") != "evolution":
-            return {"provider": provider, "connected": False, "state": "no_server", "number": "",
-                    "error": "The WhatsApp server isn’t set up yet. Ask your admin to add it under Advanced."}
-        state = await prov.connection_state()
-        connected = state == "open"
-        number = await prov.owner_number() if connected else ""
-        return {"provider": provider, "connected": connected, "state": state, "number": number}
     # WANotifier sending is paused until its adapter is verified (safety gate).
     if provider == "wanotifier" and (cfg.get("api_key") or "").strip() and not cfg.get("wanotifier_verified"):
         return {"provider": provider, "connected": False, "state": "setup_incomplete", "number": "",
@@ -11538,33 +11519,9 @@ async def wa_connection(user = Depends(verify_token)):
             "state": "open" if configured else "close", "number": ""}
 
 
-@app.get("/api/teacher/whatsapp/qr")
-async def wa_qr(user = Depends(verify_token)):
-    _wa_require_teacher(user)
-    cfg = wa.get_wa_config()
-    provider = (cfg.get("provider") or "").lower()
-    if provider != "evolution":
-        return {"state": "n/a",
-                "error": "Scan-to-connect is for the simple setup. Your provider connects with credentials under Advanced."}
-    prov = wa.get_provider(cfg)
-    if getattr(prov, "name", "") != "evolution":
-        return {"state": "no_server",
-                "error": "The WhatsApp server isn’t set up yet. Ask your admin to add it under Advanced (for developers)."}
-    state = await prov.connection_state()
-    if state == "open":
-        return {"state": "open", "qr_base64": None, "pairing_code": None}
-    res = await prov.get_qr()
-    return {"state": state, "qr_base64": res.get("qr_base64"),
-            "pairing_code": res.get("pairing_code"), "error": res.get("error")}
-
-
 @app.post("/api/teacher/whatsapp/disconnect")
 async def wa_disconnect(user = Depends(verify_token)):
     _wa_require_teacher(user)
-    prov = wa.get_provider(wa.get_wa_config())
-    if getattr(prov, "name", "") == "evolution":
-        r = await prov.logout()
-        return {"success": bool(r.get("_ok")), "error": r.get("error")}
     return {"success": True}
 
 
@@ -11639,10 +11596,10 @@ def _wa_missing_manual(body: str, manual_values: Optional[dict]) -> list:
 
 # ── Send (manual) ─────────────────────────────────────────────────────────────
 # ── Background batch sends ─────────────────────────────────────────────────
-# Evolution throttles ~2.5s between messages, so a class-wide send to hundreds
-# of parents takes many minutes — far past any HTTP timeout. Above this
-# threshold the send endpoints enqueue a background task and return a batch_id
-# the client polls; below it they stay synchronous (instant result alert).
+# A class-wide send to hundreds of parents can take a while — past an HTTP
+# timeout. Above this threshold the send endpoints enqueue a background task and
+# return a batch_id the client polls; below it they stay synchronous (instant
+# result alert).
 WA_BATCH_THRESHOLD = 10
 _wa_batches: dict = {}  # batch_id -> progress dict (in-memory; messages table is the audit trail)
 
@@ -11757,8 +11714,6 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     async def run(batch_id=None):
         results = []
         for idx, r in enumerate(recips):
-            if idx > 0 and provider.name == "evolution":
-                await asyncio.sleep(2.5)
             res = await _wa_send_and_log(
                 provider, teacher_id, r, mode=data.mode, template_name=data.template_name,
                 body_text=free_body, manual_values=data.manual_values,
@@ -12167,8 +12122,6 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     async def run(batch_id=None):
         results = []
         for idx, r in enumerate(sendable):
-            if idx > 0 and provider.name == "evolution":
-                await asyncio.sleep(2.5)
             band = r["band"] or {}
             msg = band.get("message") or data.default_message or ""
             attach = band.get("attach_report", True)
@@ -12389,8 +12342,6 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     async def run(batch_id=None):
         results = []
         for idx, r in enumerate(recips):
-            if idx > 0 and provider.name == "evolution":
-                await asyncio.sleep(2.5)
             if data.message:
                 body = data.message
             elif data.include_credentials:
@@ -12525,30 +12476,6 @@ async def wa_webhook(request: Request):
 
     pid = body.get("id") or body.get("message_id")
     status = body.get("status")
-    
-    # Evolution API payload normalization
-    evo_event = body.get("event")
-    evo_data = body.get("data", {})
-    if evo_event == "messages.update":
-        # Delivery status
-        if isinstance(evo_data, dict) and "key" in evo_data and "update" in evo_data:
-            pid = evo_data["key"].get("id")
-            evo_status = evo_data["update"].get("status")
-            if evo_status == "SERVER_ACK": status = "sent"
-            elif evo_status == "DELIVERY_ACK": status = "delivered"
-            elif evo_status == "READ": status = "read"
-            elif evo_status == "ERROR": status = "failed"
-    elif evo_event == "messages.upsert":
-        # Incoming message
-        if isinstance(evo_data, dict) and "message" in evo_data:
-            msg = evo_data["message"]
-            if msg.get("key", {}).get("fromMe") is False:
-                pid = msg["key"].get("id")
-                from_phone = msg["key"].get("remoteJid", "").split("@")[0]
-                text = msg.get("message", {}).get("conversation") or msg.get("message", {}).get("extendedTextMessage", {}).get("text")
-                body["from"] = from_phone
-                body["text"] = text
-                body["direction"] = "inbound"
 
     # 1) Delivery-status update for a message we sent.
     if pid and status:
@@ -12726,8 +12653,6 @@ async def _wa_execute_job(job: dict, force: bool = False):
         rows = _wa_build_report_rows(teacher_id, std_ids, None,
                                      job_test_id, "overall", criteria)
         for idx, r in enumerate(rows):
-            if idx > 0 and provider.name == "evolution":
-                await asyncio.sleep(2.5)
             if not r["phone"] or r["id"] in recent_ids:
                 continue
             if criteria and not r["band"]:
