@@ -55,9 +55,13 @@ jobs:
       - name: Build web + sync Capacitor
         working-directory: frontend
         run: |
-          npm ci || npm install
+          # --include=dev forces devDependencies (incl. @capacitor/cli) to install
+          # even if the runner sets NODE_ENV=production; the npx fallback to a
+          # missing cap binary is what failed the first run ("could not determine
+          # executable to run"). Call the local binary directly to be safe.
+          npm ci --include=dev || npm install --include=dev
           npm run build
-          npx cap sync android
+          ./node_modules/.bin/cap sync android
 
       - name: Decode keystore
         run: |
