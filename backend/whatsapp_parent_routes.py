@@ -126,7 +126,7 @@ def _parent_recipient(student: dict, standard_name: str = "") -> Optional[dict]:
     Returns None when the parent can't/shouldn't be messaged (opted out / no phone)."""
     if student.get("whatsapp_opt_out"):
         return None
-    phone = normalize_in(student.get("parent_phone"))
+    phone = normalize_in(student.get("parent_phone")) or normalize_in(student.get("phone"))
     if not phone:
         return None
     return {

@@ -10963,7 +10963,7 @@ class WhatsAppReportSendInput(BaseModel):
     criteria: Optional[List[dict]] = None   # [{min,max,message,template_name,attach_report}]
 
 class WhatsAppWelcomeInput(BaseModel):
-    student_ids: Optional[List[str]] = None
+    included_student_ids: Optional[List[str]] = None
     standard_ids: Optional[List[str]] = None
     template_name: Optional[str] = None
     message: Optional[str] = None
@@ -11330,7 +11330,7 @@ def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=N
             "id": r["id"],
             "name": r.get("name") or "",
             "username": r.get("username") or "",
-            "phone": r.get("parent_phone") or "",
+            "phone": r.get("parent_phone") or r.get("phone") or "",
             "parent_phone": r.get("parent_phone") or "",
             "student_phone": r.get("phone") or "",
             "student_code": r.get("student_code") or "",
@@ -12364,10 +12364,10 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     provider = wa.get_provider()
     teacher_id = user["teacher_id"]
     # SAFETY: require an explicit selection — never resolve to "everyone".
-    if data.student_ids is None and not data.standard_ids:
+    if data.included_student_ids is None and not data.standard_ids:
         raise HTTPException(status_code=400, detail="Select recipients first.")
     recips = [r for r in _wa_resolve_recipients(teacher_id, data.standard_ids,
-                                                data.student_ids) if r["phone"]]
+                                                data.included_student_ids) if r["phone"]]
     if not recips:
         raise HTTPException(status_code=400, detail="No recipients with a phone number")
     lms = _wa_branding_name()

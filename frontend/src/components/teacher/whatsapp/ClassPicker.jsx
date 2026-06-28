@@ -13,7 +13,7 @@ export default function ClassPicker({ groups = [], selected, onChange, onStudent
   const [editVal, setEditVal] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const eligible = (s) => s.parent_phone && !s.opted_out;
+  const eligible = (s) => (s.parent_phone || s.phone) && !s.opted_out;
 
   const toggleOpen = (id) => {
     const next = new Set(open);
