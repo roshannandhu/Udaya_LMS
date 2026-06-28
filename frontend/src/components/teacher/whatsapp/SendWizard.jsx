@@ -431,8 +431,9 @@ export default function SendWizard({
         </div>
       )}
 
-      {/* ── Sticky action bar (clear of the floating dock on phones) ── */}
-      <div className="sticky bottom-24 lg:bottom-4 z-30 mt-5">
+      {/* ── Action bar. In-flow on phones (so it never floats over the inline
+           preview — that overlap was a bug); sticky only on desktop. ── */}
+      <div className="lg:sticky lg:bottom-4 z-30 mt-5">
         <div className="glass-panel border border-[#EBEAE7] rounded-2xl px-3.5 py-3 flex items-center gap-3 bg-white/95 backdrop-blur shadow-lg">
           <Btn variant="ghost" icon={ArrowLeft} onClick={() => step === 1 ? onExit() : setStep(s => s - 1)}>
             {step === 1 ? 'Back' : 'Previous'}
