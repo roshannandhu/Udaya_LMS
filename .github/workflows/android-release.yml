@@ -40,11 +40,11 @@ jobs:
           # fail (it builds cleanly on 24). Also clears the Node-20 deprecation.
           node-version: '24'
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'   # Capacitor 8 compiles against Java 21
 
       - name: Derive version
         id: ver
