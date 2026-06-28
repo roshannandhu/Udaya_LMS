@@ -50,7 +50,7 @@ jobs:
         id: ver
         run: |
           NAME="${GITHUB_REF_NAME#v}"          # v1.1.0 -> 1.1.0
-          CODE="$((100 + GITHUB_RUN_NUMBER))"   # monotonic, always > the old literal (10)
+          CODE="$((200 + GITHUB_RUN_NUMBER))"   # monotonic, always > the manual builds (≤106)
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "Building versionName=$NAME versionCode=$CODE"
