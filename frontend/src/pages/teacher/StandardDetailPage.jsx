@@ -180,6 +180,8 @@ function AddStudentModal({ open, onClose, standardId, onStudentAdded }) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [parentPhone, setParentPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -188,6 +190,7 @@ function AddStudentModal({ open, onClose, standardId, onStudentAdded }) {
   React.useEffect(() => {
     if (open) {
       setName(''); setUsername(''); setEmail('');
+      setPhone(''); setParentPhone('');
       setPassword(defaultStudentPassword || '');
       setError(''); setSuccess(null);
     }
@@ -207,12 +210,14 @@ function AddStudentModal({ open, onClose, standardId, onStudentAdded }) {
           name,
           username: username.toLowerCase().replace(/\s/g, '.'),
           email: email || undefined,
+          phone: phone || undefined,
+          parent_phone: parentPhone || undefined,
           password: password || defaultStudentPassword || 'student123',
           standard_id: standardId
         })
       });
       setSuccess(`Created! Username: ${result.username}  Password: ${result.password}`);
-      setName(''); setUsername(''); setEmail('');
+      setName(''); setUsername(''); setEmail(''); setPhone(''); setParentPhone('');
       setPassword(defaultStudentPassword || '');
       if (onStudentAdded) onStudentAdded();
     } catch (err) {
@@ -236,6 +241,8 @@ function AddStudentModal({ open, onClose, standardId, onStudentAdded }) {
         <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aarav Patel" />
         <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="aarav.p" />
         <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@example.com" />
+        <Input label="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
+        <Input label="Parent Phone (optional)" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+91 98765 43210" />
         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pwdPlaceholder} />
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading && <Loader2 size={14} className="animate-spin" />}

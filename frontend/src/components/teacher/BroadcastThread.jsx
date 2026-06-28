@@ -62,7 +62,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
   const { refreshStandards, invalidate, updateStandardLocal } = useAppCache();
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
-  const chatBottomRef = useRef(null);
+  const messagesRef = useRef(null);
 
   const [recording, setRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
@@ -117,9 +117,10 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     // Jump (instant) to the latest message when opening or on a new message. A
     // smooth scroll caused visible scroll churn on long threads; an instant jump
     // mirrors how a real chat opens pinned to the bottom.
-    if (chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: 'auto' });
-    }
+    const el = messagesRef.current;
+    if (!el) return;
+    const frame = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    return () => cancelAnimationFrame(frame);
   }, [broadcasts.length, std?.id]);
 
   // Live updates over an auto-reconnecting WebSocket (see useBroadcastSocket).
@@ -377,7 +378,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 md:px-8 space-y-2 relative" onClick={() => { setMenuId(null); setShowEmojiPicker(false); }}>
+      <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4 md:px-8 space-y-2 relative" onClick={() => { setMenuId(null); setShowEmojiPicker(false); }}>
         {visibleBroadcasts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
             <div className="bg-[#fff9c4] text-[#8a7e00] px-4 py-2 rounded-xl text-xs shadow-sm max-w-[280px]">
@@ -539,7 +540,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                 </React.Fragment>
               );
             })}
-            <div ref={chatBottomRef} />
+            <div />
           </div>
         )}
       </div>

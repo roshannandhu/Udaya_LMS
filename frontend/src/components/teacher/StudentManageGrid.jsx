@@ -10,7 +10,7 @@ import { downloadAoaWorkbook } from '../../lib/studentBackup';
 
 const MASK = '•••••••';
 let _draftSeq = 0;
-const newDraft = (standard_id = '') => ({ key: `d${++_draftSeq}`, standard_id, name: '', email: '', phone: '' });
+const newDraft = (standard_id = '') => ({ key: `d${++_draftSeq}`, standard_id, name: '', email: '', phone: '', parent_phone: '' });
 
 // Click-to-edit text cell. Commits on Enter or blur, cancels on Escape.
 function EditableCell({ value, placeholder, type = 'text', onCommit }) {
@@ -77,7 +77,7 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
   const [selected, setSelected] = useState(() => new Set()); // student ids
 
   // ── Add-new-students (in-grid) ──────────────────────────────────────────────
-  const [drafts, setDrafts]   = useState([]);     // [{key, standard_id, name, email, phone}]
+  const [drafts, setDrafts]   = useState([]);     // [{key, standard_id, name, email, phone, parent_phone}]
   const [savingNew, setSavingNew] = useState(false);
   const [addResult, setAddResult] = useState(null); // {added, skipped, errors, rows:[...]}
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -131,6 +131,7 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
           username,
           email: r.email.trim() || null,
           phone: r.phone.trim() || null,
+          parent_phone: r.parent_phone.trim() || null,
           standard_id: r.standard_id,
           temp_password: defaultStudentPassword || generatePassword(),
         };
@@ -149,6 +150,7 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
         student_code: s.student_code,
         email: s.email,
         phone: s.phone,
+        parent_phone: s.parent_phone,
         standard_id: s.standard_id,
         plain_password: s.temp_password,
         must_change_pwd: true,
@@ -174,8 +176,8 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
     const rs = addResult?.rows || [];
     if (!rs.length) return;
     const aoa = [
-      ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Login URL'],
-      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', 'https://tutoria.app/login']),
+      ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Parent Phone', 'Login URL'],
+      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', r.parent_phone || '', 'https://tutoria.app/login']),
     ];
     downloadAoaWorkbook(aoa, {
       filename: `New_Students_${new Date().toISOString().split('T')[0]}`,
@@ -267,7 +269,8 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
         (s.username || '').toLowerCase().includes(q) ||
         (s.email || '').toLowerCase().includes(q) ||
         (s.student_code || '').toLowerCase().includes(q) ||
-        (s.phone || '').includes(search)
+        (s.phone || '').includes(search) ||
+        (s.parent_phone || '').includes(search)
       );
     }
     return list;
@@ -315,7 +318,7 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
     }
   };
 
-  const COLS = 7;
+  const COLS = 8;
   const validDraftCount = drafts.filter(d => d.name.trim() && d.standard_id).length;
 
   // In-grid "Add new students" panel. Lives above the table so the first
@@ -422,6 +425,8 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
                 <input value={d.email} onChange={e => updateDraft(d.key, { email: e.target.value })} placeholder="Email (optional)" type="email"
                   className="px-2 py-1.5 rounded border border-[#E4E2DF] text-sm bg-white outline-none flex-1 min-w-[140px]" />
                 <input value={d.phone} onChange={e => updateDraft(d.key, { phone: e.target.value })} placeholder="Phone (optional)" type="tel"
+                  className="px-2 py-1.5 rounded border border-[#E4E2DF] text-sm bg-white outline-none w-full md:w-40" />
+                <input value={d.parent_phone} onChange={e => updateDraft(d.key, { parent_phone: e.target.value })} placeholder="Parent Phone (optional)" type="tel"
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (i === drafts.length - 1) addDraft(); } }}
                   className="px-2 py-1.5 rounded border border-[#E4E2DF] text-sm bg-white outline-none w-full md:w-40" />
                 <span className="text-[11px] text-neutral-400 hidden lg:inline whitespace-nowrap">ID &amp; password auto</span>
@@ -489,6 +494,7 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Name</th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Email</th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Phone</th>
+              <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Parent Phone</th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Password</th>
               <th className="text-left font-semibold px-3 py-2 border-b border-[#E4E2DF]">Actions</th>
             </tr>
@@ -542,6 +548,9 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
                         </td>
                         <td className="px-2 py-1 align-middle min-w-[150px]">
                           <EditableCell value={s.phone} type="tel" placeholder="add phone" onCommit={v => patchField(s.id, 'phone', v)} />
+                        </td>
+                        <td className="px-2 py-1 align-middle min-w-[150px]">
+                          <EditableCell value={s.parent_phone} type="tel" placeholder="add parent phone" onCommit={v => patchField(s.id, 'parent_phone', v)} />
                         </td>
                         <td className="px-3 py-1.5 align-middle whitespace-nowrap">
                           {s.plain_password ? (

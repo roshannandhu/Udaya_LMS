@@ -728,6 +728,7 @@ class StudentProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    parent_phone: Optional[str] = None
     # Simple profile-icon choice ('male' | 'female' | 'default'). Stored in
     # avatar_url as a sentinel ("preset:male") the frontend resolves to a
     # bundled icon; 'default' clears it back to the neutral icon. Uploaded
@@ -751,6 +752,7 @@ class CreateStudentRequest(BaseModel):
     password: str
     name: str
     username: str
+    phone: Optional[str] = None
     standard_id: Optional[str] = None
     parent_phone: Optional[str] = None
 
@@ -3903,6 +3905,7 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
             "name": request.name,
             "username": request.username,
             "email": auth_email,
+            "phone": request.phone,
             "standard_id": request.standard_id,
         }
         service_supabase.table("students").insert(student_data).execute()
@@ -11241,7 +11244,7 @@ def _wa_fetch_students(standard_ids: List[str]) -> list:
         return []
     try:
         rows = service_supabase.table("students").select(
-            "id, name, username, phone, student_code, standard_id, whatsapp_opt_out, attendance_pct, avg_score, points, plain_password"
+            "id, name, username, phone, parent_phone, student_code, standard_id, whatsapp_opt_out, attendance_pct, avg_score, points, plain_password"
         ).in_("standard_id", standard_ids).execute().data or []
     except Exception:
         rows = service_supabase.table("students").select(
@@ -11249,6 +11252,7 @@ def _wa_fetch_students(standard_ids: List[str]) -> list:
         ).in_("standard_id", standard_ids).execute().data or []
         for r in rows:
             r["whatsapp_opt_out"] = False
+            r["parent_phone"] = None
     return rows
 
 
@@ -11327,6 +11331,7 @@ def _wa_resolve_recipients(teacher_id, standard_ids=None, included_student_ids=N
             "name": r.get("name") or "",
             "username": r.get("username") or "",
             "phone": r.get("phone") or "",
+            "parent_phone": r.get("parent_phone") or "",
             "student_code": r.get("student_code") or "",
             "standard_id": std_id,
             "standard_name": std_name.get(std_id, ""),
@@ -11476,6 +11481,9 @@ def _wa_is_configured(cfg: dict) -> bool:
     only once its adapter is verified (wanotifier_verified) — see the safety gate
     in whatsapp.py — so the UI stops claiming a broken provider is connected."""
     provider = (cfg.get("provider") or "").lower()
+    if provider == "baileys":
+        import whatsapp_client as client
+        return client.is_enabled()
     if provider == "meta":
         return bool((cfg.get("meta_access_token") or "").strip()
                     and (cfg.get("meta_phone_number_id") or "").strip())

@@ -23,14 +23,14 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
     const initStd = initialStandardId ? standards.find(s => s.id === initialStandardId) : null;
     const stdName = initStd ? initStd.name : '10th Standard';
     const wsData = [
-      ['Name', 'Email', 'Phone', 'Standard'],
-      ['Aarav Patel',  '', '', stdName],
-      ['Meera Singh',  '', '', stdName],
-      ['Rohan Kumar',  '', '', stdName],
+      ['Name', 'Email', 'Phone', 'Parent Phone', 'Standard'],
+      ['Aarav Patel',  '', '', '', stdName],
+      ['Meera Singh',  '', '', '', stdName],
+      ['Rohan Kumar',  '', '', '', stdName],
     ];
     await downloadAoaWorkbook(wsData, {
       filename: 'Student_Import_Template',
-      cols: [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }],
+      cols: [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 18 }],
       sheetName: 'Students',
     });
   };
@@ -114,6 +114,7 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
         username: s.generated_username,
         email: s.raw_email,
         phone: s.raw_phone,
+        parent_phone: s.raw_parent_phone,
         standard_id: s.matched_standard_id,
         temp_password: s.temp_password
       }))
@@ -144,6 +145,7 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
           standard: s.standard_name || '',
           email: s.email || '',
           phone: s.phone || '',
+          parent_phone: s.parent_phone || '',
         }))
       : (data?.students || [])
           .filter(s => s.status !== 'error' && s.matched_standard_id)
@@ -155,16 +157,17 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
             standard: s.matched_standard_name || s.raw_standard || '',
             email: s.raw_email || '',
             phone: s.raw_phone || '',
+            parent_phone: s.raw_parent_phone || '',
           }));
 
     const wsData = [
-      ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Login URL'],
-      ...rows.map(r => [r.student_code, r.name, r.username, r.temp_password, r.standard, r.email, r.phone, 'https://tutoria.app/login']),
+      ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Parent Phone', 'Login URL'],
+      ...rows.map(r => [r.student_code, r.name, r.username, r.temp_password, r.standard, r.email, r.phone, r.parent_phone, 'https://tutoria.app/login']),
     ];
 
     await downloadAoaWorkbook(wsData, {
       filename: `Student_Credentials_${new Date().toISOString().split('T')[0]}`,
-      cols: [{wch: 16}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 25}],
+      cols: [{wch: 16}, {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 15}, {wch: 25}],
       sheetName: 'Credentials',
     });
   };
@@ -276,7 +279,11 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
                           {s.generated_username && <p className="text-xs text-neutral-500 truncate">@{s.generated_username}</p>}
                         </div>
                         <div className="col-span-1 text-sm text-neutral-600 truncate">{s.raw_email || '—'}</div>
-                        <div className="col-span-1 text-sm text-neutral-600 truncate">{s.raw_phone || '—'}</div>
+                        <div className="col-span-1 text-sm text-neutral-600 truncate">
+                          {s.raw_phone && <div>S: {s.raw_phone}</div>}
+                          {s.raw_parent_phone && <div className="text-xs text-neutral-400">P: {s.raw_parent_phone}</div>}
+                          {!s.raw_phone && !s.raw_parent_phone && '—'}
+                        </div>
                         <div className="col-span-1 text-xs">
                           {s.errors.map(err => <p key={err} className="text-red-600">{err}</p>)}
                           {s.warnings.map(warn => <p key={warn} className="text-amber-600">{warn}</p>)}

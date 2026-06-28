@@ -20,7 +20,7 @@ export default function RecipientPicker({ groups = [], selected, onChange, onStu
     setOpen(next);
   };
 
-  const eligible = (s) => s.phone && !s.opted_out;
+  const eligible = (s) => s.parent_phone && !s.opted_out;
 
   const toggleStudent = (id) => {
     const next = new Set(selected);
@@ -37,14 +37,14 @@ export default function RecipientPicker({ groups = [], selected, onChange, onStu
     onChange(next);
   };
 
-  const startEdit = (s) => { setEditId(s.id); setEditVal(s.phone || ''); };
+  const startEdit = (s) => { setEditId(s.id); setEditVal(s.parent_phone || ''); };
   const cancelEdit = () => { setEditId(null); setEditVal(''); };
   const saveEdit = async (s) => {
     const phone = editVal.trim();
     if (saving) return;
     setSaving(true);
     try {
-      await apiClient(`/students/${s.id}`, { method: 'PATCH', body: JSON.stringify({ phone }) });
+      await apiClient(`/students/${s.id}`, { method: 'PATCH', body: JSON.stringify({ parent_phone: phone }) });
       cancelEdit();
       onStudentUpdated?.();   // page refetches recipients (cache is cleared by the PATCH)
     } catch (e) {
@@ -115,9 +115,9 @@ export default function RecipientPicker({ groups = [], selected, onChange, onStu
                           <button onClick={() => startEdit(s)}
                             className="text-xs text-neutral-500 flex items-center gap-1 hover:text-neutral-800 group">
                             <Phone size={11} />
-                            {s.phone
-                              ? <span className="inline-flex items-center gap-1">{s.phone}<Pencil size={10} className="opacity-0 group-hover:opacity-60" /></span>
-                              : <span className="inline-flex items-center gap-1 text-whatsapp-green-fg"><Plus size={11} /> Add number</span>}
+                            {s.parent_phone
+                              ? <span className="inline-flex items-center gap-1">{s.parent_phone}<Pencil size={10} className="opacity-0 group-hover:opacity-60" /></span>
+                              : <span className="inline-flex items-center gap-1 text-whatsapp-green-fg"><Plus size={11} /> Add parent number</span>}
                             {s.opted_out && <span className="inline-flex items-center gap-0.5 text-amber-600 ml-1"><BellOff size={11} /> opted out</span>}
                           </button>
                         )}

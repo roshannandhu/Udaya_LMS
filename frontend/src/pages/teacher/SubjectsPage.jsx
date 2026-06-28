@@ -102,6 +102,8 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [parentPhone, setParentPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -115,10 +117,10 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
     try {
       const result = await apiClient('/admin/create-student', {
         method: 'POST',
-        body: JSON.stringify({ name, username: username.toLowerCase().replace(/\s/g, '.'), email: email || undefined, password: password || defaultStudentPassword || 'student123', standard_id: standardId })
+        body: JSON.stringify({ name, username: username.toLowerCase().replace(/\s/g, '.'), email: email || undefined, phone: phone || undefined, parent_phone: parentPhone || undefined, password: password || defaultStudentPassword || 'student123', standard_id: standardId })
       });
       setSuccess(`Created! Username: ${result.username}`);
-      setName(''); setUsername(''); setEmail(''); setPassword('');
+      setName(''); setUsername(''); setEmail(''); setPhone(''); setParentPhone(''); setPassword('');
       invalidateStudents(); await refreshStudents();
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
@@ -131,6 +133,8 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
         <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aarav Patel" />
         <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="aarav.p" />
         <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Input label="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <Input label="Parent Phone (optional)" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} />
         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={defaultStudentPassword ? `Leave blank to use "${defaultStudentPassword}"` : 'Leave blank for student123'} />
         <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
           {loading && <Loader2 size={14} className="animate-spin" />} Add Student

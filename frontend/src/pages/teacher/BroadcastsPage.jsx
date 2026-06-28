@@ -148,7 +148,7 @@ export default function BroadcastsPage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 h-full bg-[#f0f2f5] lg:p-4 lg:pb-6 -mb-28 lg:mb-0 pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:pb-0" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
+    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-[#f0f2f5] pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:p-4" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
       {/* Mobile/tablet TopBar — the desktop TopNav only appears at lg, so keep the
           page header until then (was md:hidden → vanished on iPad with no replacement). */}
       <div className="lg:hidden flex-shrink-0">
@@ -159,7 +159,7 @@ export default function BroadcastsPage() {
         />
       </div>
 
-      <div className="flex flex-1 min-h-0 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5 lg:h-[calc(100vh-120px)]">
+      <div className="flex flex-1 min-h-0 w-full max-w-[1400px] mx-auto bg-white lg:rounded-xl lg:shadow-sm overflow-hidden border border-black/5">
 
         {/* Standards list pane (Sidebar) */}
         <div className={`${showList ? 'flex' : 'hidden md:flex'} flex-col min-h-0 w-full md:w-[350px] lg:w-[400px] bg-white border-r border-neutral-200 flex-shrink-0`}>

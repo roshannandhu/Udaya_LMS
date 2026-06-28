@@ -80,7 +80,7 @@ export default function WhatsAppCenterPage() {
   const rates = config?.rates || { utility: 0.14, marketing: 0.78, auth: 0.13 };
   const currency = config?.currency || 'INR';
   const provider = config?.provider;
-  const parentCount = groups.flatMap(g => g.students).filter(s => s.phone && !s.opted_out).length;
+  const parentCount = groups.flatMap(g => g.students).filter(s => s.parent_phone && !s.opted_out).length;
 
   const goHome = () => { setScreen('home'); setExamId(null); };
   // OverviewTab quick-actions speak the old tab language — translate it.
@@ -426,6 +426,7 @@ function AdvancedSettings({ config, reload }) {
           className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
           <option value="meta">Meta WhatsApp Cloud API (recommended)</option>
           <option value="wanotifier">WANotifier</option>
+          <option value="baileys">Baileys (Self-Hosted Node Service)</option>
         </select>
       </div>
 
@@ -469,6 +470,25 @@ function AdvancedSettings({ config, reload }) {
           <Input label="Sender number / WhatsApp ID" value={form.sender}
             onChange={(e) => set({ sender: e.target.value })} />
         </>
+      )}
+      {form.provider === 'baileys' && (
+        <div className="glass-panel border border-whatsapp-green-fg/20 bg-whatsapp-green-light/10 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
+            <CheckCircle2 size={16} className="text-whatsapp-green-fg" /> Baileys Node Service Active
+          </p>
+          <p className="text-xs text-neutral-600 leading-relaxed">
+            Routes all outgoing WhatsApp notifications through a local self-hosted Node.js service using your own paired WhatsApp number.
+          </p>
+          <p className="text-xs text-neutral-600 leading-relaxed">
+            Connection sessions, QR codes, and device linking must be managed from the Status page.
+          </p>
+          <div className="pt-1.5">
+            <Link to="/teacher/whatsapp/status"
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-whatsapp-green text-white hover:bg-whatsapp-green/90 shadow-sm transition-colors">
+              <QrCode size={13} /> Open WhatsApp Status &amp; Link Device
+            </Link>
+          </div>
+        </div>
       )}
 
       <div>

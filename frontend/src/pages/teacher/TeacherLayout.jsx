@@ -24,6 +24,7 @@ export default function TeacherLayout() {
   const { role, clearAuth } = useAuthStore();
 
   const active = getActiveTab(location.pathname);
+  const isBroadcastRoute = location.pathname.startsWith('/teacher/broadcasts');
 
   // On phone the content area is the scroll container (app-shell, see below),
   // so reset it to the top on every route change — what body-scroll did for free.
@@ -60,11 +61,14 @@ export default function TeacherLayout() {
     // inset was inert and headers got clipped under the clock/icons. The 28px
     // floor guarantees clearance on the APK; env() wins on larger-notch devices.
     // lg:pt-0 keeps desktop flush (the floor never applies there).
-    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[max(env(safe-area-inset-top),28px)] lg:pt-0">
+    <div className={`flex flex-col h-[100dvh] overflow-hidden pt-[max(env(safe-area-inset-top),28px)] lg:pt-0 ${isBroadcastRoute ? 'lg:h-[100dvh]' : 'lg:h-auto lg:min-h-screen lg:overflow-visible'}`}>
       <TopNav type="teacher" />
       {/* overflow-x-clip (not -hidden: that would break position:sticky headers)
           stops sideways pan; overflow-y-auto makes this the phone scroll area. */}
-      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-48 lg:pb-0">
+      <div
+        ref={contentRef}
+        className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto pb-48 lg:pb-0 lg:overflow-visible'}`}
+      >
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
           <Outlet />
         </Suspense>

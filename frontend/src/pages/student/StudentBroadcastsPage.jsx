@@ -32,7 +32,7 @@ export default function StudentBroadcastsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewerBroadcastId, setViewerBroadcastId] = useState(null); // doc attachment open in secure viewer
   const markedReadRef = useRef(new Set());
-  const chatBottomRef = useRef(null);
+  const messagesRef = useRef(null);
 
   useEffect(() => {
     if (standardId) {
@@ -76,9 +76,10 @@ export default function StudentBroadcastsPage() {
     // Jump (not smooth-scroll) to the latest message. A smooth scroll re-triggered
     // every bubble's in-view animation, which read as flicker/jank; an instant jump
     // is snappy and animation-free, like opening a real chat at the bottom.
-    if (chatBottomRef.current) {
-      chatBottomRef.current.scrollIntoView({ behavior: 'auto' });
-    }
+    const el = messagesRef.current;
+    if (!el) return;
+    const frame = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    return () => cancelAnimationFrame(frame);
   }, [broadcasts.length]);
 
   // Live updates over an auto-reconnecting WebSocket (see useBroadcastSocket).
@@ -164,7 +165,7 @@ export default function StudentBroadcastsPage() {
   let currentGroup = null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#efeae2] -mb-28 lg:mb-0 lg:pb-0 lg:h-[calc(100vh-64px)]">
+    <div className="flex-1 h-full min-h-0 overflow-hidden flex flex-col bg-[#efeae2]">
       <div className="lg:hidden flex-shrink-0"><TopBar title="Class Updates" showSearch={false} /></div>
       <div className="flex flex-1 w-full max-w-[1000px] mx-auto bg-[#efeae2] md:border-x md:border-black/5 shadow-sm relative flex-col min-h-0">
         
@@ -199,7 +200,7 @@ export default function StudentBroadcastsPage() {
           </div>
         )}
         
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:pb-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full">
+      <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:pb-4 md:px-8 space-y-2 max-w-5xl mx-auto w-full">
           {broadcasts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="bg-[#fff9c4] text-[#8a7e00] px-4 py-2 rounded-xl text-xs shadow-sm max-w-[280px]">
@@ -302,7 +303,7 @@ export default function StudentBroadcastsPage() {
                   </React.Fragment>
                 );
               })}
-              <div ref={chatBottomRef} />
+              <div />
             </div>
           )}
         </div>

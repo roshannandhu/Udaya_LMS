@@ -46,6 +46,7 @@ export default function StudentLayout() {
   };
 
   const active = getActiveTab(location.pathname);
+  const isBroadcastRoute = location.pathname.startsWith('/student/broadcasts');
 
   // While a student is actively taking an exam, hide BOTH navs so the taskbar
   // can't be used to navigate out of the test (anti-cheat). Set by
@@ -88,10 +89,13 @@ export default function StudentLayout() {
     // bare inset was inert and headers got clipped under the clock/icons. The 28px
     // floor guarantees clearance on the APK; env() wins on devices that report a
     // larger notch. lg:pt-0 keeps desktop flush (the floor never applies there).
-    <div className="flex flex-col h-[100dvh] lg:h-auto lg:min-h-screen overflow-hidden lg:overflow-visible pt-[max(env(safe-area-inset-top),28px)] lg:pt-0">
+    <div className={`flex flex-col h-[100dvh] overflow-hidden pt-[max(env(safe-area-inset-top),28px)] lg:pt-0 ${isBroadcastRoute ? 'lg:h-[100dvh]' : 'lg:h-auto lg:min-h-screen lg:overflow-visible'}`}>
       {!examLocked && <TopNav type="student" badges={badges} />}
       {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
-      <div ref={contentRef} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible overflow-x-clip pb-48 lg:pb-0">
+      <div
+        ref={contentRef}
+        className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto pb-48 lg:pb-0 lg:overflow-visible'}`}
+      >
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <Outlet />
         </Suspense>

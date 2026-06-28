@@ -88,7 +88,8 @@ function navigateTo(path) {
 async function syncToken(token) {
   if (!token) return;
   try {
-    await deviceApi.register(token, 'android');
+    const result = await deviceApi.register(token, 'android');
+    if (!result?.ok) throw new Error('device-token-save-rejected');
     localStorage.setItem(LAST_TOKEN_KEY, token);
     setStatus({ permission: 'granted', registered: true, error: null,
                 tokenTail: String(token).slice(-10) });

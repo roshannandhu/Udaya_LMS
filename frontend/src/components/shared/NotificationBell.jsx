@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, CheckCheck, X } from 'lucide-react';
-import { apiClient } from '../../lib/api';
+import { useNotificationStore } from '../../lib/notifications';
 
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -14,65 +14,31 @@ function timeAgo(dateStr) {
 
 export default function NotificationBell({ dark = false }) {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const notifications = useNotificationStore(s => s.notifications);
+  const loading = useNotificationStore(s => s.loading);
+  const error = useNotificationStore(s => s.error);
+  const fetchNotifications = useNotificationStore(s => s.fetch);
+  const markRead = useNotificationStore(s => s.markRead);
+  const markAllRead = useNotificationStore(s => s.markAllRead);
   const panelRef = useRef(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const fetchNotifications = async () => {
-    if (!localStorage.getItem('tutoria_token')) return;
-    setLoading(true);
-    try {
-      const data = await apiClient('/notifications');
-      setNotifications(data || []);
-    } catch {
-      // silently ignore
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (!open) return;
-    fetchNotifications();
-  }, [open]);
-
-  // A foreground push (or any in-app trigger) refreshes the list so the badge
-  // updates immediately, even while the panel is closed.
-  useEffect(() => {
-    const onRefresh = () => fetchNotifications();
-    window.addEventListener('udaya:notifications-refresh', onRefresh);
-    return () => window.removeEventListener('udaya:notifications-refresh', onRefresh);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const interval = setInterval(fetchNotifications, 30000);
     const handler = (e) => {
       if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => {
-      clearInterval(interval);
       document.removeEventListener('mousedown', handler);
     };
   }, [open]);
 
-  const markRead = async (id) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    try { await apiClient(`/notifications/${id}/read`, { method: 'PATCH' }); } catch {}
-  };
-
-  const markAllRead = async () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    try { await apiClient('/notifications/read-all', { method: 'POST' }); } catch {}
-  };
-
   return (
     <div className="relative" ref={panelRef}>
       <button
-        onClick={() => { setOpen(o => !o); if (!open) fetchNotifications(); }}
+        onClick={() => { setOpen(o => !o); if (!open) fetchNotifications().catch(() => {}); }}
         className={`relative p-2 rounded-lg transition-colors ${dark ? 'text-neutral-300 hover:text-white hover:bg-white/10' : 'text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF]'}`}
       >
         <Bell size={16} />
@@ -89,7 +55,7 @@ export default function NotificationBell({ dark = false }) {
             <span className="text-sm font-semibold">Notifications</span>
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
-                <button onClick={markAllRead} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-900 px-2 py-1 rounded hover:bg-[#F4F2EF]">
+                <button onClick={() => markAllRead().catch(() => {})} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-900 px-2 py-1 rounded hover:bg-[#F4F2EF]">
                   <CheckCheck size={11} /> Mark all read
                 </button>
               )}
@@ -106,13 +72,13 @@ export default function NotificationBell({ dark = false }) {
             {!loading && notifications.length === 0 && (
               <div className="py-8 text-center">
                 <Bell size={20} className="mx-auto mb-2 text-neutral-300" />
-                <p className="text-xs text-neutral-400">No notifications yet</p>
+                <p className="text-xs text-neutral-400">{error || 'No notifications yet'}</p>
               </div>
             )}
             {notifications.map(n => (
               <div
                 key={n.id}
-                onClick={() => !n.read && markRead(n.id)}
+                onClick={() => !n.read && markRead(n.id).catch(() => {})}
                 className={`px-4 py-3 border-b border-[#EFEDEA] last:border-b-0 cursor-default transition-colors ${n.read ? 'opacity-60' : 'hover:bg-[#F4F2EF] cursor-pointer'}`}
               >
                 <div className="flex items-start gap-2">
@@ -123,7 +89,7 @@ export default function NotificationBell({ dark = false }) {
                     <p className="text-[10px] text-neutral-400 mt-0.5">{timeAgo(n.created_at)}</p>
                   </div>
                   {!n.read && (
-                    <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }}
+                    <button onClick={(e) => { e.stopPropagation(); markRead(n.id).catch(() => {}); }}
                       className="p-1 text-neutral-400 hover:text-blue-600 rounded hover:bg-[#F4F2EF] flex-shrink-0">
                       <Check size={11} />
                     </button>

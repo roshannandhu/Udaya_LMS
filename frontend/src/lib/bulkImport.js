@@ -7,6 +7,7 @@
 const NAME_KEYS = ['name', 'student name', 'full name', 'student', 'sname'];
 const EMAIL_KEYS = ['email', 'email address', 'mail', 'e-mail'];
 const PHONE_KEYS = ['phone', 'mobile', 'contact', 'phone number', 'mob', 'phno'];
+const PARENT_PHONE_KEYS = ['parent phone', 'parent_phone', 'parent contact', 'parent mobile', 'parentphone', 'p_phone', 'pphone', 'parent_mobile'];
 const STANDARD_KEYS = ['standard', 'class', 'std', 'grade', 'batch', 'section'];
 
 function matchKey(headers, keysToMatch) {
@@ -124,6 +125,7 @@ export async function parseImportFile(file, existingStandards, existingUsernames
         name: matchKey(headers, NAME_KEYS),
         email: matchKey(headers, EMAIL_KEYS),
         phone: matchKey(headers, PHONE_KEYS),
+        parent_phone: matchKey(headers, PARENT_PHONE_KEYS),
         standard: matchKey(headers, STANDARD_KEYS) || '_SheetName'
       };
 
@@ -136,10 +138,11 @@ export async function parseImportFile(file, existingStandards, existingUsernames
         const raw_name = row[colMap.name] ? String(row[colMap.name]).trim() : '';
         const raw_email = colMap.email && row[colMap.email] ? String(row[colMap.email]).trim() : null;
         const raw_phone = colMap.phone && row[colMap.phone] ? String(row[colMap.phone]).trim() : null;
+        const raw_parent_phone = colMap.parent_phone && row[colMap.parent_phone] ? String(row[colMap.parent_phone]).trim() : null;
         const raw_std = colMap.standard && row[colMap.standard] ? String(row[colMap.standard]).trim() : '';
 
         // Skip completely blank rows (common in Excel files with trailing empty rows)
-        if (!raw_name && !raw_email && !raw_phone && !raw_std) continue;
+        if (!raw_name && !raw_email && !raw_phone && !raw_parent_phone && !raw_std) continue;
 
         const warnings = [];
         const errors = [];
@@ -192,6 +195,7 @@ export async function parseImportFile(file, existingStandards, existingUsernames
           raw_standard: raw_std,
           raw_email,
           raw_phone,
+          raw_parent_phone,
           matched_standard_id,
           matched_standard_name,
           generated_username,

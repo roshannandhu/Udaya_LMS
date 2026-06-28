@@ -69,6 +69,77 @@ CREATE TABLE IF NOT EXISTS subject_classes (
 );
 
 -- Students
+-- Tutoria LMS Database Schema (Supabase / PostgreSQL)
+-- Uses UUID primary keys. students.id = auth.users.id (set explicitly on insert).
+--
+-- ── PORTABILITY (AWS RDS / plain PostgreSQL) ─────────────────────────────────
+-- This file targets Supabase, but is the single source of truth for the schema.
+-- To provision a NON-Supabase Postgres (e.g. AWS RDS), do these 3 things first:
+--
+-- 1. gen_random_uuid() is built into PostgreSQL 13+. On PG <13 run:
+--      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+--
+-- 2. Several FKs reference Supabase's auth schema (auth.users). Plain Postgres
+--    has no auth schema — create a stub BEFORE running this file:
+--      CREATE SCHEMA IF NOT EXISTS auth;
+--      CREATE TABLE IF NOT EXISTS auth.users (id UUID PRIMARY KEY);
+--    (Your new auth system must insert a row into auth.users for every
+--    teacher/student account, mirroring what Supabase Auth did. Affected FKs:
+--    standards.teacher_id, live_classes.created_by, teacher_branding.teacher_id,
+--    teacher_admins.*)
+--
+-- 3. RLS policies below reference Supabase roles (anon, authenticated). On
+--    plain Postgres those roles don't exist; either create them as NOLOGIN
+--    roles (CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;) or
+--    skip the policy blocks — the FastAPI backend connects with full
+--    privileges and enforces all authorization itself.
+--
+-- 4. Storage buckets (bottom of file) are Supabase Storage, NOT SQL. On AWS,
+--    replace with S3 buckets and update the backend storage calls.
+--
+-- ── TEACHER CREDENTIALS (read before migrating!) ─────────────────────────────
+-- There is NO teachers table. A teacher account is a row in Supabase Auth's
+-- internal auth.users with user_metadata.role = 'teacher' (created via
+-- supabase.auth.admin.create_user in main.py). This file CANNOT recreate them.
+--
+-- To migrate teacher logins to AWS:
+--   1. Export auth.users from Supabase (Dashboard → Database → full pg_dump
+--      includes the auth schema, or use the Auth admin API to list users).
+--   2. Recreate each teacher in the new auth system WITH THE SAME UUID, and
+--      insert that UUID into the auth.users stub (portability note 2 above).
+--      KEEPING THE UUID IS CRITICAL — standards.teacher_id,
+--      teacher_branding.teacher_id, whatsapp_*.teacher_id, live_classes.created_by
+--      and students.id all point at auth.users.id. New UUIDs = orphaned data.
+--   3. Passwords exist ONLY as bcrypt hashes inside Supabase Auth — there is no
+--      plaintext copy anywhere. If the new auth system can't import bcrypt
+--      hashes, issue teachers a password reset on first login after migration.
+--      (Student passwords are easier: students.plain_password holds the
+--      teacher-set password for most students.)
+
+-- Standards (8th, 9th, 10th, 11th, 12th)
+CREATE TABLE IF NOT EXISTS standards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    short TEXT,
+    emoji TEXT DEFAULT 'graduation',  -- lucide icon key (legacy rows may hold an emoji char)
+    teacher_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    start_date DATE,
+    end_date DATE,
+    attendance_threshold INTEGER DEFAULT 75,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Subject Classes (Maths, Physics, Chemistry, etc.)
+CREATE TABLE IF NOT EXISTS subject_classes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    standard_id UUID REFERENCES standards(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    emoji TEXT DEFAULT 'book',  -- lucide icon key (legacy rows may hold an emoji char)
+    end_date DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Students
 -- id = auth.users.id (set explicitly from Supabase auth on create)
 CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY,
@@ -77,6 +148,7 @@ CREATE TABLE IF NOT EXISTS students (
     student_code TEXT,            -- human-readable Student ID, e.g. UDAYA202510001 (auto-generated)
     email TEXT,
     phone TEXT,
+    parent_phone TEXT,
     avatar_url TEXT,
     standard_id UUID REFERENCES standards(id),
     points INTEGER DEFAULT 0,
@@ -329,9 +401,9 @@ CREATE TABLE IF NOT EXISTS notifications (
     type TEXT NOT NULL,
     title TEXT,
     body TEXT,
-    data JSONB,
-    read BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    read BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Bulk Import Audit Log
@@ -661,272 +733,8 @@ CREATE INDEX IF NOT EXISTS idx_video_progress_student ON video_progress(student_
 CREATE INDEX IF NOT EXISTS idx_tests_class ON tests(class_id);
 CREATE INDEX IF NOT EXISTS idx_test_attempts_student ON test_attempts(student_id);
 CREATE INDEX IF NOT EXISTS idx_broadcasts_standard ON broadcasts(standard_id);
-
--- ── Standards teacher_id index (speeds up ownership checks on delete/update) ────
-CREATE INDEX IF NOT EXISTS idx_standards_teacher ON standards(teacher_id);
-
--- ══════════════════════════════════════════════════════════════════════════════
--- MIGRATION: Fix standards with missing teacher_id
--- Run this block in Supabase SQL Editor if "Not authorized" appears on delete/update.
--- Step 1: Find your teacher UUID (copy from Authentication → Users in Supabase dashboard)
--- Step 2: Paste it below and run
--- ══════════════════════════════════════════════════════════════════════════════
-
--- STEP 1 — Diagnose: see which standards have no teacher assigned
--- SELECT id, name, teacher_id FROM standards WHERE teacher_id IS NULL;
-
--- STEP 2 — Find your teacher's UUID from auth.users
--- SELECT id, email, created_at FROM auth.users ORDER BY created_at DESC;
-
--- STEP 3 — Fix: assign all unclaimed standards to your teacher account
--- Replace 'YOUR-TEACHER-UUID' with the UUID from Step 2
--- UPDATE standards
---   SET teacher_id = 'YOUR-TEACHER-UUID'
---   WHERE teacher_id IS NULL;
-
--- STEP 4 — (Optional) Enforce NOT NULL going forward so this can never happen again
--- First run STEP 3 to ensure no NULLs remain, then:
--- ALTER TABLE standards
---   ALTER COLUMN teacher_id SET NOT NULL,
---   ADD CONSTRAINT fk_standards_teacher
---     FOREIGN KEY (teacher_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
--- ══════════════════════════════════════════════════════════════════════════════
--- MIGRATION: Sub-teachers table (multi-teacher support)
--- Run in Supabase SQL Editor to enable teacher team management.
--- ══════════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS sub_teachers (
-    id                 UUID PRIMARY KEY,  -- sub-teacher's Supabase auth user UUID
-    primary_teacher_id UUID NOT NULL,     -- primary teacher's auth UUID
-    name               TEXT NOT NULL,
-    email              TEXT,
-    phone              TEXT,
-    created_at         TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_sub_teachers_primary ON sub_teachers(primary_teacher_id);
-
-ALTER TABLE sub_teachers ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_anon_sub_teachers" ON sub_teachers;
-CREATE POLICY "deny_anon_sub_teachers" ON sub_teachers FOR ALL USING (false);
-
--- ══════════════════════════════════════════════════════════════════════════════
--- MIGRATION: Assignments feature
--- Run in Supabase SQL Editor to enable assignments for teachers and students.
--- ══════════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS assignments (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    class_id    UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
-    title       TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    due_date    TIMESTAMPTZ,
-    created_by  UUID,
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
-
-ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_anon_assignments" ON assignments;
-CREATE POLICY "deny_anon_assignments" ON assignments FOR ALL USING (false);
-
-CREATE TABLE IF NOT EXISTS assignment_attachments (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    assignment_id   UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
-    file_url        TEXT NOT NULL,
-    file_name       TEXT NOT NULL,
-    file_type       TEXT,
-    storage_path    TEXT NOT NULL,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_assignment_attachments_aid ON assignment_attachments(assignment_id);
-
-ALTER TABLE assignment_attachments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_anon_assignment_attachments" ON assignment_attachments;
-CREATE POLICY "deny_anon_assignment_attachments" ON assignment_attachments FOR ALL USING (false);
-
-CREATE TABLE IF NOT EXISTS assignment_submissions (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    assignment_id       UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
-    student_id          UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    file_url            TEXT NOT NULL,
-    file_name           TEXT NOT NULL,
-    file_type           TEXT,
-    storage_path        TEXT NOT NULL,
-    marks_obtained      NUMERIC,
-    points_earned       INTEGER,
-    prev_points_earned  INTEGER DEFAULT 0,
-    graded_at           TIMESTAMPTZ,
-    submitted_at        TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(assignment_id, student_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_assignment_submissions_aid ON assignment_submissions(assignment_id);
-CREATE INDEX IF NOT EXISTS idx_assignment_submissions_sid ON assignment_submissions(student_id);
-
-ALTER TABLE assignment_submissions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_anon_assignment_submissions" ON assignment_submissions;
-CREATE POLICY "deny_anon_assignment_submissions" ON assignment_submissions FOR ALL USING (false);
-
--- ══════════════════════════════════════════════════════════════════════════════
--- MIGRATION: Notes feature (per-subject teacher notes visible to students)
--- ══════════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS notes (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    class_id    UUID NOT NULL REFERENCES subject_classes(id) ON DELETE CASCADE,
-    title       TEXT NOT NULL,
-    body        TEXT,
-    file_url    TEXT,
-    file_type   TEXT,
-    storage_path TEXT,
-    is_pinned   BOOLEAN DEFAULT false,
-    created_by  UUID NOT NULL,
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_notes_class ON notes(class_id);
-
-ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_all_notes" ON notes;
-CREATE POLICY "deny_all_notes" ON notes FOR ALL USING (false);
-
--- ══════════════════════════════════════════════════════════════════════════════
--- MIGRATION: Broadcast enhancements (auto-delete TTL + reply-to + reactions)
--- ══════════════════════════════════════════════════════════════════════════════
-
-ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS reply_to UUID REFERENCES broadcasts(id);
-ALTER TABLE standards  ADD COLUMN IF NOT EXISTS broadcast_ttl_hours INT;
-
-CREATE TABLE IF NOT EXISTS broadcast_reactions (
-    broadcast_id UUID NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
-    user_id      UUID NOT NULL,
-    emoji        TEXT NOT NULL,
-    created_at   TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (broadcast_id, user_id, emoji)
-);
-
-CREATE INDEX IF NOT EXISTS idx_reactions_broadcast ON broadcast_reactions(broadcast_id);
-
-ALTER TABLE broadcast_reactions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_all_reactions" ON broadcast_reactions;
-CREATE POLICY "deny_all_reactions" ON broadcast_reactions FOR ALL USING (false);
-
--- ── Verification (run after the two migrations above; expect 5 rows) ──────────
--- SELECT 'notes table' AS item FROM information_schema.tables WHERE table_name='notes'
--- UNION ALL SELECT 'broadcast_reactions table' FROM information_schema.tables WHERE table_name='broadcast_reactions'
--- UNION ALL SELECT 'broadcasts.expires_at' FROM information_schema.columns WHERE table_name='broadcasts' AND column_name='expires_at'
--- UNION ALL SELECT 'broadcasts.reply_to' FROM information_schema.columns WHERE table_name='broadcasts' AND column_name='reply_to'
--- UNION ALL SELECT 'standards.broadcast_ttl_hours' FROM information_schema.columns WHERE table_name='standards' AND column_name='broadcast_ttl_hours';
-
--- ══════════════════════════════════════════════════════════════════════════════
--- MIGRATION: WhatsApp Message Controller (parent messaging)
--- ══════════════════════════════════════════════════════════════════════════════
--- The backend uses the SERVICE ROLE key (bypasses RLS) and enforces all auth in
--- main.py, so every table below gets a deny-all RLS policy — the anon client must
--- never read these directly. Same pattern as `notes` / `broadcast_reactions`.
-
--- Approved/draft message templates (Meta requires pre-approved templates outside
--- the 24h customer-service window).
-CREATE TABLE IF NOT EXISTS whatsapp_templates (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    teacher_id           UUID NOT NULL,
-    name                 TEXT NOT NULL,
-    category             TEXT NOT NULL DEFAULT 'utility',   -- utility|marketing|auth
-    language             TEXT NOT NULL DEFAULT 'en',
-    header_type          TEXT NOT NULL DEFAULT 'none',      -- none|image|document|audio|text (derived from media)
-    body_text            TEXT NOT NULL,
-    media_url            TEXT,                              -- optional file attached to this template
-    media_type           TEXT,
-    media_name           TEXT,
-    variables            JSONB DEFAULT '[]'::jsonb,
-    provider_template_id TEXT,
-    status               TEXT NOT NULL DEFAULT 'draft',     -- draft|pending|approved|rejected
-    created_at           TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_wa_templates_teacher ON whatsapp_templates(teacher_id);
--- Templates can carry an optional attachment (added after initial release):
-ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_url  TEXT;
-ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_type TEXT;
-ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_name TEXT;
-ALTER TABLE whatsapp_templates ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_all_wa_templates" ON whatsapp_templates;
-CREATE POLICY "deny_all_wa_templates" ON whatsapp_templates FOR ALL USING (false);
-
--- Send log — one row per recipient per send. Drives History + spend total.
-CREATE TABLE IF NOT EXISTS whatsapp_messages (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    teacher_id          UUID NOT NULL,
-    standard_id         UUID,
-    student_id          UUID,
-    to_phone            TEXT NOT NULL,
-    template_name       TEXT,
-    body_text           TEXT,
-    media_url           TEXT,
-    media_type          TEXT,
-    category            TEXT DEFAULT 'utility',
-    status              TEXT NOT NULL DEFAULT 'queued',     -- queued|sent|delivered|read|failed|not_configured
-    provider_message_id TEXT,
-    cost_amount         NUMERIC DEFAULT 0,
-    currency            TEXT DEFAULT 'INR',
-    error               TEXT,
-    job_id              UUID,
-    sent_at             TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_wa_messages_teacher  ON whatsapp_messages(teacher_id);
-CREATE INDEX IF NOT EXISTS idx_wa_messages_created  ON whatsapp_messages(created_at);
-CREATE INDEX IF NOT EXISTS idx_wa_messages_provider ON whatsapp_messages(provider_message_id);
--- Attribute an exam-result send to its exam so the "Pending Actions" card can
--- dedupe parents who have already been notified (added after initial release):
-ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS test_id UUID;
-CREATE INDEX IF NOT EXISTS idx_wa_messages_test ON whatsapp_messages(test_id);
-ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_all_wa_messages" ON whatsapp_messages;
-CREATE POLICY "deny_all_wa_messages" ON whatsapp_messages FOR ALL USING (false);
-
--- Scheduled / automatic jobs (after 1 week / 1 month / custom, post-exam, etc.)
-CREATE TABLE IF NOT EXISTS whatsapp_scheduled_jobs (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    teacher_id    UUID NOT NULL,
-    name          TEXT NOT NULL,
-    target_type   TEXT NOT NULL DEFAULT 'all',     -- class|classes|all
-    target_ids    JSONB DEFAULT '[]'::jsonb,
-    trigger_type  TEXT NOT NULL DEFAULT 'interval',-- interval|post_exam|fixed_date
-    trigger_config JSONB DEFAULT '{}'::jsonb,       -- {every:"1 week"} / {test_id} / {at}
-    mode          TEXT NOT NULL DEFAULT 'template', -- template|report
-    template_name TEXT,
-    body_text     TEXT,
-    category      TEXT DEFAULT 'utility',
-    report_format TEXT DEFAULT 'none',              -- none|pdf|image|text
-    criteria      JSONB DEFAULT '[]'::jsonb,        -- [{min,max,template_name,message,attach_report}]
-    quiet_hours   JSONB DEFAULT '{}'::jsonb,        -- {start:"09:00", end:"20:00"}
-    active        BOOLEAN DEFAULT true,
-    next_run_at   TIMESTAMPTZ,
-    last_run_at   TIMESTAMPTZ,
-    created_at    TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_wa_jobs_teacher ON whatsapp_scheduled_jobs(teacher_id);
-CREATE INDEX IF NOT EXISTS idx_wa_jobs_due     ON whatsapp_scheduled_jobs(active, next_run_at);
-ALTER TABLE whatsapp_scheduled_jobs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "deny_all_wa_jobs" ON whatsapp_scheduled_jobs;
-CREATE POLICY "deny_all_wa_jobs" ON whatsapp_scheduled_jobs FOR ALL USING (false);
-
--- Per-parent opt-out (respect-the-parent / DLT compliance). Excluded from every
--- recipient resolver + cost estimate.
-ALTER TABLE students ADD COLUMN IF NOT EXISTS whatsapp_opt_out BOOLEAN DEFAULT false;
-
--- Inbound parent replies (read-only inbox). Captured by the delivery webhook when
--- a parent messages back; matched to a student/teacher by phone number.
-CREATE TABLE IF NOT EXISTS whatsapp_inbox (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    teacher_id          UUID NOT NULL,
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created ON notifications(recipient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_id, created_at DESC) WHERE read = false;
     from_phone          TEXT NOT NULL,
     student_id          UUID,
     student_name        TEXT,
