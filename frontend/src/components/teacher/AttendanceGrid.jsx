@@ -250,27 +250,27 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
           return (
             <div 
               key={student.student_id} 
-              className="bg-white p-4 rounded-[28px] shadow-sm hover:shadow-md transition-shadow border border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-5"
+              className="bg-white p-3 md:p-4 rounded-[24px] md:rounded-[28px] shadow-sm hover:shadow-md transition-shadow border border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-5"
             >
               <div 
-                className="flex items-center gap-4 flex-1 cursor-pointer"
+                className="flex items-center gap-3 md:gap-4 flex-1 cursor-pointer"
                 onClick={() => onNavigate && onNavigate(student.student_id)}
               >
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <Avatar src={student.avatar_url} name={student.name} size="lg" className="rounded-[20px]" />
                   {currentStatus === 'present' && <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#4caf50] rounded-full border-2 border-white flex items-center justify-center"><CheckCircle2 size={12} className="text-white"/></div>}
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-neutral-900">{student.name}</h3>
-                  <p className="text-xs font-medium text-neutral-400 mt-0.5">{student.username}</p>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-[15px] md:text-base font-bold text-neutral-900 truncate">{student.name}</h3>
+                  <p className="text-[11px] md:text-xs font-medium text-neutral-400 mt-0.5 truncate">{student.username}</p>
                 </div>
               </div>
 
               {/* Segmented Toggles styled as soft pills */}
-              <div className="flex bg-[#f5f7fa] p-1.5 rounded-[20px] w-full md:w-auto">
+              <div className="flex bg-[#f5f7fa] p-1 md:p-1.5 rounded-[16px] md:rounded-[20px] w-full md:w-auto mt-1 md:mt-0">
                 <button
                   onClick={() => markStudent(student.student_id, 'present')}
-                  className={`flex-1 md:w-[90px] py-2.5 text-xs font-bold rounded-[16px] transition-all ${
+                  className={`flex-1 md:w-[90px] py-2 md:py-2.5 text-[11px] md:text-xs font-bold rounded-[12px] md:rounded-[16px] transition-all ${
                     currentStatus === 'present' 
                       ? 'bg-[#e8f5e9] text-[#2e7d32] shadow-sm' 
                       : 'text-neutral-500 hover:bg-white/60'
@@ -280,7 +280,7 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
                 </button>
                 <button
                   onClick={() => markStudent(student.student_id, 'late')}
-                  className={`flex-1 md:w-[90px] py-2.5 text-xs font-bold rounded-[16px] transition-all ${
+                  className={`flex-1 md:w-[90px] py-2 md:py-2.5 text-[11px] md:text-xs font-bold rounded-[12px] md:rounded-[16px] transition-all ${
                     currentStatus === 'late' 
                       ? 'bg-[#fff8e1] text-[#f57f17] shadow-sm' 
                       : 'text-neutral-500 hover:bg-white/60'
@@ -290,7 +290,7 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
                 </button>
                 <button
                   onClick={() => markStudent(student.student_id, 'absent')}
-                  className={`flex-1 md:w-[90px] py-2.5 text-xs font-bold rounded-[16px] transition-all ${
+                  className={`flex-1 md:w-[90px] py-2 md:py-2.5 text-[11px] md:text-xs font-bold rounded-[12px] md:rounded-[16px] transition-all ${
                     currentStatus === 'absent' 
                       ? 'bg-[#fce4ec] text-[#c2185b] shadow-sm' 
                       : 'text-neutral-500 hover:bg-white/60'

@@ -431,25 +431,33 @@ export default function SendWizard({
         </div>
       )}
 
-      {/* ── Action bar. In-flow on phones (so it never floats over the inline
-           preview — that overlap was a bug); sticky only on desktop. ── */}
       <div className="lg:sticky lg:bottom-4 z-30 mt-5">
-        <div className="glass-panel border border-[#EBEAE7] rounded-2xl px-3.5 py-3 flex items-center gap-3 bg-white/95 backdrop-blur shadow-lg">
-          <Btn variant="ghost" icon={ArrowLeft} onClick={() => step === 1 ? onExit() : setStep(s => s - 1)}>
-            {step === 1 ? 'Back' : 'Previous'}
-          </Btn>
-          <div className="flex-1 text-right text-xs text-neutral-500 min-w-0 truncate">
-            {count > 0 ? `${effCount} parent${effCount === 1 ? '' : 's'}${rate > 0 ? ` · ${sym}${amount.toFixed(2)}` : ''}` : 'Pick a class to start'}
+        <div className="glass-panel border border-[#EBEAE7] rounded-2xl px-2 md:px-3.5 py-3 flex items-center justify-between gap-2 md:gap-3 bg-white/95 backdrop-blur shadow-lg">
+          <div className="flex-shrink-0">
+            <Btn variant="ghost" icon={ArrowLeft} onClick={() => step === 1 ? onExit() : setStep(s => s - 1)}>
+              <span className="hidden sm:inline">{step === 1 ? 'Back' : 'Previous'}</span>
+            </Btn>
           </div>
-          {step < 3 ? (
-            <Btn variant="primary" onClick={() => setStep(s => s + 1)} disabled={!canNext}>
-              Next <ArrowRight size={14} className="ml-1" />
-            </Btn>
-          ) : (
-            <Btn variant="primary" icon={Send} onClick={send} disabled={sending || effCount === 0}>
-              {sending ? 'Sending…' : `Send${rate > 0 ? ` (${sym}${amount.toFixed(2)})` : ''}`}
-            </Btn>
-          )}
+          <div className="flex-1 text-center text-[10px] md:text-xs text-neutral-500 min-w-0 truncate">
+            <span className="hidden sm:inline">
+              {count > 0 ? `${effCount} parent${effCount === 1 ? '' : 's'}${rate > 0 ? ` · ${sym}${amount.toFixed(2)}` : ''}` : 'Pick a class to start'}
+            </span>
+            <span className="sm:hidden">
+              {count > 0 ? `${effCount} parent${effCount === 1 ? '' : 's'}` : 'Pick class'}
+            </span>
+          </div>
+          <div className="flex-shrink-0">
+            {step < 3 ? (
+              <Btn variant="primary" onClick={() => setStep(s => s + 1)} disabled={!canNext}>
+                Next <ArrowRight size={14} className="ml-1 hidden sm:block" />
+              </Btn>
+            ) : (
+              <Btn variant="primary" icon={Send} onClick={send} disabled={sending || effCount === 0}>
+                <span className="hidden sm:inline">{sending ? 'Sending…' : `Send${rate > 0 ? ` (${sym}${amount.toFixed(2)})` : ''}`}</span>
+                <span className="sm:hidden">{sending ? 'Sending…' : 'Send'}</span>
+              </Btn>
+            )}
+          </div>
         </div>
       </div>
       </div>
