@@ -9,6 +9,7 @@ import useAndroidBackButton from './lib/useAndroidBackButton';
 import { enableScreenSecurity, disableScreenSecurity } from './lib/secureScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import SplashScreen from './components/SplashScreen';
+import UpdateBanner from './components/UpdateBanner';
 import useLiveClassEvents from './hooks/useLiveClassEvents';
 import { startNotificationSync, stopNotificationSync } from './lib/notifications';
 
@@ -64,6 +65,7 @@ const AttendancePage          = lazyWithRetry(() => import('./pages/teacher/Atte
 const TeacherLiveClassesPage  = lazyWithRetry(() => import('./pages/teacher/TeacherLiveClassesPage'));
 const WhatsAppPage            = lazyWithRetry(() => import('./pages/teacher/WhatsAppCenterPage'));
 const WhatsAppStatusPage      = lazyWithRetry(() => import('./pages/teacher/WhatsAppStatus'));
+const AppDownloadPage         = lazyWithRetry(() => import('./pages/AppDownloadPage'));
 const StudentLiveClassesPage  = lazyWithRetry(() => import('./pages/student/StudentLiveClassesPage'));
 
 const StudentHomePage            = lazyWithRetry(() => import('./pages/student/StudentHomePage'));
@@ -294,6 +296,9 @@ export default function App() {
       <RoutedBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* Public APK download page — reachable without auth (share this link). */}
+        <Route path="/app" element={<AppDownloadPage />} />
+        <Route path="/download" element={<AppDownloadPage />} />
 
         <Route path="/teacher" element={
           <ProtectedTeacherRoute>
@@ -347,6 +352,8 @@ export default function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
       </RoutedBoundary>
+      {/* Native-only "update available" banner (no-op on web). */}
+      <UpdateBanner />
     </BrowserRouter>
     </>
   );
