@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import {
   History, Inbox, Clock, LayoutTemplate, Settings as SettingsIcon,
   LayoutDashboard, ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
@@ -95,7 +95,12 @@ export default function WhatsAppCenterPage() {
 
   return (
     <div className="min-h-screen bg-[#FAFAF9] pb-28 lg:pb-8">
-      <TopBar title="WhatsApp Center" />
+      <TopBar title="WhatsApp Center" action={
+        <Link to="/teacher/whatsapp/status"
+          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-white text-neutral-900 hover:bg-[#F4F2EF] border border-[#EFEDEA] shadow-card">
+          <QrCode size={14} /> Status
+        </Link>
+      } />
 
       {/* Phone: narrow column. Laptop: home gets a wide grid, wizard/sub-screens breathe. */}
       <div className={`px-4 md:px-8 py-5 mx-auto max-w-3xl ${isTask || sub ? 'lg:max-w-5xl' : 'lg:max-w-6xl'}`}>
