@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CountUp, ProgressRing } from '../../components/shared/Animated';
 import {
@@ -159,8 +160,7 @@ export default function StudentHomePage() {
     return () => window.removeEventListener('live-class-update', handleUpdate);
   }, []);
 
-  useEffect(() => {
-    const load = async () => {
+  const load = useCallback(async () => {
       if (!(homeCache && homeCache.userId === user?.id)) setLoading(true);
       try {
         const standardId = user?.standard_id;
@@ -212,9 +212,11 @@ export default function StudentHomePage() {
       } finally {
         setLoading(false);
       }
-    };
-    load();
-  }, [user?.standard_id]);
+  }, [user?.standard_id, user?.id]);
+
+  useEffect(() => { load(); }, [load]);
+  // Live refresh on focus / visibility / data-changed (new test, graded result, …).
+  useAutoRefresh(load);
 
   const now = new Date();
   const displayName = user?.name?.split(' ')[0] || 'Student';

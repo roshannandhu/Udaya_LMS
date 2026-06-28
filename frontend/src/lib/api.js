@@ -67,7 +67,10 @@ export async function apiClient(endpoint, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const isGet = !options.method || options.method === 'GET';
 
-  if (isGet && !NO_CACHE.some(p => endpoint.startsWith(p))) {
+  // `fresh: true` skips the read cache (used by event-driven auto-refresh so a
+  // refetch within the 120s TTL still returns live data); the response is still cached.
+  const cacheable = isGet && !options.fresh && !NO_CACHE.some(p => endpoint.startsWith(p));
+  if (cacheable) {
     const hit = _cache.get(endpoint);
     if (hit && Date.now() - hit.ts < CACHE_TTL) return hit.data;
   }

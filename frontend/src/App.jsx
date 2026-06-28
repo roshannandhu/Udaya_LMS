@@ -223,7 +223,15 @@ export default function App() {
       return;
     }
     startNotificationSync();
-    return () => stopNotificationSync();
+    // App-wide: when the notification poll detects a server change, force the shared
+    // app-cache (standards/subjects/students) to refetch so every store-backed page
+    // updates live without per-page wiring. Page-local data uses useAutoRefresh.
+    const onDataChanged = () => { useAppCache.getState().forceRefreshAll?.(); };
+    window.addEventListener('udaya:data-changed', onDataChanged);
+    return () => {
+      window.removeEventListener('udaya:data-changed', onDataChanged);
+      stopNotificationSync();
+    };
   }, [role]);
 
   useEffect(() => {

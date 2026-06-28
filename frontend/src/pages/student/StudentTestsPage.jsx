@@ -12,6 +12,7 @@ import { Tag, Skeleton } from '../../components/ui';
 import { testApi, assignmentApi } from '../../lib/api';
 import { useAppCache, useWhatsNew, isNewSince } from '../../store';
 import { useAuthStore } from '../../lib/auth';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import { AnimatedPage, Item, SpotlightCard } from '../../components/bits';
@@ -327,34 +328,38 @@ export default function StudentTestsPage() {
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [assignReattempt, setAssignReattempt] = useState({}); // {assignment_id: 'pending'|'rejected'}
 
+  // Load tests + history + reattempt status. Reused by the mount fetch AND the
+  // auto-refresh below so a teacher's approve / a newly published test both show up
+  // live (a full refetch, not just reattempt status as before).
+  const loadTests = async ({ showSkeleton = false } = {}) => {
+    if (showSkeleton) setLoading(true);
+    try {
+      const [testsRes, historyRes, reattemptRes] = await Promise.all([
+        testApi.getTests(),
+        testApi.getStudentTestHistory(),
+        testApi.getMyReattemptRequests().catch(() => ({})),
+      ]);
+      const testsData = Array.isArray(testsRes) ? testsRes : [];
+      setAllTests(testsData);
+      const attemptsMap = {};
+      (Array.isArray(historyRes) ? historyRes : []).forEach(a => {
+        attemptsMap[a.test_id] = a;
+      });
+      setMyAttempts(attemptsMap);
+      const reattemptMap = (reattemptRes && typeof reattemptRes === 'object') ? reattemptRes : {};
+      setReattemptStatus(reattemptMap);
+
+      testsPageCache = { ...(testsPageCache?.userId === user?.id ? testsPageCache : {}), userId: user?.id, allTests: testsData, myAttempts: attemptsMap, reattemptStatus: reattemptMap };
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch tests on mount
   useEffect(() => {
-    const fetchData = async () => {
-      if (!cache) setLoading(true);
-      try {
-        const [testsRes, historyRes, reattemptRes] = await Promise.all([
-          testApi.getTests(),
-          testApi.getStudentTestHistory(),
-          testApi.getMyReattemptRequests().catch(() => ({})),
-        ]);
-        const testsData = Array.isArray(testsRes) ? testsRes : [];
-        setAllTests(testsData);
-        const attemptsMap = {};
-        (Array.isArray(historyRes) ? historyRes : []).forEach(a => {
-          attemptsMap[a.test_id] = a;
-        });
-        setMyAttempts(attemptsMap);
-        const reattemptMap = (reattemptRes && typeof reattemptRes === 'object') ? reattemptRes : {};
-        setReattemptStatus(reattemptMap);
-
-        testsPageCache = { ...(cache || {}), userId: user?.id, allTests: testsData, myAttempts: attemptsMap, reattemptStatus: reattemptMap };
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    loadTests({ showSkeleton: !cache });
   }, []);
 
   // Fetch assignments lazily when Assignments tab is opened
@@ -381,29 +386,21 @@ export default function StudentTestsPage() {
     }
   }, [activeTab]);
 
-  // Re-fetch re-attempt statuses when the student returns to the tab, so a
-  // teacher's approve/reject shows up without a manual reload (a granted test
-  // then jumps to "Available"; a granted assignment shows "approved").
-  useEffect(() => {
-    const refresh = () => {
-      if (document.hidden) return;
-      testApi.getMyReattemptRequests().then(m => {
-        if (m && typeof m === 'object') {
-          setReattemptStatus(m);
-          if (testsPageCache?.userId === user?.id) testsPageCache = { ...testsPageCache, reattemptStatus: m };
-        }
+  // Live refresh: on focus / tab-visible / an app-wide data-changed signal (e.g. a
+  // teacher approves a re-attempt or publishes a test), refetch the full list — a
+  // granted test jumps to "Available", a granted assignment shows "approved", and
+  // newly published tests appear, all without a manual reload.
+  useAutoRefresh(() => {
+    loadTests();
+    assignmentApi.getMyReattemptRequests().then(m => {
+      if (m && typeof m === 'object') setAssignReattempt(m);
+    }).catch(() => {});
+    if (activeTab === 'assignments') {
+      assignmentApi.getAllMyAssignments().then(d => {
+        if (d?.assignments) setAssignments(d.assignments);
       }).catch(() => {});
-      assignmentApi.getMyReattemptRequests().then(m => {
-        if (m && typeof m === 'object') setAssignReattempt(m);
-      }).catch(() => {});
-    };
-    document.addEventListener('visibilitychange', refresh);
-    window.addEventListener('focus', refresh);
-    return () => {
-      document.removeEventListener('visibilitychange', refresh);
-      window.removeEventListener('focus', refresh);
-    };
-  }, [user?.id]);
+    }
+  });
 
   // ── Test helpers ──────────────────────────────────────────────────
   const attemptedIds = new Set(Object.keys(myAttempts));

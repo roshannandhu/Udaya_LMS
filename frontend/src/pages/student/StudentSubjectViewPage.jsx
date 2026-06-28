@@ -7,6 +7,7 @@ import { Tag } from '../../components/ui';
 import { videoApi, testApi, leaderboardApi, apiClient, assignmentApi, liveClassApi, notesApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import { useWhatsNew, isNewSince } from '../../store';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import StudentAssignmentSheet from '../../components/student/StudentAssignmentSheet';
 import ZoomMeetingView, { preloadZoomSDK } from '../../components/ZoomMeetingView';
 import LiveClassCard from '../../components/cards/LiveClassCard';
@@ -288,25 +289,18 @@ export default function StudentSubjectViewPage() {
     loadAssignReattempt();
   }, [tab, classId]);
 
-  // Re-fetch re-attempt status when the student returns to the tab, so a
-  // teacher's approve/reject shows up without a manual reload.
-  useEffect(() => {
-    const onFocus = () => {
-      if (document.hidden) return;
-      loadAssignReattempt();
-      // Refresh test re-attempt statuses too, so a teacher's approve/reject shows
-      // up without a manual reload (a granted test jumps to "Available").
-      testApi.getMyReattemptRequests()
-        .then(m => { if (m && typeof m === 'object') setReattemptStatus(m); })
-        .catch(() => {});
-    };
-    document.addEventListener('visibilitychange', onFocus);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', onFocus);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, []);
+  // Live refresh on focus / visibility / data-changed: a teacher's approve/reject and
+  // newly published videos/tests/assignments show up without a manual reload.
+  useAutoRefresh(() => {
+    loadAssignReattempt();
+    testApi.getMyReattemptRequests()
+      .then(m => { if (m && typeof m === 'object') setReattemptStatus(m); })
+      .catch(() => {});
+    videoApi.getVideos(classId).then(v => setVideos(v || [])).catch(() => {});
+    testApi.getTests(classId).then(t => setTests(t || [])).catch(() => {});
+    assignmentApi.getByClass(classId)
+      .then(d => setAssignments(d?.assignments || [])).catch(() => {});
+  });
 
   // Lazy-load leaderboard only when that tab is opened
   useEffect(() => {

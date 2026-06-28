@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { reportApi } from '../../lib/api';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import StudentReportCard from '../../components/shared/StudentReportCard';
 
 export default function StudentReportPage() {
@@ -22,6 +23,12 @@ export default function StudentReportPage() {
       .finally(() => { if (!ignore) setLoading(false); });
     return () => { ignore = true; };
   }, [period]);
+
+  // Live refresh: silently re-pull the current period's report on focus / visibility /
+  // data-changed (e.g. a new graded result) — no loading flash.
+  useAutoRefresh(() => {
+    reportApi.getMy(period).then(setData).catch(() => {});
+  });
 
   if (loading && !data) {
     return (
