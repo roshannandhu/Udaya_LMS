@@ -25,7 +25,8 @@ const CACHE_TTL = 120_000;
 // keep the exam card showing "Request re-attempt" after it was already approved.
 const NO_CACHE = ['/notifications', '/auth/me', '/live-classes', '/broadcasts/',
   '/student/reattempt-requests', '/student/assignment-reattempt-requests',
-  '/reattempt-requests', '/assignment-reattempt-requests'];
+  '/reattempt-requests', '/assignment-reattempt-requests',
+  '/whatsapp/status', '/teacher/whatsapp/connection', '/teacher/whatsapp/stats'];
 
 // Clear the in-memory GET cache. Called on login/logout so one account never sees
 // another account's cached /standards, /subjects, /students responses (the cache is
