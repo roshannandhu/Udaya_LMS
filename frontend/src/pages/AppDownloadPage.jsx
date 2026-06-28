@@ -9,6 +9,10 @@ import { apiClient } from '../lib/api';
 
 const LOCATION_URL = 'https://share.google/M9oZS4oVP6281fzOi';
 const CONTACT_EMAIL = 'udayatuitionhome@gmail.com';
+// Public R2 base — the APK + version.json live here. Used as a direct fallback so
+// the download works even if the backend's /api/app/version is empty/misconfigured.
+const R2_BASE = 'https://files.udaya-learn.com';
+const FALLBACK_APK = `${R2_BASE}/app/udaya-latest.apk`;
 
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return null;
@@ -36,10 +40,23 @@ export default function AppDownloadPage() {
   // Public branding (logo/name) + latest app version — both work without login.
   useEffect(() => {
     apiClient('/branding').then(applyBranding).catch(() => {});
-    apiClient('/app/version').then(d => setInfo(d && typeof d === 'object' ? d : null)).catch(() => {});
+    // Prefer the backend (same-origin), but fall back to reading version.json
+    // straight from R2 so the page never gets stuck when /api/app/version is empty.
+    apiClient('/app/version')
+      .then(d => {
+        if (d && typeof d === 'object' && d.apkUrl) { setInfo(d); return; }
+        return fetch(`${R2_BASE}/app/version.json?t=${Date.now()}`, { cache: 'no-store' })
+          .then(r => (r.ok ? r.json() : null)).then(j => j && setInfo(j));
+      })
+      .catch(() => {
+        fetch(`${R2_BASE}/app/version.json?t=${Date.now()}`, { cache: 'no-store' })
+          .then(r => (r.ok ? r.json() : null)).then(j => j && setInfo(j)).catch(() => {});
+      });
   }, [applyBranding]);
 
-  const apkUrl = info?.apkUrl || info?.apkLatestUrl || null;
+  // Always have a working download target: real apkUrl if known, else the latest
+  // APK on R2 directly (confirmed public). An <a download> needs no CORS.
+  const apkUrl = info?.apkUrl || info?.apkLatestUrl || FALLBACK_APK;
   const size = formatSize(info?.sizeBytes);
   const name = lmsName || 'Udaya';
   const logo = lmsLogo || DEFAULT_LMS_LOGO;
