@@ -615,9 +615,8 @@ export const whatsappApi = {
   getConfig:    ()     => apiClient('/teacher/whatsapp/config'),
   setConfig:    (data) => apiClient('/teacher/whatsapp/config', { method: 'POST', body: JSON.stringify(data) }),
 
-  // Connection / QR pairing (scan-to-connect setup)
+  // Connection (credential-based providers: Meta / WANotifier)
   getConnection: () => apiClient('/teacher/whatsapp/connection'),
-  getQr:         () => apiClient('/teacher/whatsapp/qr'),
   disconnect:    () => apiClient('/teacher/whatsapp/disconnect', { method: 'POST' }),
 
   // Recipients grouped by class

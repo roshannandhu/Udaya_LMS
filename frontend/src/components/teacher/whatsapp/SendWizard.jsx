@@ -112,7 +112,7 @@ export default function SendWizard({
 
   const count = selected.size;
   const category = task === 'announcement' ? msg.category : 'utility';
-  const rate = provider === 'evolution' ? 0 : (rates?.[category] ?? 0.14);
+  const rate = rates?.[category] ?? 0.14;
 
   // Exam mode: once previewed, the honest count is who actually took the exam.
   const effCount = (task === 'exam' && examPreview) ? examPreview.preview.length : count;

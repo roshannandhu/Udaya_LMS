@@ -283,9 +283,7 @@ function StatsRail({ currency = 'INR' }) {
 /* ── Settings (connect via QR + developer config) — carried over ────────────── */
 function SettingsScreen({ config, reload, onConnected }) {
   const [conn, setConn] = useState(null);
-  const [qr, setQr] = useState(null);
   const [loadingConn, setLoadingConn] = useState(true);
-  const [showQr, setShowQr] = useState(false);
   const [testNumber, setTestNumber] = useState('');
   const [testing, setTesting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -297,24 +295,8 @@ function SettingsScreen({ config, reload, onConnected }) {
   };
   useEffect(() => { refreshConn(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadQr = async () => {
-    setQr(null);
-    try { setQr(await whatsappApi.getQr()); } catch (e) { setQr({ error: e.message }); }
-  };
-  const startConnect = async () => { setShowQr(true); await loadQr(); };
-
-  // While the QR is on screen, poll until the phone links.
-  useEffect(() => {
-    if (!showQr) return undefined;
-    const id = setInterval(async () => {
-      const c = await refreshConn();
-      if (c?.connected) { setShowQr(false); onConnected?.(); }
-    }, 3000);
-    return () => clearInterval(id);
-  }, [showQr]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const disconnect = async () => {
-    if (!confirm('Disconnect WhatsApp? You’ll need to scan again to reconnect.')) return;
+    if (!confirm('Disconnect WhatsApp?')) return;
     setBusy(true);
     try { await whatsappApi.disconnect(); await refreshConn(); onConnected?.(); }
     catch (e) { alert(e.message); } finally { setBusy(false); }
@@ -333,7 +315,6 @@ function SettingsScreen({ config, reload, onConnected }) {
   };
 
   const connected = conn?.connected;
-  const noServer = conn?.state === 'no_server' || qr?.state === 'no_server';
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -352,53 +333,10 @@ function SettingsScreen({ config, reload, onConnected }) {
           </div>
           <Btn size="sm" variant="danger" onClick={disconnect} disabled={busy}>Disconnect</Btn>
         </div>
-      ) : noServer ? (
-        <div className="rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          The WhatsApp server isn’t set up yet. Ask your admin/developer to add it under
-          <span className="font-medium"> Advanced (for developers)</span> below.
-        </div>
       ) : (
-        <div className="glass-panel border border-[#EBEAE7] rounded-card p-4">
-          {!showQr ? (
-            <div className="text-center py-3">
-              <div className="w-12 h-12 rounded-full bg-whatsapp-green-light mx-auto flex items-center justify-center mb-2">
-                <QrCode size={22} className="text-whatsapp-green-fg" />
-              </div>
-              <p className="text-sm text-neutral-600 mb-3">Your WhatsApp isn’t linked yet.</p>
-              <Btn variant="primary" icon={QrCode} onClick={startConnect}>Connect WhatsApp</Btn>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-              <div className="flex items-center justify-center">
-                {qr?.qr_base64 ? (
-                  <img src={qr.qr_base64} alt="WhatsApp QR code"
-                    className="w-44 h-44 rounded-lg border border-[#EBEAE7] bg-white p-1" />
-                ) : qr?.error ? (
-                  <p className="text-xs text-red-600 text-center px-2">{qr.error}</p>
-                ) : (
-                  <div className="w-44 h-44 rounded-lg border border-dashed border-[#D9D7D3] flex items-center justify-center text-neutral-400">
-                    <Loader2 size={20} className="animate-spin" />
-                  </div>
-                )}
-              </div>
-              <div className="text-sm">
-                <p className="font-semibold text-neutral-800 mb-2">Scan to link</p>
-                <ol className="text-xs text-neutral-600 space-y-1 list-decimal ml-4">
-                  <li>Open <b>WhatsApp</b> on your phone</li>
-                  <li>Tap <b>⋮ → Linked devices</b></li>
-                  <li>Tap <b>Link a device</b></li>
-                  <li>Point your phone at this code</li>
-                </ol>
-                {qr?.pairing_code && (
-                  <p className="text-xs text-neutral-500 mt-2">Or enter code: <span className="font-mono font-semibold">{qr.pairing_code}</span></p>
-                )}
-                <button onClick={loadQr} className="mt-3 text-xs text-whatsapp-green-fg hover:underline">Refresh code</button>
-                <p className="text-[11px] text-neutral-400 mt-2 flex items-center gap-1">
-                  <Loader2 size={11} className="animate-spin" /> Waiting for you to scan…
-                </p>
-              </div>
-            </div>
-          )}
+        <div className="rounded-card border border-[#EBEAE7] bg-neutral-50 p-4 text-sm text-neutral-600">
+          Your WhatsApp isn’t set up yet. Open <span className="font-medium">Advanced (for developers)</span> below,
+          choose your provider (<span className="font-medium">Meta WhatsApp Cloud API</span> recommended) and enter your credentials.
         </div>
       )}
 
@@ -427,15 +365,12 @@ function SettingsScreen({ config, reload, onConnected }) {
 
 function AdvancedSettings({ config, reload }) {
   const [form, setForm] = useState({
-    provider: config?.provider || 'evolution',
+    provider: config?.provider || 'meta',
     api_key: '',
     sender: config?.sender || '',
     meta_access_token: '',
     meta_phone_number_id: config?.meta_phone_number_id || '',
     meta_waba_id: config?.meta_waba_id || '',
-    evolution_base_url: config?.evolution_base_url || '',
-    evolution_api_key: '',
-    evolution_instance: config?.evolution_instance || '',
     currency: config?.currency || 'INR',
     rates: config?.rates || { utility: 0.14, marketing: 0.78, auth: 0.13 },
     auto_welcome: config?.auto_welcome || false,
@@ -453,10 +388,9 @@ function AdvancedSettings({ config, reload }) {
       const body = { ...form };
       if (!body.api_key) delete body.api_key;                 // keep stored secret if blank
       if (!body.meta_access_token) delete body.meta_access_token;
-      if (!body.evolution_api_key) delete body.evolution_api_key;
       await whatsappApi.setConfig(body);
       await reload();
-      setForm(f => ({ ...f, api_key: '', meta_access_token: '', evolution_api_key: '' }));
+      setForm(f => ({ ...f, api_key: '', meta_access_token: '' }));
       alert('Saved.');
     } catch (e) { alert(e.message); } finally { setSaving(false); }
   };
@@ -487,7 +421,6 @@ function AdvancedSettings({ config, reload }) {
           className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
           <option value="meta">Meta WhatsApp Cloud API (recommended)</option>
           <option value="wanotifier">WANotifier</option>
-          <option value="evolution">Evolution API</option>
         </select>
       </div>
 
@@ -518,25 +451,6 @@ function AdvancedSettings({ config, reload }) {
             </div>
             <p className="text-[11px] text-neutral-400 mt-1.5">Sends Meta’s pre-approved “hello_world” message — proves delivery works. Save first.</p>
           </div>
-        </>
-      )}
-      {form.provider === 'evolution' && (
-        <>
-          <Input label="Evolution Base URL" placeholder="e.g. http://localhost:8080"
-            value={form.evolution_base_url} onChange={(e) => set({ evolution_base_url: e.target.value })} />
-          <div>
-            <Input label="Global API Key" type="password"
-              placeholder={config?.evolution_key_masked || 'Enter API key'}
-              value={form.evolution_api_key} onChange={(e) => set({ evolution_api_key: e.target.value })} />
-            <p className="text-[11px] text-neutral-400 mt-1">
-              {config?.evolution_key_masked ? `Stored: ${config.evolution_key_masked}. Leave blank to keep it.` : 'Stored server-side only; never shown again in full.'}
-            </p>
-          </div>
-          <Input label="Instance Name" placeholder="e.g. TutoriaInstance"
-            value={form.evolution_instance} onChange={(e) => set({ evolution_instance: e.target.value })} />
-          <p className="text-[11px] text-neutral-400 -mt-2">
-            The WhatsApp instance must be created and paired (QR code) in the Evolution API manager.
-          </p>
         </>
       )}
       {form.provider === 'wanotifier' && (

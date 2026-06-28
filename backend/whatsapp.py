@@ -66,9 +66,6 @@ def estimate_cost(recipient_count: int, category: str = "utility",
                   config: Optional[dict] = None) -> dict:
     """Live cost estimate: count × per-category rate."""
     config = config if config is not None else get_wa_config()
-    provider = (config.get("provider") or "wanotifier").lower()
-    if provider == "evolution":
-        return {"count": recipient_count, "rate": 0, "amount": 0.00, "currency": "INR"}
     rates = get_rates(config)
     rate = float(rates.get(category, DEFAULT_RATES.get(category, 0.14)))
     currency = config.get("currency") or DEFAULT_CURRENCY
@@ -355,169 +352,6 @@ class MetaCloudProvider(WhatsAppProvider):
         return {"status": (data[0].get("status", "pending").lower()) if data else "pending"}
 
 
-class EvolutionProvider(WhatsAppProvider):
-    """Evolution API adapter.
-    
-    Pairs via QR code, bypassing 24h limits and Meta template requirements.
-    Only supports free-form texts and media sending.
-    """
-
-    name = "evolution"
-    configured = True
-
-    def __init__(self, base_url: str, api_key: str, instance: str):
-        self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
-        self.instance = instance
-
-    async def _post(self, path: str, payload: dict) -> dict:
-        url = f"{self.base_url}/{path.lstrip('/')}"
-        headers = {"apikey": self.api_key, "Content-Type": "application/json"}
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-            data = resp.json() if resp.content else {}
-            if resp.status_code >= 400:
-                err_msg = data.get("error") or f"HTTP {resp.status_code}"
-                detail = data.get("message")
-                if detail:
-                    err_msg = f"{err_msg}: {detail}"
-                if isinstance(err_msg, dict):
-                    err_msg = str(err_msg)
-                print(f"[Evolution API] Request failed: {err_msg} (Payload: {payload})")
-                return {"status": "failed", "provider_message_id": None, "error": err_msg}
-            msg_id = None
-            if "key" in data and isinstance(data["key"], dict):
-                msg_id = data["key"].get("id")
-            return {"status": "sent", "provider_message_id": msg_id, "error": None, "raw": data}
-        except Exception as e:
-            print(f"[Evolution API] Network exception: {e}")
-            return {"status": "failed", "provider_message_id": None, "error": str(e)}
-
-    @staticmethod
-    def _digits(to: str) -> str:
-        return "".join(c for c in (to or "") if c.isdigit())
-
-    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
-        to_digits = self._digits(to)
-        if media_url:
-            kind = "image" if (media_type or "").startswith("image") else (
-                "video" if (media_type or "").startswith("video") else (
-                    "audio" if (media_type or "").startswith("audio") else "document"))
-            payload: Dict[str, Any] = {
-                "number": to_digits,
-                "mediatype": kind,
-                "mimetype": media_type or ("application/pdf" if kind == "document" else "image/jpeg"),
-                "media": media_url,
-            }
-            if kind != "audio" and text:
-                payload["caption"] = text
-            if kind == "document":
-                ext = ".pdf" if (media_type or "").startswith("application/pdf") else ""
-                payload["fileName"] = f"attachment{ext}"
-            return await self._post(f"message/sendMedia/{self.instance}", payload)
-        else:
-            return await self._post(f"message/sendText/{self.instance}", {
-                "number": to_digits, 
-                "text": text or ""
-            })
-
-    async def send_template(self, to, template, variables=None, media_url=None, media_type=None, language="en") -> dict:
-        return {"status": "failed", "provider_message_id": None, "error": "Evolution API does not use Meta templates. Please use free-form messages."}
-
-    async def create_template(self, name, category, language, body_text, header_type="none", variables=None) -> dict:
-        return {"status": "approved", "provider_template_id": f"evo_{name}", "error": None}
-
-    async def get_template_status(self, provider_template_id: str) -> dict:
-        return {"status": "approved"}
-
-    async def get_session_state(self, to: str) -> bool:
-        return True
-
-    # ── Connection / QR pairing (WhatsApp-Web-style setup) ───────────────────
-    async def _get(self, path: str) -> dict:
-        url = f"{self.base_url}/{path.lstrip('/')}"
-        headers = {"apikey": self.api_key}
-        try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                resp = await client.get(url, headers=headers)
-            data = resp.json() if resp.content else {}
-            if resp.status_code >= 400:
-                return {"_ok": False, "data": data,
-                        "error": (data.get("message") or data.get("error") or f"HTTP {resp.status_code}")}
-            return {"_ok": True, "data": data, "error": None}
-        except Exception as e:
-            return {"_ok": False, "data": {}, "error": str(e)}
-
-    async def _delete(self, path: str) -> dict:
-        url = f"{self.base_url}/{path.lstrip('/')}"
-        headers = {"apikey": self.api_key}
-        try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                resp = await client.delete(url, headers=headers)
-            data = resp.json() if resp.content else {}
-            return {"_ok": resp.status_code < 400, "data": data,
-                    "error": None if resp.status_code < 400 else (data.get("message") or f"HTTP {resp.status_code}")}
-        except Exception as e:
-            return {"_ok": False, "data": {}, "error": str(e)}
-
-    async def connection_state(self) -> str:
-        """'open' (linked), 'connecting' (awaiting scan), or 'close' (not linked)."""
-        r = await self._get(f"instance/connectionState/{self.instance}")
-        if not r["_ok"]:
-            return "close"
-        d = r["data"] or {}
-        inst = d.get("instance") if isinstance(d.get("instance"), dict) else {}
-        return inst.get("state") or d.get("state") or "close"
-
-    async def ensure_instance(self) -> None:
-        """Create the instance on the Evolution server if it doesn't exist yet."""
-        try:
-            r = await self._get(f"instance/fetchInstances?instanceName={self.instance}")
-            data = r.get("data")
-            exists = (isinstance(data, list) and len(data) > 0) or \
-                     (isinstance(data, dict) and bool(data.get("instance") or data.get("instanceName") or data.get("name")))
-            if exists:
-                return
-            url = f"{self.base_url}/instance/create"
-            headers = {"apikey": self.api_key, "Content-Type": "application/json"}
-            body = {"instanceName": self.instance, "integration": "WHATSAPP-BAILEYS", "qrcode": True}
-            async with httpx.AsyncClient(timeout=20) as client:
-                await client.post(url, headers=headers, json=body)
-        except Exception as e:
-            print(f"[Evolution API] ensure_instance failed: {e}")
-
-    async def get_qr(self) -> dict:
-        """Fetch the pairing QR (base64 image) + numeric pairing code to link a phone."""
-        await self.ensure_instance()
-        r = await self._get(f"instance/connect/{self.instance}")
-        if not r["_ok"]:
-            return {"error": r["error"]}
-        d = r["data"] or {}
-        qr = d.get("qrcode") if isinstance(d.get("qrcode"), dict) else {}
-        return {
-            "qr_base64": d.get("base64") or qr.get("base64"),
-            "pairing_code": d.get("pairingCode") or qr.get("pairingCode"),
-            "error": None,
-        }
-
-    async def owner_number(self) -> str:
-        """The linked WhatsApp number (digits only) when connected, else ''."""
-        r = await self._get(f"instance/fetchInstances?instanceName={self.instance}")
-        if not r["_ok"]:
-            return ""
-        data = r["data"]
-        rec = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
-        if not rec:
-            return ""
-        inst = rec.get("instance") if isinstance(rec.get("instance"), dict) else rec
-        owner = inst.get("owner") or inst.get("ownerJid") or inst.get("number") or ""
-        return str(owner).split("@")[0] if owner else ""
-
-    async def logout(self) -> dict:
-        return await self._delete(f"instance/logout/{self.instance}")
-
-
 def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
     """Factory: real provider when credentials exist, else the degrade provider.
 
@@ -532,14 +366,6 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
         phone_id = (config.get("meta_phone_number_id") or "").strip()
         if token and phone_id:
             return MetaCloudProvider(token, phone_id, (config.get("meta_waba_id") or "").strip() or None)
-        return UnconfiguredProvider()
-
-    if provider == "evolution":
-        base_url = (config.get("evolution_base_url") or "").strip()
-        apikey = (config.get("evolution_api_key") or "").strip()
-        instance = (config.get("evolution_instance") or "").strip()
-        if base_url and apikey and instance:
-            return EvolutionProvider(base_url, apikey, instance)
         return UnconfiguredProvider()
 
     if provider == "wanotifier":

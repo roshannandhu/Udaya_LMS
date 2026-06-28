@@ -20,7 +20,6 @@ function FileChipIcon({ type }) {
 
 export default function TemplatesTab({ templates, reload, variables = [], provider = 'meta' }) {
   const isMeta = provider === 'meta';
-  const isEvolution = provider === 'evolution';
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -198,7 +197,7 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
                 accept="image/*,audio/*,application/pdf" onChange={handleFile} />
             </div>
 
-            {!isEvolution && (
+            {(
               <details className="group">
                 <summary className="cursor-pointer text-[11px] font-medium text-neutral-500 hover:text-neutral-800 select-none">
                   Optional settings
