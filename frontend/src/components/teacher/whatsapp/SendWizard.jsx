@@ -106,7 +106,7 @@ export default function SendWizard({
   useEffect(() => {
     if (task !== 'exam' || !examStandardId) return;
     const ids = groups.filter(g => g.standard_id === examStandardId)
-      .flatMap(g => g.students.filter(s => s.phone && !s.opted_out).map(s => s.id));
+      .flatMap(g => g.students.filter(s => s.parent_phone && !s.opted_out).map(s => s.id));
     setSelected(new Set(ids));
   }, [examId, examStandardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
