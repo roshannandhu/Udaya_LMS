@@ -86,3 +86,5 @@ push_secrets.py
 *secrets*.py
 r2-upload/
 _design_handoff/
+upload_to_r2.py
+r2-upload/
