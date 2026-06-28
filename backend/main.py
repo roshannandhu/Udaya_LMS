@@ -10230,6 +10230,37 @@ def get_branding():
         "lms_logo": settings.get("lms_logo") or "",
     }
 
+
+# ── Android app version (public) ───────────────────────────────────────────────
+# Serves the latest published app metadata for the /app download page + the in-app
+# update banner. The CI pipeline (.github/workflows/android-release.yml) uploads
+# app/version.json to the R2 public bucket on every tagged release; this proxies it
+# same-origin (avoids webview CORS) with a short cache. Returns {} before the first
+# release so callers degrade gracefully.
+_APP_VERSION_CACHE = {"ts": 0.0, "data": {}}
+_APP_VERSION_TTL = 300  # seconds
+
+
+@app.get("/api/app/version")
+async def get_app_version():
+    import time
+    now = time.time()
+    if now - _APP_VERSION_CACHE["ts"] < _APP_VERSION_TTL and _APP_VERSION_CACHE["data"]:
+        return _APP_VERSION_CACHE["data"]
+    base = (os.getenv("R2_PUBLIC_BASE_URL") or "").rstrip("/")
+    if not base:
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(f"{base}/app/version.json")
+        data = resp.json() if resp.status_code == 200 else {}
+    except Exception:
+        data = _APP_VERSION_CACHE["data"] or {}  # keep last good value on a blip
+    if isinstance(data, dict) and data:
+        _APP_VERSION_CACHE["ts"] = now
+        _APP_VERSION_CACHE["data"] = data
+    return data if isinstance(data, dict) else {}
+
 # ─── AI INSIGHTS GENERATION ──────────────────────────────────────────────
 
 class InsightsRequest(BaseModel):
@@ -11546,12 +11577,24 @@ def _wa_student_score(report: dict, test_id: Optional[str] = None):
 
 
 # ── Config ───────────────────────────────────────────────────────────────────
+def _wa_resolve_provider(cfg: dict) -> str:
+    """The effective provider. Heals a legacy/unknown/blank value (e.g. an old
+    'evolution' config) to 'baileys' when the Node service is wired — mirrors the
+    same self-heal in whatsapp.get_provider() so the UI and the sender agree."""
+    provider = (cfg.get("provider") or "").lower()
+    if provider not in ("baileys", "meta", "wanotifier"):
+        import whatsapp_client as client
+        if client.is_enabled():
+            return "baileys"
+    return provider
+
+
 def _wa_is_configured(cfg: dict) -> bool:
     """True when the active provider has the credentials it needs to send. An
     unset/unknown provider is NEVER 'configured'. WANotifier counts as configured
     only once its adapter is verified (wanotifier_verified) — see the safety gate
     in whatsapp.py — so the UI stops claiming a broken provider is connected."""
-    provider = (cfg.get("provider") or "").lower()
+    provider = _wa_resolve_provider(cfg)
     if provider == "baileys":
         import whatsapp_client as client
         return client.is_enabled()
@@ -11606,7 +11649,23 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
 async def wa_connection(user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
-    provider = (cfg.get("provider") or "").lower()
+    provider = _wa_resolve_provider(cfg)
+    # Baileys: report the REAL phone-pairing state from the Node service, not just
+    # "is the URL set" — so the console banner agrees with the QR/status page.
+    if provider == "baileys":
+        import whatsapp_client as client
+        try:
+            svc = await client.status()
+            connected = bool(svc.get("connected"))
+            return {"provider": provider, "connected": connected,
+                    "state": "open" if connected else "close",
+                    "number": svc.get("number") or "", "qr": svc.get("qr")}
+        except client.ServiceDownError:
+            return {"provider": provider, "connected": False, "state": "service_down",
+                    "number": "", "error": "The WhatsApp service is unreachable. Messages are buffered until it returns."}
+        except Exception as e:
+            print(f"[wa] connection status failed: {e}")
+            return {"provider": provider, "connected": False, "state": "close", "number": ""}
     # WANotifier sending is paused until its adapter is verified (safety gate).
     if provider == "wanotifier" and (cfg.get("api_key") or "").strip() and not cfg.get("wanotifier_verified"):
         return {"provider": provider, "connected": False, "state": "setup_incomplete", "number": "",

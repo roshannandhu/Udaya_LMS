@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MdAssignment, MdEmojiEvents, MdBarChart, MdChevronRight, MdNotificationsActive } from 'react-icons/md';
+import { MdAssignment, MdEmojiEvents, MdBarChart, MdChevronRight, MdNotificationsActive, MdSystemUpdate } from 'react-icons/md';
 import { Loader2 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { AnimatedPage, Item, Pressable, SpotlightCard } from '../../components/bits';
@@ -74,6 +74,7 @@ export default function StudentMorePage() {
     { icon: MdAssignment, label: 'Tests',       sub: 'Take tests and view results',       onClick: () => navigate('/student/tests') },
     { icon: MdEmojiEvents,       label: 'Leaderboard', sub: 'View class rankings',               onClick: () => navigate('/student/leaderboard') },
     { icon: MdBarChart,     label: 'Report Card', sub: 'View your performance report card', onClick: () => navigate('/student/report') },
+    { icon: MdSystemUpdate, label: 'Download Android app', sub: 'Get or update the official app', onClick: () => navigate('/app') },
   ];
 
   return (
