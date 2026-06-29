@@ -31,6 +31,10 @@ let sock = null;
 let connected = false;
 let latestQrDataUrl = null; // set while pairing, cleared once open
 let starting = false;
+// Consecutive 'close' events without ever reaching 'open'. A dead/stale saved
+// session can loop here forever, reconnecting with invalid creds and NEVER issuing
+// a QR. Past a threshold we wipe the session so the next start emits a fresh QR.
+let connectAttempts = 0;
 
 // India format: strip +/spaces, drop a leading 0, prepend 91 for a bare 10-digit.
 function normalizeIn(raw) {
@@ -106,6 +110,7 @@ async function startSock() {
         connected = true;
         starting = false;
         latestQrDataUrl = null;
+        connectAttempts = 0; // healthy link — reset the dead-session guard
         queue.markConnected();
         console.log('[wa] connection open — ready to send');
       }
@@ -115,11 +120,23 @@ async function startSock() {
         starting = false;
         const code = lastDisconnect?.error?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
-        console.warn(`[wa] connection closed (code=${code}); ` +
-          (loggedOut ? 'logged out — a fresh QR will be issued' : 'reconnecting…'));
-        // Reconnect either way: a logged-out session reconnects to get a new QR.
-        const delay = loggedOut ? 1000 : 3000;
-        setTimeout(() => startSock().catch((e) => console.error(e)), delay);
+        connectAttempts++;
+        // Self-heal a dead session: if WhatsApp logged us out, OR we've closed many
+        // times in a row without ever opening (stale creds that can't pair), delete
+        // the saved session so the next start has NO creds → Baileys emits a fresh QR.
+        // A genuinely linked phone reaches 'open' first and resets the counter, so a
+        // working session is never wiped.
+        if (loggedOut || connectAttempts >= 5) {
+          console.warn(`[wa] connection closed (code=${code}, attempt=${connectAttempts}) — ` +
+            'clearing stale session to force a fresh QR');
+          try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); }
+          catch (e) { console.warn('[wa] failed to clear session dir:', e.message); }
+          connectAttempts = 0;
+          setTimeout(() => startSock().catch((e) => console.error(e)), 1000);
+        } else {
+          console.warn(`[wa] connection closed (code=${code}, attempt=${connectAttempts}); reconnecting…`);
+          setTimeout(() => startSock().catch((e) => console.error(e)), 3000);
+        }
       }
     });
   } catch (e) {
