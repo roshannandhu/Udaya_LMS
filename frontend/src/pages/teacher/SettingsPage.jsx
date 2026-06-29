@@ -777,7 +777,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-neutral-400 flex items-center justify-center gap-1">Udaya v1.0 Beta · Built with <MdFavorite className="w-3.5 h-3.5 text-red-500" /></p>
+        <p className="text-center text-xs text-neutral-400 flex items-center justify-center gap-1">Udaya v{import.meta.env.VITE_APP_VERSION || '1.1.3'} · Built with <MdFavorite className="w-3.5 h-3.5 text-red-500" /></p>
       </div>
     </div>
   );
