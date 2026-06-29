@@ -307,7 +307,7 @@ export default function StudentBroadcastsPage() {
                   </React.Fragment>
                 );
               })}
-              <div />
+              <div style={{ height: 'calc(96px + max(1rem, env(safe-area-inset-bottom)))' }} className="flex-shrink-0" />
             </div>
           )}
         </div>

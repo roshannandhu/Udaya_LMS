@@ -1,6 +1,7 @@
 import React, { Suspense, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
+import { useTeacherThread } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
 import PageTransition from '../../components/shared/PageTransition';
@@ -23,6 +24,7 @@ export default function TeacherLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { role, clearAuth } = useAuthStore();
+  const threadOpen = useTeacherThread(s => s.open);
 
   const active = getActiveTab(location.pathname);
   const isBroadcastRoute = location.pathname.startsWith('/teacher/broadcasts');
@@ -74,7 +76,7 @@ export default function TeacherLayout() {
           <PageTransition><Outlet /></PageTransition>
         </Suspense>
       </div>
-      <BottomNav active={active} setActive={setActive} type="teacher" />
+      {!threadOpen && <BottomNav active={active} setActive={setActive} type="teacher" />}
     </div>
   );
 }

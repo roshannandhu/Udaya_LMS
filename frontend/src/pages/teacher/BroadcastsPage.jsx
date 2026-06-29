@@ -3,7 +3,7 @@ import { MessageSquare, Settings, X, Check } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import TopBar from '../../components/shared/TopBar';
 import BroadcastThread from '../../components/teacher/BroadcastThread';
-import { useStore, useAppCache } from '../../store';
+import { useStore, useAppCache, useTeacherThread } from '../../store';
 import { Skeleton } from '../../components/ui';
 import { pastelFor, pastelTokens } from '../../components/cards/pastel';
 import { useTheme } from '../../lib/theme';
@@ -114,6 +114,12 @@ export default function BroadcastsPage() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  const setThreadOpen = useTeacherThread(s => s.setOpen);
+  useEffect(() => {
+    setThreadOpen(paneView === 'thread');
+    return () => setThreadOpen(false);
+  }, [paneView, setThreadOpen]);
+
   const studentCounts = {};
   students.forEach(s => {
     studentCounts[s.standard_id] = (studentCounts[s.standard_id] || 0) + 1;
@@ -148,7 +154,7 @@ export default function BroadcastsPage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-[#f0f2f5] pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))] lg:p-4" onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
+    <div className={`flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-[#f0f2f5] lg:p-4 ${showThread ? 'pb-0' : 'pb-[calc(74px+max(1rem,env(safe-area-inset-bottom)))]'}`} onClick={() => { if (ttlOpenFor) setTtlOpenFor(null); }}>
       {/* Mobile/tablet TopBar — the desktop TopNav only appears at lg, so keep the
           page header until then (was md:hidden → vanished on iPad with no replacement). */}
       <div className="lg:hidden flex-shrink-0">

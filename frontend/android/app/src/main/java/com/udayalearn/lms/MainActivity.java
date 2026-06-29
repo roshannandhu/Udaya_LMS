@@ -24,6 +24,10 @@ public class MainActivity extends BridgeActivity {
         // IndexedDB are preserved so users stay logged in.
         clearStaleWebViewCachesOnUpgrade();
         super.onCreate(savedInstanceState);
+        
+        // Request Camera and microphone permission upfront
+        requestCameraAndAudioPermissions();
+
         // FLAG_SECURE is ON for EVERYONE, always (like Google Pay) — blocks OS
         // screenshots, screen recording, and the recents thumbnail. Set here at
         // launch (not role-based) and the SecureScreen plugin's disable() is a
@@ -33,6 +37,25 @@ public class MainActivity extends BridgeActivity {
             WindowManager.LayoutParams.FLAG_SECURE);
         NotificationChannels.ensure(this);
         handleNavigate(getIntent());
+    }
+
+    private void requestCameraAndAudioPermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            String[] permissions = {
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.RECORD_AUDIO
+            };
+            boolean needsRequest = false;
+            for (String perm : permissions) {
+                if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    needsRequest = true;
+                    break;
+                }
+            }
+            if (needsRequest) {
+                requestPermissions(permissions, 1024);
+            }
+        }
     }
 
     /** On a versionCode change, delete the WebView's service-worker + cache dirs so a
