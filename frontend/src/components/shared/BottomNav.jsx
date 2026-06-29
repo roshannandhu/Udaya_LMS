@@ -8,8 +8,8 @@ const BottomNav = memo(function BottomNav({ active, setActive, type = 'teacher',
   if (type === 'teacher') items.push({ id: 'more', label: 'More', icon: MORE_ICON });
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pointer-events-none">
-      <nav className="nav-dark max-w-md mx-auto px-4 py-2 h-[58px] flex items-center justify-between rounded-[28px] pointer-events-auto">
+    <div className="lg:hidden shrink-0 px-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <nav className="nav-dark max-w-md mx-auto px-4 py-2 h-[58px] flex items-center justify-between rounded-[28px]">
         {items.map((item) => {
           const isActive = active === item.id;
           const badge = badges?.[item.id] || 0;

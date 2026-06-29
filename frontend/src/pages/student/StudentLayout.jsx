@@ -97,7 +97,6 @@ export default function StudentLayout() {
       <div
         ref={contentRef}
         className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto lg:overflow-visible'}`}
-        style={!examLocked && !isBroadcastRoute && !threadOpen ? { paddingBottom: 'max(96px, calc(env(safe-area-inset-bottom) + 80px))' } : undefined}
       >
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <PageTransition><Outlet /></PageTransition>
