@@ -149,7 +149,7 @@ export default function AppDownloadPage() {
   }, []);
 
   const apkUrl = info?.apkUrl || info?.apkLatestUrl || FALLBACK_APK;
-  const versionName = info?.versionName || '1.1.2';
+  const versionName = info?.versionName || '1.1.6';
   const size = formatSize(info?.sizeBytes) || '6.5 MB';
   const name = lmsName || 'Udaya';
   const hasLogo = !!lmsLogo;
