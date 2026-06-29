@@ -9,6 +9,28 @@ import './index.css'
 // requests (used to enforce app-only viewing of protected files for students).
 window.__UDAYA_NATIVE__ = Capacitor.isNativePlatform()
 
+// Service worker policy by platform.
+// • Native (Capacitor WebView): NEVER run a SW. The app already bundles its assets;
+//   a SW only persists a precached index.html that, after an app update, points at
+//   old chunk hashes missing from the new APK → every chunk 404s → blank white
+//   screen ("installs but won't open"). So we actively tear down any SW + caches a
+//   previous build may have left behind.
+// • Web/PWA: register normally so the site stays installable + offline-capable.
+if (Capacitor.isNativePlatform()) {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => regs.forEach((r) => r.unregister()))
+      .catch(() => {})
+  }
+  if (typeof caches !== 'undefined') {
+    caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {})
+  }
+} else if ('serviceWorker' in navigator) {
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .catch(() => {})
+}
+
 // Error monitoring — dormant unless VITE_SENTRY_DSN is set in the Pages env.
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN
 if (sentryDsn) {

@@ -13,6 +13,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Don't auto-inject the SW registration into index.html. main.jsx registers it
+      // manually — and ONLY on web. Inside the Android WebView a service worker just
+      // serves a stale precached index.html after an app update (old chunk hashes →
+      // 404 → blank screen), so the native shell must never register one.
+      injectRegister: null,
       manifest: {
         name: 'Udaya LMS',
         short_name: 'Udaya',

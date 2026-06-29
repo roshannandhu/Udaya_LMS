@@ -11,7 +11,7 @@ android {
         // `-PversionCode=NN -PversionName=X.Y.Z` so the git tag is the single source
         // of truth. They fall back to these literals for local debug builds.
         versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 10
-        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0.9"
+        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.1.7"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
