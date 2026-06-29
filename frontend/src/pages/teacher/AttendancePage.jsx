@@ -1,37 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  AlertTriangle, Users, BookOpen, Calendar, ChevronLeft, ChevronRight, CheckCircle2, Loader2, Save, Info
-} from 'lucide-react';
-import { Btn, Skeleton, Avatar } from '../../components/ui';
+import { BookOpen, ChevronRight } from 'lucide-react';
+import { Skeleton } from '../../components/ui';
 import { useAppCache } from '../../store';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import AttendanceGrid, { getMonday, fmt } from '../../components/teacher/AttendanceGrid';
 
-/* ─── Main Attendance Page ──────────────────────────────────────── */
 export default function AttendancePage() {
   const navigate = useNavigate();
 
-  // Pull from global cache — instant if already prefetched
-  const standards       = useAppCache(s => s.standards);
-  const allSubjects     = useAppCache(s => s.subjects);
-  const standardsReady  = useAppCache(s => s.standardsReady);
-  const subjectsReady   = useAppCache(s => s.subjectsReady);
+  const standards      = useAppCache(s => s.standards);
+  const allSubjects    = useAppCache(s => s.subjects);
+  const standardsReady = useAppCache(s => s.standardsReady);
+  const subjectsReady  = useAppCache(s => s.subjectsReady);
   const refreshStandards = useAppCache(s => s.refreshStandards);
-  const refreshSubjects   = useAppCache(s => s.refreshSubjects);
+  const refreshSubjects  = useAppCache(s => s.refreshSubjects);
   const loading = !standardsReady || !subjectsReady;
 
-  const [activeStdId, setActiveStdId]           = useState(null);
-  const [activeSubjectId, setActiveSubjectId]   = useState(null);
-  const [error, setError]                       = useState('');
+  const [activeStdId, setActiveStdId]       = useState(null);
+  const [activeSubjectId, setActiveSubjectId] = useState(null);
 
-  // Background refresh
   useEffect(() => {
     refreshStandards();
     refreshSubjects();
   }, []);
 
-  // Auto-select first standard + subject when cache arrives
   useEffect(() => {
     if (standards.length > 0 && !activeStdId) {
       const firstStd = standards[0];
@@ -41,117 +34,108 @@ export default function AttendancePage() {
     }
   }, [standards, allSubjects]);
 
-  // BUG FIX: always coerce both sides to string
   const subjects = allSubjects.filter(s => String(s.standard_id) === String(activeStdId));
 
   const handleStdChange = (stdId) => {
     setActiveStdId(stdId);
-    // BUG FIX: coerce comparison
     const firstSub = allSubjects.find(s => String(s.standard_id) === String(stdId));
     setActiveSubjectId(firstSub?.id || null);
   };
 
-  const today = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-
-  const activeSubject = subjects.find(s => s.id === activeSubjectId);
+  const activeSubject  = subjects.find(s => s.id === activeSubjectId);
+  const activeStandard = standards.find(s => s.id === activeStdId);
 
   return (
-    <div className="min-h-screen pb-24">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-        <div className="px-3 md:px-8 py-4 max-w-5xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-2xl bg-pastel-sky flex items-center justify-center flex-shrink-0">
-                <Calendar size={16} className="text-pastel-sky-fg" />
-              </div>
-              <div>
-                <h1 className="text-lg md:text-xl font-semibold leading-tight">Attendance</h1>
-                {activeSubject && (
-                  <p className="text-xs text-neutral-500 leading-tight inline-flex items-center gap-1"><SubjectIcon value={activeSubject.emoji} size={13} />{activeSubject.name}</p>
-                )}
-              </div>
+    <div className="min-h-screen bg-[#f8f9fb]">
+
+      {/* ── Sticky header ── */}
+      <div className="sticky top-0 z-20 bg-white border-b border-neutral-100 shadow-sm">
+        <div className="px-4 pt-4 pb-3 max-w-2xl mx-auto">
+
+          {/* Title + breadcrumb */}
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-xl font-black text-neutral-900 leading-tight">Attendance</h1>
+              {activeStandard && activeSubject && (
+                <div className="flex items-center gap-1 text-xs text-neutral-500 mt-0.5">
+                  <SubjectIcon value={activeStandard.emoji} size={11} fallback="graduation" />
+                  <span>{activeStandard.name}</span>
+                  <ChevronRight size={10} />
+                  <SubjectIcon value={activeSubject.emoji} size={11} />
+                  <span className="font-semibold text-neutral-700">{activeSubject.name}</span>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-neutral-400 hidden sm:block">{today}</p>
           </div>
-        </div>
-      </div>
 
-      <div className="px-4 md:px-8 py-5 max-w-5xl mx-auto">
-        {/* Error */}
-        {error && (
-          <div className="mb-4 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-2xl p-3">
-            <AlertTriangle size={16} className="flex-shrink-0" /> {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="space-y-3">
-            <div className="flex gap-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}</div>
-            <div className="flex gap-2">{[1,2,3,4].map(i => <Skeleton key={i} className="h-11 w-28 rounded-xl" />)}</div>
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}
-          </div>
-        ) : standards.length === 0 ? (
-          <div className="text-center py-20 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
-            <BookOpen size={36} className="mx-auto mb-3 text-neutral-300" />
-            <p className="font-semibold text-neutral-600 mb-1">No standards yet</p>
-            <p className="text-sm text-neutral-400 mb-5">Create a standard and enrol students first.</p>
-            <button onClick={() => navigate('/teacher/standards')}
-              className="px-5 py-2.5 bg-ink text-white rounded-pill text-sm font-medium hover:bg-neutral-800 transition-colors">
-              Go to Subjects
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Standard tabs */}
-            {standards.length > 1 && (
-              <div className="flex gap-2 mb-4 flex-wrap">
-                {standards.map(std => (
-                  <button key={std.id} onClick={() => handleStdChange(std.id)}
-                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium border transition-all
-                      ${String(activeStdId) === String(std.id)
-                        ? 'bg-neutral-900 text-white border-neutral-900'
-                        : 'glass-panel border-white/60 text-neutral-600 hover:bg-[#F4F2EF]'}`}>
-                    <SubjectIcon value={std.emoji} size={14} fallback="graduation" /> {std.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Subject tabs */}
-            {subjects.length === 0 ? (
-              <div className="text-center py-12 glass-panel border-dashed border-[#D8D6D2] rounded-2xl text-sm text-neutral-500">
-                No subjects in this standard yet.
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2 mb-1 overflow-x-auto pb-2 scrollbar-hide">
+          {/* Selectors */}
+          {loading ? (
+            <div className="flex gap-2">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-24 rounded-full flex-shrink-0" />)}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {/* Standard chips */}
+              {standards.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                  {standards.map(std => (
+                    <button key={std.id} onClick={() => handleStdChange(std.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border whitespace-nowrap flex-shrink-0 transition-all
+                        ${String(activeStdId) === String(std.id)
+                          ? 'bg-neutral-900 text-white border-neutral-900'
+                          : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'}`}>
+                      <SubjectIcon value={std.emoji} size={11} fallback="graduation" />
+                      {std.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Subject chips */}
+              {subjects.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                   {subjects.map(sub => (
                     <button key={sub.id} onClick={() => setActiveSubjectId(sub.id)}
-                      className={`flex items-center gap-2 px-5 py-3 rounded-full border text-sm font-bold whitespace-nowrap transition-all flex-shrink-0
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold border whitespace-nowrap flex-shrink-0 transition-all
                         ${String(activeSubjectId) === String(sub.id)
-                          ? 'bg-neutral-900 border-neutral-900 text-white shadow-md'
-                          : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50 shadow-sm'}`}>
-                      <SubjectIcon value={sub.emoji} size={16} />
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'}`}>
+                      <SubjectIcon value={sub.emoji} size={11} />
                       {sub.name}
                     </button>
                   ))}
                 </div>
-
-                {activeSubjectId && (
-                  <AttendanceGrid
-                    key={activeSubjectId}
-                    subjectId={activeSubjectId}
-                    onNavigate={id => navigate(`/teacher/students/${id}`)}
-                  />
-                )}
-              </>
-            )}
-          </>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ── Page content ── */}
+      <div className="px-4 py-3 max-w-2xl mx-auto">
+        {!loading && standards.length === 0 ? (
+          <div className="text-center py-20 bg-white border border-dashed border-neutral-200 rounded-2xl mt-4">
+            <BookOpen size={36} className="mx-auto mb-3 text-neutral-300" />
+            <p className="font-semibold text-neutral-600 mb-1">No standards yet</p>
+            <p className="text-sm text-neutral-400 mb-5">Create a standard and enrol students first.</p>
+            <button onClick={() => navigate('/teacher/standards')}
+              className="px-5 py-2.5 bg-neutral-900 text-white rounded-full text-sm font-bold hover:bg-neutral-700 transition-colors">
+              Go to Subjects
+            </button>
+          </div>
+        ) : !loading && subjects.length === 0 ? (
+          <div className="text-center py-12 bg-white border border-dashed border-neutral-200 rounded-2xl mt-4">
+            <p className="text-sm text-neutral-400">No subjects in this standard yet.</p>
+          </div>
+        ) : activeSubjectId ? (
+          <AttendanceGrid
+            key={activeSubjectId}
+            subjectId={activeSubjectId}
+            onNavigate={id => navigate(`/teacher/students/${id}`)}
+          />
+        ) : null}
+      </div>
+
     </div>
   );
 }
+

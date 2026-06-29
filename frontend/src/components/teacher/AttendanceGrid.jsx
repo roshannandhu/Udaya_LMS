@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  CheckCircle2, AlertTriangle, Users, Loader2, Calendar as CalendarIcon, Save, ChevronDown
+  ChevronLeft, ChevronRight, Save, CheckCircle2, AlertTriangle, Users, Loader2
 } from 'lucide-react';
 import { attendanceApi } from '../../lib/api';
-import { Btn, Skeleton, Avatar } from '../ui';
+import { Avatar, Skeleton } from '../ui';
 
 export function fmt(date) {
   const d = new Date(date);
@@ -19,80 +19,186 @@ export function getMonday(d) {
   return new Date(date.setDate(diff));
 }
 
-// Helper to add days
 function addDays(date, days) {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
+/* ── Animated SVG donut ring ───────────────────────────────────────── */
+function DonutRing({ present, total }) {
+  const pct = total > 0 ? Math.round((present / total) * 100) : 0;
+  const radius = 26;
+  const circ = 2 * Math.PI * radius;
+  const dash = (pct / 100) * circ;
+  const stroke = pct >= 80 ? '#22c55e' : pct >= 60 ? '#f59e0b' : pct > 0 ? '#ef4444' : '#e5e7eb';
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 70, height: 70 }}>
+      <svg width="70" height="70" viewBox="0 0 70 70" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="35" cy="35" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="7" />
+        <circle
+          cx="35" cy="35" r={radius}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="7"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.7s cubic-bezier(0.34,1.56,0.64,1), stroke 0.4s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[17px] font-black text-neutral-900 leading-none">{pct}%</span>
+        <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-wide">present</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Status cycle: null → present → absent → late → null ──────────── */
+const STATUS_CYCLE = [null, 'present', 'absent', 'late'];
+const STATUS_CFG = {
+  null:    { label: 'Mark',    bg: 'bg-neutral-100', text: 'text-neutral-500', dot: 'bg-neutral-300', ring: 'ring-neutral-200' },
+  present: { label: 'Present', bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500', ring: 'ring-emerald-300' },
+  absent:  { label: 'Absent',  bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500',     ring: 'ring-red-300' },
+  late:    { label: 'Late',    bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400',   ring: 'ring-amber-300' },
+};
+
+function StudentRow({ student, status, onChange, onNavigate }) {
+  const key = status ?? null;
+  const cfg = STATUS_CFG[key];
+
+  const cycleStatus = () => {
+    const idx = STATUS_CYCLE.indexOf(key);
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+    onChange(next);
+  };
+
+  return (
+    <div className="flex items-center gap-3 bg-white rounded-2xl px-3 py-2.5 shadow-sm border border-neutral-100 transition-transform active:scale-[0.99]">
+      <button
+        type="button"
+        onClick={() => onNavigate && onNavigate(student.student_id)}
+        className={`relative flex-shrink-0 rounded-full ring-2 transition-all duration-300 ${cfg.ring}`}
+      >
+        <Avatar src={student.avatar_url} name={student.name} size="md" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onNavigate && onNavigate(student.student_id)}
+        className="flex-1 min-w-0 text-left"
+      >
+        <p className="font-semibold text-[14px] text-neutral-900 truncate leading-snug">{student.name}</p>
+        <p className="text-[11px] text-neutral-400 truncate leading-snug">{student.username}</p>
+      </button>
+      <button
+        type="button"
+        onClick={cycleStatus}
+        className={`flex-shrink-0 w-[82px] py-2 rounded-xl text-[11px] font-bold transition-all duration-200 active:scale-90 flex items-center justify-center gap-1.5 ${cfg.bg} ${cfg.text}`}
+      >
+        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+        {cfg.label}
+      </button>
+    </div>
+  );
+}
+
+/* ── Main AttendanceGrid ──────────────────────────────────────────── */
 export default function AttendanceGrid({ subjectId, onNavigate }) {
-  const [activeDate, setActiveDate] = useState(fmt(new Date()));
+  const todayStr = fmt(new Date());
+
+  const [activeDate, setActiveDate] = useState(todayStr);
+  const [weekStart, setWeekStart]   = useState(() => fmt(getMonday(new Date())));
   const [students, setStudents]     = useState([]);
-  const [changesMap, setChangesMap] = useState({}); // student_id -> status ('present', 'absent', 'late', null)
+  const [changesMap, setChangesMap] = useState({});
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
   const [error, setError]           = useState('');
+  const [undoSnap, setUndoSnap]     = useState(null);
+  const undoTimer                   = useRef(null);
 
   const loadDate = useCallback(async (dateStr) => {
     setLoading(true);
     setError('');
-    setChangesMap({}); // clear un-saved changes when switching date
+    setChangesMap({});
     try {
       const data = await attendanceApi.getSubjectAttendance(subjectId, dateStr);
       setStudents(Array.isArray(data) ? data : []);
-    } catch (e) {
+    } catch {
       setError('Could not load attendance data.');
-      console.error(e);
     } finally {
       setLoading(false);
     }
   }, [subjectId]);
 
-  useEffect(() => {
-    loadDate(activeDate);
-  }, [activeDate, loadDate]);
+  useEffect(() => { loadDate(activeDate); }, [activeDate, loadDate]);
 
-  const markStudent = (studentId, status) => {
-    setChangesMap(prev => ({ ...prev, [studentId]: status }));
+  const weekDays = useMemo(() => {
+    const monday = new Date(weekStart + 'T00:00:00');
+    return Array.from({ length: 7 }).map((_, i) => addDays(monday, i));
+  }, [weekStart]);
+
+  const canGoNext = useMemo(() => {
+    const m = new Date(weekStart + 'T00:00:00');
+    return fmt(addDays(m, 7)) <= todayStr;
+  }, [weekStart, todayStr]);
+
+  const prevWeek = () => {
+    const m = new Date(weekStart + 'T00:00:00');
+    setWeekStart(fmt(addDays(m, -7)));
+  };
+  const nextWeek = () => {
+    if (!canGoNext) return;
+    const m = new Date(weekStart + 'T00:00:00');
+    setWeekStart(fmt(addDays(m, 7)));
   };
 
+  const getEffectiveStatus = (sid) => {
+    if (changesMap[sid] !== undefined) return changesMap[sid];
+    const s = students.find(s => s.student_id === sid);
+    return s ? s.status : null;
+  };
+
+  const markStudent = (sid, status) =>
+    setChangesMap(prev => ({ ...prev, [sid]: status }));
+
   const markAll = (status) => {
-    const newChanges = { ...changesMap };
-    students.forEach(s => {
-      newChanges[s.student_id] = status;
-    });
-    setChangesMap(newChanges);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoSnap({ ...changesMap });
+    undoTimer.current = setTimeout(() => setUndoSnap(null), 5000);
+    const next = {};
+    students.forEach(s => { next[s.student_id] = status; });
+    setChangesMap(next);
+  };
+
+  const undo = () => {
+    if (undoSnap !== null) {
+      setChangesMap(undoSnap);
+      setUndoSnap(null);
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    }
   };
 
   const save = async () => {
-    if (Object.keys(changesMap).length === 0) return;
-    
-    // Build records array and toDelete array
-    const toSave = [];
-    const toDelete = [];
-    Object.entries(changesMap).forEach(([studentId, status]) => {
-      if (status === null || status === '__CLEAR__') {
-        toDelete.push(studentId);
-      } else {
-        toSave.push({ student_id: studentId, status });
-      }
+    if (!Object.keys(changesMap).length) return;
+    const toSave = [], toDelete = [];
+    Object.entries(changesMap).forEach(([sid, st]) => {
+      if (st === null || st === '__CLEAR__') toDelete.push(sid);
+      else toSave.push({ student_id: sid, status: st });
     });
-
     setSaving(true);
     setError('');
     try {
-      if (toSave.length > 0) {
+      if (toSave.length)
         await attendanceApi.markSubjectAttendance(subjectId, { date: activeDate, records: toSave });
-      }
-      for (const sId of toDelete) {
-        try { await attendanceApi.clearAttendanceRecord(subjectId, sId, activeDate); } catch {}
+      for (const sid of toDelete) {
+        try { await attendanceApi.clearAttendanceRecord(subjectId, sid, activeDate); } catch {}
       }
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-      setChangesMap({}); // clear local changes
-      await loadDate(activeDate); // refresh initial state from server
+      setTimeout(() => setSaved(false), 2500);
+      setChangesMap({});
+      await loadDate(activeDate);
     } catch (e) {
       setError(e.message || 'Failed to save attendance.');
     } finally {
@@ -100,239 +206,160 @@ export default function AttendanceGrid({ subjectId, onNavigate }) {
     }
   };
 
-  const hasChanges = Object.keys(changesMap).length > 0;
-
-  // --- Calendar Taskbar Logic ---
-  const activeDateObj = useMemo(() => new Date(activeDate + 'T00:00:00'), [activeDate]);
-  const monday = useMemo(() => getMonday(activeDateObj), [activeDateObj]);
-  const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }).map((_, i) => addDays(monday, i));
-  }, [monday]);
-
-  const monthName = activeDateObj.toLocaleString('default', { month: 'long' });
-  const year = activeDateObj.getFullYear();
-  const todayStr = fmt(new Date());
-
-  const handleDayClick = (d) => {
-    const dateStr = fmt(d);
-    // Optional: Prevent selecting future dates if needed, but standard HTML let them select up to today.
-    // Actually, in original code `max={fmt(new Date())}` was set. 
-    // Let's only allow up to today if we want, or just let them select it. 
-    if (dateStr > todayStr) return; // Disallow future attendance marking
-    setActiveDate(dateStr);
-  };
-
-
-  // Calculate current effective states for display
-  const getEffectiveStatus = (studentId) => {
-    if (changesMap[studentId] !== undefined) return changesMap[studentId];
-    const s = students.find(s => s.student_id === studentId);
-    return s ? s.status : null;
-  };
-
+  const hasChanges   = Object.keys(changesMap).length > 0;
   const presentCount = students.filter(s => getEffectiveStatus(s.student_id) === 'present').length;
-  const absentCount = students.filter(s => getEffectiveStatus(s.student_id) === 'absent').length;
-  const lateCount = students.filter(s => getEffectiveStatus(s.student_id) === 'late').length;
-  const totalCount = students.length;
+  const absentCount  = students.filter(s => getEffectiveStatus(s.student_id) === 'absent').length;
+  const lateCount    = students.filter(s => getEffectiveStatus(s.student_id) === 'late').length;
+  const totalCount   = students.length;
+  const monthLabel   = new Date(activeDate + 'T00:00:00').toLocaleString('default', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="mt-6 pb-28">
+    <div className="mt-2 space-y-3">
 
-      {/* Calendar Taskbar */}
-      <div className="bg-white rounded-[24px] p-5 shadow-sm border border-neutral-100 mb-8">
-        <div className="flex justify-between items-center mb-4 relative">
-          <label className="flex items-center gap-2 cursor-pointer group relative">
-            <input 
-              type="date"
-              value={activeDate}
-              max={todayStr}
-              onChange={(e) => {
-                if (e.target.value) setActiveDate(e.target.value);
-              }}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-            />
-            <span className="text-lg font-bold text-neutral-800">{monthName} {year}</span>
-            <CalendarIcon size={18} className="text-neutral-500 group-hover:text-neutral-800 transition-colors" />
-          </label>
-          <button 
-            onClick={() => setActiveDate(todayStr)}
-            className="px-4 py-1.5 bg-[#e0f7fa] text-[#00acc1] font-bold rounded-xl text-sm hover:bg-[#b2ebf2] transition-colors"
-          >
-            Today
-          </button>
+      {/* ── Date navigator ── */}
+      <div className="bg-white rounded-2xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <span className="text-sm font-bold text-neutral-700">{monthLabel}</span>
+          <div className="flex items-center gap-1.5">
+            <button onClick={prevWeek}
+              className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center transition-colors active:scale-90">
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={() => { setActiveDate(todayStr); setWeekStart(fmt(getMonday(new Date()))); }}
+              className="px-3 h-7 rounded-full bg-neutral-900 text-white text-[11px] font-bold hover:bg-neutral-700 transition-colors">
+              Today
+            </button>
+            <button onClick={nextWeek} disabled={!canGoNext}
+              className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center transition-colors active:scale-90 disabled:opacity-25">
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
-
-        <div className="flex justify-between items-center px-2 md:px-6">
-          {weekDays.map((d, i) => {
+        <div className="flex items-center justify-between px-3 pb-3 gap-1">
+          {weekDays.map(d => {
             const dStr = fmt(d);
-            const isSelected = dStr === activeDate;
+            const isSel   = dStr === activeDate;
             const isToday = dStr === todayStr;
-            const isFuture = dStr > todayStr;
-            const dayName = d.toLocaleString('default', { weekday: 'short' });
-            
+            const isFut   = dStr > todayStr;
+            const dayLbl  = d.toLocaleString('default', { weekday: 'narrow' });
             return (
-              <button 
-                key={dStr}
-                onClick={() => handleDayClick(d)}
-                disabled={isFuture}
-                className={`flex flex-col items-center gap-2 group ${isFuture ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                <span className={`text-xs font-medium ${isToday ? 'text-[#00acc1]' : 'text-neutral-500'}`}>
-                  {dayName}
+              <button key={dStr} onClick={() => !isFut && setActiveDate(dStr)} disabled={isFut}
+                className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 rounded-xl transition-all duration-200 active:scale-90
+                  ${isFut ? 'opacity-25 cursor-not-allowed' : 'cursor-pointer'}
+                  ${isSel ? 'bg-neutral-900 shadow-md' : 'hover:bg-neutral-50'}`}>
+                <span className={`text-[9px] font-bold uppercase
+                  ${isSel ? 'text-white/60' : isToday ? 'text-blue-500' : 'text-neutral-400'}`}>
+                  {dayLbl}
                 </span>
-                <div className={`w-10 h-10 flex items-center justify-center rounded-full text-base font-bold transition-all
-                  ${isSelected 
-                    ? 'bg-[#374151] text-white shadow-md scale-110' 
-                    : isToday 
-                      ? 'text-[#00acc1] group-hover:bg-neutral-50' 
-                      : 'text-neutral-700 group-hover:bg-neutral-50'
-                  }`}
-                >
+                <span className={`text-[14px] font-black leading-none
+                  ${isSel ? 'text-white' : isToday ? 'text-blue-500' : 'text-neutral-700'}`}>
                   {d.getDate()}
-                </div>
+                </span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Quick Actions & Stats mimicking udaya.jpg UI design */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-        
-        {/* Left side: Quick Actions */}
-        <button 
-          onClick={() => markAll('present')}
-          className="w-full md:w-auto px-6 py-3 bg-[#e5f5e8] text-[#2d7a42] rounded-full text-sm font-bold hover:bg-[#d4ecd9] transition-colors flex items-center justify-center gap-2 shadow-sm"
-        >
-          <CheckCircle2 size={18} />
-          Mark All Present
-        </button>
-
-        {/* Right side: The rounded pill stats from the design */}
-        <div className="flex bg-white p-2 rounded-[24px] shadow-sm border border-neutral-100 gap-2 overflow-x-auto scrollbar-hide">
-          <div className="flex flex-col items-center justify-center bg-[#e0f7fa] min-w-[80px] py-3 rounded-[20px]">
-            <span className="text-2xl font-bold text-[#006064] leading-none mb-1">{totalCount}</span>
-            <span className="text-[10px] font-semibold text-[#00838f] uppercase tracking-wider">Total</span>
-          </div>
-          <div className="flex flex-col items-center justify-center bg-[#e8f5e9] min-w-[80px] py-3 rounded-[20px]">
-            <span className="text-2xl font-bold text-[#1b5e20] leading-none mb-1">{presentCount}</span>
-            <span className="text-[10px] font-semibold text-[#2e7d32] uppercase tracking-wider">Present</span>
-          </div>
-          <div className="flex flex-col items-center justify-center bg-[#fce4ec] min-w-[80px] py-3 rounded-[20px]">
-            <span className="text-2xl font-bold text-[#880e4f] leading-none mb-1">{absentCount}</span>
-            <span className="text-[10px] font-semibold text-[#ad1457] uppercase tracking-wider">Absent</span>
-          </div>
+      {/* ── Stats: donut + count tiles ── */}
+      <div className="flex items-center gap-3">
+        <DonutRing present={presentCount} total={totalCount} />
+        <div className="flex-1 grid grid-cols-3 gap-2">
+          {[
+            { label: 'Present', count: presentCount, bg: 'bg-emerald-50', text: 'text-emerald-700' },
+            { label: 'Absent',  count: absentCount,  bg: 'bg-red-50',     text: 'text-red-700' },
+            { label: 'Late',    count: lateCount,    bg: 'bg-amber-50',   text: 'text-amber-700' },
+          ].map(s => (
+            <div key={s.label} className={`${s.bg} rounded-xl py-2 text-center`}>
+              <div className={`text-xl font-black ${s.text} leading-none`}>{s.count}</div>
+              <div className="text-[8px] font-bold text-neutral-500 uppercase tracking-wide mt-0.5">{s.label}</div>
+            </div>
+          ))}
         </div>
-
       </div>
 
+      {/* ── Mark All row with undo ── */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wide whitespace-nowrap shrink-0">Mark all</span>
+        {[
+          { s: 'present', label: '✓ Present', cls: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
+          { s: 'absent',  label: '✗ Absent',  cls: 'bg-red-100 text-red-700 hover:bg-red-200' },
+          { s: 'late',    label: '⏱ Late',    cls: 'bg-amber-100 text-amber-700 hover:bg-amber-200' },
+        ].map(({ s, label, cls }) => (
+          <button key={s} onClick={() => markAll(s)}
+            className={`flex-1 py-2 rounded-xl text-[10px] font-bold transition-colors active:scale-95 ${cls}`}>
+            {label}
+          </button>
+        ))}
+        {undoSnap !== null && (
+          <button onClick={undo}
+            className="px-3 py-2 rounded-xl text-[10px] font-bold bg-neutral-900 text-white whitespace-nowrap animate-pulse shrink-0">
+            Undo
+          </button>
+        )}
+      </div>
+
+      {/* ── Error ── */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-2xl flex items-center gap-2 text-sm border border-red-100 shadow-sm">
-          <AlertTriangle size={18} /> {error}
+        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
+          <AlertTriangle size={14} className="flex-shrink-0" /> {error}
         </div>
       )}
 
-      {/* Student List as ultra-rounded floating cards */}
+      {/* ── Student list ── */}
       {loading ? (
-        <div className="space-y-4">
-          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-20 rounded-[24px]" />)}
+        <div className="space-y-2.5">
+          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-14 rounded-2xl" />)}
         </div>
       ) : !students.length ? (
-        <div className="text-center py-14 bg-white/50 border border-white/60 rounded-[32px] text-sm text-neutral-500 shadow-sm mt-6">
+        <div className="text-center py-12 bg-white border border-dashed border-neutral-200 rounded-2xl">
           <Users size={28} className="mx-auto mb-2 text-neutral-300" />
-          No students enrolled in this subject yet.
+          <p className="text-sm text-neutral-400">No students enrolled yet.</p>
         </div>
       ) : (
-      <div className="space-y-4">
-        {students.map((student) => {
-          const currentStatus = getEffectiveStatus(student.student_id);
-          
-          return (
-            <div 
-              key={student.student_id} 
-              className="bg-white p-3 md:p-4 rounded-[24px] md:rounded-[28px] shadow-sm hover:shadow-md transition-shadow border border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-5"
-            >
-              <div 
-                className="flex items-center gap-3 md:gap-4 flex-1 cursor-pointer"
-                onClick={() => onNavigate && onNavigate(student.student_id)}
-              >
-                <div className="relative flex-shrink-0">
-                  <Avatar src={student.avatar_url} name={student.name} size="lg" className="rounded-[20px]" />
-                  {currentStatus === 'present' && <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#4caf50] rounded-full border-2 border-white flex items-center justify-center"><CheckCircle2 size={12} className="text-white"/></div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-[15px] md:text-base font-bold text-neutral-900 truncate">{student.name}</h3>
-                  <p className="text-[11px] md:text-xs font-medium text-neutral-400 mt-0.5 truncate">{student.username}</p>
-                </div>
-              </div>
-
-              {/* Segmented Toggles styled as soft pills */}
-              <div className="flex bg-[#f5f7fa] p-1 md:p-1.5 rounded-[16px] md:rounded-[20px] w-full md:w-auto mt-1 md:mt-0">
-                <button
-                  onClick={() => markStudent(student.student_id, 'present')}
-                  className={`flex-1 md:w-[90px] py-2 md:py-2.5 text-[11px] md:text-xs font-bold rounded-[12px] md:rounded-[16px] transition-all ${
-                    currentStatus === 'present' 
-                      ? 'bg-[#e8f5e9] text-[#2e7d32] shadow-sm' 
-                      : 'text-neutral-500 hover:bg-white/60'
-                  }`}
-                >
-                  Present
-                </button>
-                <button
-                  onClick={() => markStudent(student.student_id, 'late')}
-                  className={`flex-1 md:w-[90px] py-2 md:py-2.5 text-[11px] md:text-xs font-bold rounded-[12px] md:rounded-[16px] transition-all ${
-                    currentStatus === 'late' 
-                      ? 'bg-[#fff8e1] text-[#f57f17] shadow-sm' 
-                      : 'text-neutral-500 hover:bg-white/60'
-                  }`}
-                >
-                  Late
-                </button>
-                <button
-                  onClick={() => markStudent(student.student_id, 'absent')}
-                  className={`flex-1 md:w-[90px] py-2 md:py-2.5 text-[11px] md:text-xs font-bold rounded-[12px] md:rounded-[16px] transition-all ${
-                    currentStatus === 'absent' 
-                      ? 'bg-[#fce4ec] text-[#c2185b] shadow-sm' 
-                      : 'text-neutral-500 hover:bg-white/60'
-                  }`}
-                >
-                  Absent
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+        <div className="space-y-2">
+          {students.map(student => (
+            <StudentRow
+              key={student.student_id}
+              student={student}
+              status={getEffectiveStatus(student.student_id)}
+              onChange={status => markStudent(student.student_id, status)}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
       )}
 
-      {/* Floating Save Bar styled in UI colors */}
-      <div className={`fixed bottom-6 left-0 right-0 z-50 px-4 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${hasChanges || saved ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-24 opacity-0 scale-95'}`}>
-        <div className="max-w-md mx-auto bg-white text-neutral-800 shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-neutral-100 rounded-full p-2 flex items-center justify-between pl-6">
-          
+      {/* ── Inline save bar (NOT fixed — no overlap with BottomNav) ── */}
+      <div
+        className="overflow-hidden transition-all duration-500"
+        style={{ maxHeight: hasChanges || saved ? 80 : 0, opacity: hasChanges || saved ? 1 : 0 }}
+      >
+        <div className="mt-1 bg-neutral-900 rounded-2xl px-4 py-3 flex items-center justify-between">
           {saved ? (
-             <div className="flex-1 flex items-center justify-center gap-2 text-[#2d7a42] font-bold py-2">
-               <CheckCircle2 size={20} /> Attendance Saved Successfully
-             </div>
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm mx-auto">
+              <CheckCircle2 size={18} /> Saved successfully
+            </div>
           ) : (
             <>
-              <div className="flex gap-4 text-sm font-bold">
-                <span className="text-[#2e7d32]">{presentCount} P</span>
-                <span className="text-[#f57f17]">{lateCount} L</span>
-                <span className="text-[#c2185b]">{absentCount} A</span>
+              <div className="flex gap-3 text-sm font-bold">
+                <span className="text-emerald-400">{presentCount}P</span>
+                <span className="text-amber-400">{lateCount}L</span>
+                <span className="text-red-400">{absentCount}A</span>
+                <span className="text-neutral-500 text-xs self-center">/ {totalCount}</span>
               </div>
-              <button 
-                onClick={save} 
-                disabled={saving}
-                className="bg-[#2d7a42] text-white px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-[#1b5e20] transition-colors disabled:opacity-70 shadow-sm"
-              >
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <><Save size={16} strokeWidth={2.5} /> Save</>}
+              <button onClick={save} disabled={saving}
+                className="bg-white text-neutral-900 px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-neutral-100 transition-colors disabled:opacity-60 active:scale-95">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save
               </button>
             </>
           )}
-
         </div>
       </div>
-      
+
     </div>
   );
 }
+
