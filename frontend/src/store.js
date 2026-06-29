@@ -342,8 +342,8 @@ export const useWhatsNew = create((set, get) => ({
 export const isNewSince = (createdAt, baseline) =>
   !!createdAt && !!baseline && new Date(createdAt) > new Date(baseline);
 
-/* ── Teacher Broadcast Thread Open Store ─────────────────────────── */
-export const useTeacherThread = create((set) => ({
+/* ── Broadcast Thread Open Store ─────────────────────────── */
+export const useThreadStore = create((set) => ({
   open: false,
   setOpen: (v) => set({ open: !!v }),
 }));

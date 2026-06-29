@@ -657,7 +657,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       )}
 
       {/* Input area */}
-      <div className="bg-[#f0f2f5] px-2 py-2 flex items-end gap-2 shrink-0">
+      <div className="bg-[#f0f2f5] px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] flex items-end gap-2 shrink-0">
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
         
         {recording ? (

@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
-import { useWhatsNew, useExamLock } from '../../store';
+import { useWhatsNew, useExamLock, useThreadStore } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
 import PageTransition from '../../components/shared/PageTransition';
@@ -53,6 +53,7 @@ export default function StudentLayout() {
   // can't be used to navigate out of the test (anti-cheat). Set by
   // StudentTestTakingPage; cleared on submit/unmount.
   const examLocked = useExamLock(s => s.locked);
+  const threadOpen = useThreadStore(s => s.open);
 
   // Phone app-shell: the content area scrolls (not the body), so reset it to the
   // top on route change — what body-scroll used to do for free.
@@ -101,7 +102,7 @@ export default function StudentLayout() {
           <PageTransition><Outlet /></PageTransition>
         </Suspense>
       </div>
-      {!examLocked && <BottomNav active={active} setActive={setActive} type="student" badges={badges} />}
+      {!examLocked && !threadOpen && <BottomNav active={active} setActive={setActive} type="student" badges={badges} />}
     </div>
   );
 }

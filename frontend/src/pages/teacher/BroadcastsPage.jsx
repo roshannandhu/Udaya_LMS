@@ -3,7 +3,7 @@ import { MessageSquare, Settings, X, Check } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import TopBar from '../../components/shared/TopBar';
 import BroadcastThread from '../../components/teacher/BroadcastThread';
-import { useStore, useAppCache, useTeacherThread } from '../../store';
+import { useStore, useAppCache, useThreadStore } from '../../store';
 import { Skeleton } from '../../components/ui';
 import { pastelFor, pastelTokens } from '../../components/cards/pastel';
 import { useTheme } from '../../lib/theme';
@@ -114,7 +114,7 @@ export default function BroadcastsPage() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const setThreadOpen = useTeacherThread(s => s.setOpen);
+  const setThreadOpen = useThreadStore(s => s.setOpen);
   useEffect(() => {
     setThreadOpen(paneView === 'thread');
     return () => setThreadOpen(false);

@@ -217,8 +217,8 @@ export default function AppDownloadPage() {
                 </span>
               </a>
               <div style={{ lineHeight: 1.3 }}>
-                <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#2A2350' }}>Android • Free</div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>{meta}</div>
+                <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#2A2350' }}>Android • Version {versionName} • Free</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>{size ? `${size} · ` : ''}no ads</div>
               </div>
             </div>
           </div>
@@ -329,11 +329,11 @@ export default function AppDownloadPage() {
             <div style={{ fontSize: 38, marginBottom: 8 }}>🎉</div>
             <h2 style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4.5vw,48px)', letterSpacing: '-1px', color: '#fff', margin: '0 0 14px' }}>Ready to learn the fun way?</h2>
             <p style={{ fontWeight: 700, fontSize: 17, color: 'rgba(255,255,255,0.85)', margin: '0 auto 30px', maxWidth: 470 }}>Start learning with {name} today — free, light and made for classes 8, 9 &amp; 10.</p>
-            <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: '#fff', color: '#6A3CFF', textDecoration: 'none', padding: '17px 30px', borderRadius: 18, boxShadow: '0 16px 30px rgba(0,0,0,0.18)' }}>
+            <a href={apkUrl} download={`udaya-app-v${versionName}.apk`} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: '#fff', color: '#6A3CFF', textDecoration: 'none', padding: '17px 30px', borderRadius: 18, boxShadow: '0 16px 30px rgba(0,0,0,0.18)' }}>
               <span style={{ fontSize: 24 }}>⬇</span>
-              <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20 }}>Download the APK</span>
+              <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20 }}>Download the APK (v{versionName})</span>
             </a>
-            <div style={{ marginTop: 16, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Android • {meta}, ever</div>
+            <div style={{ marginTop: 16, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Android • {size ? `${size} · ` : ''}no ads, ever</div>
           </div>
         </div>
       </section>

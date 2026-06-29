@@ -25,8 +25,8 @@ public class MainActivity extends BridgeActivity {
         clearStaleWebViewCachesOnUpgrade();
         super.onCreate(savedInstanceState);
         
-        // Request Camera and microphone permission upfront
-        requestCameraAndAudioPermissions();
+        // Request Camera and microphone permission upfront, but delay it to avoid startup crash
+        new Handler(Looper.getMainLooper()).postDelayed(this::requestCameraAndAudioPermissions, 2000);
 
         // FLAG_SECURE is ON for EVERYONE, always (like Google Pay) — blocks OS
         // screenshots, screen recording, and the recents thumbnail. Set here at
