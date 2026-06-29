@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, MessageSquare, ListOrdered, Wifi, WifiOff, QrCode, Smartphone, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { RefreshCw, MessageSquare, ListOrdered, Wifi, WifiOff, QrCode, Smartphone, Loader2, LogIn } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Tag, Skeleton } from '../../components/ui';
 import { apiClient } from '../../lib/api';
+
+// An error whose message indicates the session/token was rejected (401). apiClient
+// throws "Session expired…" on a 401 it can't refresh; treat that distinctly so the
+// page says "log in again" instead of pretending it's still generating a QR.
+const isAuthError = (msg) => /session expired|log in again|unauthorized|401/i.test(msg || '');
 
 // Status → dot colour, mirrors MessagePerformanceDonut so the whole WhatsApp
 // module reads consistently.
@@ -45,20 +51,32 @@ function fmtTime(iso) {
 }
 
 export default function WhatsAppStatus() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [authError, setAuthError] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const aliveRef = useRef(true);
+  // When the awaiting-QR spinner first appears — used to flip to a "taking too long"
+  // hint instead of spinning forever when the service never emits a QR.
+  const [qrWaitSince, setQrWaitSince] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const fetchStatus = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
     try {
       const res = await apiClient('/whatsapp/status');
-      if (aliveRef.current) { setData(res); setError(null); }
+      if (aliveRef.current) { setData(res); setError(null); setAuthError(false); }
     } catch (err) {
-      if (aliveRef.current) setError(err?.message || 'Failed to load WhatsApp status');
+      if (aliveRef.current) {
+        const msg = err?.message || 'Failed to load WhatsApp status';
+        setError(msg);
+        // A rejected session must NOT keep showing stale "connected/QR" data —
+        // surface it so the card shows "log in again" instead of a fake spinner.
+        if (isAuthError(msg)) { setAuthError(true); setData(null); }
+      }
     } finally {
       if (aliveRef.current && showSpinner) setLoading(false);
     }
@@ -72,14 +90,15 @@ export default function WhatsAppStatus() {
   }, [fetchStatus]);
 
   // While not connected (e.g. waiting for a QR scan), poll every 4s so the dot
-  // flips to green and the QR refreshes/clears without a manual reload.
+  // flips to green and the QR refreshes/clears without a manual reload. Stop
+  // polling once the session is rejected — re-login is required, not a retry.
   const connected = !!data?.connected;
   const isBaileys = data?.provider === 'baileys';
   useEffect(() => {
-    if (connected) return;
+    if (connected || authError) return;
     const t = setInterval(() => fetchStatus(false), 4000);
     return () => clearInterval(t);
-  }, [connected, fetchStatus]);
+  }, [connected, authError, fetchStatus]);
 
   const enableBaileys = async () => {
     setEnabling(true);
@@ -106,8 +125,28 @@ export default function WhatsAppStatus() {
     }
   };
 
-  const showQr = isBaileys && !connected && data?.qr;
-  const needsEnable = data && data.provider !== 'baileys';
+  const serviceDown = !!data?.service_down;
+  const showQr = isBaileys && !connected && !!data?.qr;
+  const awaitingQr = isBaileys && !connected && !serviceDown && !data?.qr && !authError;
+  const needsEnable = data && data.provider !== 'baileys' && !authError;
+
+  // Track how long we've been waiting for a QR so the spinner can become a hint
+  // ("taking longer than expected") rather than spin forever.
+  useEffect(() => {
+    if (awaitingQr) setQrWaitSince((s) => s ?? Date.now());
+    else setQrWaitSince(null);
+  }, [awaitingQr]);
+  useEffect(() => {
+    if (!awaitingQr) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [awaitingQr]);
+  const qrSlow = awaitingQr && qrWaitSince && (now - qrWaitSince > 20000);
+
+  const goLogin = () => {
+    try { window.dispatchEvent(new CustomEvent('auth:logout')); } catch { /* ignore */ }
+    navigate('/login');
+  };
 
   return (
     <div className="pb-24">
@@ -122,13 +161,27 @@ export default function WhatsAppStatus() {
       />
 
       <div className="px-3 md:px-8 max-w-5xl mx-auto space-y-4">
-        {error && (
+        {/* Non-auth errors get a thin inline banner; auth errors get the full card below. */}
+        {error && !authError && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
             {error}
           </div>
         )}
 
-        {loading && !data ? (
+        {authError ? (
+          <div className="bg-white border border-amber-200 rounded-2xl p-6 shadow-card flex flex-col items-center text-center">
+            <span className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-3">
+              <LogIn size={22} />
+            </span>
+            <p className="font-semibold text-neutral-800">Your session has expired</p>
+            <p className="text-sm text-neutral-500 mt-1 max-w-sm">
+              Please log in again to load the WhatsApp connection and QR code.
+            </p>
+            <Btn variant="primary" size="sm" icon={LogIn} onClick={goLogin} className="mt-4">
+              Log in again
+            </Btn>
+          </div>
+        ) : loading && !data ? (
           <div className="space-y-4">
             <Skeleton className="h-24 rounded-2xl" />
             <div className="grid grid-cols-2 gap-4">
@@ -177,13 +230,14 @@ export default function WhatsAppStatus() {
               )}
             </div>
 
-            {/* QR pairing card */}
-            {isBaileys && !connected && (
+            {/* QR pairing card — shown only when actually waiting for / showing a QR.
+                Service-down gets its own message (no fake "Generating QR" spinner). */}
+            {(showQr || awaitingQr) && (
               <div className="bg-white border border-[#EFEDEA] rounded-2xl p-5 shadow-card flex flex-col items-center text-center">
                 <div className="flex items-center gap-2 text-sm font-medium mb-3">
                   <QrCode size={16} /> Scan to connect
                 </div>
-                {data?.qr ? (
+                {showQr ? (
                   <>
                     <img src={data.qr} alt="WhatsApp QR code" width={240} height={240}
                          className="rounded-xl border border-[#EFEDEA]" />
@@ -195,10 +249,28 @@ export default function WhatsAppStatus() {
                 ) : (
                   <div className="w-[240px] h-[240px] bg-neutral-50 rounded-xl border border-[#EFEDEA] flex flex-col items-center justify-center p-4">
                     <Loader2 className="animate-spin text-neutral-400 mb-2" size={24} />
-                    <p className="text-xs text-neutral-500">Generating QR code...</p>
-                    <p className="text-[10px] text-neutral-400 mt-1 max-w-[200px]">Waiting for Baileys socket to initialize pairing flow.</p>
+                    <p className="text-xs text-neutral-500">Generating QR code…</p>
+                    {qrSlow ? (
+                      <p className="text-[10px] text-neutral-400 mt-1 max-w-[200px]">
+                        Taking longer than expected — make sure the WhatsApp service is running, then tap Refresh.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-neutral-400 mt-1 max-w-[200px]">Waiting for the WhatsApp service to start pairing.</p>
+                    )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Service offline — explicit, instead of a misleading QR spinner. */}
+            {serviceDown && !connected && (
+              <div className="bg-white border border-amber-200 rounded-2xl p-4 shadow-card flex items-center gap-3">
+                <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                  <WifiOff size={18} />
+                </span>
+                <p className="text-sm text-neutral-600">
+                  The WhatsApp service is offline. Outgoing messages are buffered and will send once it’s back.
+                </p>
               </div>
             )}
 
