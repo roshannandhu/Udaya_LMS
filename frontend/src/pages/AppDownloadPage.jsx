@@ -83,18 +83,20 @@ export default function AppDownloadPage() {
     }
   }, []);
 
-  // Branding + live app version (with a direct-R2 fallback so the button always works).
+  // Branding + live app version. R2 version.json is the source of truth (the CI
+  // pipeline writes it on every release), so read it FIRST/directly; fall back to the
+  // backend only if R2 is unreachable. This guarantees the page shows the ACTUAL
+  // published version, never a stale/guessed one.
   useEffect(() => {
     apiClient('/branding').then(applyBranding).catch(() => {});
-    apiClient('/app/version')
-      .then(d => {
-        if (d && typeof d === 'object' && d.apkUrl) { setInfo(d); return; }
-        return fetch(`${R2_BASE}/app/version.json?t=${Date.now()}`, { cache: 'no-store' })
-          .then(r => (r.ok ? r.json() : null)).then(j => j && setInfo(j));
+    fetch(`${R2_BASE}/app/version.json?t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        if (j && j.versionName) { setInfo(j); return; }
+        return apiClient('/app/version').then(d => { if (d && d.versionName) setInfo(d); });
       })
       .catch(() => {
-        fetch(`${R2_BASE}/app/version.json?t=${Date.now()}`, { cache: 'no-store' })
-          .then(r => (r.ok ? r.json() : null)).then(j => j && setInfo(j)).catch(() => {});
+        apiClient('/app/version').then(d => { if (d && d.versionName) setInfo(d); }).catch(() => {});
       });
   }, [applyBranding]);
 
@@ -149,8 +151,13 @@ export default function AppDownloadPage() {
   }, []);
 
   const apkUrl = info?.apkUrl || info?.apkLatestUrl || FALLBACK_APK;
-  const versionName = info?.versionName || '1.1.7';
-  const size = formatSize(info?.sizeBytes) || '6.5 MB';
+  // Only ever show the REAL published version — never a hardcoded/guessed one.
+  // `meta` is the "vX · size" line; before live data loads it reads "Latest version".
+  const versionName = info?.versionName || null;
+  const size = formatSize(info?.sizeBytes);
+  const meta = versionName
+    ? `v${versionName}${size ? ` · ${size}` : ''} · no ads`
+    : 'Latest version · no ads';
   const name = lmsName || 'Udaya';
   const hasLogo = !!lmsLogo;
 
@@ -212,7 +219,7 @@ export default function AppDownloadPage() {
               </a>
               <div style={{ lineHeight: 1.3 }}>
                 <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#2A2350' }}>Android • Free</div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>v{versionName} · {size} · no ads</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>{meta}</div>
               </div>
             </div>
           </div>
@@ -299,7 +306,7 @@ export default function AppDownloadPage() {
           </div>
           <div className="u-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 'clamp(18px,2.5vw,28px)' }}>
             {[
-              { emoji: '⬇️', n: 1, c: '#FF6B6B', sh: 'rgba(255,107,107,0.18)', t: 'Tap Download APK', b: `Grab the file straight from this page. It's tiny — about ${size}.` },
+              { emoji: '⬇️', n: 1, c: '#FF6B6B', sh: 'rgba(255,107,107,0.18)', t: 'Tap Download APK', b: `Grab the file straight from this page${size ? ` — it's tiny, about ${size}` : ''}.` },
               { emoji: '📲', n: 2, c: '#28C7A0', sh: 'rgba(40,199,160,0.18)', t: 'Install in seconds', b: 'Open it, allow install from this source, and you\'re done.' },
               { emoji: '🚀', n: 3, c: '#9B6BFF', sh: 'rgba(155,107,255,0.18)', t: 'Sign in & dive in', b: 'Log in with your Student ID and your subjects are ready.' },
             ].map((s, i) => (
@@ -327,7 +334,7 @@ export default function AppDownloadPage() {
               <span style={{ fontSize: 24 }}>⬇</span>
               <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20 }}>Download the APK</span>
             </a>
-            <div style={{ marginTop: 16, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Android • v{versionName} · {size} · no ads, ever</div>
+            <div style={{ marginTop: 16, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Android • {meta}, ever</div>
           </div>
         </div>
       </section>
