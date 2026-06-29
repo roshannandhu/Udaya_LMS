@@ -12,12 +12,18 @@ public class SecureScreenPlugin extends Plugin {
     /** Call from JS when a student logs in — blocks all screenshots & recordings */
     @PluginMethod
     public void enable(PluginCall call) {
-        getActivity().runOnUiThread(() ->
-            getActivity().getWindow().setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE
-            )
-        );
+        if (getActivity() == null) {
+            call.resolve();
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() != null && getActivity().getWindow() != null) {
+                getActivity().getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE,
+                    WindowManager.LayoutParams.FLAG_SECURE
+                );
+            }
+        });
         call.resolve();
     }
 

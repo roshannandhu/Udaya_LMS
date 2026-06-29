@@ -150,14 +150,13 @@ export default function AppDownloadPage() {
     };
   }, []);
 
-  const apkUrl = info?.apkUrl || info?.apkLatestUrl || FALLBACK_APK;
-  // Only ever show the REAL published version — never a hardcoded/guessed one.
-  // `meta` is the "vX · size" line; before live data loads it reads "Latest version".
-  const versionName = info?.versionName || null;
-  const size = formatSize(info?.sizeBytes);
-  const meta = versionName
-    ? `v${versionName}${size ? ` · ${size}` : ''} · no ads`
-    : 'Latest version · no ads';
+  const fallbackVersion = '1.2.8';
+  const fallbackApkUrl = `${R2_BASE}/app/udaya-${fallbackVersion}.apk`;
+  const apkUrl = info?.apkUrl || info?.apkLatestUrl || fallbackApkUrl;
+
+  const versionName = info?.versionName || fallbackVersion;
+  const size = formatSize(info?.sizeBytes) || '6.7 MB';
+  const meta = `v${versionName}${size ? ` · ${size}` : ''} · no ads`;
   const name = lmsName || 'Udaya';
   const hasLogo = !!lmsLogo;
 

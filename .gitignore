@@ -88,3 +88,4 @@ r2-upload/
 _design_handoff/
 upload_to_r2.py
 r2-upload/
+_r2cors.py
