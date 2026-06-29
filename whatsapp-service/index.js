@@ -86,6 +86,19 @@ const queue = new MessageQueue(rawSend, {
   logFile: LOG_FILE,
 });
 
+function clearSessionDir() {
+  try {
+    if (fs.existsSync(SESSION_DIR)) {
+      const files = fs.readdirSync(SESSION_DIR);
+      for (const file of files) {
+        fs.rmSync(`${SESSION_DIR}/${file}`, { recursive: true, force: true });
+      }
+    }
+  } catch (e) {
+    console.warn('[wa] failed to clear session dir:', e.message);
+  }
+}
+
 // ── Baileys socket lifecycle ───────────────────────────────────────────────────
 async function startSock() {
   if (starting) return;
@@ -129,8 +142,7 @@ async function startSock() {
         if (loggedOut || connectAttempts >= 5) {
           console.warn(`[wa] connection closed (code=${code}, attempt=${connectAttempts}) — ` +
             'clearing stale session to force a fresh QR');
-          try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); }
-          catch (e) { console.warn('[wa] failed to clear session dir:', e.message); }
+          clearSessionDir();
           connectAttempts = 0;
           setTimeout(() => startSock().catch((e) => console.error(e)), 1000);
         } else {
@@ -193,11 +205,7 @@ app.post('/disconnect', requireToken, async (_req, res) => {
       sock = null;
     }
     // Delete session files
-    try {
-      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-    } catch (e) {
-      console.warn('[wa] failed to clear session dir:', e.message);
-    }
+    clearSessionDir();
     res.json({ success: true });
     // Restart socket to get a fresh QR code
     setTimeout(() => startSock().catch((e) => console.error(e)), 2000);
