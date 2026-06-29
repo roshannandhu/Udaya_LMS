@@ -21,14 +21,14 @@ export default function StatCard({ value, label, icon: Icon, color, emphasis = f
     : `bg-white border ${emphasis ? 'border-neutral-300 shadow-lift' : 'border-[#EFEDEA] shadow-soft'}`;
 
   return (
-    <motion.div variants={fadeUp} className={`rounded-card p-4 ${surface} ${className}`}>
+    <motion.div variants={fadeUp} className={`rounded-2xl sm:rounded-card p-3 sm:p-4 ${surface} ${className}`}>
       {Icon && (
-        <Icon size={16} className="mb-2" style={pastel ? { color: pastel.fgHex } : undefined} />
+        <Icon size={16} className="mb-1.5 sm:mb-2" style={pastel ? { color: pastel.fgHex } : undefined} />
       )}
-      <p className="text-2xl md:text-3xl font-semibold tracking-tight leading-none" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+      <p className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight leading-none" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
         {value}
       </p>
-      <p className="text-xs text-neutral-600 mt-1.5">{label}</p>
+      <p className="text-[11px] sm:text-xs text-neutral-600 mt-1.5 leading-tight">{label}</p>
     </motion.div>
   );
 }

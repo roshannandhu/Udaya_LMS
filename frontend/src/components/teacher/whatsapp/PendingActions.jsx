@@ -57,24 +57,26 @@ export default function PendingActions({ onReview, onSent }) {
           const sent = done[exam.test_id];
           const isBusy = busy === exam.test_id;
           return (
-            <div key={exam.test_id} className="px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-whatsapp-green-light flex items-center justify-center flex-shrink-0">
-                <GraduationCap size={15} className="text-whatsapp-green-fg" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-neutral-800 truncate">{exam.title}</p>
-                <p className="text-[11px] text-neutral-500 truncate">
-                  {[exam.standard_name, exam.subject_name].filter(Boolean).join(' · ')}
-                  {(exam.standard_name || exam.subject_name) ? ' · ' : ''}
-                  {exam.pending_parents} parent{exam.pending_parents === 1 ? '' : 's'} to notify
-                </p>
+            <div key={exam.test_id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-whatsapp-green-light flex items-center justify-center flex-shrink-0">
+                  <GraduationCap size={15} className="text-whatsapp-green-fg" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-neutral-800 truncate">{exam.title}</p>
+                  <p className="text-[11px] text-neutral-500 truncate">
+                    {[exam.standard_name, exam.subject_name].filter(Boolean).join(' · ')}
+                    {(exam.standard_name || exam.subject_name) ? ' · ' : ''}
+                    {exam.pending_parents} parent{exam.pending_parents === 1 ? '' : 's'} to notify
+                  </p>
+                </div>
               </div>
               {sent ? (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-whatsapp-green-fg flex-shrink-0">
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-whatsapp-green-fg flex-shrink-0 self-end sm:self-auto ml-11 sm:ml-0">
                   <CheckCircle2 size={14} /> {sent}
                 </span>
               ) : (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0 justify-end ml-11 sm:ml-0">
                   <button onClick={() => sendAll(exam)} disabled={isBusy}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-xs font-semibold bg-whatsapp-green text-white hover:opacity-90 disabled:opacity-50">
                     {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Send all

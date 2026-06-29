@@ -233,14 +233,14 @@ function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, on
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           <div>
             <h2 className="text-sm font-bold text-neutral-500 uppercase tracking-widest mb-3">More</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-1 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-2.5">
               {Object.entries(SCREENS).map(([id, s]) => (
                 <button key={id} onClick={() => onScreen(id)}
-                  className="relative flex flex-col lg:flex-row items-center lg:justify-start gap-1.5 lg:gap-3 py-3 px-1 lg:px-3.5 lg:py-2.5 rounded-2xl bg-white border border-[#EBEAE7] hover:bg-[#F4F2EF] transition-colors">
+                  className="relative flex flex-row items-center justify-start gap-3 py-3 px-3.5 rounded-2xl bg-white border border-[#EBEAE7] hover:bg-[#F4F2EF] transition-colors w-full">
                   <s.icon size={17} className="text-neutral-500 flex-shrink-0" />
-                  <span className="text-[10px] lg:text-sm font-medium text-neutral-600 lg:text-neutral-700 leading-tight text-center lg:text-left">{s.title}</span>
+                  <span className="text-xs lg:text-sm font-medium text-neutral-600 lg:text-neutral-700 leading-tight text-left">{s.title}</span>
                   {id === 'inbox' && inboxUnread > 0 && (
-                    <span className="absolute top-1.5 right-1.5 lg:static lg:ml-auto min-w-4 h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+                    <span className="ml-auto min-w-4 h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
                       {inboxUnread > 9 ? '9+' : inboxUnread}
                     </span>
                   )}

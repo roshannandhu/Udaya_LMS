@@ -384,7 +384,7 @@ export default function TodayPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {quickActions.map((a, i) => (
                 <Card key={i} as="button" color={a.color} interactive padded={false}
-                  onClick={() => navigate(a.to)} className="p-4 flex flex-col items-start gap-2">
+                  onClick={() => navigate(a.to)} className="p-3 md:p-4 rounded-2xl sm:rounded-card flex flex-col items-start gap-1.5 md:gap-2">
                       <a.icon size={18} style={{ color: pastelTokens(a.color, dark).fgHex }} />
                       <span className="text-xs font-semibold">{a.label}</span>
                     </Card>
