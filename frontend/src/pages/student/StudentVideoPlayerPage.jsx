@@ -529,18 +529,6 @@ export default function StudentVideoPlayerPage() {
             </div>
           )}
 
-          {/* Paused overlay (YouTube only): a soft scrim + a single play icon that
-              COVERS YouTube's own centre button, so only one button is ever visible.
-              Purely visual (pointer-events:none) — Vidstack's gesture layer handles
-              the tap-to-play and the bottom control bar still works. */}
-          {fileSrc && isYouTube && isPaused && !ytError && (
-            <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ background: 'rgba(0,0,0,0.28)' }}>
-              <div className="w-[68px] h-[68px] rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center">
-                <Play size={30} className="text-white ml-1" fill="currentColor" />
-              </div>
-            </div>
-          )}
-
         </div>
 
         {/* ── Info panel ── */}
