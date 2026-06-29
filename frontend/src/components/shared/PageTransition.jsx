@@ -52,7 +52,7 @@ export default function PageTransition({ children }) {
       `}</style>
       <div
         key={displayLocation.pathname}
-        className={transitionStage === 'enter' ? 'page-enter' : 'page-exit'}
+        className={`flex-1 flex flex-col min-h-0 h-full ${transitionStage === 'enter' ? 'page-enter' : 'page-exit'}`}
       >
         {children}
       </div>
