@@ -12,8 +12,8 @@ REMOTE=$(git rev-parse origin/main)
 [ "$LOCAL" = "$REMOTE" ] && exit 0
 
 echo "$(date -u +%FT%TZ): change ${LOCAL:0:7} -> ${REMOTE:0:7}"
-if git diff --name-only "$LOCAL" "$REMOTE" | grep -qE '^(backend/|Dockerfile|docker-compose\.yml)'; then
-  echo "$(date -u +%FT%TZ): backend change — deploying"
+if git diff --name-only "$LOCAL" "$REMOTE" | grep -qE '^(backend/|whatsapp-service/|Dockerfile|docker-compose\.yml|deploy\.sh|autodeploy\.sh)'; then
+  echo "$(date -u +%FT%TZ): server-side change — deploying"
   bash "$(dirname "$0")/deploy.sh"
 else
   git merge --ff-only origin/main --quiet || true

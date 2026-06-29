@@ -33,6 +33,9 @@ services:
   # abort the deploy, and so this networked Baileys process is NOT handed the
   # Supabase keys from backend/.env. Set SHARED_TOKEN / DAILY_MESSAGE_LIMIT in the
   # repo-root .env on the box; both default safely if unset.
+  # NOTE: changes under whatsapp-service/ now trigger a redeploy (see autodeploy.sh)
+  # so the Baileys image is rebuilt — previously its QR/connection fixes never shipped
+  # to prod because autodeploy only watched backend/ + Dockerfile + this file.
   whatsapp:
     build:
       context: ./whatsapp-service
