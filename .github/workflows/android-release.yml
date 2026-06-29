@@ -66,6 +66,17 @@ jobs:
           npm run build
           ./node_modules/.bin/cap sync android
 
+      - name: Write google-services.json
+        run: |
+          # FCM config — gitignored, so CI must materialise it from a secret. WITHOUT
+          # it the google-services plugin is skipped, FirebaseApp never initialises, and
+          # the app CRASHES right after login when push registers. Strip to base64
+          # alphabet for a robust decode (same as the keystore).
+          printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | tr -dc 'A-Za-z0-9+/=' | base64 -d > frontend/android/app/google-services.json
+          echo "google-services.json bytes: $(stat -c%s frontend/android/app/google-services.json)"
+          # Fail loudly if it didn't decode to real JSON — better than a crashing APK.
+          node -e "JSON.parse(require('fs').readFileSync('frontend/android/app/google-services.json','utf8')); console.log('google-services.json: valid')"
+
       - name: Decode keystore
         run: |
           # Keep ONLY base64 alphabet chars before decoding — robust against any

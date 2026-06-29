@@ -51,6 +51,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | Secret | Value |
 |--------|-------|
 | `ANDROID_KEYSTORE_BASE64` | `base64 -w0 udaya-release.keystore` (the whole file, one line) |
+| `GOOGLE_SERVICES_JSON_BASE64` | `base64 -w0 frontend/android/app/google-services.json` — **required**, else Firebase isn't initialised and the app **crashes after login** (push registration). The file is gitignored, so CI must materialise it from this secret. |
 | `ANDROID_KEYSTORE_PASSWORD` | the store password you set |
 | `ANDROID_KEY_ALIAS` | `udaya` |
 | `ANDROID_KEY_PASSWORD` | the key password you set |

@@ -284,7 +284,10 @@ export default function App() {
   useEffect(() => {
     if (!role) return;
     (async () => {
-      try { (await import('./lib/push')).initPush(); } catch { /* not native */ }
+      // Push is non-essential — its failure must NEVER block the app. Guard both the
+      // import AND the async initPush() promise (Firebase/FCM can reject natively).
+      try { await (await import('./lib/push')).initPush()?.catch?.(() => {}); }
+      catch { /* not native / push unavailable — ignore */ }
     })();
   }, [role]);
 
