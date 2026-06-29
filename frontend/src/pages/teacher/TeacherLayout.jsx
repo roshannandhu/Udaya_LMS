@@ -70,11 +70,13 @@ export default function TeacherLayout() {
           stops sideways pan; overflow-y-auto makes this the phone scroll area. */}
       <div
         ref={contentRef}
-        className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto pb-48 lg:pb-0 lg:overflow-visible'}`}
+        className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto lg:overflow-visible'}`}
       >
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse w-8 h-8 bg-neutral-200 rounded-lg"></div></div>}>
           <PageTransition><Outlet /></PageTransition>
         </Suspense>
+        {/* Universal spacer for the mobile BottomNav (approx 90px tall) */}
+        {!isBroadcastRoute && !threadOpen && <div className="h-[100px] shrink-0 lg:hidden pointer-events-none" />}
       </div>
       {!threadOpen && <BottomNav active={active} setActive={setActive} type="teacher" />}
     </div>

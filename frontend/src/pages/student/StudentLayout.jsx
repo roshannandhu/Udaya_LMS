@@ -96,11 +96,13 @@ export default function StudentLayout() {
       {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
       <div
         ref={contentRef}
-        className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto pb-48 lg:pb-0 lg:overflow-visible'}`}
+        className={`flex-1 flex flex-col min-h-0 overflow-x-clip ${isBroadcastRoute ? 'overflow-y-hidden pb-0 lg:overflow-hidden' : 'overflow-y-auto lg:overflow-visible'}`}
       >
         <Suspense fallback={<div className="p-8 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full" /></div>}>
           <PageTransition><Outlet /></PageTransition>
         </Suspense>
+        {/* Universal spacer for the mobile BottomNav (approx 90px tall) */}
+        {!examLocked && !isBroadcastRoute && !threadOpen && <div className="h-[100px] shrink-0 lg:hidden pointer-events-none" />}
       </div>
       {!examLocked && !threadOpen && <BottomNav active={active} setActive={setActive} type="student" badges={badges} />}
     </div>
