@@ -150,7 +150,7 @@ export default function AppDownloadPage() {
     };
   }, []);
 
-  const fallbackVersion = '1.3.1';
+  const fallbackVersion = '1.0.1';
   const fallbackApkUrl = `${R2_BASE}/app/udaya-${fallbackVersion}.apk`;
   const apkUrl = info?.apkUrl || info?.apkLatestUrl || fallbackApkUrl;
 
@@ -183,7 +183,10 @@ export default function AppDownloadPage() {
       {/* NAV */}
       <nav style={{ position: 'sticky', top: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px clamp(20px,5vw,64px)', backdropFilter: 'blur(10px)', background: 'rgba(255,249,240,0.72)', borderBottom: '1px solid rgba(42,35,80,0.06)' }}>
         <Brand big />
-        <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#fff', textDecoration: 'none', background: '#2A2350', padding: '11px 20px', borderRadius: 999, boxShadow: '0 8px 18px rgba(42,35,80,0.22)' }}>Get the app</a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 14, color: '#6B6593' }}>v{versionName}</span>
+          <a href={apkUrl} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#fff', textDecoration: 'none', background: '#2A2350', padding: '11px 20px', borderRadius: 999, boxShadow: '0 8px 18px rgba(42,35,80,0.22)' }}>Get the app</a>
+        </div>
       </nav>
 
       {/* HERO */}
