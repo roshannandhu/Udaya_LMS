@@ -150,8 +150,8 @@ export default function AppDownloadPage() {
     };
   }, []);
 
-  const fallbackVersion = '1.0.1';
-  const fallbackApkUrl = `${R2_BASE}/app/udaya-${fallbackVersion}.apk`;
+  const fallbackVersion = '';
+  const fallbackApkUrl = `${R2_BASE}/app/udaya-latest.apk`;
   const apkUrl = info?.apkUrl || info?.apkLatestUrl || fallbackApkUrl;
 
   const versionName = info?.versionName || fallbackVersion;
