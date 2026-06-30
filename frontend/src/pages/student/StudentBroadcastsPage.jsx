@@ -283,7 +283,7 @@ export default function StudentBroadcastsPage() {
                           <div className="relative min-w-0">
                             <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                               {b.text}
-                              <span aria-hidden="true" className="inline-block align-bottom" style={{ width: b.edited ? 78 : 46 }} />
+                              <span aria-hidden="true" className="inline-block align-bottom" style={{ width: b.edited ? '5em' : '3.5em' }} />
                             </p>
                             <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none">
                               {b.edited && <span className="italic">edited</span>}

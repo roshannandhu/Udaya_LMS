@@ -262,12 +262,12 @@ export default function StudentProfilePage() {
                 { icon: CheckCircle2, color: 'text-blue-500',   bg: 'bg-blue-50',     value: attendancePct !== null ? `${Math.round(attendancePct)}%` : '—', label: 'Attendance' },
                 { icon: BookOpen,     color: 'text-purple-500', bg: 'bg-purple-50',   value: subjects.length,                                                label: 'Subjects'   },
               ].map((s, i) => (
-                <div key={i} className="flex flex-col p-4 rounded-2xl bg-neutral-50 hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-md transition-all group">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${s.bg} group-hover:scale-110 transition-transform`}>
+                <div key={i} className="flex flex-col p-4 rounded-2xl bg-neutral-50 hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-md transition-all group min-w-0 break-words">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 flex-shrink-0 ${s.bg} group-hover:scale-110 transition-transform`}>
                     <s.icon size={20} className={s.color} />
                   </div>
-                  <p className="text-3xl font-extrabold text-neutral-900 leading-none mb-2" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{s.value}</p>
-                  <p className="text-xs font-bold uppercase tracking-wider text-neutral-400">{s.label}</p>
+                  <p className="text-3xl font-extrabold text-neutral-900 leading-none mb-2 truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{s.value}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-neutral-400 leading-snug">{s.label}</p>
                 </div>
               ))}
             </div>

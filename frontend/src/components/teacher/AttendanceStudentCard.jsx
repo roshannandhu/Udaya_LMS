@@ -81,9 +81,9 @@ export default function AttendanceStudentCard({ studentId }) {
           { label: 'Absent (30d)',  value: data.absent_days ?? 0, color: 'text-red-600', bg: 'bg-red-50/60' },
           { label: 'Late (30d)',    value: data.late_days ?? 0, color: 'text-amber-700', bg: 'bg-amber-50/60' },
         ].map((s, i) => (
-          <div key={i} className={`${s.bg} border border-white/60 rounded-xl p-3 backdrop-blur-sm`}>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-neutral-500 mt-0.5">{s.label}</p>
+          <div key={i} className={`${s.bg} border border-white/60 rounded-xl p-3 backdrop-blur-sm min-w-0 break-words`}>
+            <p className={`text-2xl font-bold truncate ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-neutral-500 mt-0.5 leading-snug">{s.label}</p>
           </div>
         ))}
       </div>

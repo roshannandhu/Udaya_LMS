@@ -49,10 +49,10 @@ function ChangePasswordModal({ open, onClose }) {
 
 function StatCard({ icon: Icon, label, value, color }) {
   return (
-    <div className="p-4 glass-panel border-white/60 shadow-sm rounded-xl">
-      <Icon size={16} className={`${color} mb-2`} />
-      <p className={`text-2xl font-bold tracking-tight ${color}`}>{value}</p>
-      <p className="text-xs text-neutral-500 mt-0.5">{label}</p>
+    <div className="p-4 glass-panel border-white/60 shadow-sm rounded-xl min-w-0 break-words">
+      <Icon size={16} className={`${color} mb-2 flex-shrink-0`} />
+      <p className={`text-2xl font-bold tracking-tight truncate ${color}`}>{value}</p>
+      <p className="text-xs text-neutral-500 mt-0.5 leading-snug">{label}</p>
     </div>
   );
 }
