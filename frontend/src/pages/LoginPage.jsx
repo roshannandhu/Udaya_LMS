@@ -29,7 +29,7 @@ export default function LoginPage() {
     return () => clearInterval(id);
   }, [resendWait > 0]);
 
-  useEffect(() => { document.title = lmsName || 'Udaya'; }, [lmsName]);
+  useEffect(() => { document.title = lmsName || 'Udaya Learn'; }, [lmsName]);
 
   // Pull branding from the public endpoint so the logo/name appear on any device
   // (localStorage may be empty on a fresh browser).
@@ -138,7 +138,7 @@ export default function LoginPage() {
           <span 
             className="font-extrabold text-[40px] tracking-tight text-neutral-900 text-center drop-shadow-sm leading-none"
           >
-            {lmsName || 'Udaya'}
+            {lmsName || 'Udaya Learn'}
           </span>
         </div>
 
@@ -273,7 +273,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-[13px] font-semibold text-neutral-400 mt-8 tracking-wide">
-          {lmsName || 'Udaya'} · Built for modern learning
+          {lmsName || 'Udaya Learn'} · Built for modern learning
         </p>
         {/* Hide the download prompt when already running inside the Android app. */}
         {!window.__UDAYA_NATIVE__ && (

@@ -105,6 +105,23 @@ jobs:
             -PversionName=${{ steps.ver.outputs.name }} \
             -PversionCode=${{ steps.ver.outputs.code }}
 
+      - name: Build signed release AAB (for Google Play)
+        working-directory: frontend/android
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/udaya-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          # Google Play distributes Android App Bundles (.aab), not APKs. Same keystore
+          # + version props as the APK above, so the AAB you upload to Play and the
+          # direct-download APK share a signature (provided you upload this keystore as
+          # the Play "app signing key" — see plan Part B3). The direct APK flow is
+          # unchanged; this step is purely additive.
+          ./gradlew bundleRelease -x lintVitalRelease --stacktrace \
+            -PversionName=${{ steps.ver.outputs.name }} \
+            -PversionCode=${{ steps.ver.outputs.code }}
+
       - name: Stage artifacts
         id: stage
         run: |
@@ -114,6 +131,12 @@ jobs:
           APK_NAME="udaya-${{ steps.ver.outputs.name }}.apk"
           cp "$APK_SRC" "out/$APK_NAME"
           cp "$APK_SRC" "out/udaya-latest.apk"
+          # Stage the Play Store bundle too (hand-uploaded to Play Console; NOT pushed to R2).
+          AAB_SRC="frontend/android/app/build/outputs/bundle/release/app-release.aab"
+          AAB_NAME="udaya-${{ steps.ver.outputs.name }}.aab"
+          test -f "$AAB_SRC" || { echo "AAB not found at $AAB_SRC"; exit 1; }
+          cp "$AAB_SRC" "out/$AAB_NAME"
+          echo "aab_name=$AAB_NAME" >> "$GITHUB_OUTPUT"
           SIZE=$(stat -c%s "$APK_SRC")
           cat > out/version.json <<JSON
           {
@@ -146,12 +169,23 @@ jobs:
           aws s3 cp "out/version.json" "s3://$BUCKET/app/version.json" \
             --endpoint-url "$ENDPOINT" --content-type application/json --cache-control "no-cache"
 
+      - name: Upload Play Store bundle (.aab) artifact
+        # Download this from the workflow run and hand-upload it to Google Play Console
+        # (Internal testing → Closed → Production) for the first release.
+        uses: actions/upload-artifact@v4
+        with:
+          name: udaya-playstore-aab
+          path: out/${{ steps.stage.outputs.aab_name }}
+          if-no-files-found: error
+
       - name: Create GitHub Release (archive)
         uses: softprops/action-gh-release@v2
         with:
           files: |
             out/${{ steps.stage.outputs.apk_name }}
+            out/${{ steps.stage.outputs.aab_name }}
             out/version.json
           body: |
             Udaya app ${{ steps.ver.outputs.name }} (build ${{ steps.ver.outputs.code }})
-            Download: ${{ secrets.R2_PUBLIC_BASE_URL }}/app/${{ steps.stage.outputs.apk_name }}
+            Direct APK: ${{ secrets.R2_PUBLIC_BASE_URL }}/app/${{ steps.stage.outputs.apk_name }}
+            Play Store bundle (.aab) attached below — upload to Google Play Console.

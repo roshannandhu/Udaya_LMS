@@ -120,7 +120,7 @@ export default function SettingsPage() {
   } = useSettingsStore();
 
   const logoInputRef = useRef(null);
-  const [nameInput, setNameInput] = useState(lmsName || 'Udaya');
+  const [nameInput, setNameInput] = useState(lmsName || 'Udaya Learn');
   const [nameSaved, setNameSaved] = useState(false);
   const [pwdInput, setPwdInput] = useState(defaultStudentPassword || '');
   const [pwdSaved, setPwdSaved] = useState(false);
@@ -226,7 +226,7 @@ export default function SettingsPage() {
   }
 
   const handleSaveName = () => {
-    setLmsName(nameInput.trim() || 'Udaya');
+    setLmsName(nameInput.trim() || 'Udaya Learn');
     setNameSaved(true);
     setTimeout(() => setNameSaved(false), 1500);
   };

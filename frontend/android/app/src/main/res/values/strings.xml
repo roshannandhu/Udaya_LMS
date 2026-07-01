@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Udaya</string>
-    <string name="title_activity_main">Udaya</string>
+    <string name="app_name">Udaya Learn</string>
+    <string name="title_activity_main">Udaya Learn</string>
     <string name="package_name">com.udayalearn.lms</string>
     <string name="custom_url_scheme">com.udayalearn.lms</string>
 </resources>

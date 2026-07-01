@@ -1,6 +1,6 @@
 {
   "appId": "com.udayalearn.lms",
-  "appName": "Udaya",
+  "appName": "Udaya Learn",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

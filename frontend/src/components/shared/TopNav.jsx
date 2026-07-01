@@ -51,7 +51,7 @@ const TopNav = memo(function TopNav({ type = 'teacher', badges }) {
           <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-9 h-9 rounded-[10px] object-cover flex-shrink-0 bg-white" />
           <span className="font-bold text-[22px] tracking-tight text-white truncate"
             style={{ fontFamily: '"Fraunces", Georgia, serif', letterSpacing: '-0.02em' }}>
-            {lmsName || 'Udaya'}
+            {lmsName || 'Udaya Learn'}
           </span>
         </Link>
 

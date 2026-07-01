@@ -66,6 +66,7 @@ const TeacherLiveClassesPage  = lazyWithRetry(() => import('./pages/teacher/Teac
 const WhatsAppPage            = lazyWithRetry(() => import('./pages/teacher/WhatsAppCenterPage'));
 const WhatsAppStatusPage      = lazyWithRetry(() => import('./pages/teacher/WhatsAppStatus'));
 const AppDownloadPage         = lazyWithRetry(() => import('./pages/AppDownloadPage'));
+const PrivacyPolicyPage       = lazyWithRetry(() => import('./pages/PrivacyPolicyPage'));
 const StudentLiveClassesPage  = lazyWithRetry(() => import('./pages/student/StudentLiveClassesPage'));
 
 const StudentHomePage            = lazyWithRetry(() => import('./pages/student/StudentHomePage'));
@@ -302,6 +303,8 @@ export default function App() {
         {/* Public APK download page — reachable without auth (share this link). */}
         <Route path="/app" element={<AppDownloadPage />} />
         <Route path="/download" element={<AppDownloadPage />} />
+        {/* Public privacy policy — required by Google Play; paste /privacy URL into the listing. */}
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
         <Route path="/teacher" element={
           <ProtectedTeacherRoute>

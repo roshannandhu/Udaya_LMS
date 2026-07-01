@@ -12,6 +12,42 @@ const FALLBACK_APK = `${R2_BASE}/app/udaya-latest.apk`;
 const LOCATION_URL = 'https://share.google/M9oZS4oVP6281fzOi';
 const CONTACT_EMAIL = 'udayatuitionhome@gmail.com';
 
+// Paste the real Play Store listing URL here once the app is live, e.g.
+//   'https://play.google.com/store/apps/details?id=com.udayalearn.lms'
+// While this is empty the "Get it on Google Play" badge stays HIDDEN everywhere,
+// so the page looks exactly as it does today until you go live.
+const PLAY_STORE_URL = '';
+
+// Official-style "Get it on Google Play" badge, drawn inline (no external asset) so
+// it's crisp at any size and ships with the bundle. Renders nothing until
+// PLAY_STORE_URL is set, then links straight to the store listing.
+function PlayBadge({ height = 54 }) {
+  if (!PLAY_STORE_URL) return null;
+  return (
+    <a
+      href={PLAY_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Get it on Google Play"
+      style={{ display: 'inline-flex', lineHeight: 0 }}
+    >
+      <svg height={height} viewBox="0 0 180 54" role="img" aria-hidden="true" style={{ display: 'block' }}>
+        <rect x="0.5" y="0.5" width="179" height="53" rx="9" fill="#000" stroke="rgba(255,255,255,0.28)" />
+        {/* Play triangle */}
+        <g transform="translate(16 13)">
+          <polygon points="0,1 18,14 0,27" fill="#00A0FF" />
+          <polygon points="0,1 18,14 12,14" fill="#00E676" />
+          <polygon points="0,27 18,14 12,14" fill="#FF3D00" />
+          <polygon points="18,14 12,14 11,20" fill="#FFCE00" />
+        </g>
+        {/* Text */}
+        <text x="48" y="22" fill="#fff" fontFamily="Arial, Helvetica, sans-serif" fontSize="9" letterSpacing="0.5">GET IT ON</text>
+        <text x="48" y="40" fill="#fff" fontFamily="'Fredoka', Arial, sans-serif" fontWeight="600" fontSize="19">Google Play</text>
+      </svg>
+    </a>
+  );
+}
+
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return null;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -70,7 +106,7 @@ export default function AppDownloadPage() {
   const rootRef = useRef(null);
   const phoneRef = useRef(null);
 
-  useEffect(() => { document.title = `Get the ${lmsName || 'Udaya'} app`; }, [lmsName]);
+  useEffect(() => { document.title = `Get the ${lmsName || 'Udaya Learn'} app`; }, [lmsName]);
 
   // Load the playful fonts once.
   useEffect(() => {
@@ -157,7 +193,7 @@ export default function AppDownloadPage() {
   const versionName = info?.versionName || fallbackVersion;
   const size = formatSize(info?.sizeBytes) || '6.7 MB';
   const meta = `v${versionName}${size ? ` · ${size}` : ''} · no ads`;
-  const name = lmsName || 'Udaya';
+  const name = lmsName || 'Udaya Learn';
   const hasLogo = !!lmsLogo;
 
   // Reusable bits
@@ -219,6 +255,7 @@ export default function AppDownloadPage() {
                   <span style={{ display: 'block', fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 19 }}>Get the APK</span>
                 </span>
               </a>
+              <PlayBadge />
               <div style={{ lineHeight: 1.3 }}>
                 <div style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 15, color: '#2A2350' }}>Android • Version {versionName} • Free</div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>{size ? `${size} · ` : ''}no ads</div>
@@ -336,6 +373,11 @@ export default function AppDownloadPage() {
               <span style={{ fontSize: 24 }}>⬇</span>
               <span style={{ fontFamily: "'Fredoka',sans-serif", fontWeight: 600, fontSize: 20 }}>Download the APK (v{versionName})</span>
             </a>
+            {PLAY_STORE_URL && (
+              <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center' }}>
+                <PlayBadge />
+              </div>
+            )}
             <div style={{ marginTop: 16, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Android • {size ? `${size} · ` : ''}no ads, ever</div>
           </div>
         </div>
@@ -349,6 +391,7 @@ export default function AppDownloadPage() {
             <a href="#features" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Features</a>
             <a href={apkUrl} style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Download</a>
             <a href={LOCATION_URL} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Get directions</a>
+            <a href="/privacy" style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Privacy</a>
             <a href={`mailto:${CONTACT_EMAIL}`} style={{ fontWeight: 700, fontSize: 14, color: '#6B6593', textDecoration: 'none' }}>Contact</a>
           </div>
           <div style={{ fontWeight: 700, fontSize: 13, color: '#9590B5' }}>Made with <span style={{ color: '#FF6B6B' }}>♥</span> for students of {name}.</div>
