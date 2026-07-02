@@ -468,6 +468,14 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
 # Small module-level cache so the branding logo (same URL for every student in a
 # bulk send) is fetched once per process, not once per PDF.
 _image_cache: Dict[str, Optional[bytes]] = {}
+DEFAULT_LOGO_PATH = Path(__file__).resolve().parents[1] / "frontend" / "public" / "logo.jpeg"
+
+
+def _default_logo_bytes() -> Optional[bytes]:
+    try:
+        return DEFAULT_LOGO_PATH.read_bytes() if DEFAULT_LOGO_PATH.exists() else None
+    except Exception:
+        return None
 
 
 def _fetch_image_bytes(url: Optional[str], cache: bool = False) -> Optional[bytes]:
@@ -501,10 +509,10 @@ def _period_label(period: str, is_exam: bool) -> str:
     today = date.today()
     fmt = "%d %b %Y"
     if period == "weekly":
-        return f"Weekly Progress Report · {(today - timedelta(days=7)).strftime(fmt)} – {today.strftime(fmt)}"
+        return f"Weekly Progress Report | {(today - timedelta(days=7)).strftime(fmt)} - {today.strftime(fmt)}"
     if period == "monthly":
-        return f"Monthly Progress Report · {(today - timedelta(days=30)).strftime(fmt)} – {today.strftime(fmt)}"
-    return "Progress Report · Overall"
+        return f"Monthly Progress Report | {(today - timedelta(days=30)).strftime(fmt)} - {today.strftime(fmt)}"
+    return "Progress Report | Overall"
 
 
 def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
@@ -536,7 +544,7 @@ def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
             exam_rank = exam.get("rank")
             exam_total = exam.get("total_attempts")
     else:
-        recent_tests = timeline[-5:] if timeline else []
+        recent_tests = timeline if timeline else []
         if period in ("weekly", "monthly"):
             # Average of THIS period's tests (timeline is already date-filtered upstream).
             pcts = [t.get("score_pct") for t in timeline if t.get("score_pct") is not None]
@@ -557,16 +565,27 @@ def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
         "name": student.get("name") or "Student",
         "standard": student.get("standard_name") or "",
         "student_code": student.get("student_code") or "",
+        "username": student.get("username") or "",
+        "email": student.get("email") or "",
         "avatar_url": student.get("avatar_url") or "",
         "attendance_pct": attendance_pct,
         "avg_score": avg_score,
-        "points": points,
+        "points": report.get("period_points") if report.get("period_points") is not None else points,
         "rank": rank,
         "total_students": total_students,
         "exam_rank": exam_rank,
         "exam_total": exam_total,
         "radar": radar,
         "recent_tests": recent_tests,
+        "assignments": report.get("assignment_scores") or [],
+        "assignment_stats": report.get("assignment_stats") or {},
+        "live_classes_stats": report.get("live_classes_stats") or {},
+        "class_averages": report.get("class_averages") or {},
+        "topic_mastery_pct": report.get("topic_mastery_pct"),
+        "attendance_heatmap": report.get("attendance_heatmap") or [],
+        "video_heatmap": report.get("video_heatmap") or [],
+        "test_heatmap": report.get("test_heatmap") or [],
+        "assignment_heatmap": report.get("assignment_heatmap") or [],
         "period": period,
         "period_label": _period_label(period, is_exam),
         "is_exam": is_exam,
@@ -579,7 +598,7 @@ def build_report_text(report: dict, lms_name: str = "", test_id: Optional[str] =
     f = _report_fields(report, test_id)
     is_exam = f["is_exam"]
     lines: List[str] = []
-    header = lms_name.strip() or ("Exam Result" if is_exam else "Progress Report")
+    header = lms_name.strip() or ("Exam Result" if is_exam else "Udaya")
     lines.append(f"*{header}*")
     lines.append(f"Student: {f['name']}" + (f" ({f['standard']})" if f["standard"] else ""))
     if is_exam and f["exam_title"]:
@@ -597,12 +616,12 @@ def build_report_text(report: dict, lms_name: str = "", test_id: Optional[str] =
         lines.append("")
         lines.append("*Subjects*")
         for s in f["radar"]:
-            lines.append(f"• {s.get('subject', '')}: {s.get('test_avg', 0)}% avg")
+            lines.append(f"- {s.get('subject', '')}: {s.get('test_avg', 0)}% avg")
     if not is_exam and f["recent_tests"]:
         lines.append("")
         lines.append("*Recent tests*")
         for t in f["recent_tests"]:
-            lines.append(f"• {t.get('test_title', 'Test')}: {t.get('score_pct', 0)}%")
+            lines.append(f"- {t.get('test_title', 'Test')}: {t.get('score_pct', 0)}%")
     return "\n".join(lines)
 
 
@@ -625,7 +644,7 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
 
     f = _report_fields(report, test_id)
     is_exam = f["is_exam"]
-    brand = lms_name.strip() or "Progress Report"
+    brand = lms_name.strip() or "Udaya"
     today_str = date.today().strftime("%d %b %Y")
 
     buf = io.BytesIO()
@@ -651,13 +670,13 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
         except Exception:
             return None
 
-    logo_img = _image_reader(_fetch_image_bytes(logo_url, cache=True))
+    logo_img = _image_reader(_fetch_image_bytes(logo_url, cache=True) or _default_logo_bytes())
     photo_img = _image_reader(_fetch_image_bytes(f["avatar_url"]))
 
     def footer():
         c.setFont("Helvetica", 8)
         c.setFillColor(GRAY)
-        c.drawString(M, 10 * mm, f"Generated by {brand} · {today_str}")
+        c.drawString(M, 10 * mm, f"Generated by {brand} | {today_str}")
         c.drawRightString(W - M, 10 * mm, f"Page {page_num}")
         c.setStrokeColor(BORDER)
         c.line(M, 13 * mm, W - M, 13 * mm)
@@ -684,7 +703,7 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
         hx += chip + 5 * mm
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 17)
-    c.drawString(hx, H - band_h / 2 + 1.5 * mm, brand)
+    c.drawString(hx, H - band_h / 2 + 1.5 * mm, brand[:42])
     c.setFillColor(colors.HexColor("#b9bcc7"))
     c.setFont("Helvetica", 10)
     c.drawString(hx, H - band_h / 2 - 4.5 * mm, f["period_label"])
@@ -701,6 +720,17 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
         c.setFillColor(colors.white)
         c.roundRect(px - 1 * mm, py - 1 * mm, photo_w + 2 * mm, photo_h + 2 * mm, 2 * mm, stroke=1, fill=1)
         c.drawImage(photo_img, px, py, photo_w, photo_h, preserveAspectRatio=True, anchor="c", mask="auto")
+    else:
+        px, py = W - M - photo_w, y - photo_h + 6 * mm
+        c.setStrokeColor(BORDER)
+        c.setFillColor(colors.white)
+        c.roundRect(px - 1 * mm, py - 1 * mm, photo_w + 2 * mm, photo_h + 2 * mm, 2 * mm, stroke=1, fill=1)
+        c.setFillColor(LIGHT)
+        c.roundRect(px, py, photo_w, photo_h, 1.5 * mm, stroke=0, fill=1)
+        c.setFillColor(INK)
+        c.setFont("Helvetica-Bold", 14)
+        initials = "".join(part[:1] for part in f["name"].split()[:2]).upper() or "S"
+        c.drawCentredString(px + photo_w / 2, py + photo_h / 2 - 2 * mm, initials)
     c.setFillColor(INK)
     c.setFont("Helvetica-Bold", 16)
     c.drawString(M, y, f["name"])
@@ -712,16 +742,17 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
         sub_bits.append(f"Student ID: {f['student_code']}")
     if f["standard"]:
         sub_bits.append(f["standard"])
+    if f["username"]:
+        sub_bits.append(f"@{f['username']}")
     if sub_bits:
-        c.drawString(M, y, "   •   ".join(sub_bits))
+        c.drawString(M, y, " | ".join(sub_bits)[:88])
         y -= 6 * mm
     if is_exam and f["exam_title"]:
         c.setFillColor(INK)
         c.setFont("Helvetica-Bold", 11)
         c.drawString(M, y, f"Exam: {f['exam_title']}")
         y -= 6 * mm
-    if photo_img:
-        y = min(y, H - band_h - 12 * mm - photo_h - 2 * mm)
+    y = min(y, H - band_h - 12 * mm - photo_h - 2 * mm)
     y -= 4 * mm
 
     # ── KPI cards ──────────────────────────────────────────────────────────
@@ -753,13 +784,19 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
             x += card_w + card_gap
         y -= card_h + 10 * mm
 
+    def cell_text(value, max_chars=34):
+        if value is None or value == "":
+            return "-"
+        text = str(value)
+        return text if len(text) <= max_chars else text[:max_chars - 1] + "..."
+
     # ── Table helper ───────────────────────────────────────────────────────
     def table(title, headers, rows, col_widths):
         nonlocal y
         if not rows:
             return
         row_h = 7.5 * mm
-        if y < 40 * mm:
+        if y < 46 * mm:
             new_page()
         c.setFillColor(INK)
         c.setFont("Helvetica-Bold", 12)
@@ -772,7 +809,7 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
         c.setFont("Helvetica-Bold", 9)
         x = M
         for htext, wcol in zip(headers, col_widths):
-            c.drawString(x + 2.5 * mm, y - row_h / 2, htext)
+            c.drawString(x + 2.5 * mm, y - row_h / 2, cell_text(htext, 18))
             x += wcol
         y -= row_h
         for i, row in enumerate(rows):
@@ -785,7 +822,7 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
             c.setFont("Helvetica", 9)
             x = M
             for val, wcol in zip(row, col_widths):
-                c.drawString(x + 2.5 * mm, y - row_h / 2, str(val))
+                c.drawString(x + 2.5 * mm, y - row_h / 2, cell_text(val, max(8, int(wcol / mm * 1.65))))
                 x += wcol
             c.setStrokeColor(BORDER)
             c.line(M, y - row_h + 2 * mm, W - M, y - row_h + 2 * mm)
@@ -794,17 +831,50 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
 
     cw = W - 2 * M
 
+    details_rows = [
+        ["Student ID", f["student_code"] or "-"],
+        ["Standard", f["standard"] or "-"],
+        ["Username", f"@{f['username']}" if f["username"] else "-"],
+        ["Email", f["email"] or "-"],
+        ["Report", f["period_label"]],
+    ]
+    if is_exam and f["exam_title"]:
+        details_rows.append(["Exam", f["exam_title"]])
+    table("Student Details", ["Field", "Value"], details_rows, [cw * 0.28, cw * 0.72])
+
+    if not is_exam:
+        attendance_total = sum((d.get("total") or 0) for d in f["attendance_heatmap"])
+        attendance_present = sum((d.get("present") or 0) + (d.get("late") or 0) for d in f["attendance_heatmap"])
+        test_count = sum((d.get("count") or 0) for d in f["test_heatmap"])
+        video_minutes = round(sum((d.get("minutes") or 0) for d in f["video_heatmap"]))
+        video_sessions = sum((d.get("count") or 0) for d in f["video_heatmap"])
+        assign_count = sum((d.get("count") or 0) for d in f["assignment_heatmap"])
+        live = f["live_classes_stats"] or {}
+        table(
+            "Activity Summary",
+            ["Activity", "Result"],
+            [
+                ["Attendance Records", f"{attendance_present}/{attendance_total} present or late" if attendance_total else "-"],
+                ["Tests Taken", test_count or "-"],
+                ["Video Study", f"{video_minutes} min across {video_sessions} sessions" if video_sessions else "-"],
+                ["Assignments Submitted", assign_count or "-"],
+                ["Live Classes", f"{live.get('attended') or 0}/{live.get('total')} attended" if live.get("total") else "-"],
+            ],
+            [cw * 0.38, cw * 0.62],
+        )
+
     if f["radar"]:
         table(
             "Subject Performance",
-            ["Subject", "Avg Score", "Attendance", "Videos"],
+            ["Subject", "Avg Score", "Attendance", "Videos", "Assignments"],
             [[
                 s.get("subject", ""),
-                (f"{round(s.get('test_avg') or 0)}%" if (s.get("test_count") or 0) > 0 else "—"),
-                (f"{round(s.get('attendance_pct') or 0)}%" if (s.get("att_total") or 0) > 0 else "—"),
-                (f"{s.get('video_done', 0)}/{s.get('video_total', 0)}" if (s.get("video_total") or 0) > 0 else "—"),
+                (f"{round(s.get('test_avg') or 0)}%" if (s.get("test_count") or 0) > 0 else "-"),
+                (f"{round(s.get('attendance_pct') or 0)}%" if (s.get("att_total") or 0) > 0 else "-"),
+                (f"{s.get('video_done', 0)}/{s.get('video_total', 0)}" if (s.get("video_total") or 0) > 0 else "-"),
+                (f"{s.get('assignment_submitted', 0)}/{s.get('assignment_total', 0)}" if (s.get("assignment_total") or 0) > 0 else "-"),
             ] for s in f["radar"]],
-            [cw * 0.40, cw * 0.20, cw * 0.20, cw * 0.20],
+            [cw * 0.32, cw * 0.17, cw * 0.17, cw * 0.17, cw * 0.17],
         )
 
     if f["recent_tests"]:
@@ -820,9 +890,38 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
                 _fmt_date(t.get("date")),
                 (t.get("test_title") or "Test")[:48],
                 f"{t.get('score_pct', 0)}%",
-                (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "—"),
+                (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "-"),
             ] for t in f["recent_tests"] if t],
             [cw * 0.16, cw * 0.48, cw * 0.16, cw * 0.20],
+        )
+
+    if not is_exam and f["assignments"]:
+        table(
+            "Assignments",
+            ["Assignment", "Subject", "Status", "Marks", "Points"],
+            [[
+                a.get("assignment_title") or "Assignment",
+                a.get("subject_name") or "-",
+                "Graded" if a.get("marks_obtained") is not None else ("Submitted" if a.get("submitted_at") else "Pending"),
+                (f"{round(a.get('marks_obtained') or 0)}%" if a.get("marks_obtained") is not None else "-"),
+                a.get("points_earned") if a.get("points_earned") is not None else "-",
+            ] for a in f["assignments"]],
+            [cw * 0.34, cw * 0.22, cw * 0.16, cw * 0.14, cw * 0.14],
+        )
+
+    if not is_exam and f["class_averages"]:
+        ca = f["class_averages"]
+        table(
+            "Performance vs Class Average",
+            ["Metric", "Student", "Class Avg"],
+            [
+                ["Average Score", f"{f['avg_score']}%" if f["avg_score"] is not None else "-", f"{round(ca.get('avg_score') or 0)}%"],
+                ["Attendance", f"{f['attendance_pct']}%" if f["attendance_pct"] is not None else "-", f"{round(ca.get('attendance_pct') or 0)}%"],
+                ["Points", f["points"] if f["points"] is not None else "-", round(ca.get("points") or 0)],
+                ["Video Completion", "-", f"{round(ca.get('video_pct') or 0)}%"],
+                ["Mastery", f"{round(f['topic_mastery_pct'] or 0)}%" if f["topic_mastery_pct"] is not None else "-", f"{round(ca.get('mastery') or 0)}%"],
+            ],
+            [cw * 0.40, cw * 0.30, cw * 0.30],
         )
 
     footer()
@@ -842,7 +941,7 @@ def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] 
 
     f = _report_fields(report, test_id)
     is_exam = f["is_exam"]
-    brand = lms_name.strip() or "Progress Report"
+    brand = lms_name.strip() or "Udaya"
     today_str = date.today().strftime("%d %b %Y")
     W, H = 900, 1200
     img = Image.new("RGB", (W, H), "#FAFAF9")
@@ -869,7 +968,7 @@ def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] 
         except Exception:
             return None
 
-    logo = open_image(_fetch_image_bytes(logo_url, cache=True))
+    logo = open_image(_fetch_image_bytes(logo_url, cache=True) or _default_logo_bytes())
     photo = open_image(_fetch_image_bytes(f["avatar_url"]))
 
     pad = 48
@@ -971,9 +1070,9 @@ def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] 
             ["Subject", "Avg Score", "Attendance", "Videos"],
             [[
                 (s.get("subject") or "")[:22],
-                (f"{round(s.get('test_avg') or 0)}%" if (s.get("test_count") or 0) > 0 else "—"),
-                (f"{round(s.get('attendance_pct') or 0)}%" if (s.get("att_total") or 0) > 0 else "—"),
-                (f"{s.get('video_done', 0)}/{s.get('video_total', 0)}" if (s.get("video_total") or 0) > 0 else "—"),
+                (f"{round(s.get('test_avg') or 0)}%" if (s.get("test_count") or 0) > 0 else "-"),
+                (f"{round(s.get('attendance_pct') or 0)}%" if (s.get("att_total") or 0) > 0 else "-"),
+                (f"{s.get('video_done', 0)}/{s.get('video_total', 0)}" if (s.get("video_total") or 0) > 0 else "-"),
             ] for s in f["radar"]],
             [0.40, 0.20, 0.20, 0.20],
         )
@@ -985,14 +1084,14 @@ def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] 
             [[
                 (t.get("test_title") or "Test")[:34],
                 f"{t.get('score_pct', 0)}%",
-                (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "—"),
+                (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "-"),
             ] for t in f["recent_tests"] if t],
             [0.56, 0.20, 0.24],
         )
 
     # ── Footer ─────────────────────────────────────────────────────────────
     d.line([(pad, H - 70), (W - pad, H - 70)], fill="#EBEAE7", width=2)
-    d.text((pad, H - 52), f"Generated by {brand} · {today_str}", fill="#999999", font=font(16))
+    d.text((pad, H - 52), f"Generated by {brand} | {today_str}", fill="#999999", font=font(16))
 
     out = io.BytesIO()
     img.save(out, format="PNG")

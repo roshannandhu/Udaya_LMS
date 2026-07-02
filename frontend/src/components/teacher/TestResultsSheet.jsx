@@ -332,12 +332,13 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                       const student = a.students || {};
                       const totalM = test.total_marks || test.totalMarks || 100;
                       const scorePct = a.score != null ? ((a.score / totalM) * 100).toFixed(1) : 0;
+                      const displayRank = a.rank || i + 1;
                       return (
                         <div key={a.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-md bg-white border ${a.flagged ? 'border-red-200' : 'border-white/60'}`}>
-                          <span className={`text-xs font-semibold w-5 flex justify-center tabular-nums ${i < 3 ? 'text-amber-600' : 'text-neutral-500'}`}>
-                            {i === 0 ? <Medal size={15} className="text-amber-400" /> : i === 1 ? <Medal size={15} className="text-neutral-400" /> : i === 2 ? <Medal size={15} className="text-amber-700" /> : i + 1}
+                          <span className={`text-xs font-semibold w-5 flex justify-center tabular-nums ${displayRank <= 3 ? 'text-amber-600' : 'text-neutral-500'}`}>
+                            {displayRank === 1 ? <Medal size={15} className="text-amber-400" /> : displayRank === 2 ? <Medal size={15} className="text-neutral-400" /> : displayRank === 3 ? <Medal size={15} className="text-amber-700" /> : displayRank}
                           </span>
-                          <Avatar name={student.name} size="sm" />
+                          <Avatar name={student.name} src={student.avatar_url} size="sm" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium truncate">{student.name || 'Unknown'}</p>
@@ -420,7 +421,7 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                       return (
                         <div key={r.id} className="p-3 rounded-md bg-white border border-amber-100">
                           <div className="flex items-center gap-3 mb-2">
-                            <Avatar name={student.name} size="sm" />
+                            <Avatar name={student.name} src={student.avatar_url} size="sm" />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">{student.name || 'Student'}</p>
                               {oldPct != null && <p className="text-[11px] text-neutral-500">Previous score: {oldPct}%</p>}

@@ -9,6 +9,8 @@ dist/
 build/
 *.log
 broadcasts.json
+tmp/
+backend/generated/
 
 # Cloudflare Origin cert + key on the EC2 box — NEVER commit (private key).
 cf-origin/

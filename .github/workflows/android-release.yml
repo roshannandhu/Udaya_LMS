@@ -51,7 +51,11 @@ jobs:
         id: ver
         run: |
           NAME="${GITHUB_REF_NAME#v}"          # v1.1.0 -> 1.1.0
-          CODE="$((200 + GITHUB_RUN_NUMBER))"   # monotonic, always > the manual builds (≤106)
+          if ! [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            NAME="1.4.3"
+          fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "$NAME"
+          CODE="$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "Building versionName=$NAME versionCode=$CODE"

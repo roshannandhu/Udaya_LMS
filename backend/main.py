@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import asyncio
 import csv
 from io import StringIO
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, FileResponse
 import uuid
 import re
 import os
@@ -3683,15 +3683,58 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
     # ── Student rank in standard ──────────────────────────────────────────
     rank = None
     total_students = 0
+    period_points = None
     if std_id:
         try:
-            ranked_res = service_supabase.table("students").select("id, points").eq(
-                "standard_id", std_id
-            ).order("points", desc=True).execute()
-            ranked_list = ranked_res.data or []
+            if period in ("weekly", "monthly") and period_start:
+                roster = service_supabase.table("students").select("id, points").eq(
+                    "standard_id", std_id
+                ).execute().data or []
+                ids = [row["id"] for row in roster]
+                window_points = {sid: 0 for sid in ids}
+
+                if ids:
+                    try:
+                        attempts_points = service_supabase.table("test_attempts").select(
+                            "student_id, points_earned"
+                        ).in_("student_id", ids).gte("submitted_at", period_start).execute()
+                        for attempt_row in (attempts_points.data or []):
+                            sid = attempt_row.get("student_id")
+                            window_points[sid] = window_points.get(sid, 0) + int(attempt_row.get("points_earned") or 0)
+                    except Exception as exc:
+                        print(f"Report rank window tests failed (ignored): {exc}")
+
+                    try:
+                        sub_points = service_supabase.table("assignment_submissions").select(
+                            "student_id, points_earned"
+                        ).in_("student_id", ids).gte("submitted_at", period_start).execute()
+                        for sub_row in (sub_points.data or []):
+                            sid = sub_row.get("student_id")
+                            window_points[sid] = window_points.get(sid, 0) + int(sub_row.get("points_earned") or 0)
+                    except Exception as exc:
+                        print(f"Report rank window assignments failed (ignored): {exc}")
+
+                    try:
+                        video_rows = service_supabase.table("video_progress").select(
+                            "student_id"
+                        ).in_("student_id", ids).eq("completed", True).gte("last_watched_at", period_start).execute()
+                        for video_row in (video_rows.data or []):
+                            sid = video_row.get("student_id")
+                            window_points[sid] = window_points.get(sid, 0) + 10
+                    except Exception as exc:
+                        print(f"Report rank window videos failed (ignored): {exc}")
+
+                ranked_list = sorted(roster, key=lambda row: window_points.get(row["id"], 0), reverse=True)
+                period_points = window_points.get(student_id, 0)
+            else:
+                ranked_res = service_supabase.table("students").select("id, points").eq(
+                    "standard_id", std_id
+                ).order("points", desc=True).execute()
+                ranked_list = ranked_res.data or []
+                period_points = student.get("points")
             total_students = len(ranked_list)
-            for i, s in enumerate(ranked_list):
-                if s["id"] == student_id:
+            for i, ranked_student in enumerate(ranked_list):
+                if ranked_student["id"] == student_id:
                     rank = i + 1
                     break
         except Exception:
@@ -3948,6 +3991,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "total_tests_in_standard": total_tests_in_standard,
         "rank": rank,
         "total_students": total_students,
+        "period_points": period_points,
         "topic_mastery_pct": topic_mastery_pct,
         "subjects": subjects,
         "live_classes_stats": live_classes_stats,
@@ -5966,7 +6010,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-student-auth-email-fix"
+BUILD_MARKER = "2026-07-03-report-pdf-and-auth-fix"
 
 @app.get("/api/health")
 def health_check():
@@ -6854,9 +6898,15 @@ def get_test_results(test_id: str, user = Depends(verify_token)):
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    # Get all attempts with student info
-    attempts = service_supabase.table("test_attempts").select("*, students(name, username)").eq("test_id", test_id).execute()
-    attempts_list = attempts.data or []
+    # Get all attempts with student info, including avatar for result lists/PDFs.
+    attempts = service_supabase.table("test_attempts").select(
+        "*, students(name, username, avatar_url)"
+    ).eq("test_id", test_id).execute()
+    attempts_list = sorted(attempts.data or [], key=lambda x: x.get("score") or 0, reverse=True)
+    total_attempts = len(attempts_list)
+    for i, attempt in enumerate(attempts_list):
+        attempt["rank"] = i + 1
+        attempt["total_attempts"] = total_attempts
 
     # Calculate stats
     scores = [a["score"] for a in attempts_list if a.get("score") is not None]
@@ -6865,9 +6915,9 @@ def get_test_results(test_id: str, user = Depends(verify_token)):
 
     return {
         "test": test.data,
-        "attempts": sorted(attempts_list, key=lambda x: x.get("score") or 0, reverse=True),
+        "attempts": attempts_list,
         "stats": {
-            "total_attempts": len(attempts.data),
+            "total_attempts": total_attempts,
             "avg_score": round(avg_score, 2),
             "highest_score": max(scores) if scores else 0,
             "lowest_score": min(scores) if scores else 0,
@@ -11302,6 +11352,7 @@ class WhatsAppJobInput(BaseModel):
     body_text: Optional[str] = None
     category: str = "utility"
     report_format: str = "none"
+    report_period: str = "overall"
     criteria: Optional[list] = None
     quiet_hours: Optional[dict] = None
     active: bool = True
@@ -11727,10 +11778,71 @@ async def _wa_ensure_bucket():
             "whatsapp", options={"public": True}))
 
 
+_WA_LOCAL_MEDIA_DIR = Path(__file__).resolve().parent / "generated" / "whatsapp"
+_WA_LOCAL_MEDIA_TTL_SECONDS = 7 * 24 * 60 * 60
+
+
+def _wa_public_base_url() -> str:
+    for key in (
+        "WHATSAPP_MEDIA_PUBLIC_BASE_URL",
+        "PUBLIC_BASE_URL",
+        "APP_PUBLIC_BASE_URL",
+        "BACKEND_PUBLIC_URL",
+        "SITE_URL",
+    ):
+        val = (os.getenv(key) or "").strip().rstrip("/")
+        if val:
+            return val
+    return "https://www.udaya-learn.com"
+
+
+def _wa_cleanup_local_media():
+    try:
+        cutoff = time_module.time() - _WA_LOCAL_MEDIA_TTL_SECONDS
+        if not _WA_LOCAL_MEDIA_DIR.exists():
+            return
+        for path in _WA_LOCAL_MEDIA_DIR.iterdir():
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"[wa] local media cleanup failed: {e}")
+
+
+@app.get("/api/teacher/whatsapp/media/{filename}")
+def wa_public_media(filename: str):
+    if not re.match(r"^[0-9a-fA-F-]+\.(pdf|png|jpg|jpeg)$", filename or ""):
+        raise HTTPException(status_code=404, detail="File not found")
+    path = (_WA_LOCAL_MEDIA_DIR / filename).resolve()
+    if _WA_LOCAL_MEDIA_DIR.resolve() not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    ext = path.suffix.lower()
+    media_type = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+    }.get(ext, "application/octet-stream")
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
+
+
 async def _wa_upload_bytes(data: bytes, ext: str, content_type: str) -> str:
-    await _wa_ensure_bucket()
-    fname = f"whatsapp/{uuid.uuid4()}{ext}"
-    return await asyncio.to_thread(lambda: filestore.upload_public(service_supabase, "whatsapp", fname, data, content_type))
+    ext = ext if ext.startswith(".") else f".{ext}"
+    fname = f"{uuid.uuid4()}{ext}"
+    key = f"whatsapp/{fname}"
+    try:
+        await _wa_ensure_bucket()
+        return await asyncio.to_thread(
+            lambda: filestore.upload_public(service_supabase, "whatsapp", key, data, content_type)
+        )
+    except Exception as e:
+        # If object storage is temporarily/misconfigured, still expose a public URL
+        # from the API host so WhatsApp media sends keep working on EC2.
+        print(f"[wa] public storage upload failed; using local media fallback: {e}")
+        _WA_LOCAL_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        _wa_cleanup_local_media()
+        await asyncio.to_thread(lambda: (_WA_LOCAL_MEDIA_DIR / fname).write_bytes(data))
+        return f"{_wa_public_base_url()}/api/teacher/whatsapp/media/{fname}"
+
 
 
 _WA_MESSAGES_TEST_ID_OK = False
@@ -12534,6 +12646,7 @@ def _wa_build_report_rows(teacher_id, std_ids, included_ids, test_id, period, cr
     band. Returns (recipients_with_report). Each item carries the report dict.
     Exam mode (test_id): recipients are forced to the exam's own standard, so an
     exam report can never reach another standard — regardless of what the client sent."""
+    period = _wa_normalize_report_period(period)
     if test_id:
         exam_std = _wa_exam_standard_id(test_id)
         std_ids = [exam_std] if exam_std else std_ids
@@ -12556,7 +12669,7 @@ def _wa_build_report_rows(teacher_id, std_ids, included_ids, test_id, period, cr
 def wa_preview_criteria(data: WhatsAppReportSendInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
     rows = _wa_build_report_rows(user["teacher_id"], data.standard_ids, data.included_student_ids,
-                                 data.test_id, data.period, data.criteria)
+                                 data.test_id, _wa_normalize_report_period(data.period), data.criteria)
     preview = []
     skipped = 0
     skipped_no_exam = 0
@@ -12592,7 +12705,7 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     if not data.test_id and data.included_student_ids is None and not data.standard_ids:
         raise HTTPException(status_code=400, detail="Select recipients first.")
     rows = _wa_build_report_rows(teacher_id, data.standard_ids, data.included_student_ids,
-                                 data.test_id, data.period, data.criteria)
+                                 data.test_id, _wa_normalize_report_period(data.period), data.criteria)
     # Pre-filter to actually-sendable rows so batch progress totals are honest.
     sendable = [
         r for r in rows
@@ -12611,6 +12724,7 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
             template_name = band.get("template_name") or data.template_name
             media_url = media_type = None
             body_text = msg
+            artifact_error = None
 
             report = r["_report"]
             try:
@@ -12626,7 +12740,19 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
                     txt = wa.build_report_text(report, lms, data.test_id)
                     body_text = (txt + ("\n\n" + msg if msg else "")).strip()
             except Exception as e:
+                artifact_error = str(e)
                 print(f"[wa] report artifact build failed for {r['id']}: {e}")
+
+            if artifact_error and attach and data.report_format in ("pdf", "image"):
+                res = {
+                    "status": "failed",
+                    "provider_message_id": None,
+                    "error": f"Report {data.report_format.upper()} attachment failed: {artifact_error}",
+                    "cost": 0,
+                }
+                results.append(res)
+                _wa_batch_track(batch_id, res)
+                continue
 
             mode = "template" if template_name else "freeform"
             res = await _wa_send_and_log(
@@ -13125,6 +13251,23 @@ def _wa_initial_next_run(job_input: WhatsAppJobInput):
     return now
 
 
+def _wa_normalize_report_period(period: Optional[str]) -> str:
+    return period if period in ("weekly", "monthly", "overall") else "overall"
+
+
+def _wa_job_report_period(job: dict) -> str:
+    cfg = job.get("trigger_config") or {}
+    explicit = _wa_normalize_report_period(job.get("report_period") or cfg.get("period"))
+    if explicit != "overall":
+        return explicit
+    every = str(cfg.get("every") or "").lower()
+    if "month" in every:
+        return "monthly"
+    if "week" in every:
+        return "weekly"
+    return "overall"
+
+
 def _wa_quiet_now(quiet: dict) -> bool:
     """True if the current UTC time is inside the configured quiet-hours window
     (sends should be deferred). Window is {start:'HH:MM', end:'HH:MM'} as allowed
@@ -13172,8 +13315,9 @@ async def _wa_execute_job(job: dict, force: bool = False):
     results = []
     job_test_id = (job.get("trigger_config") or {}).get("test_id")
     if job.get("mode") == "report" or report_format != "none":
+        report_period = "overall" if job_test_id else _wa_job_report_period(job)
         rows = _wa_build_report_rows(teacher_id, std_ids, None,
-                                     job_test_id, "overall", criteria)
+                                     job_test_id, report_period, criteria)
         for idx, r in enumerate(rows):
             if not r["phone"] or r["id"] in recent_ids:
                 continue
@@ -13182,6 +13326,7 @@ async def _wa_execute_job(job: dict, force: bool = False):
             band = r["band"] or {}
             body = band.get("message") or job.get("body_text") or ""
             media_url = media_type = None
+            artifact_error = None
             try:
                 if report_format == "pdf":
                     pdf = await asyncio.to_thread(wa.build_report_pdf, r["_report"], lms, job_test_id, get_teacher_settings().get("lms_logo"))
@@ -13192,7 +13337,16 @@ async def _wa_execute_job(job: dict, force: bool = False):
                 elif report_format == "text":
                     body = (wa.build_report_text(r["_report"], lms, job_test_id) + ("\n\n" + body if body else "")).strip()
             except Exception as e:
+                artifact_error = str(e)
                 print(f"[wa job] artifact failed: {e}")
+            if artifact_error and report_format in ("pdf", "image"):
+                results.append({
+                    "status": "failed",
+                    "provider_message_id": None,
+                    "error": f"Report {report_format.upper()} attachment failed: {artifact_error}",
+                    "cost": 0,
+                })
+                continue
             tn = band.get("template_name") or job.get("template_name")
             mode = "template" if (job.get("mode") == "template" and tn) else "freeform"
             results.append(await _wa_send_and_log(
@@ -13260,19 +13414,28 @@ def wa_list_jobs(user = Depends(verify_token)):
             "teacher_id", user["teacher_id"]).order("created_at", desc=True).execute().data or []
     except Exception:
         rows = []
+    for row in rows:
+        if row.get("mode") == "report" or row.get("report_format") != "none":
+            row["report_period"] = _wa_job_report_period(row)
     return {"jobs": rows}
 
 
 @app.post("/api/teacher/whatsapp/jobs")
 def wa_create_job(data: WhatsAppJobInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
+    trigger_config = dict(data.trigger_config or {})
+    if data.mode == "report" or data.report_format != "none":
+        if data.report_period in ("weekly", "monthly"):
+            trigger_config["period"] = _wa_normalize_report_period(data.report_period)
+        else:
+            trigger_config.pop("period", None)
     row = {
         "teacher_id": user["teacher_id"],
         "name": data.name.strip(),
         "target_type": data.target_type,
         "target_ids": data.target_ids or [],
         "trigger_type": data.trigger_type,
-        "trigger_config": data.trigger_config or {},
+        "trigger_config": trigger_config,
         "mode": data.mode,
         "template_name": data.template_name,
         "body_text": data.body_text,
@@ -13293,12 +13456,18 @@ def wa_create_job(data: WhatsAppJobInput, user = Depends(verify_token)):
 @app.put("/api/teacher/whatsapp/jobs/{job_id}")
 def wa_update_job(job_id: str, data: WhatsAppJobInput, user = Depends(verify_token)):
     _wa_require_teacher(user)
+    trigger_config = dict(data.trigger_config or {})
+    if data.mode == "report" or data.report_format != "none":
+        if data.report_period in ("weekly", "monthly"):
+            trigger_config["period"] = _wa_normalize_report_period(data.report_period)
+        else:
+            trigger_config.pop("period", None)
     update = {
         "name": data.name.strip(),
         "target_type": data.target_type,
         "target_ids": data.target_ids or [],
         "trigger_type": data.trigger_type,
-        "trigger_config": data.trigger_config or {},
+        "trigger_config": trigger_config,
         "mode": data.mode,
         "template_name": data.template_name,
         "body_text": data.body_text,

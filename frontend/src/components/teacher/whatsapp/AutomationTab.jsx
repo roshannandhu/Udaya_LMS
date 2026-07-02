@@ -9,7 +9,7 @@ const EMPTY = {
   name: '', target_type: 'all', target_ids: [],
   trigger_type: 'interval', trigger_config: { every: '1 week' },
   mode: 'template', template_name: '', body_text: '', category: 'utility',
-  report_format: 'none', criteria: [], quiet_hours: {}, active: true,
+  report_format: 'none', report_period: 'weekly', criteria: [], quiet_hours: {}, active: true,
 };
 
 function fmt(dt) {
@@ -126,6 +126,15 @@ function JobModal({ open, onClose, initial, templates, groups, onSaved }) {
                 <option value="pdf">PDF</option>
                 <option value="image">Image card</option>
                 <option value="text">Text summary</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Report period</label>
+              <select value={form.report_period || 'overall'} onChange={(e) => set({ report_period: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="overall">Overall</option>
               </select>
             </div>
             <CriteriaBuilder value={form.criteria} onChange={(c) => set({ criteria: c })} templates={templates} />

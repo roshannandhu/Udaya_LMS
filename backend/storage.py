@@ -21,8 +21,8 @@ _r2_client = None
 def is_r2_enabled() -> bool:
     return bool(
         os.getenv("R2_ACCOUNT_ID")
-        and os.getenv("R2_ACCESS_KEY")
-        and os.getenv("R2_SECRET_KEY")
+        and (os.getenv("R2_ACCESS_KEY") or os.getenv("R2_ACCESS_KEY_ID"))
+        and (os.getenv("R2_SECRET_KEY") or os.getenv("R2_SECRET_ACCESS_KEY"))
         and os.getenv("R2_PUBLIC_BUCKET")
     )
 
@@ -34,8 +34,8 @@ def _r2():
         _r2_client = boto3.client(
             "s3",
             endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
-            aws_access_key_id=os.environ["R2_ACCESS_KEY"],
-            aws_secret_access_key=os.environ["R2_SECRET_KEY"],
+            aws_access_key_id=os.getenv("R2_ACCESS_KEY") or os.getenv("R2_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("R2_SECRET_KEY") or os.getenv("R2_SECRET_ACCESS_KEY"),
             region_name="auto",
         )
     return _r2_client
@@ -67,10 +67,13 @@ def upload_public(supa, bucket: str, path: str, data: bytes, content_type: str) 
     """Store a publicly-served file; return its URL. R2 public bucket (CDN) or Supabase."""
     _require_backend()
     if is_r2_enabled():
+        base = _public_base()
+        if not base:
+            raise RuntimeError("R2_PUBLIC_BASE_URL is required for public uploads")
         _r2().put_object(
             Bucket=os.environ["R2_PUBLIC_BUCKET"], Key=path, Body=data, ContentType=content_type
         )
-        return f"{_public_base()}/{path}"
+        return f"{base}/{path}"
     supa.storage.from_(bucket).upload(path, data, {"content-type": content_type})
     return supa.storage.from_(bucket).get_public_url(path)
 

@@ -159,23 +159,35 @@ def _resolve_parents(main, teacher_id: str, standard_id: str) -> list:
 
 
 # ── Report-card builder (shared by single + bulk) ──────────────────────────────
+def _report_period(value: Optional[str]) -> str:
+    return value if value in ("weekly", "monthly", "overall") else "overall"
+
+
 async def _send_report_card(main, provider, teacher_id, user, student, term,
-                            standard_name="", batch_id=None):
+                            standard_name="", batch_id=None, period="overall"):
     recip = _parent_recipient(student, standard_name)
     if not recip:
         return {"student_id": student.get("id"), "status": "skipped",
                 "error": "no parent_phone or opted out", "cost": 0}
 
-    report = main.get_student_report_v2(student["id"], "overall", user)
+    period = _report_period(period)
+    report = main.get_student_report_v2(student["id"], period, user)
     fields = wa._report_fields(report)
     lms = main._wa_branding_name()
 
     pdf_url = ""
+    pdf_error = None
     try:
-        pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms, None)
+        pdf = await asyncio.to_thread(
+            wa.build_report_pdf, report, lms, None, main.get_teacher_settings().get("lms_logo")
+        )
         pdf_url = await main._wa_upload_bytes(pdf, ".pdf", "application/pdf")
     except Exception as e:
+        pdf_error = str(e)
         print(f"[parent-wa] report PDF build/upload failed for {student['id']}: {e}")
+    if not pdf_url:
+        return {"student_id": student.get("id"), "status": "failed",
+                "error": f"Report PDF attachment failed: {pdf_error or 'unknown error'}", "cost": 0}
 
     body = T.report_card(
         parent_name="Parent",
@@ -198,6 +210,7 @@ async def _send_report_card(main, provider, teacher_id, user, student, term,
 # ── Request bodies (all-optional → path endpoints work with no body too) ────────
 class ReportBody(BaseModel):
     term: Optional[str] = None
+    period: Optional[str] = None
 
 
 class AttendanceBody(BaseModel):
@@ -207,6 +220,7 @@ class AttendanceBody(BaseModel):
 class BulkReportsBody(BaseModel):
     standard_id: str
     term: Optional[str] = None
+    period: Optional[str] = None
 
 
 class BroadcastBody(BaseModel):
@@ -221,9 +235,12 @@ async def send_report(student_id: str, body: Optional[ReportBody] = None,
     import main
     _enforce_daily_cap(main, user["teacher_id"])
     student = _load_student_for_teacher(main, user["teacher_id"], student_id)
-    term = (body.term if body else None) or datetime.now().strftime("%B %Y")
+    period = _report_period(body.period if body else None)
+    term = (body.term if body else None) or (
+        "Weekly Report" if period == "weekly" else "Monthly Report" if period == "monthly" else datetime.now().strftime("%B %Y")
+    )
     provider = wa.get_provider()
-    res = await _send_report_card(main, provider, user["teacher_id"], user, student, term)
+    res = await _send_report_card(main, provider, user["teacher_id"], user, student, term, period=period)
     return {"result": res, "configured": provider.configured}
 
 
@@ -277,13 +294,31 @@ async def send_exam_result(exam_id: str, student_id: str,
     pct = (float(score) / float(total) * 100) if score is not None and total else None
 
     provider = wa.get_provider()
+    lms = main._wa_branding_name()
     body_text = T.exam_result(
         parent_name="Parent", student_name=recip["name"] or "your child",
         subject=subject or test.get("title") or "", score=score, total=total,
-        grade=_grade(pct), brand=main._wa_branding_name() or None)
+        grade=_grade(pct), brand=lms or None)
+    pdf_url = ""
+    pdf_error = None
+    try:
+        report = main.get_student_report_v2(student_id, "overall", user)
+        pdf = await asyncio.to_thread(
+            wa.build_report_pdf, report, lms, exam_id, main.get_teacher_settings().get("lms_logo")
+        )
+        pdf_url = await main._wa_upload_bytes(pdf, ".pdf", "application/pdf")
+    except Exception as e:
+        pdf_error = str(e)
+        print(f"[parent-wa] exam result PDF build/upload failed for {student_id}/{exam_id}: {e}")
+    if not pdf_url:
+        return {"result": {"student_id": student_id, "status": "failed",
+                           "error": f"Exam result PDF attachment failed: {pdf_error or 'unknown error'}", "cost": 0},
+                "configured": provider.configured}
+
     # test_id ties into the existing exam-result dedup (12h window + test_id column).
     res = await main._wa_send_and_log(
         provider, user["teacher_id"], recip, mode="freeform", body_text=body_text,
+        media_url=pdf_url or None, media_type="application/pdf" if pdf_url else None,
         category="utility", standard_id=recip["standard_id"], test_id=exam_id)
     return {"result": res, "configured": provider.configured}
 
@@ -296,7 +331,10 @@ async def send_bulk_reports(body: BulkReportsBody, user=Depends(current_teacher)
     recips = _resolve_parents(main, teacher_id, body.standard_id)
     if not recips:
         raise HTTPException(status_code=400, detail="No parents with a phone number")
-    term = body.term or datetime.now().strftime("%B %Y")
+    period = _report_period(body.period)
+    term = body.term or (
+        "Weekly Report" if period == "weekly" else "Monthly Report" if period == "monthly" else datetime.now().strftime("%B %Y")
+    )
     provider = wa.get_provider()
     std_name = recips[0].get("standard_name") or ""
 
@@ -315,7 +353,7 @@ async def send_bulk_reports(body: BulkReportsBody, user=Depends(current_teacher)
                 if not s:
                     continue
                 res = await _send_report_card(main, provider, teacher_id, user, s, term,
-                                              std_name, batch_id)
+                                              std_name, batch_id, period=period)
                 results.append(res)
             except Exception as e:
                 print(f"[wa] skipping report for {r.get('id')}: {e}")
