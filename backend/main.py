@@ -1561,6 +1561,7 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
 
     identifier = request.email_or_username.strip()
     email_to_use = identifier
+    student_id_to_confirm = None
 
     if "@" not in identifier:
         # No "@" → could be a Student ID, username, or phone number.
@@ -1585,11 +1586,12 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         #    rows (possible if the unique index migration never ran), which
         #    silently killed Student-ID login for the affected students.
         try:
-            rows = service_supabase.table("students").select("email, username").eq(
+            rows = service_supabase.table("students").select("id, email, username").eq(
                 "student_code", identifier.upper()).limit(1).execute().data or []
             resolved = _email_from_row(rows[0] if rows else None)
             if resolved:
                 email_to_use = resolved
+                student_id_to_confirm = rows[0].get("id")
             elif rows:
                 resolution_note.append("code row found but no email/username")
         except Exception as e:
@@ -1601,11 +1603,12 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         if "@" not in email_to_use:
             try:
                 normalized_identifier = _normalize_student_username(identifier)
-                rows = service_supabase.table("students").select("email, username").ilike(
+                rows = service_supabase.table("students").select("id, email, username").ilike(
                     "username", normalized_identifier).limit(1).execute().data or []
                 resolved = _email_from_row(rows[0] if rows else None)
                 if resolved:
                     email_to_use = resolved
+                    student_id_to_confirm = rows[0].get("id")
             except Exception as e:
                 resolution_note.append(f"username lookup error: {e}")
 
@@ -1616,16 +1619,19 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
             if len(digits_only) < 7:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             # Try exact match first (limit(1): duplicates must not 406 the login)
-            rows = service_supabase.table("students").select("email, username").eq(
+            rows = service_supabase.table("students").select("id, email, username").eq(
                 "phone", identifier).limit(1).execute().data or []
             resolved = _email_from_row(rows[0] if rows else None)
+            if resolved:
+                student_id_to_confirm = rows[0].get("id")
             if not resolved:
                 # Digits-normalized match (handles +91 prefix variations)
-                all_students = service_supabase.table("students").select("email, username, phone").not_.is_("phone", "null").execute()
+                all_students = service_supabase.table("students").select("id, email, username, phone").not_.is_("phone", "null").execute()
                 for s in (all_students.data or []):
                     stored_digits = re.sub(r'\D', '', s.get("phone", ""))
                     if stored_digits and (stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits)):
                         resolved = _email_from_row(s)
+                        student_id_to_confirm = s.get("id")
                         break
             if resolved:
                 email_to_use = resolved
@@ -1669,11 +1675,13 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
                 pass
             elif "not confirmed" in err_text and service_supabase:
                 try:
-                    listed = service_supabase.auth.admin.list_users()
-                    users_list = getattr(listed, "users", listed) or []
-                    target = next((u for u in users_list if (getattr(u, "email", "") or "").lower() == confirm_email.lower()), None)
-                    if target:
-                        service_supabase.auth.admin.update_user_by_id(target.id, {"email_confirm": True})
+                    target_id = student_id_to_confirm
+                    if not target_id:
+                        row = service_supabase.table("students").select("id").eq("email", confirm_email).limit(1).execute().data
+                        target_id = row[0]["id"] if row else None
+                        
+                    if target_id:
+                        service_supabase.auth.admin.update_user_by_id(target_id, {"email_confirm": True})
                         response = _sign_in(confirm_email)
                     else:
                         raise first_err
@@ -4112,6 +4120,11 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
 
         if not response.user:
             raise HTTPException(status_code=400, detail="Failed to create student")
+
+        try:
+            service_supabase.auth.admin.update_user_by_id(response.user.id, {"email_confirm": True})
+        except Exception:
+            pass
 
         student_data = {
             "id": response.user.id,
