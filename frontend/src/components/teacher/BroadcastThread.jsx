@@ -490,11 +490,11 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                           fills the width). Widen the gap for "edited"/scheduled badges. */}
                       {b.text && (
                         <div className="relative min-w-0">
-                          <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
+                          <div className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                             {b.text}
-                            <span aria-hidden="true" className="inline-block align-bottom" style={{ width: `${5.5 + (b.edited ? 3 : 0) + (isFutureScheduled ? 9 : 0)}em` }} />
-                          </p>
-                          <span className="absolute bottom-0 right-0">{metaRow}</span>
+                            <span className="float-right ml-4 mt-2">{metaRow}</span>
+                            <div className="clear-both"></div>
+                          </div>
                         </div>
                       )}
 

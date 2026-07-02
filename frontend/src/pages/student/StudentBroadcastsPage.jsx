@@ -281,14 +281,14 @@ export default function StudentBroadcastsPage() {
                             text fills the width). Widen the gap when "edited" shows. */}
                         {b.text && (
                           <div className="relative min-w-0">
-                            <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
+                            <div className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                               {b.text}
-                              <span aria-hidden="true" className="inline-block align-bottom" style={{ width: b.edited ? '7.5em' : '4.5em' }} />
-                            </p>
-                            <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none">
-                              {b.edited && <span className="italic">edited</span>}
-                              <span>{b.time}</span>
-                            </span>
+                              <span className="float-right ml-4 mt-2 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none">
+                                {b.edited && <span className="italic">edited</span>}
+                                <span>{b.time}</span>
+                              </span>
+                              <div className="clear-both"></div>
+                            </div>
                           </div>
                         )}
 
