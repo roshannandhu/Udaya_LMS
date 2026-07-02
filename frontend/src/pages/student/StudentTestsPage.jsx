@@ -98,10 +98,13 @@ function TestCard({ t, section, idx = 0, subjects, myAttempts, reattemptStatus, 
 
       {section === 'completed' && attempt && (
         <div className="mt-auto pt-5">
-          <div className="grid grid-cols-4 gap-2 text-[12px] mb-5 bg-white/50 p-3 rounded-2xl shadow-inner">
+          <div className={`grid ${attempt.rank && attempt.total_attempts ? 'grid-cols-5' : 'grid-cols-4'} gap-2 text-[12px] mb-5 bg-white/50 p-3 rounded-2xl shadow-inner`}>
             <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Score</div><div className="font-extrabold text-[15px] text-black">{attempt.score}/{t.total_marks}</div></div>
             <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Correct</div><div className="font-extrabold text-[15px] text-green-600">{attempt.correct_count}</div></div>
             <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Wrong</div><div className="font-extrabold text-[15px] text-red-600">{attempt.wrong_count}</div></div>
+            {attempt.rank && attempt.total_attempts && (
+              <div className="flex flex-col items-center justify-center border-r border-black/5"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Rank</div><div className="font-extrabold text-[15px] text-indigo-600">{attempt.rank}/{attempt.total_attempts}</div></div>
+            )}
             <div className="flex flex-col items-center justify-center"><div className="text-black/50 text-[10px] uppercase font-extrabold mb-1 tracking-wider">Pts</div><div className="font-extrabold text-[15px] text-amber-500 flex items-center gap-0.5"><Star size={12} fill="currentColor"/>{attempt.points_earned}</div></div>
           </div>
           <button

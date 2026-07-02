@@ -3413,6 +3413,28 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
             "flagged": a.get("flagged", False),
         })
 
+    # Per-exam rank: this student's position among ALL attempts of each test.
+    # One bulk query for every test in the timeline, grouped + sorted in memory.
+    timeline_test_ids = [t["test_id"] for t in test_timeline if t.get("test_id")]
+    if timeline_test_ids:
+        try:
+            all_att_res = service_supabase.table("test_attempts").select(
+                "test_id, student_id, score"
+            ).in_("test_id", timeline_test_ids).execute()
+            by_test: dict = {}
+            for att in (all_att_res.data or []):
+                by_test.setdefault(att["test_id"], []).append(att)
+            for entry in test_timeline:
+                rows = by_test.get(entry.get("test_id")) or []
+                rows.sort(key=lambda r: (r.get("score") or 0), reverse=True)
+                entry["total_attempts"] = len(rows)
+                entry["rank"] = next(
+                    (i + 1 for i, r in enumerate(rows) if r.get("student_id") == student_id),
+                    None,
+                )
+        except Exception:
+            pass  # rank is decorative — never fail the report over it
+
     # ── Video progress (period filtered) ─────────────────────────────
     vq = service_supabase.table("video_progress").select(
         "video_id, completed, progress_secs, last_watched_at, videos(id, title, duration_secs, class_id)"
@@ -6777,8 +6799,28 @@ def get_student_test_history(user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     attempts = service_supabase.table("test_attempts").select("*, tests(title, total_marks)").eq("student_id", user["student_id"]).order("submitted_at", desc=True).execute()
+    rows = attempts.data or []
 
-    return attempts.data or []
+    # Annotate each attempt with the student's rank among all attempts of that test.
+    test_ids = [r.get("test_id") for r in rows if r.get("test_id")]
+    if test_ids:
+        try:
+            all_att = service_supabase.table("test_attempts").select(
+                "test_id, student_id, score"
+            ).in_("test_id", test_ids).execute()
+            by_test: dict = {}
+            for att in (all_att.data or []):
+                by_test.setdefault(att["test_id"], []).append(att)
+            sid = user["student_id"]
+            for r in rows:
+                grp = by_test.get(r.get("test_id")) or []
+                grp.sort(key=lambda a: (a.get("score") or 0), reverse=True)
+                r["total_attempts"] = len(grp)
+                r["rank"] = next((i + 1 for i, a in enumerate(grp) if a.get("student_id") == sid), None)
+        except Exception:
+            pass
+
+    return rows
 
 # Get attempt review with correct answers (student views their own completed attempt)
 @app.get("/api/tests/{test_id}/attempt-review")
@@ -12486,11 +12528,11 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
             report = r["_report"]
             try:
                 if attach and data.report_format == "pdf":
-                    pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms, data.test_id)
+                    pdf = await asyncio.to_thread(wa.build_report_pdf, report, lms, data.test_id, get_teacher_settings().get("lms_logo"))
                     media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf")
                     media_type = "application/pdf"
                 elif attach and data.report_format == "image":
-                    png = await asyncio.to_thread(wa.build_report_image, report, lms, data.test_id)
+                    png = await asyncio.to_thread(wa.build_report_image, report, lms, data.test_id, get_teacher_settings().get("lms_logo"))
                     media_url = await _wa_upload_bytes(png, ".png", "image/png")
                     media_type = "image/png"
                 elif data.report_format == "text":
@@ -13055,10 +13097,10 @@ async def _wa_execute_job(job: dict, force: bool = False):
             media_url = media_type = None
             try:
                 if report_format == "pdf":
-                    pdf = await asyncio.to_thread(wa.build_report_pdf, r["_report"], lms, job_test_id)
+                    pdf = await asyncio.to_thread(wa.build_report_pdf, r["_report"], lms, job_test_id, get_teacher_settings().get("lms_logo"))
                     media_url = await _wa_upload_bytes(pdf, ".pdf", "application/pdf"); media_type = "application/pdf"
                 elif report_format == "image":
-                    png = await asyncio.to_thread(wa.build_report_image, r["_report"], lms, job_test_id)
+                    png = await asyncio.to_thread(wa.build_report_image, r["_report"], lms, job_test_id, get_teacher_settings().get("lms_logo"))
                     media_url = await _wa_upload_bytes(png, ".png", "image/png"); media_type = "image/png"
                 elif report_format == "text":
                     body = (wa.build_report_text(r["_report"], lms, job_test_id) + ("\n\n" + body if body else "")).strip()

@@ -1,0 +1,426 @@
+// Shared branded PDF builders — every report/analytics export in both portals
+// goes through here so parents and teachers always get the same professional
+// document: institution logo + name header, student photo, full data, footer.
+// jsPDF is imported dynamically inside the builders to keep it out of the bundle.
+
+import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
+
+// ── Palette (matches the app / WhatsApp artifacts) ────────────────────────────
+const DARK = '#0f1014';
+const INK = '#111111';
+const GRAY = '#777777';
+const LIGHT = '#F4F2EF';
+const BORDER = '#EBEAE7';
+const INDIGO = [99, 102, 241];
+
+const MARGIN = 14; // mm
+
+export function getBranding() {
+  const s = useSettingsStore.getState();
+  return {
+    name: (s.lmsName || '').trim() || 'Udaya Learn',
+    logoUrl: s.lmsLogo || DEFAULT_LMS_LOGO,
+  };
+}
+
+// Fetch any image URL and normalize it to a PNG data URL via canvas (jsPDF only
+// accepts PNG/JPEG). Returns null for preset avatar sentinels and any failure —
+// the PDF must always render, just without the image.
+export async function fetchImageDataURL(url) {
+  if (!url || typeof url !== 'string' || url.startsWith('preset:')) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    return { dataUrl: canvas.toDataURL('image/png'), width: bitmap.width, height: bitmap.height };
+  } catch {
+    return null;
+  }
+}
+
+const gradeFor = (score) => {
+  const s = Math.round(score || 0);
+  if (s >= 90) return { grade: 'A+', label: 'Outstanding' };
+  if (s >= 80) return { grade: 'A', label: 'Excellent' };
+  if (s >= 70) return { grade: 'B+', label: 'Very Good' };
+  if (s >= 60) return { grade: 'B', label: 'Good' };
+  if (s >= 50) return { grade: 'C', label: 'Average' };
+  if (s >= 35) return { grade: 'D', label: 'Needs Work' };
+  return { grade: 'E', label: 'At Risk' };
+};
+
+const fmtDate = (iso) => {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return String(iso).slice(0, 10);
+  }
+};
+
+const periodTitle = (period) => {
+  if (period === 'weekly') return 'Weekly Report Card';
+  if (period === 'monthly') return 'Monthly Report Card';
+  return 'Student Report Card — Overall';
+};
+
+const periodRange = (period) => {
+  const today = new Date();
+  const fmt = (d) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (period === 'weekly') {
+    const from = new Date(today); from.setDate(from.getDate() - 7);
+    return `${fmt(from)} – ${fmt(today)}`;
+  }
+  if (period === 'monthly') {
+    const from = new Date(today); from.setDate(from.getDate() - 30);
+    return `${fmt(from)} – ${fmt(today)}`;
+  }
+  return 'All time';
+};
+
+async function loadJsPdf() {
+  const jsPDFModule = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+  const JsPDF = jsPDFModule.default || jsPDFModule.jsPDF;
+  return { JsPDF, autoTable };
+}
+
+// Dark branded header band. Returns the y where content starts.
+function drawHeader(doc, { brandName, logo, title, subtitle }) {
+  const W = doc.internal.pageSize.getWidth();
+  const bandH = 30;
+  doc.setFillColor(DARK);
+  doc.rect(0, 0, W, bandH, 'F');
+  let x = MARGIN;
+  if (logo) {
+    const chip = 18;
+    doc.setFillColor('#ffffff');
+    doc.roundedRect(x, (bandH - chip) / 2, chip, chip, 3, 3, 'F');
+    // fit inside the chip preserving aspect
+    const pad = 1.5, box = chip - pad * 2;
+    const r = Math.min(box / logo.width, box / logo.height);
+    const w = logo.width * r, h = logo.height * r;
+    doc.addImage(logo.dataUrl, 'PNG', x + pad + (box - w) / 2, (bandH - chip) / 2 + pad + (box - h) / 2, w, h);
+    x += chip + 5;
+  }
+  doc.setTextColor('#ffffff');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(17);
+  doc.text(brandName, x, bandH / 2 - 0.5);
+  doc.setTextColor('#b9bcc7');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.text(title + (subtitle ? `  ·  ${subtitle}` : ''), x, bandH / 2 + 6);
+  doc.setFontSize(8);
+  doc.text(`Generated ${fmtDate(new Date().toISOString())}`, W - MARGIN, bandH / 2 + 6, { align: 'right' });
+  return bandH + 10;
+}
+
+// Footer with page numbers on every page — call once after all content.
+function drawFooters(doc, brandName) {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(BORDER);
+    doc.line(MARGIN, H - 12, W - MARGIN, H - 12);
+    doc.setTextColor(GRAY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Generated by ${brandName} · ${fmtDate(new Date().toISOString())}`, MARGIN, H - 8);
+    doc.text(`Page ${i} of ${n}`, W - MARGIN, H - 8, { align: 'right' });
+  }
+}
+
+function drawKpiCards(doc, kpis, y) {
+  if (!kpis.length) return y;
+  const W = doc.internal.pageSize.getWidth();
+  const gap = 4;
+  const perRow = Math.min(kpis.length, 4);
+  const cardW = (W - 2 * MARGIN - gap * (perRow - 1)) / perRow;
+  const cardH = 17;
+  kpis.forEach((k, i) => {
+    const row = Math.floor(i / perRow), col = i % perRow;
+    const x = MARGIN + col * (cardW + gap);
+    const cy = y + row * (cardH + gap);
+    doc.setFillColor(LIGHT);
+    doc.roundedRect(x, cy, cardW, cardH, 2.5, 2.5, 'F');
+    doc.setTextColor(INK);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text(String(k.value), x + 4, cy + 8);
+    doc.setTextColor(GRAY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.text(k.label.toUpperCase(), x + 4, cy + 13.5);
+  });
+  const rows = Math.ceil(kpis.length / perRow);
+  return y + rows * cardH + (rows - 1) * gap + 10;
+}
+
+const tableDefaults = {
+  theme: 'striped',
+  headStyles: { fillColor: INDIGO, fontStyle: 'bold' },
+  alternateRowStyles: { fillColor: LIGHT },
+  styles: { fontSize: 9, cellPadding: 2.5 },
+  margin: { left: MARGIN, right: MARGIN, bottom: 18 },
+};
+
+function sectionTitle(doc, text, y) {
+  doc.setTextColor(INK);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(text, MARGIN, y);
+  return y + 4;
+}
+
+// Study streak (current) — same definition as StudentReportCard's insights.
+function computeStreak(data) {
+  const activeDays = new Set();
+  (data?.attendance_heatmap || []).forEach(d => { if ((d.present || 0) + (d.late || 0) > 0) activeDays.add(d.date); });
+  (data?.test_heatmap || []).forEach(d => { if ((d.count || 0) > 0) activeDays.add(d.date); });
+  (data?.video_heatmap || []).forEach(d => { if ((d.minutes || 0) > 0) activeDays.add(d.date); });
+  (data?.assignment_heatmap || []).forEach(d => { if ((d.count || 0) > 0) activeDays.add(d.date); });
+  const dayId = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  let current = 0;
+  const cursor = new Date();
+  if (!activeDays.has(dayId(cursor))) cursor.setDate(cursor.getDate() - 1);
+  while (activeDays.has(dayId(cursor))) { current += 1; cursor.setDate(cursor.getDate() - 1); }
+  return current;
+}
+
+/**
+ * Full branded student report card PDF — used by the teacher portal (detail
+ * page, report modal) and the student portal (own report page).
+ */
+export async function buildStudentReportPdf({ data, period = 'overall' }) {
+  if (!data) return;
+  const { JsPDF, autoTable } = await loadJsPdf();
+  const brand = getBranding();
+  const s = data.student || {};
+  const [logo, photo] = await Promise.all([
+    fetchImageDataURL(brand.logoUrl),
+    fetchImageDataURL(s.avatar_url),
+  ]);
+
+  const doc = new JsPDF();
+  const W = doc.internal.pageSize.getWidth();
+
+  let y = drawHeader(doc, {
+    brandName: brand.name,
+    logo,
+    title: periodTitle(period),
+    subtitle: periodRange(period),
+  });
+
+  // ── Identity block (photo right) ─────────────────────────────────────────
+  const photoW = 24, photoH = 28;
+  if (photo) {
+    const px = W - MARGIN - photoW;
+    doc.setDrawColor(BORDER);
+    doc.setFillColor('#ffffff');
+    doc.roundedRect(px - 1, y - 5, photoW + 2, photoH + 2, 2, 2, 'FD');
+    const r = Math.min(photoW / photo.width, photoH / photo.height);
+    const w = photo.width * r, h = photo.height * r;
+    doc.addImage(photo.dataUrl, 'PNG', px + (photoW - w) / 2, y - 4 + (photoH - h) / 2, w, h);
+  }
+  const grade = gradeFor(s.avg_score);
+  doc.setTextColor(INK);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text(s.name || 'Student', MARGIN, y + 2);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(GRAY);
+  const idBits = [];
+  if (s.student_code) idBits.push(`Student ID: ${s.student_code}`);
+  if (s.standard_name) idBits.push(s.standard_name);
+  if (s.username) idBits.push(`@${s.username}`);
+  if (idBits.length) { doc.text(idBits.join('   |   '), MARGIN, y); y += 6; }
+  doc.setTextColor(INK);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(`Grade: ${grade.grade} (${grade.label})`, MARGIN, y);
+  y += 6;
+  if (photo) y = Math.max(y, 40 + photoH + 3);
+  y += 3;
+
+  // ── Derived metrics ──────────────────────────────────────────────────────
+  const radar = data.subject_radar || [];
+  const totalVids = radar.reduce((a, r) => a + (r.video_total || 0), 0);
+  const doneVids = radar.reduce((a, r) => a + (r.video_done || 0), 0);
+  const videoPct = totalVids > 0 ? Math.round((doneVids / totalVids) * 100) : 0;
+  const assignStats = data.assignment_stats || {};
+  const assignPct = assignStats.total > 0 ? Math.round((assignStats.submitted / assignStats.total) * 100) : null;
+  const liveStats = data.live_classes_stats || {};
+  const timeline = (data.test_timeline || []).slice();
+  const streak = computeStreak(data);
+
+  const kpis = [
+    { label: 'Avg Score', value: `${Math.round(s.avg_score || 0)}%` },
+    { label: 'Attendance', value: `${Math.round(s.attendance_pct || 0)}%` },
+    { label: 'Class Rank', value: data.rank ? `${data.rank} / ${data.total_students}` : '—' },
+    { label: 'Points', value: `${s.points || 0}` },
+    { label: 'Videos Watched', value: totalVids > 0 ? `${videoPct}%` : '—' },
+    { label: 'Assignments', value: assignPct != null ? `${assignPct}%` : '—' },
+    { label: 'Live Classes', value: liveStats.total > 0 ? `${Math.round(liveStats.attendance_pct || 0)}%` : '—' },
+    { label: 'Study Streak', value: `${streak} day${streak === 1 ? '' : 's'}` },
+  ];
+  y = drawKpiCards(doc, kpis, y);
+
+  // ── Subject performance ──────────────────────────────────────────────────
+  if (radar.length > 0) {
+    y = sectionTitle(doc, 'Subject Performance', y);
+    autoTable(doc, {
+      ...tableDefaults,
+      startY: y,
+      head: [['Subject', 'Avg Score', 'Videos', 'Attendance', 'Assignments']],
+      body: radar.map(r => [
+        r.subject,
+        r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—',
+        r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
+        r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—',
+        r.assignment_total > 0 ? `${r.assignment_submitted}/${r.assignment_total}` : '—',
+      ]),
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  // ── Tests (most recent first, with per-exam rank) ────────────────────────
+  if (timeline.length > 0) {
+    y = sectionTitle(doc, `Tests (${timeline.length})`, y);
+    autoTable(doc, {
+      ...tableDefaults,
+      startY: y,
+      head: [['Date', 'Test', 'Subject', 'Score', 'Rank']],
+      body: timeline
+        .slice()
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .map(t => [
+          fmtDate(t.date),
+          t.test_title || 'Test',
+          t.subject || '—',
+          `${Math.round(t.score_pct || 0)}%`,
+          t.rank && t.total_attempts ? `${t.rank} of ${t.total_attempts}` : '—',
+        ]),
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  // ── Graded assignments ───────────────────────────────────────────────────
+  const gradedAssigns = (data.assignment_scores || []).filter(a => a.marks_obtained != null);
+  if (gradedAssigns.length > 0) {
+    y = sectionTitle(doc, 'Graded Assignments', y);
+    autoTable(doc, {
+      ...tableDefaults,
+      startY: y,
+      head: [['Assignment', 'Subject', 'Marks']],
+      body: gradedAssigns.map(a => [
+        a.assignment_title || 'Assignment',
+        a.subject_name || '—',
+        `${Math.round(a.marks_obtained || 0)}%`,
+      ]),
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  // ── Highlights ───────────────────────────────────────────────────────────
+  const tested = radar.filter(r => (r.test_count || 0) > 0);
+  const bestSub = tested.length ? tested.reduce((a, b) => (a.test_avg >= b.test_avg ? a : b)) : null;
+  const worstSub = tested.length > 1 ? tested.reduce((a, b) => (a.test_avg <= b.test_avg ? a : b)) : null;
+  const highlights = [];
+  if (bestSub) highlights.push(['Best Subject', `${bestSub.subject} (${Math.round(bestSub.test_avg)}% avg)`]);
+  if (worstSub && worstSub !== bestSub) highlights.push(['Needs Attention', `${worstSub.subject} (${Math.round(worstSub.test_avg)}% avg)`]);
+  const sortedTests = timeline.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  if (sortedTests.length >= 4) {
+    const mid = Math.floor(sortedTests.length / 2);
+    const avgOf = arr => arr.reduce((a, t) => a + (t.score_pct || 0), 0) / (arr.length || 1);
+    const improvement = Math.round(avgOf(sortedTests.slice(mid)) - avgOf(sortedTests.slice(0, mid)));
+    highlights.push(['Improvement', `${improvement > 0 ? '+' : ''}${improvement}% vs earlier tests`]);
+  }
+  if (data.total_tests_in_standard > 0) {
+    highlights.push(['Test Coverage', `${Math.round((timeline.length / data.total_tests_in_standard) * 100)}% (${timeline.length} of ${data.total_tests_in_standard} taken)`]);
+  }
+  if (data.topic_mastery_pct != null) highlights.push(['Topic Mastery', `${Math.round(data.topic_mastery_pct)}%`]);
+  if (highlights.length > 0) {
+    y = sectionTitle(doc, 'Highlights', y);
+    autoTable(doc, {
+      ...tableDefaults,
+      startY: y,
+      head: [],
+      body: highlights,
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 45 } },
+    });
+  }
+
+  drawFooters(doc, brand.name);
+  const pText = period ? period.charAt(0).toUpperCase() + period.slice(1) : 'Overall';
+  doc.save(`${(s.name || 'Student').replace(/\s+/g, '_')}_Report_${pText}.pdf`);
+}
+
+/**
+ * Branded class analytics PDF (teacher Reports page) — roster with explicit
+ * rank column + subject performance.
+ */
+export async function buildClassAnalyticsPdf({ analytics, standardName }) {
+  if (!analytics) return;
+  const { JsPDF, autoTable } = await loadJsPdf();
+  const brand = getBranding();
+  const logo = await fetchImageDataURL(brand.logoUrl);
+
+  const doc = new JsPDF();
+  let y = drawHeader(doc, {
+    brandName: brand.name,
+    logo,
+    title: 'Class Analytics Report',
+    subtitle: standardName || '',
+  });
+
+  const overview = analytics.overview || {};
+  y = drawKpiCards(doc, [
+    { label: 'Students', value: `${overview.total_students ?? 0}` },
+    { label: 'Avg Score', value: `${overview.avg_score ?? 0}%` },
+    { label: 'Avg Attendance', value: `${overview.avg_attendance ?? 0}%` },
+    { label: 'Total Points', value: `${overview.total_points ?? 0}` },
+  ], y);
+
+  const students = [...(analytics.students || [])].sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0));
+  if (students.length > 0) {
+    y = sectionTitle(doc, 'Student Rankings', y);
+    autoTable(doc, {
+      ...tableDefaults,
+      startY: y,
+      head: [['Rank', 'Name', 'Avg Score', 'Attendance', 'Points']],
+      body: students.map((st, i) => [
+        i + 1,
+        st.name || '—',
+        st.has_tests ? `${Math.round(st.avg_score || 0)}%` : '—',
+        st.has_attendance ? `${Math.round(st.attendance_pct || 0)}%` : '—',
+        st.points || 0,
+      ]),
+      columnStyles: { 0: { cellWidth: 14 } },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  const subjectPerf = analytics.subject_performance || [];
+  if (subjectPerf.length > 0) {
+    y = sectionTitle(doc, 'Subject Performance', y);
+    autoTable(doc, {
+      ...tableDefaults,
+      startY: y,
+      head: [['Subject', 'Avg Score', 'Avg Attendance']],
+      body: subjectPerf.map(sp => [sp.subject_name, `${sp.avg_score}%`, `${sp.avg_attendance}%`]),
+    });
+  }
+
+  drawFooters(doc, brand.name);
+  doc.save(`${(standardName || 'Class').replace(/\s+/g, '_')}_Analytics_Report.pdf`);
+}

@@ -1241,45 +1241,18 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
-  // ── PDF export (carried over, enriched) ───────────────────────────────────────
+  // ── PDF export — shared branded builder (logo header, photo, full data) ──────
   const handleDownloadPDF = useCallback(async () => {
     if (!data) return;
     if (onDownloadPDF) { onDownloadPDF(data); return; }
     try {
-      const jsPDFModule = await import('jspdf');
-      const { default: autoTable } = await import('jspdf-autotable');
-      const JsPDFConstructor = jsPDFModule.default || jsPDFModule.jsPDF;
-      const doc = new JsPDFConstructor();
-      const s = student || {};
-      const pText = period ? (period.charAt(0).toUpperCase() + period.slice(1)) : 'Overall';
-
-      doc.setFontSize(20); doc.text('Student Report Card', 14, 20); doc.setFontSize(12);
-      doc.text(`Name: ${s.name || 'Unknown'}  |  Grade: ${grade.grade} (${grade.label})`, 14, 30);
-      doc.text(`Period: ${pText}  |  Avg Score: ${Math.round(s.avg_score || 0)}%  |  Attendance: ${Math.round(s.attendance_pct || 0)}%  |  Rank: ${rank ? `${rank}/${totalStudents}` : 'N/A'}`, 14, 38);
-      doc.text(`Streak: ${insights.streak.current} days  |  Tests Taken: ${testsAttempted}  |  Videos: ${videoPct}%  |  Live Classes: ${liveStats.attendance_pct}%`, 14, 46);
-
-      if (subjectRadar && subjectRadar.length > 0) {
-        doc.setFontSize(14); doc.text('Subject Performance', 14, 58);
-        autoTable(doc, {
-          startY: 62,
-          head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance', 'Assignments']],
-          body: subjectRadar.map(r => [
-            r.subject,
-            r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—',
-            r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
-            r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—',
-            r.assignment_total > 0 ? `${r.assignment_submitted}/${r.assignment_total}` : '—',
-          ]),
-          theme: 'striped',
-          headStyles: { fillColor: [99, 102, 241] },
-        });
-      }
-      doc.save(`${(s.name || 'Student').replace(/\s+/g, '_')}_Report_${pText}.pdf`);
+      const { buildStudentReportPdf } = await import('../../lib/reportPdf');
+      await buildStudentReportPdf({ data, period });
     } catch (e) {
       console.error('Failed to generate PDF', e);
       alert('Failed to generate PDF. Please ensure you have a stable connection.');
     }
-  }, [data, period, rank, totalStudents, subjectRadar, student, onDownloadPDF, grade, insights, testsAttempted, videoPct, liveStats]);
+  }, [data, period, onDownloadPDF]);
 
   if (!data) return (
     <div className="flex flex-col items-center justify-center py-24 text-neutral-400">

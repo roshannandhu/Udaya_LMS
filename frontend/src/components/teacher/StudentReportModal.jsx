@@ -34,36 +34,8 @@ export default function StudentReportModal({ open, onClose, studentId }) {
   const handleDownloadPDF = useCallback(async (reportData) => {
     if (!reportData) return;
     try {
-      const jsPDFModule = await import('jspdf');
-      const { default: autoTable } = await import('jspdf-autotable');
-      const JsPDFConstructor = jsPDFModule.default || jsPDFModule.jsPDF;
-      const doc = new JsPDFConstructor();
-      const s = reportData.student || {};
-    doc.setFontSize(20); doc.text('Student Report Card', 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Name: ${s.name}  |  Username: @${s.username}`, 14, 30);
-    doc.text(
-      `Period: ${period.charAt(0).toUpperCase() + period.slice(1)}  |  Avg Score: ${s.avg_score || 0}%  |  Attendance: ${s.attendance_pct || 0}%  |  Rank: ${reportData.rank ? `${reportData.rank}/${reportData.total_students}` : 'N/A'}`,
-      14, 38
-    );
-    const subjectRadar = reportData.subject_radar || [];
-    if (subjectRadar.length > 0) {
-      doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
-      autoTable(doc, {
-        startY: 56,
-        head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
-        body: subjectRadar.map(r => [
-          r.subject,
-          r.test_count > 0 ? `${Math.round(r.test_avg || 0)}%` : '—',
-          r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
-          r.att_total > 0 ? `${Math.round(r.attendance_pct || 0)}%` : '—',
-        ]),
-        theme: 'striped',
-        headStyles: { fillColor: [99, 102, 241] },
-      });
-    }
-    const safeName = (s.name || 'Student').replace(/\s+/g, '_');
-    doc.save(`${safeName}_Report_${period || 'overall'}.pdf`);
+      const { buildStudentReportPdf } = await import('../../lib/reportPdf');
+      await buildStudentReportPdf({ data: reportData, period });
     } catch (e) {
       console.error("Failed to generate PDF", e);
       alert("Failed to generate PDF. Please ensure you have a stable connection.");

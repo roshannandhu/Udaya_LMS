@@ -64,56 +64,13 @@ export default function ReportsPage() {
 
   const handleExportPDF = async () => {
     if (!analytics || !currentStd) return;
-    const { default: jsPDF } = await import('jspdf');
-    const { default: autoTable } = await import('jspdf-autotable');
-    const doc = new jsPDF();
-    const now = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-
-    doc.setFontSize(20);
-    doc.text('Class Analytics Report', 14, 18);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`${currentStd.name}  ·  Generated ${now}`, 14, 26);
-    doc.setTextColor(0);
-
-    const overview = analytics.overview;
-    doc.setFontSize(12);
-    doc.text(`Students: ${overview.total_students}   Avg Score: ${overview.avg_score}%   Avg Attendance: ${overview.avg_attendance}%   Total Points: ${overview.total_points}`, 14, 36);
-
-    const rows = [...analytics.students]
-      .sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0))
-      .map((s, i) => [
-        i + 1,
-        s.name || '—',
-        s.has_tests ? `${Math.round(s.avg_score || 0)}%` : '—',
-        s.has_attendance ? `${Math.round(s.attendance_pct || 0)}%` : '—',
-        s.points || 0,
-      ]);
-
-    autoTable(doc, {
-      startY: 44,
-      head: [['#', 'Name', 'Avg Score', 'Attendance', 'Points']],
-      body: rows,
-      theme: 'striped',
-      headStyles: { fillColor: [23, 23, 23] },
-      columnStyles: { 0: { cellWidth: 10 } },
-    });
-
-    if (analytics.subject_performance.length > 0) {
-      const finalY = doc.lastAutoTable.finalY + 12;
-      doc.setFontSize(13);
-      doc.text('Subject Performance', 14, finalY);
-      const subRows = analytics.subject_performance.map(s => [s.subject_name, `${s.avg_score}%`, `${s.avg_attendance}%`]);
-      autoTable(doc, {
-        startY: finalY + 6,
-        head: [['Subject', 'Avg Score', 'Avg Attendance']],
-        body: subRows,
-        theme: 'striped',
-        headStyles: { fillColor: [79, 70, 229] },
-      });
+    try {
+      const { buildClassAnalyticsPdf } = await import('../../lib/reportPdf');
+      await buildClassAnalyticsPdf({ analytics, standardName: currentStd.name });
+    } catch (e) {
+      console.error('Failed to generate PDF', e);
+      alert('Failed to generate PDF. Please ensure you have a stable connection.');
     }
-
-    doc.save(`${currentStd.name.replace(/\s+/g, '_')}_Analytics_Report.pdf`);
   };
 
   const currentStd = standards.find(s => s.id === activeStd);

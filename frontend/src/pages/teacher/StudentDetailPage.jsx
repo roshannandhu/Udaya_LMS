@@ -35,35 +35,13 @@ export default function StudentDetailPage() {
 
   const handleDownloadPDF = async () => {
     if (!reportData) return;
-    const { default: jsPDF } = await import('jspdf');
-    const { default: autoTable } = await import('jspdf-autotable');
-    const doc = new jsPDF();
-    const s = reportData.student || {};
-    const subjectRadar = reportData.subject_radar || [];
-    
-    doc.setFontSize(20); doc.text('Student Report Card', 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Name: ${s.name}  |  Username: @${s.username}`, 14, 30);
-    doc.text(
-      `Period: ${reportPeriod.charAt(0).toUpperCase() + reportPeriod.slice(1)}  |  Avg Score: ${s.avg_score || 0}%  |  Attendance: ${s.attendance_pct || 0}%  |  Rank: ${reportData.rank ? `${reportData.rank}/${reportData.total_students}` : 'N/A'}`,
-      14, 38
-    );
-    if (subjectRadar.length > 0) {
-      doc.setFontSize(14); doc.text('Subject Performance', 14, 52);
-      autoTable(doc, {
-        startY: 56,
-        head: [['Subject', 'Avg Score', 'Videos Done', 'Attendance']],
-        body: subjectRadar.map(r => [
-          r.subject,
-          r.test_count > 0 ? `${r.test_avg}%` : '—',
-          r.video_total > 0 ? `${r.video_done}/${r.video_total}` : '—',
-          r.att_total > 0 ? `${r.attendance_pct}%` : '—',
-        ]),
-        theme: 'striped',
-        headStyles: { fillColor: [99, 102, 241] },
-      });
+    try {
+      const { buildStudentReportPdf } = await import('../../lib/reportPdf');
+      await buildStudentReportPdf({ data: reportData, period: reportPeriod });
+    } catch (e) {
+      console.error('Failed to generate PDF', e);
+      alert('Failed to generate PDF. Please ensure you have a stable connection.');
     }
-    doc.save(`${s.name}_Report_${reportPeriod}.pdf`);
   };
 
   const handleShare = async () => {

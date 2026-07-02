@@ -464,6 +464,49 @@ def get_provider(config: Optional[dict] = None) -> WhatsAppProvider:
 
 
 # ── Report rendering (consumes the GET /students/{id}/report/v2 shape) ────────
+
+# Small module-level cache so the branding logo (same URL for every student in a
+# bulk send) is fetched once per process, not once per PDF.
+_image_cache: Dict[str, Optional[bytes]] = {}
+
+
+def _fetch_image_bytes(url: Optional[str], cache: bool = False) -> Optional[bytes]:
+    """Download an image for embedding in a PDF/PNG artifact.
+
+    Returns None for missing URLs, ``preset:`` avatar sentinels and any network
+    failure — artifacts must render fine without images.
+    """
+    if not url or not isinstance(url, str) or url.startswith("preset:"):
+        return None
+    if cache and url in _image_cache:
+        return _image_cache[url]
+    data: Optional[bytes] = None
+    try:
+        resp = httpx.get(url, timeout=8.0, follow_redirects=True)
+        if resp.status_code == 200 and resp.content:
+            data = resp.content
+    except Exception:
+        data = None
+    if cache:
+        _image_cache[url] = data
+    return data
+
+
+def _period_label(period: str, is_exam: bool) -> str:
+    """Human document title + date range for the report header."""
+    from datetime import date, timedelta
+
+    if is_exam:
+        return "Exam Result"
+    today = date.today()
+    fmt = "%d %b %Y"
+    if period == "weekly":
+        return f"Weekly Progress Report · {(today - timedelta(days=7)).strftime(fmt)} – {today.strftime(fmt)}"
+    if period == "monthly":
+        return f"Monthly Progress Report · {(today - timedelta(days=30)).strftime(fmt)} – {today.strftime(fmt)}"
+    return "Progress Report · Overall"
+
+
 def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
     """Pull the common fields used by all three renderers from a report/v2 dict.
 
@@ -481,6 +524,7 @@ def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
 
     is_exam = bool(test_id)
     exam = None
+    exam_rank = exam_total = None
     if is_exam:
         exam = next((t for t in timeline if t.get("test_id") == test_id), None)
         recent_tests = [exam] if exam else []
@@ -488,6 +532,9 @@ def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
         avg_score = exam.get("score_pct") if exam else None
         attendance_pct = None
         points = rank = total_students = None
+        if exam:
+            exam_rank = exam.get("rank")
+            exam_total = exam.get("total_attempts")
     else:
         recent_tests = timeline[-5:] if timeline else []
         if period in ("weekly", "monthly"):
@@ -510,14 +557,18 @@ def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
         "name": student.get("name") or "Student",
         "standard": student.get("standard_name") or "",
         "student_code": student.get("student_code") or "",
+        "avatar_url": student.get("avatar_url") or "",
         "attendance_pct": attendance_pct,
         "avg_score": avg_score,
         "points": points,
         "rank": rank,
         "total_students": total_students,
+        "exam_rank": exam_rank,
+        "exam_total": exam_total,
         "radar": radar,
         "recent_tests": recent_tests,
         "period": period,
+        "period_label": _period_label(period, is_exam),
         "is_exam": is_exam,
         "exam_title": (exam.get("test_title") if exam else None),
     }
@@ -537,6 +588,8 @@ def build_report_text(report: dict, lms_name: str = "", test_id: Optional[str] =
         lines.append(f"Attendance: {f['attendance_pct']}%")
     if f["avg_score"] is not None:
         lines.append((f"Score: {f['avg_score']}%") if is_exam else (f"Average score: {f['avg_score']}%"))
+    if is_exam and f["exam_rank"] and f["exam_total"]:
+        lines.append(f"Rank in exam: {f['exam_rank']} of {f['exam_total']}")
     if f["rank"] and f["total_students"]:
         lines.append(f"Class rank: {f['rank']} / {f['total_students']}")
     # Subjects + history are only meaningful for a multi-test report, not one exam.
@@ -553,156 +606,393 @@ def build_report_text(report: dict, lms_name: str = "", test_id: Optional[str] =
     return "\n".join(lines)
 
 
-def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = None) -> bytes:
-    """Render the report as a PDF (reportlab). Layout mirrors StudentReportCard."""
+def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = None,
+                     logo_url: Optional[str] = None) -> bytes:
+    """Render the report as a professional branded PDF (reportlab).
+
+    Branded header (logo + institution name), student identity block with photo,
+    KPI cards (incl. exam rank), ruled tables, footer with page numbers.
+    """
     try:
+        from datetime import date
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import mm
         from reportlab.lib import colors
+        from reportlab.lib.utils import ImageReader
         from reportlab.pdfgen import canvas
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("reportlab is required for PDF reports") from e
 
     f = _report_fields(report, test_id)
     is_exam = f["is_exam"]
+    brand = lms_name.strip() or "Progress Report"
+    today_str = date.today().strftime("%d %b %Y")
+
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     W, H = A4
-    y = H - 25 * mm
+    M = 16 * mm  # page margin
+    page_num = 1
 
-    c.setFillColor(colors.HexColor("#111111"))
-    c.setFont("Helvetica-Bold", 20)
-    c.drawString(20 * mm, y, (lms_name.strip() or ("Exam Result" if is_exam else "Progress Report")))
-    y -= 9 * mm
-    c.setFont("Helvetica", 12)
-    c.setFillColor(colors.HexColor("#444444"))
-    c.drawString(20 * mm, y, f"{f['name']}" + (f"  •  {f['standard']}" if f["standard"] else ""))
+    DARK = colors.HexColor("#0f1014")
+    INK = colors.HexColor("#111111")
+    GRAY = colors.HexColor("#777777")
+    LIGHT = colors.HexColor("#F4F2EF")
+    BORDER = colors.HexColor("#EBEAE7")
+    INDIGO = colors.HexColor("#6366f1")
+
+    def _image_reader(data: Optional[bytes]):
+        if not data:
+            return None
+        try:
+            reader = ImageReader(io.BytesIO(data))
+            reader.getSize()  # force decode so bad bytes fail here, not mid-draw
+            return reader
+        except Exception:
+            return None
+
+    logo_img = _image_reader(_fetch_image_bytes(logo_url, cache=True))
+    photo_img = _image_reader(_fetch_image_bytes(f["avatar_url"]))
+
+    def footer():
+        c.setFont("Helvetica", 8)
+        c.setFillColor(GRAY)
+        c.drawString(M, 10 * mm, f"Generated by {brand} · {today_str}")
+        c.drawRightString(W - M, 10 * mm, f"Page {page_num}")
+        c.setStrokeColor(BORDER)
+        c.line(M, 13 * mm, W - M, 13 * mm)
+
+    def new_page():
+        nonlocal page_num, y
+        footer()
+        c.showPage()
+        page_num += 1
+        y = H - 20 * mm
+
+    # ── Header band ────────────────────────────────────────────────────────
+    band_h = 30 * mm
+    c.setFillColor(DARK)
+    c.rect(0, H - band_h, W, band_h, stroke=0, fill=1)
+    hx = M
+    if logo_img:
+        chip = 18 * mm
+        cy = H - band_h / 2 - chip / 2
+        c.setFillColor(colors.white)
+        c.roundRect(hx, cy, chip, chip, 3 * mm, stroke=0, fill=1)
+        c.drawImage(logo_img, hx + 1.5 * mm, cy + 1.5 * mm, chip - 3 * mm, chip - 3 * mm,
+                    preserveAspectRatio=True, anchor="c", mask="auto")
+        hx += chip + 5 * mm
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 17)
+    c.drawString(hx, H - band_h / 2 + 1.5 * mm, brand)
+    c.setFillColor(colors.HexColor("#b9bcc7"))
+    c.setFont("Helvetica", 10)
+    c.drawString(hx, H - band_h / 2 - 4.5 * mm, f["period_label"])
+    c.setFont("Helvetica", 8.5)
+    c.drawRightString(W - M, H - band_h / 2 - 4.5 * mm, f"Generated {today_str}")
+
+    y = H - band_h - 12 * mm
+
+    # ── Identity block (photo right) ───────────────────────────────────────
+    photo_w, photo_h = 24 * mm, 28 * mm
+    if photo_img:
+        px, py = W - M - photo_w, y - photo_h + 6 * mm
+        c.setStrokeColor(BORDER)
+        c.setFillColor(colors.white)
+        c.roundRect(px - 1 * mm, py - 1 * mm, photo_w + 2 * mm, photo_h + 2 * mm, 2 * mm, stroke=1, fill=1)
+        c.drawImage(photo_img, px, py, photo_w, photo_h, preserveAspectRatio=True, anchor="c", mask="auto")
+    c.setFillColor(INK)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(M, y, f["name"])
+    y -= 6.5 * mm
+    c.setFont("Helvetica", 10)
+    c.setFillColor(GRAY)
+    sub_bits = []
     if f["student_code"]:
-        c.drawRightString(W - 20 * mm, y, f"ID: {f['student_code']}")
+        sub_bits.append(f"Student ID: {f['student_code']}")
+    if f["standard"]:
+        sub_bits.append(f["standard"])
+    if sub_bits:
+        c.drawString(M, y, "   •   ".join(sub_bits))
+        y -= 6 * mm
+    if is_exam and f["exam_title"]:
+        c.setFillColor(INK)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(M, y, f"Exam: {f['exam_title']}")
+        y -= 6 * mm
+    if photo_img:
+        y = min(y, H - band_h - 12 * mm - photo_h - 2 * mm)
     y -= 4 * mm
-    c.setStrokeColor(colors.HexColor("#EBEAE7"))
-    c.line(20 * mm, y, W - 20 * mm, y)
-    y -= 12 * mm
 
-    # KPI row
+    # ── KPI cards ──────────────────────────────────────────────────────────
     kpis = []
+    if f["avg_score"] is not None:
+        kpis.append((("Score" if is_exam else "Avg Score"), f"{f['avg_score']}%"))
+    if is_exam and f["exam_rank"] and f["exam_total"]:
+        kpis.append(("Exam Rank", f"{f['exam_rank']} of {f['exam_total']}"))
     if f["attendance_pct"] is not None:
         kpis.append(("Attendance", f"{f['attendance_pct']}%"))
-    if f["avg_score"] is not None:
-        kpis.append((("Score" if is_exam else "Avg score"), f"{f['avg_score']}%"))
     if f["rank"] and f["total_students"]:
-        kpis.append(("Class rank", f"{f['rank']}/{f['total_students']}"))
-    x = 20 * mm
-    for label, value in kpis:
-        c.setFont("Helvetica-Bold", 18)
-        c.setFillColor(colors.HexColor("#111111"))
-        c.drawString(x, y, value)
-        c.setFont("Helvetica", 9)
-        c.setFillColor(colors.HexColor("#888888"))
-        c.drawString(x, y - 6 * mm, label)
-        x += 55 * mm
-    y -= 18 * mm
+        kpis.append(("Class Rank", f"{f['rank']} / {f['total_students']}"))
+    if f["points"] is not None:
+        kpis.append(("Points", f"{f['points']}"))
+    if kpis:
+        card_gap = 4 * mm
+        card_w = min(42 * mm, (W - 2 * M - card_gap * (len(kpis) - 1)) / len(kpis))
+        card_h = 18 * mm
+        x = M
+        for label, value in kpis:
+            c.setFillColor(LIGHT)
+            c.roundRect(x, y - card_h, card_w, card_h, 2.5 * mm, stroke=0, fill=1)
+            c.setFillColor(INK)
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(x + 4 * mm, y - 8 * mm, value)
+            c.setFillColor(GRAY)
+            c.setFont("Helvetica", 7.5)
+            c.drawString(x + 4 * mm, y - 14 * mm, label.upper())
+            x += card_w + card_gap
+        y -= card_h + 10 * mm
 
-    def section(title):
+    # ── Table helper ───────────────────────────────────────────────────────
+    def table(title, headers, rows, col_widths):
         nonlocal y
+        if not rows:
+            return
+        row_h = 7.5 * mm
+        if y < 40 * mm:
+            new_page()
+        c.setFillColor(INK)
         c.setFont("Helvetica-Bold", 12)
-        c.setFillColor(colors.HexColor("#111111"))
-        c.drawString(20 * mm, y, title)
-        y -= 7 * mm
+        c.drawString(M, y, title)
+        y -= 8 * mm
+        # header row
+        c.setFillColor(INDIGO)
+        c.rect(M, y - row_h + 2 * mm, W - 2 * M, row_h, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 9)
+        x = M
+        for htext, wcol in zip(headers, col_widths):
+            c.drawString(x + 2.5 * mm, y - row_h / 2, htext)
+            x += wcol
+        y -= row_h
+        for i, row in enumerate(rows):
+            if y < 25 * mm:
+                new_page()
+            if i % 2 == 1:
+                c.setFillColor(LIGHT)
+                c.rect(M, y - row_h + 2 * mm, W - 2 * M, row_h, stroke=0, fill=1)
+            c.setFillColor(colors.HexColor("#333333"))
+            c.setFont("Helvetica", 9)
+            x = M
+            for val, wcol in zip(row, col_widths):
+                c.drawString(x + 2.5 * mm, y - row_h / 2, str(val))
+                x += wcol
+            c.setStrokeColor(BORDER)
+            c.line(M, y - row_h + 2 * mm, W - M, y - row_h + 2 * mm)
+            y -= row_h
+        y -= 8 * mm
+
+    cw = W - 2 * M
 
     if f["radar"]:
-        section("Subjects")
-        c.setFont("Helvetica", 11)
-        c.setFillColor(colors.HexColor("#333333"))
-        for s in f["radar"]:
-            if y < 25 * mm:
-                c.showPage(); y = H - 25 * mm
-            c.drawString(24 * mm, y, f"{s.get('subject', '')}")
-            c.drawRightString(W - 24 * mm, y, f"{s.get('test_avg', 0)}% avg")
-            y -= 6 * mm
-        y -= 4 * mm
+        table(
+            "Subject Performance",
+            ["Subject", "Avg Score", "Attendance", "Videos"],
+            [[
+                s.get("subject", ""),
+                (f"{round(s.get('test_avg') or 0)}%" if (s.get("test_count") or 0) > 0 else "—"),
+                (f"{round(s.get('attendance_pct') or 0)}%" if (s.get("att_total") or 0) > 0 else "—"),
+                (f"{s.get('video_done', 0)}/{s.get('video_total', 0)}" if (s.get("video_total") or 0) > 0 else "—"),
+            ] for s in f["radar"]],
+            [cw * 0.40, cw * 0.20, cw * 0.20, cw * 0.20],
+        )
 
     if f["recent_tests"]:
-        section("Exam result" if is_exam else "Recent tests")
-        c.setFont("Helvetica", 11)
-        c.setFillColor(colors.HexColor("#333333"))
-        for t in f["recent_tests"]:
-            if y < 25 * mm:
-                c.showPage(); y = H - 25 * mm
-            c.drawString(24 * mm, y, f"{t.get('test_title', 'Test')}")
-            c.drawRightString(W - 24 * mm, y, f"{t.get('score_pct', 0)}%")
-            y -= 6 * mm
+        def _fmt_date(iso):
+            try:
+                return (iso or "")[:10]
+            except Exception:
+                return ""
+        table(
+            "Exam Result" if is_exam else "Recent Tests",
+            ["Date", "Test", "Score", "Rank"],
+            [[
+                _fmt_date(t.get("date")),
+                (t.get("test_title") or "Test")[:48],
+                f"{t.get('score_pct', 0)}%",
+                (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "—"),
+            ] for t in f["recent_tests"] if t],
+            [cw * 0.16, cw * 0.48, cw * 0.16, cw * 0.20],
+        )
 
+    footer()
     c.showPage()
     c.save()
     return buf.getvalue()
 
 
-def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] = None) -> bytes:
-    """Render the report as a PNG card (Pillow)."""
+def build_report_image(report: dict, lms_name: str = "", test_id: Optional[str] = None,
+                       logo_url: Optional[str] = None) -> bytes:
+    """Render the report as a professional branded PNG card (Pillow)."""
     try:
+        from datetime import date
         from PIL import Image, ImageDraw, ImageFont
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("Pillow is required for image reports") from e
 
     f = _report_fields(report, test_id)
     is_exam = f["is_exam"]
-    W, H = 800, 1000
+    brand = lms_name.strip() or "Progress Report"
+    today_str = date.today().strftime("%d %b %Y")
+    W, H = 900, 1200
     img = Image.new("RGB", (W, H), "#FAFAF9")
     d = ImageDraw.Draw(img)
 
     def font(size, bold=False):
+        candidates = (["DejaVuSans-Bold.ttf", "arialbd.ttf"] if bold
+                      else ["DejaVuSans.ttf", "arial.ttf"])
+        for name in candidates:
+            try:
+                return ImageFont.truetype(name, size)
+            except Exception:
+                continue
         try:
-            name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-            return ImageFont.truetype(name, size)
+            return ImageFont.load_default(size)  # Pillow ≥ 10.1 supports sized default
         except Exception:
             return ImageFont.load_default()
 
-    pad = 48
-    y = pad
-    d.text((pad, y), (lms_name.strip() or ("Exam Result" if is_exam else "Progress Report")), fill="#111111", font=font(40, True))
-    y += 56
-    subtitle = f["name"] + (f"  •  {f['standard']}" if f["standard"] else "")
-    d.text((pad, y), subtitle, fill="#555555", font=font(24))
-    y += 44
-    d.line([(pad, y), (W - pad, y)], fill="#EBEAE7", width=2)
-    y += 36
+    def open_image(data):
+        if not data:
+            return None
+        try:
+            return Image.open(io.BytesIO(data)).convert("RGBA")
+        except Exception:
+            return None
 
+    logo = open_image(_fetch_image_bytes(logo_url, cache=True))
+    photo = open_image(_fetch_image_bytes(f["avatar_url"]))
+
+    pad = 48
+
+    # ── Header band ────────────────────────────────────────────────────────
+    band_h = 150
+    d.rectangle([(0, 0), (W, band_h)], fill="#0f1014")
+    hx = pad
+    if logo:
+        chip = 96
+        chip_img = Image.new("RGBA", (chip, chip), "#ffffff")
+        inner = logo.copy()
+        inner.thumbnail((chip - 12, chip - 12))
+        chip_img.paste(inner, ((chip - inner.width) // 2, (chip - inner.height) // 2), inner)
+        img.paste(chip_img, (hx, (band_h - chip) // 2), chip_img)
+        hx += chip + 24
+    d.text((hx, band_h // 2 - 38), brand, fill="#ffffff", font=font(38, True))
+    d.text((hx, band_h // 2 + 12), f["period_label"], fill="#b9bcc7", font=font(20))
+    date_txt = f"Generated {today_str}"
+    d.text((W - pad - d.textlength(date_txt, font=font(17)), band_h // 2 + 14), date_txt, fill="#8a8d98", font=font(17))
+
+    y = band_h + 44
+
+    # ── Identity block (photo right) ───────────────────────────────────────
+    if photo:
+        pw, ph = 130, 150
+        thumb = photo.copy()
+        thumb.thumbnail((pw, ph))
+        px = W - pad - pw
+        d.rounded_rectangle([(px - 6, y - 6), (px + pw + 6, y + ph + 6)], radius=10, fill="#ffffff", outline="#EBEAE7", width=2)
+        img.paste(thumb, (px + (pw - thumb.width) // 2, y + (ph - thumb.height) // 2), thumb)
+    d.text((pad, y), f["name"], fill="#111111", font=font(34, True))
+    y += 48
+    sub_bits = []
+    if f["student_code"]:
+        sub_bits.append(f"Student ID: {f['student_code']}")
+    if f["standard"]:
+        sub_bits.append(f["standard"])
+    if sub_bits:
+        d.text((pad, y), "   •   ".join(sub_bits), fill="#777777", font=font(20))
+        y += 36
+    if is_exam and f["exam_title"]:
+        d.text((pad, y), f"Exam: {f['exam_title']}", fill="#111111", font=font(24, True))
+        y += 40
+    if photo:
+        y = max(y, band_h + 44 + 150 + 24)
+    y += 12
+
+    # ── KPI cards ──────────────────────────────────────────────────────────
     kpis = []
+    if f["avg_score"] is not None:
+        kpis.append((("Score" if is_exam else "Avg Score"), f"{f['avg_score']}%"))
+    if is_exam and f["exam_rank"] and f["exam_total"]:
+        kpis.append(("Exam Rank", f"{f['exam_rank']} of {f['exam_total']}"))
     if f["attendance_pct"] is not None:
         kpis.append(("Attendance", f"{f['attendance_pct']}%"))
-    if f["avg_score"] is not None:
-        kpis.append((("Score" if is_exam else "Avg score"), f"{f['avg_score']}%"))
     if f["rank"] and f["total_students"]:
-        kpis.append(("Rank", f"{f['rank']}/{f['total_students']}"))
-    x = pad
-    for label, value in kpis:
-        d.text((x, y), value, fill="#111111", font=font(40, True))
-        d.text((x, y + 50), label, fill="#888888", font=font(20))
-        x += 250
-    y += 120
+        kpis.append(("Class Rank", f"{f['rank']}/{f['total_students']}"))
+    if f["points"] is not None:
+        kpis.append(("Points", f"{f['points']}"))
+    if kpis:
+        gap = 16
+        card_w = (W - 2 * pad - gap * (len(kpis) - 1)) // len(kpis)
+        card_h = 100
+        x = pad
+        for label, value in kpis:
+            d.rounded_rectangle([(x, y), (x + card_w, y + card_h)], radius=14, fill="#F4F2EF")
+            d.text((x + 18, y + 18), value, fill="#111111", font=font(30, True))
+            d.text((x + 18, y + 64), label.upper(), fill="#888888", font=font(15))
+            x += card_w + gap
+        y += card_h + 40
 
-    def section(title):
+    # ── Tables ─────────────────────────────────────────────────────────────
+    def table(title, headers, rows, col_fracs):
         nonlocal y
+        if not rows:
+            return
         d.text((pad, y), title, fill="#111111", font=font(26, True))
-        y += 42
+        y += 44
+        row_h = 44
+        tw = W - 2 * pad
+        cols = [pad + int(tw * sum(col_fracs[:i])) for i in range(len(col_fracs))]
+        d.rectangle([(pad, y), (W - pad, y + row_h)], fill="#6366f1")
+        for htext, cx in zip(headers, cols):
+            d.text((cx + 12, y + 11), htext, fill="#ffffff", font=font(18, True))
+        y += row_h
+        for i, row in enumerate(rows):
+            if i % 2 == 1:
+                d.rectangle([(pad, y), (W - pad, y + row_h)], fill="#F4F2EF")
+            for val, cx in zip(row, cols):
+                d.text((cx + 12, y + 11), str(val), fill="#333333", font=font(18))
+            d.line([(pad, y + row_h), (W - pad, y + row_h)], fill="#EBEAE7", width=1)
+            y += row_h
+        y += 36
 
     if f["radar"]:
-        section("Subjects")
-        for s in f["radar"]:
-            d.text((pad + 16, y), s.get("subject", ""), fill="#333333", font=font(22))
-            val = f"{s.get('test_avg', 0)}% avg"
-            d.text((W - pad - d.textlength(val, font=font(22)), y), val, fill="#333333", font=font(22))
-            y += 34
-        y += 24
+        table(
+            "Subject Performance",
+            ["Subject", "Avg Score", "Attendance", "Videos"],
+            [[
+                (s.get("subject") or "")[:22],
+                (f"{round(s.get('test_avg') or 0)}%" if (s.get("test_count") or 0) > 0 else "—"),
+                (f"{round(s.get('attendance_pct') or 0)}%" if (s.get("att_total") or 0) > 0 else "—"),
+                (f"{s.get('video_done', 0)}/{s.get('video_total', 0)}" if (s.get("video_total") or 0) > 0 else "—"),
+            ] for s in f["radar"]],
+            [0.40, 0.20, 0.20, 0.20],
+        )
 
     if f["recent_tests"]:
-        section("Exam result" if is_exam else "Recent tests")
-        for t in f["recent_tests"]:
-            d.text((pad + 16, y), t.get("test_title", "Test"), fill="#333333", font=font(22))
-            val = f"{t.get('score_pct', 0)}%"
-            d.text((W - pad - d.textlength(val, font=font(22)), y), val, fill="#333333", font=font(22))
-            y += 34
+        table(
+            "Exam Result" if is_exam else "Recent Tests",
+            ["Test", "Score", "Rank"],
+            [[
+                (t.get("test_title") or "Test")[:34],
+                f"{t.get('score_pct', 0)}%",
+                (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "—"),
+            ] for t in f["recent_tests"] if t],
+            [0.56, 0.20, 0.24],
+        )
+
+    # ── Footer ─────────────────────────────────────────────────────────────
+    d.line([(pad, H - 70), (W - pad, H - 70)], fill="#EBEAE7", width=2)
+    d.text((pad, H - 52), f"Generated by {brand} · {today_str}", fill="#999999", font=font(16))
 
     out = io.BytesIO()
     img.save(out, format="PNG")

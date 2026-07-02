@@ -72,6 +72,16 @@ export default function PerformancePanel({ standardId, classId }) {
   }, [standardId, classId, period, cache]);
 
   const data = cache[period];
+
+  // Rank by average score within this period (students without tests are unranked).
+  const rankById = useMemo(() => {
+    const ranked = (data?.students || [])
+      .filter(s => s.has_tests)
+      .sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0));
+    const map = {};
+    ranked.forEach((s, i) => { map[s.student_id] = i + 1; });
+    return map;
+  }, [data]);
   const trend = useMemo(() => (data?.trend || []).map(t => ({
     ...t,
     avg_score: t.avg_score ?? null,
@@ -173,6 +183,13 @@ export default function PerformancePanel({ standardId, classId }) {
                   <button key={s.student_id} onClick={() => navigate(`/teacher/students/${s.student_id}`)}
                     className="w-full text-left px-4 py-3 hover:bg-white/50 transition-colors">
                     <div className="flex items-center gap-3 min-w-0">
+                      <span className={`inline-flex items-center justify-center w-7 h-6 text-[11px] font-bold rounded-md tabular-nums shrink-0 ${
+                        rankById[s.student_id] === 1 ? 'bg-amber-100 text-amber-700'
+                        : rankById[s.student_id] <= 3 ? 'bg-neutral-200 text-neutral-700'
+                        : 'bg-neutral-100 text-neutral-500'}`}
+                        title={rankById[s.student_id] ? `Rank ${rankById[s.student_id]} by avg score` : 'Unranked — no tests in this period'}>
+                        {rankById[s.student_id] ? `#${rankById[s.student_id]}` : '—'}
+                      </span>
                       <Avatar src={s.avatar_url} name={s.name} size="sm" />
                       <p className="flex-1 text-sm font-medium truncate">{s.name}</p>
                       <DeltaArrow delta={s.delta_score} />
