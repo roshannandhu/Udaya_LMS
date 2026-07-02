@@ -1,0 +1,9 @@
+{
+  "name": "udaya",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Root manifest so the Cloudflare Workers build's root `npm install` step succeeds. The web app lives in frontend/ and is built + deployed via wrangler.jsonc (build.command runs `cd frontend && npm run build`).",
+  "scripts": {
+    "build": "cd frontend && npm install --legacy-peer-deps && npm run build"
+  }
+}
