@@ -286,23 +286,18 @@ export default function StudentBroadcastsPage() {
                             fixed padding-bottom can't do the width part, which made the
                             time spill out of short bubbles. */}
                         {b.text && (
-                          <div className="relative min-w-0">
+                          <div className="flex flex-col">
                             <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                               {b.text}
-                              <span className="invisible inline-flex items-center gap-1 pl-3 text-[10px] leading-none whitespace-nowrap" aria-hidden="true">
-                                {b.edited && <span className="italic">edited</span>}
-                                <span>{b.time}</span>
-                              </span>
                             </p>
-                            <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none whitespace-nowrap">
+                            <div className="flex justify-end items-center gap-1 mt-0.5 text-[10px] text-neutral-400 leading-none select-none">
                               {b.edited && <span className="italic">edited</span>}
                               <span>{b.time}</span>
-                            </span>
+                            </div>
                           </div>
                         )}
 
-                        {/* Media-only message: no text to wrap around, so the time
-                            sits on its own right-aligned line under the attachment. */}
+                        {/* Media-only message: time on its own right-aligned row. */}
                         {!b.text && (
                           <div className="flex items-center justify-end gap-1 text-[10px] text-neutral-400 leading-none select-none mt-0.5">
                             {b.edited && <span className="italic">edited</span>}

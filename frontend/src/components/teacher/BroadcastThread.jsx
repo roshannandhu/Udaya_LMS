@@ -504,27 +504,19 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         </div>
                       )}
 
-                      {/* Message text + time. The invisible inline spacer (an exact-width
-                          clone of the meta row) reserves room at the end of the LAST line,
-                          wrapping to a fresh line when the text fills the width — so the
-                          absolutely-positioned time/ticks can never overlap the words. */}
-                      {/* The invisible spacer (exact-width clone of the meta row) both
-                          reserves last-line room AND widens the fit-content bubble so
-                          the absolutely-positioned meta row always stays inside it —
-                          a fixed padding-bottom can't do the width part, which made
-                          the time spill out of short bubbles. */}
+                      {/* Message body: text on top, timestamp always on its own
+                          right-aligned row below. No absolute positioning, no spacers —
+                          works for any bubble width including very short words like "hi". */}
                       {b.text && (
-                        <div className="relative min-w-0">
+                        <div className="flex flex-col">
                           <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                             {b.text}
-                            {metaSpacer}
                           </p>
-                          <span className="absolute bottom-0 right-0">{metaRow}</span>
+                          <div className="flex justify-end mt-0.5">{metaRow}</div>
                         </div>
                       )}
 
-                      {/* Media-only message: no text to wrap around, so the time sits on
-                          its own right-aligned line under the attachment. */}
+                      {/* Media-only message: time on its own right-aligned row. */}
                       {!b.text && (
                         <div className="flex items-center justify-end mt-0.5">{metaRow}</div>
                       )}
