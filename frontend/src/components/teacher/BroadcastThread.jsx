@@ -508,12 +508,18 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                           clone of the meta row) reserves room at the end of the LAST line,
                           wrapping to a fresh line when the text fills the width — so the
                           absolutely-positioned time/ticks can never overlap the words. */}
+                      {/* The invisible spacer (exact-width clone of the meta row) both
+                          reserves last-line room AND widens the fit-content bubble so
+                          the absolutely-positioned meta row always stays inside it —
+                          a fixed padding-bottom can't do the width part, which made
+                          the time spill out of short bubbles. */}
                       {b.text && (
                         <div className="relative min-w-0">
-                          <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug" style={{ paddingBottom: '1.25rem' }}>
+                          <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                             {b.text}
+                            {metaSpacer}
                           </p>
-                          <span className="absolute bottom-1 right-0">{metaRow}</span>
+                          <span className="absolute bottom-0 right-0">{metaRow}</span>
                         </div>
                       )}
 

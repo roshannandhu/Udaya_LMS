@@ -1496,27 +1496,51 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         if not service_supabase:
             raise HTTPException(status_code=503, detail="Login unavailable")
 
+        # Resolution is diagnostic-logged (identifier only, never the password)
+        # so a failed student login can be traced server-side.
+        resolution_note = []
+
+        def _email_from_row(row):
+            """Prefer the stored email; if it's missing, synthesize the auth email
+            the account was created with (username@tutoria.local) so a students
+            row with a NULL email can still authenticate."""
+            if not row:
+                return None
+            if row.get("email"):
+                return row["email"]
+            if row.get("username"):
+                return f"{str(row['username']).strip().lower()}@tutoria.local"
+            return None
+
         # 1. Try Student ID first. Codes lead with a 2-digit year but always
         #    contain the institution letters (e.g. 25UDAYA100001), so a pure-digit
         #    phone input can never equal one here. Stored codes are uppercase.
+        #    Use limit(1) rather than single(): single() 406-errors on duplicate
+        #    rows (possible if the unique index migration never ran), which
+        #    silently killed Student-ID login for the affected students.
         try:
-            code_lookup = service_supabase.table("students").select("email").eq("student_code", identifier.upper()).single().execute()
-            if code_lookup.data and code_lookup.data.get("email"):
-                email_to_use = code_lookup.data["email"]
-        except Exception:
-            pass
+            rows = service_supabase.table("students").select("email, username").eq(
+                "student_code", identifier.upper()).limit(1).execute().data or []
+            resolved = _email_from_row(rows[0] if rows else None)
+            if resolved:
+                email_to_use = resolved
+            elif rows:
+                resolution_note.append("code row found but no email/username")
+        except Exception as e:
+            resolution_note.append(f"code lookup error: {e}")
 
-        # 2. Try username lookup (case-insensitive). This is the primary login
-        #    method for students — teachers create them with a username like
-        #    "aarav.p" and the Supabase auth email is "aarav.p@tutoria.local".
-        #    Without this step every new student gets "Invalid credentials".
+        # 2. Try username lookup (case-insensitive). Teachers create students
+        #    with a username like "aarav.p"; the auth email is
+        #    "aarav.p@tutoria.local".
         if "@" not in email_to_use:
             try:
-                uname_lookup = service_supabase.table("students").select("email").ilike("username", identifier).limit(1).execute()
-                if uname_lookup.data and uname_lookup.data[0].get("email"):
-                    email_to_use = uname_lookup.data[0]["email"]
-            except Exception:
-                pass
+                rows = service_supabase.table("students").select("email, username").ilike(
+                    "username", identifier).limit(1).execute().data or []
+                resolved = _email_from_row(rows[0] if rows else None)
+                if resolved:
+                    email_to_use = resolved
+            except Exception as e:
+                resolution_note.append(f"username lookup error: {e}")
 
     if "@" not in email_to_use:
         # Still unresolved → fall back to phone number lookup
@@ -1524,31 +1548,59 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
             digits_only = re.sub(r'\D', '', identifier)
             if len(digits_only) < 7:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
-            # Try exact match first
-            phone_lookup = service_supabase.table("students").select("email").eq("phone", identifier).single().execute()
-            if not phone_lookup.data or not phone_lookup.data.get("email"):
+            # Try exact match first (limit(1): duplicates must not 406 the login)
+            rows = service_supabase.table("students").select("email, username").eq(
+                "phone", identifier).limit(1).execute().data or []
+            resolved = _email_from_row(rows[0] if rows else None)
+            if not resolved:
                 # Digits-normalized match (handles +91 prefix variations)
-                all_students = service_supabase.table("students").select("email, phone").not_.is_("phone", "null").execute()
-                phone_lookup = None
+                all_students = service_supabase.table("students").select("email, username, phone").not_.is_("phone", "null").execute()
                 for s in (all_students.data or []):
                     stored_digits = re.sub(r'\D', '', s.get("phone", ""))
-                    if stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits):
-                        phone_lookup = type('obj', (object,), {'data': s})()
+                    if stored_digits and (stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits)):
+                        resolved = _email_from_row(s)
                         break
-            if phone_lookup and getattr(phone_lookup, 'data', None) and phone_lookup.data.get("email"):
-                email_to_use = phone_lookup.data["email"]
+            if resolved:
+                email_to_use = resolved
             else:
+                print(f"[login] unresolved identifier '{identifier}' — {'; '.join(resolution_note) or 'no matching student row'}")
                 raise HTTPException(status_code=401, detail="Invalid credentials")
         except HTTPException:
             raise
-        except Exception:
+        except Exception as e:
+            print(f"[login] phone lookup error for '{identifier}': {e}")
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    try:
-        response = supabase.auth.sign_in_with_password({
-            "email": email_to_use,
+    def _sign_in(email):
+        return supabase.auth.sign_in_with_password({
+            "email": email,
             "password": request.password
         })
+
+    try:
+        try:
+            response = _sign_in(email_to_use)
+        except Exception as first_err:
+            err_text = str(first_err).lower()
+            # Self-heal: admin-created accounts that somehow ended up unconfirmed
+            # (e.g. created by an older backend where email_confirm didn't stick)
+            # fail sign-in with "email not confirmed". Confirm once and retry.
+            if "not confirmed" in err_text and service_supabase:
+                try:
+                    listed = service_supabase.auth.admin.list_users()
+                    users_list = getattr(listed, "users", listed) or []
+                    target = next((u for u in users_list if (getattr(u, "email", "") or "").lower() == email_to_use.lower()), None)
+                    if target:
+                        service_supabase.auth.admin.update_user_by_id(target.id, {"email_confirm": True})
+                        response = _sign_in(email_to_use)
+                    else:
+                        raise first_err
+                except HTTPException:
+                    raise
+                except Exception:
+                    raise first_err
+            else:
+                raise first_err
 
         if not response.user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -5804,10 +5856,14 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
     return {"message": "Request submitted. Waiting for teacher approval."}
 
 # Health
+# Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
+# cron actually picked up the latest code (there is no other version signal).
+BUILD_MARKER = "2026-07-03-login-hardening"
+
 @app.get("/api/health")
 def health_check():
     db_status = "connected" if supabase else "disconnected"
-    return {"status": "ok", "database": db_status}
+    return {"status": "ok", "database": db_status, "build": BUILD_MARKER}
 
 # ─── Teacher Team Management ─────────────────────────────────────────────────
 

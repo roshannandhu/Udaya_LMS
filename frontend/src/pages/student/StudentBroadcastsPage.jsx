@@ -280,12 +280,21 @@ export default function StudentBroadcastsPage() {
                             the text fills the width — so the absolutely-positioned
                             time can never sit on top of the words, at any width or
                             OS font scale. */}
+                        {/* The invisible spacer (exact-width clone of the time row) both
+                            reserves last-line room AND widens the fit-content bubble so
+                            the absolutely-positioned time always stays inside it — a
+                            fixed padding-bottom can't do the width part, which made the
+                            time spill out of short bubbles. */}
                         {b.text && (
                           <div className="relative min-w-0">
-                            <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug" style={{ paddingBottom: '1.25rem' }}>
+                            <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                               {b.text}
+                              <span className="invisible inline-flex items-center gap-1 pl-3 text-[10px] leading-none whitespace-nowrap" aria-hidden="true">
+                                {b.edited && <span className="italic">edited</span>}
+                                <span>{b.time}</span>
+                              </span>
                             </p>
-                            <span className="absolute bottom-1 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none whitespace-nowrap">
+                            <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none whitespace-nowrap">
                               {b.edited && <span className="italic">edited</span>}
                               <span>{b.time}</span>
                             </span>
