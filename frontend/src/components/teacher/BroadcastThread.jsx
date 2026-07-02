@@ -510,11 +510,10 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                           absolutely-positioned time/ticks can never overlap the words. */}
                       {b.text && (
                         <div className="relative min-w-0">
-                          <div className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
+                          <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug" style={{ paddingBottom: '1.25rem' }}>
                             {b.text}
-                            {metaSpacer}
-                          </div>
-                          <span className="absolute bottom-0 right-0">{metaRow}</span>
+                          </p>
+                          <span className="absolute bottom-1 right-0">{metaRow}</span>
                         </div>
                       )}
 

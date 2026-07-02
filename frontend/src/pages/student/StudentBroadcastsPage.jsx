@@ -282,14 +282,10 @@ export default function StudentBroadcastsPage() {
                             OS font scale. */}
                         {b.text && (
                           <div className="relative min-w-0">
-                            <div className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
+                            <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug" style={{ paddingBottom: '1.25rem' }}>
                               {b.text}
-                              <span className="invisible inline-flex items-center gap-1 pl-3 text-[10px] leading-none whitespace-nowrap" aria-hidden="true">
-                                {b.edited && <span className="italic">edited</span>}
-                                <span>{b.time}</span>
-                              </span>
-                            </div>
-                            <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none whitespace-nowrap">
+                            </p>
+                            <span className="absolute bottom-1 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none whitespace-nowrap">
                               {b.edited && <span className="italic">edited</span>}
                               <span>{b.time}</span>
                             </span>
