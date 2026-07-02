@@ -67,6 +67,7 @@ const WhatsAppPage            = lazyWithRetry(() => import('./pages/teacher/What
 const WhatsAppStatusPage      = lazyWithRetry(() => import('./pages/teacher/WhatsAppStatus'));
 const AppDownloadPage         = lazyWithRetry(() => import('./pages/AppDownloadPage'));
 const PrivacyPolicyPage       = lazyWithRetry(() => import('./pages/PrivacyPolicyPage'));
+const DeleteAccountPage       = lazyWithRetry(() => import('./pages/DeleteAccountPage'));
 const StudentLiveClassesPage  = lazyWithRetry(() => import('./pages/student/StudentLiveClassesPage'));
 
 const StudentHomePage            = lazyWithRetry(() => import('./pages/student/StudentHomePage'));
@@ -305,6 +306,8 @@ export default function App() {
         <Route path="/download" element={<AppDownloadPage />} />
         {/* Public privacy policy — required by Google Play; paste /privacy URL into the listing. */}
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        {/* Public account/data deletion page — required by Google Play Data safety. */}
+        <Route path="/delete-account" element={<DeleteAccountPage />} />
 
         <Route path="/teacher" element={
           <ProtectedTeacherRoute>
