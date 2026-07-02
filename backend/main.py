@@ -1237,6 +1237,77 @@ def _invalidate_auth_cache_for_user(user_id: str):
         _auth_cache.pop(t, None)
 
 
+STUDENT_AUTH_DOMAIN = "tutoria.local"
+LEGACY_STUDENT_AUTH_DOMAIN = "tutoria.internal"
+
+
+def _clean_optional_text(value) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_student_username(username: str) -> str:
+    return re.sub(r"\s+", ".", _clean_optional_text(username).lower())
+
+
+def _looks_like_real_email(value: str) -> bool:
+    value = _clean_optional_text(value)
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value))
+
+
+def _student_auth_email(username: str, domain: str = STUDENT_AUTH_DOMAIN) -> Optional[str]:
+    username = _normalize_student_username(username)
+    if not username:
+        return None
+    return f"{username}@{domain}"
+
+
+def _student_auth_email_for_create(username: str, email: Optional[str] = None) -> str:
+    email = _clean_optional_text(email).lower()
+    if _looks_like_real_email(email):
+        return email
+    username = _normalize_student_username(username)
+    if _looks_like_real_email(username):
+        return username
+    auth_email = _student_auth_email(username)
+    if not auth_email:
+        raise HTTPException(status_code=400, detail="Username is required")
+    return auth_email
+
+
+def _append_unique(items: list, value: Optional[str]):
+    value = _clean_optional_text(value).lower()
+    if value and value not in items:
+        items.append(value)
+
+
+def _student_login_email_candidates(row: Optional[dict]) -> List[str]:
+    """Auth emails to try for a student profile row.
+
+    The canonical synthetic address is username@tutoria.local. A short-lived
+    compatibility fallback keeps older bulk-created accounts working after they
+    were accidentally created as username@tutoria.internal.
+    """
+    if not row:
+        return []
+
+    candidates = []
+    email = row.get("email")
+    username = row.get("username")
+
+    _append_unique(candidates, email)
+    if _looks_like_real_email(username):
+        _append_unique(candidates, username)
+    else:
+        _append_unique(candidates, _student_auth_email(username))
+        _append_unique(candidates, _student_auth_email(username, LEGACY_STUDENT_AUTH_DOMAIN))
+    return candidates
+
+
+def _extend_unique(items: list, values: List[str]):
+    for value in values:
+        _append_unique(items, value)
+
+
 def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
@@ -1504,13 +1575,8 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
             """Prefer the stored email; if it's missing, synthesize the auth email
             the account was created with (username@tutoria.local) so a students
             row with a NULL email can still authenticate."""
-            if not row:
-                return None
-            if row.get("email"):
-                return row["email"]
-            if row.get("username"):
-                return f"{str(row['username']).strip().lower()}@tutoria.local"
-            return None
+            candidates = _student_login_email_candidates(row)
+            return candidates[0] if candidates else None
 
         # 1. Try Student ID first. Codes lead with a 2-digit year but always
         #    contain the institution letters (e.g. 25UDAYA100001), so a pure-digit
@@ -1578,21 +1644,36 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         })
 
     try:
+        response = None
         try:
             response = _sign_in(email_to_use)
         except Exception as first_err:
             err_text = str(first_err).lower()
+            confirm_email = email_to_use
+            local_suffix = f"@{STUDENT_AUTH_DOMAIN}"
+            if "not confirmed" not in err_text and email_to_use.lower().endswith(local_suffix):
+                legacy_email = f"{email_to_use[:-len(local_suffix)]}@{LEGACY_STUDENT_AUTH_DOMAIN}"
+                try:
+                    response = _sign_in(legacy_email)
+                    err_text = ""
+                except Exception as legacy_err:
+                    first_err = legacy_err
+                    confirm_email = legacy_email
+                    err_text = str(first_err).lower()
+
             # Self-heal: admin-created accounts that somehow ended up unconfirmed
             # (e.g. created by an older backend where email_confirm didn't stick)
             # fail sign-in with "email not confirmed". Confirm once and retry.
-            if "not confirmed" in err_text and service_supabase:
+            if response is not None:
+                pass
+            elif "not confirmed" in err_text and service_supabase:
                 try:
                     listed = service_supabase.auth.admin.list_users()
                     users_list = getattr(listed, "users", listed) or []
-                    target = next((u for u in users_list if (getattr(u, "email", "") or "").lower() == email_to_use.lower()), None)
+                    target = next((u for u in users_list if (getattr(u, "email", "") or "").lower() == confirm_email.lower()), None)
                     if target:
                         service_supabase.auth.admin.update_user_by_id(target.id, {"email_confirm": True})
-                        response = _sign_in(email_to_use)
+                        response = _sign_in(confirm_email)
                     else:
                         raise first_err
                 except HTTPException:
@@ -3969,7 +4050,8 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
     if not service_supabase:
         raise HTTPException(status_code=500, detail="Database not available")
 
-    auth_email = request.email or f"{request.username}@tutoria.local"
+    username = _normalize_student_username(request.username)
+    auth_email = _student_auth_email_for_create(username, request.email)
 
     try:
         response = service_supabase.auth.admin.create_user({
@@ -3979,7 +4061,7 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
             "user_metadata": {
                 "role": "student",
                 "name": request.name,
-                "username": request.username
+                "username": username
             }
         })
 
@@ -3989,7 +4071,7 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
         student_data = {
             "id": response.user.id,
             "name": request.name,
-            "username": request.username,
+            "username": username,
             "email": auth_email,
             "phone": request.phone,
             "standard_id": request.standard_id,
@@ -4016,7 +4098,7 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
         return {
             "id": response.user.id,
             "email": auth_email,
-            "username": request.username,
+            "username": username,
             "student_code": student_code,
             "role": "student",
             "password": request.password
@@ -5782,7 +5864,10 @@ def approve_join_request(request_id: str, background_tasks: BackgroundTasks, use
 
     # Create student account
     if service_supabase:
-        auth_email = f"{request.data['student_email'] or request.data['student_name']}@tutoria.local"
+        username = _normalize_student_username(
+            request.data.get("student_email") or request.data.get("student_name")
+        )
+        auth_email = _student_auth_email_for_create(username, request.data.get("student_email"))
         try:
             new_user = service_supabase.auth.admin.create_user({
                 "email": auth_email,
@@ -5790,7 +5875,8 @@ def approve_join_request(request_id: str, background_tasks: BackgroundTasks, use
                 "email_confirm": True,
                 "user_metadata": {
                     "role": "student",
-                    "name": request.data["student_name"]
+                    "name": request.data["student_name"],
+                    "username": username
                 }
             })
 
@@ -5799,7 +5885,7 @@ def approve_join_request(request_id: str, background_tasks: BackgroundTasks, use
                     "id": new_user.user.id,
                     "name": request.data["student_name"],
                     "email": auth_email,
-                    "username": request.data["student_email"] or request.data["student_name"].lower().replace(" ", "."),
+                    "username": username,
                     "standard_id": invite_link.data["standard_id"],
                     "must_change_pwd": True,
                 }).execute()
@@ -5822,7 +5908,7 @@ def approve_join_request(request_id: str, background_tasks: BackgroundTasks, use
 
                 return {
                     "message": "Student approved",
-                    "username": request.data["student_email"] or request.data["student_name"].lower().replace(" ", "."),
+                    "username": username,
                     "student_code": student_code,
                     "temp_password": temp_password
                 }
@@ -5880,7 +5966,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-login-hardening"
+BUILD_MARKER = "2026-07-03-student-auth-email-fix"
 
 @app.get("/api/health")
 def health_check():
@@ -6001,7 +6087,7 @@ def create_demo_accounts(user = Depends(verify_token)):
         ]
 
         for student in students_data:
-            auth_email = f"{student['username']}@tutoria.local"
+            auth_email = _student_auth_email_for_create(student["username"])
             student_response = service_supabase.auth.admin.create_user({
                 "email": auth_email,
                 "password": "student123",
@@ -7790,7 +7876,7 @@ async def websocket_endpoint(websocket: WebSocket, standard_id: str, token: Opti
     except WebSocketDisconnect:
         manager.disconnect(websocket, standard_id)
 
-async def _send_whatsapp_broadcast(teacher_id: str, standard_id: str, message: str, attachment_url: Optional[str] = None):
+async def _send_whatsapp_broadcast(teacher_id: str, standard_id: str, message: str, attachment_url: Optional[str] = None, attachment_type: Optional[str] = None):
     try:
         import sys
         import whatsapp_parent_routes as wpr
@@ -7817,6 +7903,7 @@ async def _send_whatsapp_broadcast(teacher_id: str, standard_id: str, message: s
                                    brand=_wa_branding_name() or None)
                 await _wa_send_and_log(
                     provider, teacher_id, r, mode="freeform", body_text=text,
+                    media_url=attachment_url or None, media_type=attachment_type or None,
                     category="utility", standard_id=r["standard_id"])
             except Exception as e:
                 print(f"[wa broadcast] skipping send for student parent {r.get('id')}: {e}")
@@ -7889,7 +7976,7 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
         await asyncio.to_thread(_notify_standard_students, req.standard_id, "broadcast",
             "New message", snippet, {"standard_id": req.standard_id})
         # Trigger WhatsApp broadcast to parents in the background
-        asyncio.create_task(_send_whatsapp_broadcast(user["teacher_id"], req.standard_id, req.message, req.attachment_url))
+        asyncio.create_task(_send_whatsapp_broadcast(user["teacher_id"], req.standard_id, req.message, req.attachment_url, req.attachment_type))
 
     return {"status": "success", "data": payload}
 
@@ -8643,7 +8730,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 continue
 
             # 1. Create Supabase Auth user
-            email_to_use = s.email if s.email else f"{s.username}@tutoria.internal"
+            email_to_use = _student_auth_email_for_create(s.username, s.email)
             auth_res = service_supabase.auth.admin.create_user({
                 "email": email_to_use,
                 "password": s.temp_password,

@@ -37,6 +37,9 @@ let starting = false;
 let connectAttempts = 0;
 
 // India format: strip +/spaces, drop a leading 0, prepend 91 for a bare 10-digit.
+import https from 'https';
+import http from 'http';
+
 function normalizeIn(raw) {
   let d = String(raw || '').replace(/\D/g, '');
   if (!d) return '';
@@ -45,6 +48,21 @@ function normalizeIn(raw) {
   return d;
 }
 const jidFor = (phone) => `${normalizeIn(phone)}@s.whatsapp.net`;
+
+function downloadFile(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    client.get(url, { rejectUnauthorized: false }, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return reject(new Error(`HTTP status ${res.statusCode}`));
+      }
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', (err) => reject(err));
+    }).on('error', (err) => reject(err));
+  });
+}
 
 // The actual Baileys send — throws on any failure so the queue can retry/log.
 async function rawSend(phone, text, media) {
@@ -66,10 +84,23 @@ async function rawSend(phone, text, media) {
 
   let content;
   if (media?.url) {
+    let mediaData;
+    if (media.url.startsWith('http')) {
+      try {
+        mediaData = await downloadFile(media.url);
+      } catch (e) {
+        console.error(`[wa] failed to pre-download media URL ${media.url}:`, e.message);
+        // Fallback to let Baileys try resolving it directly
+        mediaData = { url: media.url };
+      }
+    } else {
+      mediaData = { url: media.url };
+    }
+
     const isImage = String(media.type || '').startsWith('image');
     content = isImage
-      ? { image: { url: media.url }, caption: text || '' }
-      : { document: { url: media.url }, mimetype: media.type || 'application/pdf',
+      ? { image: mediaData, caption: text || '' }
+      : { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: 'report.pdf', caption: text || '' };
   } else {
     content = { text: text || '' };
