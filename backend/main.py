@@ -1600,8 +1600,9 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         #    "aarav.p@tutoria.local".
         if "@" not in email_to_use:
             try:
+                normalized_identifier = _normalize_student_username(identifier)
                 rows = service_supabase.table("students").select("email, username").ilike(
-                    "username", identifier).limit(1).execute().data or []
+                    "username", normalized_identifier).limit(1).execute().data or []
                 resolved = _email_from_row(rows[0] if rows else None)
                 if resolved:
                     email_to_use = resolved
