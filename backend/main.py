@@ -1492,7 +1492,7 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
     email_to_use = identifier
 
     if "@" not in identifier:
-        # No "@" → either a Student ID (e.g. UDAYA202510001) or a phone number.
+        # No "@" → could be a Student ID, username, or phone number.
         if not service_supabase:
             raise HTTPException(status_code=503, detail="Login unavailable")
 
@@ -1505,6 +1505,18 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
                 email_to_use = code_lookup.data["email"]
         except Exception:
             pass
+
+        # 2. Try username lookup (case-insensitive). This is the primary login
+        #    method for students — teachers create them with a username like
+        #    "aarav.p" and the Supabase auth email is "aarav.p@tutoria.local".
+        #    Without this step every new student gets "Invalid credentials".
+        if "@" not in email_to_use:
+            try:
+                uname_lookup = service_supabase.table("students").select("email").ilike("username", identifier).limit(1).execute()
+                if uname_lookup.data and uname_lookup.data[0].get("email"):
+                    email_to_use = uname_lookup.data[0]["email"]
+            except Exception:
+                pass
 
     if "@" not in email_to_use:
         # Still unresolved → fall back to phone number lookup
