@@ -1,0 +1,53 @@
+name: Upload Play Store assets to R2
+
+# One-shot helper (workflow_dispatch): copies the Play Store artifacts — the signed
+# .aab from the tagged GitHub release plus the store-listing graphics committed in
+# playstore-release/ — to the R2 public bucket under play/. This makes them
+# fetchable from the Play Console page (files.udaya-learn.com sends permissive
+# CORS), where they are injected into the console's file inputs via script.
+# Does NOT touch app/ (the live APK + version.json stay untouched).
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag whose .aab to copy (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download .aab from GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh release download "${{ inputs.release_tag }}" --pattern '*.aab' --dir out
+          ls -la out/
+
+      - name: Upload assets to R2 (play/ prefix)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ secrets.R2_PUBLIC_BUCKET }}
+        run: |
+          for f in out/*.aab; do
+            aws s3 cp "$f" "s3://$BUCKET/play/$(basename "$f")" \
+              --endpoint-url "$ENDPOINT" --content-type application/octet-stream
+          done
+          for g in playstore-release/*.png; do
+            aws s3 cp "$g" "s3://$BUCKET/play/$(basename "$g")" \
+              --endpoint-url "$ENDPOINT" --content-type image/png
+          done
+          echo "Uploaded:"
+          aws s3 ls "s3://$BUCKET/play/" --endpoint-url "$ENDPOINT"
