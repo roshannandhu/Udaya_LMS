@@ -236,9 +236,44 @@ VITE_API_URL=http://localhost:8001/api
 
 ---
 
-*Last updated: May 2026*
+## Android app & Google Play
+
+- The app is a **Capacitor** wrapper of the web build. Package/`applicationId`:
+  **`com.udayalearn.lms`** (permanent). Play Store display name: **"Udaya Learn"**
+  (set in `android/.../res/values/strings.xml` `app_name` + `capacitor.config.json`
+  `appName`). The *in-app* name comes from teacher Branding (backend), not code.
+- **Release build:** push a `vX.Y.Z` tag → `.github/workflows/android-release.yml`
+  builds a **signed APK** (→ Cloudflare R2, powers `/app` + in-app updater) **and a
+  signed `.aab`** (Play Store artifact, hand-uploaded to Play Console). Tags must be
+  monotonic; the live version name comes from the tag.
+- **Play Console:** personal accounts must run a **closed test (12+ testers, 14 days)**
+  before production. Public pages required by Play: **`/privacy`** and
+  **`/delete-account`** (both React routes in `App.jsx`; also static copies in
+  `frontend/public/`). Public contact email: **`udayatuitionhome@gmail.com`** (never
+  the personal Google-login address).
+- Play Console's Angular questionnaires (content rating, data safety, app access) often
+  won't commit values via automation. Workaround: fill, **Save draft, reload the page**
+  (drafts hydrate into a working form), then Save/Submit.
+
+## Frontend deployment (Cloudflare)
+
+- The frontend deploys via a **Git-connected Cloudflare Workers build** (project
+  `udaya-learn`, connected to this repo's `main`). The Cloudflare build runs
+  `npm ci` at the **repo root** before `npx wrangler deploy`, so a **root
+  `package.json` + `package-lock.json` must exist** (the app itself lives in
+  `frontend/` and is built by `wrangler.jsonc` `build.command`). Removing the root
+  manifest breaks every deploy with `ENOENT: no package.json`.
+- `wrangler.jsonc` serves `frontend/dist` with `not_found_handling:
+  single-page-application`, so unknown paths fall through to the SPA — **add public
+  pages as React routes**, not just static `public/*.html` (those get shadowed).
+- There is **no** GitHub Actions deploy workflow — the old `cloudflare-pages.yml`
+  was redundant and always failed (missing `CLOUDFLARE_API_TOKEN`); it was removed.
+
+---
+
+*Last updated: July 2026*
 *UI prototype: lms-v3_9.jsx · Build guide: BUILD_STEPS.md*
-*Stack: React + Vite · FastAPI · Supabase · Cloudflare Stream (Module 4+)*
+*Stack: React + Vite · FastAPI · Supabase · Cloudflare (Stream + Workers) · Capacitor (Android)*
 
 ---
 
