@@ -76,7 +76,8 @@
       "Bash(cat frontend/.env.local)",
       "Bash(cat frontend/.env)",
       "Bash(ls backend/.env)",
-      "PowerShell($cmds = @\\('py','python','python3'\\); foreach \\($c in $cmds\\) { $p = Get-Command $c -ErrorAction SilentlyContinue; if \\($p\\) { Write-Output \"FOUND: $c -> $\\($p.Source\\)\" } })"
+      "PowerShell($cmds = @\\('py','python','python3'\\); foreach \\($c in $cmds\\) { $p = Get-Command $c -ErrorAction SilentlyContinue; if \\($p\\) { Write-Output \"FOUND: $c -> $\\($p.Source\\)\" } })",
+      "Bash(mkdir -p \"E:/IMP projects/Udaya/frontend/src/assets/hairoil\")"
     ]
   },
   "enabledPlugins": {

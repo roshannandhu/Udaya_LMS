@@ -492,7 +492,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         <div className="relative min-w-0">
                           <p className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                             {b.text}
-                            <span aria-hidden="true" className="inline-block align-bottom" style={{ width: `${4 + (b.edited ? 2.5 : 0) + (isFutureScheduled ? 7 : 0)}em` }} />
+                            <span aria-hidden="true" className="inline-block align-bottom" style={{ width: `${5.5 + (b.edited ? 3 : 0) + (isFutureScheduled ? 9 : 0)}em` }} />
                           </p>
                           <span className="absolute bottom-0 right-0">{metaRow}</span>
                         </div>
