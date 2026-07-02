@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { attendanceApi } from '../../lib/api';
 import { Avatar, Skeleton } from '../ui';
+import { useTheme } from '../../lib/theme';
 
 export function fmt(date) {
   const d = new Date(date);
@@ -27,6 +28,7 @@ function addDays(date, days) {
 
 /* ── Animated SVG donut ring ───────────────────────────────────────── */
 function DonutRing({ present, total }) {
+  const dark = useTheme(s => s.dark);
   const pct = total > 0 ? Math.round((present / total) * 100) : 0;
   const radius = 26;
   const circ = 2 * Math.PI * radius;
@@ -36,7 +38,7 @@ function DonutRing({ present, total }) {
   return (
     <div className="relative flex items-center justify-center" style={{ width: 70, height: 70 }}>
       <svg width="70" height="70" viewBox="0 0 70 70" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="35" cy="35" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="7" />
+        <circle cx="35" cy="35" r={radius} fill="none" stroke={dark ? '#1c1c30' : '#f3f4f6'} strokeWidth="7" />
         <circle
           cx="35" cy="35" r={radius}
           fill="none"

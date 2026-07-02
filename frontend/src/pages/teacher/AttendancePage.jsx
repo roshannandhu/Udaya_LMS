@@ -46,7 +46,7 @@ export default function AttendancePage() {
   const activeStandard = standards.find(s => s.id === activeStdId);
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb]">
+    <div className="min-h-screen bg-[#F8F9FA]">
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-white border-b border-neutral-100 shadow-sm">
