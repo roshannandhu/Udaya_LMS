@@ -401,10 +401,10 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
               // To mimic WhatsApp: outgoing messages on the right
               const isSender = true; // Teacher is always the sender in this view
 
-              // Time + ticks row, reused both inline (media-only) and absolutely
-              // positioned over the last text line (with a reserved spacer).
-              const metaRow = (
-                <span className="inline-flex items-center gap-1 text-[10px] text-neutral-500 leading-none select-none">
+              // Badges + time shared by the visible meta row and the invisible
+              // width-reserving spacer (both must measure identically).
+              const metaBadges = (
+                <>
                   {isFutureScheduled && (
                     <span className="flex items-center gap-0.5 text-amber-600 bg-amber-50 px-1 rounded border border-amber-200">
                       <Clock size={8} />
@@ -413,6 +413,14 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                   )}
                   {b.edited && <span className="italic">edited</span>}
                   <span>{b.time}</span>
+                </>
+              );
+
+              // Visible time + ticks row: rendered inline for media-only bubbles,
+              // absolutely positioned at the bubble's bottom-right for text bubbles.
+              const metaRow = (
+                <span className="inline-flex items-center gap-1 text-[10px] text-neutral-500 leading-none select-none whitespace-nowrap">
+                  {metaBadges}
                   {isSender && (
                     <button
                       onClick={(e) => {
@@ -431,6 +439,18 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                       <CheckCheck size={14} className={allRead ? 'text-[#34B7F1]' : 'text-neutral-400'} />
                     </button>
                   )}
+                </span>
+              );
+
+              // Invisible clone of the meta row appended inline after the text.
+              // It reserves the meta row's exact width (plus a pl-3 gap) on the
+              // LAST line — wrapping onto its own fresh line when it doesn't fit —
+              // so the absolutely-positioned visible row below can never sit on
+              // top of the words, at any width or OS font scale.
+              const metaSpacer = (
+                <span className="invisible inline-flex items-center gap-1 pl-3 text-[10px] leading-none whitespace-nowrap" aria-hidden="true">
+                  {metaBadges}
+                  {isSender && <CheckCheck size={14} />}
                 </span>
               );
 
@@ -484,17 +504,17 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
                         </div>
                       )}
 
-                      {/* Message text + time. The transparent inline spacer reserves room
-                          on the last line so the absolutely-positioned time/ticks can never
-                          sit on top of the words (they wrap to their own line if the text
-                          fills the width). Widen the gap for "edited"/scheduled badges. */}
+                      {/* Message text + time. The invisible inline spacer (an exact-width
+                          clone of the meta row) reserves room at the end of the LAST line,
+                          wrapping to a fresh line when the text fills the width — so the
+                          absolutely-positioned time/ticks can never overlap the words. */}
                       {b.text && (
                         <div className="relative min-w-0">
                           <div className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                             {b.text}
-                            <span className="float-right ml-4 mt-2">{metaRow}</span>
-                            <div className="clear-both"></div>
+                            {metaSpacer}
                           </div>
+                          <span className="absolute bottom-0 right-0">{metaRow}</span>
                         </div>
                       )}
 

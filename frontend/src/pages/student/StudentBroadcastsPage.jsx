@@ -274,21 +274,25 @@ export default function StudentBroadcastsPage() {
                           </div>
                         )}
 
-                        {/* Message text + WhatsApp-style time.
-                            The transparent inline spacer after the text reserves room
-                            on the LAST line so the absolutely-positioned time can never
-                            sit on top of the words (it wraps to its own line if the
-                            text fills the width). Widen the gap when "edited" shows. */}
+                        {/* Message text + WhatsApp-style time. The invisible inline
+                            spacer (an exact-width clone of the time row) reserves room
+                            at the end of the LAST line — wrapping to a fresh line when
+                            the text fills the width — so the absolutely-positioned
+                            time can never sit on top of the words, at any width or
+                            OS font scale. */}
                         {b.text && (
                           <div className="relative min-w-0">
                             <div className="text-[14px] text-neutral-900 whitespace-pre-wrap break-words leading-snug">
                               {b.text}
-                              <span className="float-right ml-4 mt-2 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none">
+                              <span className="invisible inline-flex items-center gap-1 pl-3 text-[10px] leading-none whitespace-nowrap" aria-hidden="true">
                                 {b.edited && <span className="italic">edited</span>}
                                 <span>{b.time}</span>
                               </span>
-                              <div className="clear-both"></div>
                             </div>
+                            <span className="absolute bottom-0 right-0 flex items-center gap-1 text-[10px] text-neutral-400 leading-none select-none whitespace-nowrap">
+                              {b.edited && <span className="italic">edited</span>}
+                              <span>{b.time}</span>
+                            </span>
                           </div>
                         )}
 
