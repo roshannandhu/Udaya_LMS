@@ -8748,6 +8748,8 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
             existing = []
             if normalized_username:
                 existing = service_supabase.table("students").select("id, student_code").eq("username", normalized_username).execute().data or []
+                if not existing and s.username != normalized_username:
+                    existing = service_supabase.table("students").select("id, student_code").eq("username", s.username).execute().data or []
             if not existing and s.email:
                 existing = service_supabase.table("students").select("id, student_code").eq("email", s.email).execute().data or []
             
@@ -8759,6 +8761,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 update_data = {
                     "name": s.name,
                     "standard_id": s.standard_id,
+                    "username": normalized_username,
                 }
                 if s.email:
                     update_data["email"] = s.email
