@@ -1,0 +1,41 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "whatsapp-service/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "deploy.sh"
+      - "autodeploy.sh"
+      - ".github/workflows/deploy-backend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${EC2_HOST:-}" || { echo "EC2_HOST secret is missing"; exit 1; }
+          test -n "${EC2_USER:-}" || { echo "EC2_USER secret is missing"; exit 1; }
+          test -n "${EC2_SSH_KEY:-}" || { echo "EC2_SSH_KEY secret is missing"; exit 1; }
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" | tr -d '\r' > ~/.ssh/udaya_ec2_key
+          chmod 600 ~/.ssh/udaya_ec2_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/udaya_ec2_key "$EC2_USER@$EC2_HOST" \
+            'cd /opt/udaya && bash deploy.sh'
