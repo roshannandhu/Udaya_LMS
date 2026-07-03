@@ -143,10 +143,9 @@ async function rawSend(phone, text, media) {
     if (isImage) {
       content = { image: mediaData, caption: text || '' };
     } else if (isAudio) {
-      // ptt renders as a WhatsApp voice note (mic bubble) instead of a file.
-      // Force 'audio/mp4' as it ensures better cross-platform compatibility for voice notes in Baileys
-      // when the source might be audio/webm from browser MediaRecorder.
-      content = { audio: mediaData, mimetype: 'audio/mp4', ptt: true };
+      // Sending as standard audio (without ptt: true) is more robust since
+      // browser-recorded WebM buffers are often rejected by WhatsApp as PTT.
+      content = { audio: mediaData, mimetype: media.type || 'audio/mp4' };
     } else {
       content = { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
