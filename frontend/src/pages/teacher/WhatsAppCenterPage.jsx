@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
-  History, Inbox, Clock, LayoutTemplate, Settings as SettingsIcon,
+  History, MessagesSquare, Clock, LayoutTemplate, Settings as SettingsIcon,
   LayoutDashboard, ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
   SlidersHorizontal, IndianRupee, Smartphone, WifiOff,
 } from 'lucide-react';
@@ -14,7 +14,7 @@ import SendWizard, { TASKS } from '../../components/teacher/whatsapp/SendWizard'
 import PendingActions from '../../components/teacher/whatsapp/PendingActions';
 import OverviewTab from '../../components/teacher/whatsapp/OverviewTab';
 import TemplatesTab from '../../components/teacher/whatsapp/TemplatesTab';
-import InboxTab from '../../components/teacher/whatsapp/InboxTab';
+import ChatsTab from '../../components/teacher/whatsapp/ChatsTab';
 import HistoryTab from '../../components/teacher/whatsapp/HistoryTab';
 import AutomationTab from '../../components/teacher/whatsapp/AutomationTab';
 
@@ -33,7 +33,7 @@ const TASK_CARDS = [
 
 const SCREENS = {
   history:    { title: 'Delivery Reports', icon: History },
-  inbox:      { title: 'Inbox',            icon: Inbox },
+  inbox:      { title: 'Chats',            icon: MessagesSquare },
   automation: { title: 'Automations',      icon: Clock },
   templates:  { title: 'Templates',        icon: LayoutTemplate },
   settings:   { title: 'Settings',         icon: SettingsIcon },
@@ -137,7 +137,7 @@ export default function WhatsAppCenterPage() {
               <sub.icon size={18} className="text-whatsapp-green-fg" /> {sub.title}
             </h2>
             {screen === 'history' && <HistoryTab />}
-            {screen === 'inbox' && <InboxTab />}
+            {screen === 'inbox' && <ChatsTab connection={connection} onUnreadChange={setInboxUnread} />}
             {screen === 'automation' && <AutomationTab templates={templates} groups={groups} />}
             {screen === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} variables={variables} provider={provider} />}
             {screen === 'dashboard' && <OverviewTab onNavigate={navigateFromOverview} currency={currency} />}

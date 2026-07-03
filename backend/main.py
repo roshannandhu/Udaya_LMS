@@ -13238,7 +13238,9 @@ def _wa_phone_variants(phone: str):
 
 
 def _wa_match_inbound(from_phone: str):
-    """Resolve an inbound sender phone to {teacher_id, student_id, name, standard}."""
+    """Resolve an inbound sender phone to {teacher_id, student_id, name, standard}.
+    Matches students.phone first, then parent_phone (the number reports are
+    actually sent to when set)."""
     variants = _wa_phone_variants(from_phone)
     if not variants:
         return None
@@ -13247,6 +13249,12 @@ def _wa_match_inbound(from_phone: str):
             "id, name, standard_id").in_("phone", variants).execute().data or []
     except Exception:
         srows = []
+    if not srows:
+        try:
+            srows = service_supabase.table("students").select(
+                "id, name, standard_id").in_("parent_phone", variants).execute().data or []
+        except Exception:
+            srows = []
     if not srows:
         return None
     s = srows[0]
@@ -13268,6 +13276,189 @@ def _wa_match_inbound(from_phone: str):
     }
 
 
+# ── Live chat updates: teacher_id -> open inbox WebSockets ─────────────────────
+_wa_inbox_sockets: Dict[str, list] = {}
+
+async def _wa_inbox_emit(teacher_id: str, payload: dict):
+    """Push a chat event to every open Chats screen for this teacher. Best-effort —
+    dead sockets are pruned, failures never break the webhook/reply path."""
+    conns = _wa_inbox_sockets.get(teacher_id) or []
+    dead = []
+    for ws in conns:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        try:
+            conns.remove(ws)
+        except ValueError:
+            pass
+
+
+@app.websocket("/api/ws/whatsapp/inbox")
+async def wa_inbox_ws(websocket: WebSocket, token: Optional[str] = None):
+    """Live parent-chat stream for the WhatsApp Chats screen (teacher only)."""
+    if not token:
+        await websocket.close(code=4001)
+        return
+    user = None
+    cached = _auth_cache.get(token)
+    if cached and cached["expires_at"] > time_module.time():
+        user = cached.get("result")
+    if user is None:
+        try:
+            ur = await asyncio.to_thread(lambda: supabase.auth.get_user(token))
+            if ur and ur.user:
+                meta = ur.user.user_metadata or {}
+                # Sub-teachers act as their primary teacher (same as verify_token).
+                tid = (meta.get("primary_teacher_id")
+                       if meta.get("teacher_type") == "sub" and meta.get("primary_teacher_id")
+                       else ur.user.id)
+                user = {"id": ur.user.id, "role": meta.get("role", "student"), "teacher_id": tid}
+        except Exception:
+            user = None
+    if not user or user.get("role") != "teacher":
+        await websocket.close(code=4001)
+        return
+    teacher_id = user.get("teacher_id") or user.get("id")
+    await websocket.accept()
+    _wa_inbox_sockets.setdefault(teacher_id, []).append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        try:
+            _wa_inbox_sockets.get(teacher_id, []).remove(websocket)
+        except ValueError:
+            pass
+
+
+async def _wa_store_inbound_media(media_b64: str, media_type: str, media_name: Optional[str]) -> Optional[str]:
+    """Decode a base64 attachment from the Baileys service and store it publicly.
+    Returns the URL, or None on any failure (the message still saves, text-only)."""
+    try:
+        import base64 as _b64
+        data = _b64.b64decode(media_b64)
+        if not data or len(data) > 8 * 1024 * 1024:
+            return None
+        ext = ""
+        if media_name and "." in media_name:
+            ext = "." + media_name.rsplit(".", 1)[-1][:8]
+        elif (media_type or "").startswith("image/"):
+            ext = "." + (media_type.split("/")[-1] or "jpg")
+        elif media_type == "application/pdf":
+            ext = ".pdf"
+        path = f"whatsapp/in_{uuid.uuid4().hex}{ext}"
+        return await asyncio.to_thread(
+            lambda: filestore.upload_public(service_supabase, "broadcasts", path, data,
+                                            media_type or "application/octet-stream"))
+    except Exception as e:
+        print(f"[wa] inbound media store failed: {e}")
+        return None
+
+
+def _wa_pid_exists(table: str, pid: str) -> bool:
+    if not pid:
+        return False
+    try:
+        rows = service_supabase.table(table).select("id").eq(
+            "provider_message_id", pid).limit(1).execute().data
+        return bool(rows)
+    except Exception:
+        return False
+
+
+async def _wa_handle_baileys_event(body: dict):
+    """Chat message forwarded by the Baileys service (messages.upsert). Only
+    numbers that match a student/parent are kept — the teacher's personal chats
+    on the linked number never enter the LMS."""
+    direction = body.get("direction")
+    phone = str(body.get("phone") or "")
+    pid = body.get("id")
+    match = _wa_match_inbound(phone)
+    if not match:
+        return  # unmatched → personal chat → discard
+
+    at_iso = None
+    try:
+        at_iso = datetime.fromtimestamp(int(body.get("at") or 0), tz=timezone.utc).isoformat()
+    except Exception:
+        pass
+    at_iso = at_iso or datetime.now(timezone.utc).isoformat()
+
+    media_url = None
+    if body.get("media_b64"):
+        media_url = await _wa_store_inbound_media(
+            body["media_b64"], body.get("media_type") or "", body.get("media_name"))
+    msg_body = body.get("body") or ""
+    if not msg_body and not media_url:
+        msg_body = "[media message]" if body.get("media_type") else ""
+    if not msg_body and not media_url:
+        return
+
+    if direction == "inbound":
+        if _wa_pid_exists("whatsapp_inbox", pid):
+            return
+        try:
+            row = service_supabase.table("whatsapp_inbox").insert({
+                "teacher_id": match["teacher_id"],
+                "from_phone": phone,
+                "student_id": match.get("student_id"),
+                "student_name": match.get("student_name"),
+                "standard_id": match.get("standard_id"),
+                "standard_name": match.get("standard_name"),
+                "body": msg_body,
+                "media_url": media_url,
+                "media_type": body.get("media_type") if media_url else None,
+                "provider_message_id": pid,
+                "received_at": at_iso,
+            }).execute().data
+        except Exception as e:
+            print(f"[wa] inbox insert failed: {e}")
+            return
+        msg = {
+            "id": (row or [{}])[0].get("id"), "direction": "in", "body": msg_body,
+            "media_url": media_url, "media_type": body.get("media_type") if media_url else None,
+            "at": at_iso, "status": None, "read": False,
+        }
+    else:  # outbound-device: teacher replied from their phone's WhatsApp app
+        if _wa_pid_exists("whatsapp_messages", pid):
+            return
+        try:
+            row = service_supabase.table("whatsapp_messages").insert({
+                "teacher_id": match["teacher_id"],
+                "standard_id": match.get("standard_id"),
+                "student_id": match.get("student_id"),
+                "to_phone": phone,
+                "body_text": msg_body,
+                "media_url": media_url,
+                "media_type": body.get("media_type") if media_url else None,
+                "category": "chat",
+                "status": "sent",
+                "provider_message_id": pid,
+                "cost_amount": 0,
+                "sent_at": at_iso,
+            }).execute().data
+        except Exception as e:
+            print(f"[wa] device-sent chat log failed: {e}")
+            return
+        msg = {
+            "id": (row or [{}])[0].get("id"), "direction": "out", "body": msg_body,
+            "media_url": media_url, "media_type": body.get("media_type") if media_url else None,
+            "at": at_iso, "status": "sent", "read": True,
+        }
+
+    await _wa_inbox_emit(match["teacher_id"], {
+        "type": "wa_message",
+        "thread_phone": phone,
+        "student_id": match.get("student_id"),
+        "student_name": match.get("student_name"),
+        "standard_name": match.get("standard_name"),
+        "message": msg,
+    })
+
+
 # ── Webhook (no auth — provider-signed callbacks). Handles BOTH outbound delivery
 #    status updates AND inbound parent replies (read-only inbox). ───────────────
 @app.post("/api/teacher/whatsapp/webhook")
@@ -13277,6 +13468,17 @@ async def wa_webhook(request: Request):
     except Exception:
         return {"ok": True}
     if not service_supabase:
+        return {"ok": True}
+
+    # Baileys chat events carry an explicit direction + our shared service token.
+    if body.get("direction") in ("inbound", "outbound-device") and body.get("phone"):
+        import whatsapp_client as _wac
+        if _wac.SHARED_TOKEN and request.headers.get("x-service-token") != _wac.SHARED_TOKEN:
+            return {"ok": True}  # silently drop unauthenticated chat posts
+        try:
+            await _wa_handle_baileys_event(body)
+        except Exception as e:
+            print(f"[wa] baileys event failed: {e}")
         return {"ok": True}
 
     pid = body.get("id") or body.get("message_id")
@@ -13325,36 +13527,133 @@ async def wa_webhook(request: Request):
     return {"ok": True}
 
 
-# ── Inbox (read-only parent replies, grouped by parent) ────────────────────────
+# ── Chats (two-way parent threads: inbound replies + everything we sent) ───────
+def _wa_thread_key(phone: str) -> str:
+    """Same parent regardless of +91/91/leading-0 formatting → last 10 digits."""
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    return digits[-10:] if len(digits) >= 10 else (digits or "?")
+
+
 @app.get("/api/teacher/whatsapp/inbox")
-def wa_inbox(limit: int = 200, user = Depends(verify_token)):
+def wa_inbox(limit: int = 300, user = Depends(verify_token)):
     _wa_require_teacher(user)
     try:
-        rows = service_supabase.table("whatsapp_inbox").select("*").eq(
+        in_rows = service_supabase.table("whatsapp_inbox").select("*").eq(
             "teacher_id", user["teacher_id"]).order("received_at", desc=True).limit(limit).execute().data or []
     except Exception:
-        return {"threads": [], "unread": 0, "count": 0}
+        in_rows = []
+    try:
+        out_rows = service_supabase.table("whatsapp_messages").select(
+            "id, to_phone, student_id, body_text, media_url, media_type, status, category, sent_at, created_at"
+        ).eq("teacher_id", user["teacher_id"]).neq("status", "failed").neq(
+            "status", "not_configured").order("created_at", desc=True).limit(limit).execute().data or []
+    except Exception:
+        out_rows = []
+
     threads: Dict[str, dict] = {}
     unread = 0
-    for r in rows:
+
+    def thread_for(key, phone, student_id=None, student_name=None, standard_name=None):
+        t = threads.get(key)
+        if not t:
+            t = {"from_phone": phone, "student_id": student_id, "student_name": student_name,
+                 "standard_name": standard_name, "last_at": None, "unread": 0, "messages": []}
+            threads[key] = t
+        # Backfill identity from whichever side knows it (inbox rows cache names).
+        if student_name and not t.get("student_name"):
+            t["student_name"] = student_name
+            t["student_id"] = t.get("student_id") or student_id
+            t["standard_name"] = t.get("standard_name") or standard_name
+        return t
+
+    for r in in_rows:
         is_unread = not r.get("read_by_teacher")
         if is_unread:
             unread += 1
-        key = r.get("from_phone") or "?"
-        t = threads.get(key)
-        if not t:
-            t = {"from_phone": key, "student_id": r.get("student_id"),
-                 "student_name": r.get("student_name"), "standard_name": r.get("standard_name"),
-                 "last_at": r.get("received_at"), "unread": 0, "messages": []}
-            threads[key] = t
+        t = thread_for(_wa_thread_key(r.get("from_phone")), r.get("from_phone"),
+                       r.get("student_id"), r.get("student_name"), r.get("standard_name"))
         t["messages"].append({
-            "id": r["id"], "body": r.get("body"), "media_url": r.get("media_url"),
-            "media_type": r.get("media_type"), "received_at": r.get("received_at"),
+            "id": r["id"], "direction": "in", "body": r.get("body"),
+            "media_url": r.get("media_url"), "media_type": r.get("media_type"),
+            "at": r.get("received_at"), "status": None,
             "read": bool(r.get("read_by_teacher")),
         })
         if is_unread:
             t["unread"] += 1
-    return {"threads": list(threads.values()), "unread": unread, "count": len(rows)}
+
+    # Outbound messages only enrich threads that have a parent on the other end —
+    # a report blast to 40 parents must not create 40 empty "chats".
+    inbound_keys = set(threads.keys())
+    for r in out_rows:
+        key = _wa_thread_key(r.get("to_phone"))
+        if key not in inbound_keys and r.get("category") != "chat":
+            continue
+        t = thread_for(key, r.get("to_phone"), r.get("student_id"))
+        t["messages"].append({
+            "id": r["id"], "direction": "out", "body": r.get("body_text"),
+            "media_url": r.get("media_url"), "media_type": r.get("media_type"),
+            "at": r.get("sent_at") or r.get("created_at"), "status": r.get("status"),
+            "read": True,
+        })
+
+    # Resolve names for chat-only threads whose outbound rows carry just student_id.
+    unnamed_ids = [t["student_id"] for t in threads.values() if t.get("student_id") and not t.get("student_name")]
+    if unnamed_ids:
+        try:
+            srows = service_supabase.table("students").select("id, name").in_("id", unnamed_ids).execute().data or []
+            names = {s["id"]: s.get("name") for s in srows}
+            for t in threads.values():
+                if not t.get("student_name") and t.get("student_id") in names:
+                    t["student_name"] = names[t["student_id"]]
+        except Exception:
+            pass
+
+    for t in threads.values():
+        t["messages"].sort(key=lambda m: m.get("at") or "")
+        t["last_at"] = t["messages"][-1]["at"] if t["messages"] else None
+        t["last_body"] = t["messages"][-1].get("body") if t["messages"] else None
+    ordered = sorted(threads.values(), key=lambda t: t.get("last_at") or "", reverse=True)
+    return {"threads": ordered, "unread": unread, "count": len(in_rows)}
+
+
+class WhatsAppReplyInput(BaseModel):
+    to_phone: str
+    text: str
+
+
+@app.post("/api/teacher/whatsapp/inbox/reply")
+async def wa_inbox_reply(data: WhatsAppReplyInput, user = Depends(verify_token)):
+    """Send a chat reply to a parent from the Chats screen."""
+    _wa_require_teacher(user)
+    text = (data.text or "").strip()
+    to = (data.to_phone or "").strip()
+    if not text or not to:
+        raise HTTPException(status_code=400, detail="Message text and phone are required")
+    provider = wa.get_provider()
+    if not provider.configured:
+        raise HTTPException(status_code=503, detail="WhatsApp is not connected. Link it in Settings first.")
+
+    # Keep the thread identity: resolve the student on this number if we can.
+    match = _wa_match_inbound(to) or {}
+    recipient = {"id": match.get("student_id"), "name": match.get("student_name") or "",
+                 "phone": to, "standard_id": match.get("standard_id")}
+    res = await _wa_send_and_log(provider, user["teacher_id"], recipient,
+                                 mode="freeform", body_text=text, category="chat")
+    if res.get("status") in ("failed", "not_configured"):
+        raise HTTPException(status_code=502, detail=res.get("error") or "Send failed")
+    msg = {
+        "id": res.get("message_id") or f"tmp-{uuid.uuid4().hex}",
+        "direction": "out", "body": text, "media_url": None, "media_type": None,
+        "at": datetime.now(timezone.utc).isoformat(), "status": res.get("status", "queued"),
+        "read": True,
+    }
+    # Mirror to the teacher's other open devices.
+    await _wa_inbox_emit(user["teacher_id"], {
+        "type": "wa_message", "thread_phone": to,
+        "student_id": match.get("student_id"), "student_name": match.get("student_name"),
+        "standard_name": match.get("standard_name"), "message": msg,
+    })
+    return {"ok": True, "message": msg}
 
 
 @app.post("/api/teacher/whatsapp/inbox/mark-read")

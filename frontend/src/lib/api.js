@@ -640,9 +640,10 @@ export const whatsappApi = {
   // Dashboard stats (KPIs, donut, month spend, recent, scheduled)
   getStats: () => apiClient('/teacher/whatsapp/stats'),
 
-  // Read-only inbox (parent replies, grouped by parent)
+  // Chats (two-way parent threads: replies in, teacher messages out)
   getInbox:      ()     => apiClient('/teacher/whatsapp/inbox'),
   markInboxRead: (data) => apiClient('/teacher/whatsapp/inbox/mark-read', { method: 'POST', body: JSON.stringify(data || {}) }),
+  replyInbox:    (data) => apiClient('/teacher/whatsapp/inbox/reply', { method: 'POST', body: JSON.stringify(data || {}) }),
 
   // Variables (picker source of truth — auto vs ask)
   getVariables:    ()       => apiClient('/teacher/whatsapp/variables'),

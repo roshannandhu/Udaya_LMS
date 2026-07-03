@@ -13,6 +13,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 
 import { MessageQueue } from './queue.js';
@@ -23,6 +24,11 @@ const LOG_FILE = process.env.LOG_FILE || './logs/messages.log';
 const SHARED_TOKEN = process.env.SHARED_TOKEN || '';
 const DAILY_MESSAGE_LIMIT = Number(process.env.DAILY_MESSAGE_LIMIT) || 50;
 const WARMUP_ENABLED = (process.env.WARMUP_ENABLED ?? 'true') !== 'false';
+// Where incoming chat messages are forwarded (FastAPI webhook). The backend
+// decides what to keep — only numbers matched to a student/parent are stored.
+const BACKEND_WEBHOOK_URL = process.env.BACKEND_WEBHOOK_URL
+  || 'http://localhost:8001/api/teacher/whatsapp/webhook';
+const MAX_INBOUND_MEDIA_BYTES = 5 * 1024 * 1024; // 5 MB cap on forwarded media
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
 
@@ -130,6 +136,107 @@ function clearSessionDir() {
   }
 }
 
+// ── Incoming chat messages → backend webhook ───────────────────────────────────
+// The backend keeps a message only when the phone matches a student/parent, so
+// the teacher's personal chats on this number never enter the LMS.
+
+function unwrapMessage(m) {
+  // Peel ephemeral / view-once wrappers to reach the real content node.
+  let node = m;
+  for (let i = 0; i < 3 && node; i++) {
+    const inner = node.ephemeralMessage?.message
+      || node.viewOnceMessage?.message
+      || node.viewOnceMessageV2?.message
+      || node.documentWithCaptionMessage?.message;
+    if (!inner) break;
+    node = inner;
+  }
+  return node || {};
+}
+
+function extractText(node) {
+  return node.conversation
+    || node.extendedTextMessage?.text
+    || node.imageMessage?.caption
+    || node.documentMessage?.caption
+    || node.videoMessage?.caption
+    || '';
+}
+
+function postToBackend(payload, attempt = 0) {
+  try {
+    const url = new URL(BACKEND_WEBHOOK_URL);
+    const body = JSON.stringify(payload);
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'X-Service-Token': SHARED_TOKEN,
+      },
+      timeout: 15000,
+      rejectUnauthorized: false,
+    }, (res) => {
+      res.resume(); // drain
+      if (res.statusCode >= 400 && attempt === 0) {
+        setTimeout(() => postToBackend(payload, 1), 5000);
+      }
+    });
+    req.on('error', () => {
+      if (attempt === 0) setTimeout(() => postToBackend(payload, 1), 5000);
+    });
+    req.on('timeout', () => req.destroy());
+    req.write(body);
+    req.end();
+  } catch (e) {
+    console.warn('[wa] webhook forward failed:', e.message);
+  }
+}
+
+async function forwardChatMessage(msg) {
+  const jid = msg.key?.remoteJid || '';
+  // Private 1:1 chats only — never groups, broadcast lists or status updates.
+  if (!jid.endsWith('@s.whatsapp.net')) return;
+  const phone = jid.split('@')[0].replace(/\D/g, '');
+  if (!phone) return;
+
+  const node = unwrapMessage(msg.message || {});
+  // Skip protocol/reaction/edit events — they carry no chat content.
+  if (node.protocolMessage || node.reactionMessage || node.pollUpdateMessage) return;
+
+  const text = extractText(node);
+  let mediaB64 = null;
+  let mediaType = null;
+  let mediaName = null;
+  const mediaNode = node.imageMessage || node.documentMessage;
+  if (mediaNode) {
+    mediaType = mediaNode.mimetype || (node.imageMessage ? 'image/jpeg' : 'application/octet-stream');
+    mediaName = node.documentMessage?.fileName || null;
+    const declared = Number(mediaNode.fileLength || 0);
+    if (declared <= MAX_INBOUND_MEDIA_BYTES) {
+      try {
+        const buf = await downloadMediaMessage(msg, 'buffer', {}, { logger });
+        if (buf && buf.length <= MAX_INBOUND_MEDIA_BYTES) mediaB64 = buf.toString('base64');
+      } catch (e) {
+        console.warn('[wa] media download failed:', e.message);
+      }
+    }
+  }
+  if (!text && !mediaB64 && !mediaType) return; // stickers/audio/etc — nothing to show
+
+  postToBackend({
+    direction: msg.key?.fromMe ? 'outbound-device' : 'inbound',
+    phone,
+    body: text || '',
+    media_b64: mediaB64,
+    media_type: mediaB64 ? mediaType : null,
+    media_name: mediaB64 ? mediaName : null,
+    id: msg.key?.id || null,
+    at: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000),
+  });
+}
+
 // ── Baileys socket lifecycle ───────────────────────────────────────────────────
 async function startSock() {
   if (starting) return;
@@ -141,6 +248,15 @@ async function startSock() {
     sock = makeWASocket({ version, auth: state, printQRInTerminal: false, logger });
 
     sock.ev.on('creds.update', saveCreds);
+
+    // Incoming + phone-sent chat messages → backend (only 'notify' = genuinely new
+    // messages; 'append'/history syncs would flood the webhook with old chats).
+    sock.ev.on('messages.upsert', ({ messages, type }) => {
+      if (type !== 'notify') return;
+      for (const msg of messages || []) {
+        forwardChatMessage(msg).catch((e) => console.warn('[wa] inbound forward error:', e.message));
+      }
+    });
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
