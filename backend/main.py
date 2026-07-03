@@ -4820,19 +4820,33 @@ def block_student(student_id: str, blocked: bool, user = Depends(verify_token)):
     service_supabase.table("students").update({"blocked": blocked}).eq("id", student_id).execute()
     return {"message": f"Student {'blocked' if blocked else 'unblocked'} successfully"}
 
+def _resolved_reset_password(explicit: Optional[str]) -> str:
+    """Password to assign on a reset. Priority:
+      1. the password the teacher typed for this reset (>= 6 chars), else
+      2. the teacher's configured default student password (>= 6 chars), else
+      3. a random 10-char password (only when no default is set).
+    This makes "Reset password" produce the KNOWN default the teacher expects,
+    instead of a random string they'd have to look up per student."""
+    import secrets as _secrets, string as _string
+    if explicit and len(explicit.strip()) >= 6:
+        return explicit.strip()
+    try:
+        default_pwd = (get_teacher_settings().get("default_student_password") or "").strip()
+    except Exception:
+        default_pwd = ""
+    if len(default_pwd) >= 6:
+        return default_pwd
+    alphabet = _string.ascii_letters + _string.digits
+    return ''.join(_secrets.choice(alphabet) for _ in range(10))
+
+
 @app.post("/api/students/{student_id}/reset-password")
 def reset_student_password(student_id: str, body: ResetPasswordRequest = None, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
-    import secrets
-    import string
-    if body and body.new_password and len(body.new_password.strip()) >= 6:
-        new_password = body.new_password.strip()
-    else:
-        alphabet = string.ascii_letters + string.digits
-        new_password = ''.join(secrets.choice(alphabet) for _ in range(10))
+    new_password = _resolved_reset_password(body.new_password if body else None)
     try:
         service_supabase.auth.admin.update_user_by_id(student_id, {"password": new_password})
         try:
@@ -5027,7 +5041,18 @@ def bulk_reset_passwords(req: BulkResetRequest, user = Depends(verify_token)):
     if not ids:
         return {"results": [], "updated": 0, "failed": 0}
 
+    # Shared password for the whole batch: the teacher's typed value, else the
+    # configured default student password. Only when NEITHER exists do we fall
+    # back to a per-student random one (so a plain "Reset" hands out the known
+    # default the teacher expects, not random strings).
     fixed = req.new_password.strip() if (req.new_password and len(req.new_password.strip()) >= 6) else None
+    if not fixed:
+        try:
+            _dp = (get_teacher_settings().get("default_student_password") or "").strip()
+        except Exception:
+            _dp = ""
+        if len(_dp) >= 6:
+            fixed = _dp
     alphabet = string.ascii_letters + string.digits
     results, failed = [], 0
     for sid in ids:
@@ -6105,7 +6130,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-remove-debug-endpoint"
+BUILD_MARKER = "2026-07-03-reset-default-pw-and-wa-creds"
 
 @app.get("/api/health")
 def health_check():
@@ -13087,7 +13112,12 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
                     body = data.message
                 elif data.include_credentials:
                     c = creds.get(r["id"], {})
-                    pwd = (c.get("plain_password") or "").strip() or default_pwd
+                    # Send ONLY the account's real stored password. Never fall back
+                    # to the default_student_password here — that's just a guess and
+                    # is often NOT the student's actual password, so it would text
+                    # parents a password that fails to log in. If it's unknown,
+                    # _wa_credentials_body shows a "reset/contact teacher" line.
+                    pwd = (c.get("plain_password") or "").strip()
                     body = _wa_credentials_body(r["name"], c.get("student_code") or r.get("student_code"), pwd, lms)
                 else:
                     body = (f"Welcome to {lms or 'our institution'}! Your child {r['name']} has been enrolled. "
@@ -13128,19 +13158,19 @@ async def _wa_auto_welcome(student_id: str):
         rows = []
         try:
             rows = service_supabase.table("students").select(
-                "id, name, phone, parent_phone, standard_id, student_code, plain_password, whatsapp_opt_out").eq(
+                "id, name, username, phone, parent_phone, standard_id, student_code, plain_password, whatsapp_opt_out").eq(
                 "id", student_id).limit(1).execute().data or []
         except Exception:
             try:
                 rows = service_supabase.table("students").select(
-                    "id, name, phone, parent_phone, standard_id, student_code, plain_password").eq(
+                    "id, name, username, phone, parent_phone, standard_id, student_code, plain_password").eq(
                     "id", student_id).limit(1).execute().data or []
                 for s in rows:
                     s["whatsapp_opt_out"] = False
             except Exception:
                 try:
                     rows = service_supabase.table("students").select(
-                        "id, name, phone, standard_id, student_code, plain_password").eq(
+                        "id, name, username, phone, standard_id, student_code, plain_password").eq(
                         "id", student_id).limit(1).execute().data or []
                     for s in rows:
                         s["whatsapp_opt_out"] = False
@@ -13158,12 +13188,21 @@ async def _wa_auto_welcome(student_id: str):
             "id", s.get("standard_id")).limit(1).execute().data or [None])[0]
         if not std or not std.get("teacher_id"):
             return
-        default_pwd = (get_teacher_settings().get("default_student_password") or "").strip()
-        pwd = (s.get("plain_password") or "").strip() or default_pwd
+        # Send ONLY the account's real stored password (set at creation). No
+        # default_student_password fallback — a guessed password that doesn't
+        # match the account would text parents credentials that can't log in.
+        pwd = (s.get("plain_password") or "").strip()
         lms = _wa_branding_name()
         template_name = cfg.get("welcome_template")
+        # Include username + plain_password + class so a welcome TEMPLATE resolves
+        # {Username}/{Password}/{Class} to real values. Without plain_password here,
+        # a template's {Password} fell back to "******" and parents got no password.
         recip = {"id": s["id"], "name": s.get("name") or "", "phone": phone,
-                 "student_code": s.get("student_code") or "", "standard_id": std["id"]}
+                 "username": s.get("username") or "",
+                 "student_code": s.get("student_code") or "",
+                 "plain_password": pwd,
+                 "standard_id": std["id"],
+                 "standard_name": std.get("name") or ""}
         provider = wa.get_provider()
         await _wa_send_and_log(
             provider, std["teacher_id"], recip,
