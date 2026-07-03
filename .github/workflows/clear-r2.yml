@@ -1,0 +1,62 @@
+name: Clear R2 Storage Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_bucket:
+        description: 'Public Bucket Name (e.g. udaya-public)'
+        required: true
+      private_bucket:
+        description: 'Private Bucket Name (e.g. udaya-private)'
+        required: true
+
+jobs:
+  clear-r2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install boto3
+        run: pip install boto3
+        
+      - name: Empty Buckets (Preserving /app/)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          PUB_BUCKET: ${{ github.event.inputs.public_bucket }}
+          PRIV_BUCKET: ${{ github.event.inputs.private_bucket }}
+        run: |
+          python -c "
+          import os, boto3
+          account_id = os.environ.get('R2_ACCOUNT_ID')
+          if not account_id:
+              print('R2 secrets not found in GitHub. Exiting.')
+              exit(1)
+              
+          r2 = boto3.client('s3', 
+              endpoint_url=f'https://{account_id}.r2.cloudflarestorage.com', 
+              aws_access_key_id=os.environ.get('R2_ACCESS_KEY'), 
+              aws_secret_access_key=os.environ.get('R2_SECRET_KEY')
+          )
+          
+          for b in [os.environ.get('PUB_BUCKET'), os.environ.get('PRIV_BUCKET')]:
+              if not b: continue
+              print(f'Emptying bucket: {b}')
+              paginator = r2.get_paginator('list_objects_v2')
+              total = 0
+              try:
+                  for page in paginator.paginate(Bucket=b):
+                      if 'Contents' in page:
+                          # SKIP the app/ folder so the Android APKs don't get deleted!
+                          objs = [{'Key': obj['Key']} for obj in page['Contents'] if not obj['Key'].startswith('app/')]
+                          if objs:
+                              r2.delete_objects(Bucket=b, Delete={'Objects': objs})
+                              total += len(objs)
+                  print(f'✅ Deleted {total} objects from {b}.')
+              except Exception as e:
+                  print(f'Error accessing {b}: {e}')
+          "
