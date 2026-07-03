@@ -149,11 +149,15 @@ async function rawSend(phone, text, media) {
     if (isImage) {
       content = { image: mediaData, caption: text || '' };
     } else if (isAudio) {
+      let isPtt = false;
+      let finalMime = 'audio/mp4';
+      let outData = mediaData;
+      
       if ((media.type || '').includes('webm') || mtype.includes('webm')) {
-        const tmpIn = path.join(os.tmpdir(), `wa-in-${Date.now()}.webm`);
-        const tmpOut = path.join(os.tmpdir(), `wa-out-${Date.now()}.ogg`);
-        fs.writeFileSync(tmpIn, mediaData);
+        const tmpIn = path.join(SESSION_DIR, `wa-in-${Date.now()}.webm`);
+        const tmpOut = path.join(SESSION_DIR, `wa-out-${Date.now()}.ogg`);
         try {
+          fs.writeFileSync(tmpIn, mediaData);
           await new Promise((resolve, reject) => {
             ffmpeg(tmpIn)
               .outputOptions(['-c:a libopus', '-vbr on'])
@@ -162,15 +166,27 @@ async function rawSend(phone, text, media) {
               .on('end', resolve)
               .on('error', reject);
           });
-          mediaData = fs.readFileSync(tmpOut);
+          outData = fs.readFileSync(tmpOut);
+          isPtt = true;
+          finalMime = 'audio/ogg; codecs=opus';
         } catch (e) {
           console.error('[wa] ffmpeg conversion failed:', e.message);
+          isPtt = false; // Cannot send as PTT if transcoding failed
         } finally {
           if (fs.existsSync(tmpIn)) fs.unlinkSync(tmpIn);
           if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
         }
+      } else {
+        isPtt = true;
+        finalMime = media.type || 'audio/ogg; codecs=opus';
       }
-      content = { audio: mediaData, mimetype: 'audio/ogg; codecs=opus', ptt: true };
+
+      if (isPtt) {
+        content = { audio: outData, mimetype: finalMime, ptt: true };
+      } else {
+        // Fallback: If transcoding fails (e.g. EC2 missing libraries), send as a document to guarantee delivery.
+        content = { document: outData, mimetype: media.type || 'audio/webm', fileName: 'Voice-Note.webm' };
+      }
     } else {
       content = { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
