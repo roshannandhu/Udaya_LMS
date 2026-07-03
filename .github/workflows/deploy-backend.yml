@@ -42,5 +42,7 @@ jobs:
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
           # Stash any drift on the box so a fast-forward pull always applies.
+          # The health check retries: containers need a few seconds to boot, so a
+          # single immediate curl (exit 56) must not fail an otherwise-good deploy.
           ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" \
-            'cd /opt/udaya && (git stash --include-untracked || true) && git pull --ff-only && docker compose up -d --build && docker image prune -f && echo "--- health ---" && curl -s http://127.0.0.1:8001/api/health'
+            'cd /opt/udaya && (git stash --include-untracked || true) && git pull --ff-only && docker compose up -d --build && docker image prune -f && echo "--- health ---" && for i in 1 2 3 4 5 6; do curl -sf http://127.0.0.1:8001/api/health && break || { echo "waiting for api ($i)…"; sleep 5; }; done'
