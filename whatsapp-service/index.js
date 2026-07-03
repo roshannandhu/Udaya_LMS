@@ -65,10 +65,12 @@ const jidFor = (phone) => `${normalizeIn(phone)}@s.whatsapp.net`;
 // falls back to a data URI when object storage is unavailable; Baileys can't
 // fetch a data: URL, so we must turn it into bytes here or media never sends.
 function bufferFromDataUri(url) {
-  const m = /^data:([^;,]*)?(;base64)?,(.*)$/s.exec(url || '');
-  if (!m) return null;
-  const isB64 = !!m[2];
-  const payload = m[3] || '';
+  const str = url || '';
+  const commaIdx = str.indexOf(',');
+  if (commaIdx === -1) return null;
+  const header = str.slice(0, commaIdx);
+  const payload = str.slice(commaIdx + 1);
+  const isB64 = header.endsWith(';base64');
   return isB64 ? Buffer.from(payload, 'base64')
                : Buffer.from(decodeURIComponent(payload), 'utf-8');
 }
