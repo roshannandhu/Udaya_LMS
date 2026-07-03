@@ -2,17 +2,6 @@ name: Deploy backend
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "backend/**"
-      - "whatsapp-service/**"
-      - "Dockerfile"
-      - "docker-compose.yml"
-      - "deploy.sh"
-      - "autodeploy.sh"
-      - ".github/workflows/deploy-backend.yml"
 
 permissions:
   contents: read
