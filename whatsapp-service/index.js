@@ -145,7 +145,7 @@ async function rawSend(phone, text, media) {
     } else if (isAudio) {
       // Sending as standard audio (without ptt: true) is more robust since
       // browser-recorded WebM buffers are often rejected by WhatsApp as PTT.
-      content = { audio: mediaData, mimetype: media.type || 'audio/mp4' };
+      content = { audio: mediaData, mimetype: 'audio/mp4' };
     } else {
       content = { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
