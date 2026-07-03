@@ -1561,6 +1561,7 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
 
     identifier = request.email_or_username.strip()
     email_to_use = identifier
+    student_login_emails = []
     student_id_to_confirm = None
 
     if "@" not in identifier:
@@ -1572,12 +1573,16 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         # so a failed student login can be traced server-side.
         resolution_note = []
 
-        def _email_from_row(row):
-            """Prefer the stored email; if it's missing, synthesize the auth email
-            the account was created with (username@tutoria.local) so a students
-            row with a NULL email can still authenticate."""
+        def _set_student_login_candidates(row):
+            """Carry every possible auth email for the matched student row."""
+            nonlocal email_to_use, student_id_to_confirm
             candidates = _student_login_email_candidates(row)
-            return candidates[0] if candidates else None
+            if not candidates:
+                return False
+            _extend_unique(student_login_emails, candidates)
+            email_to_use = candidates[0]
+            student_id_to_confirm = row.get("id")
+            return True
 
         # 1. Try Student ID first. Codes lead with a 2-digit year but always
         #    contain the institution letters (e.g. 25UDAYA100001), so a pure-digit
@@ -1588,11 +1593,8 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         try:
             rows = service_supabase.table("students").select("id, email, username").eq(
                 "student_code", identifier.upper()).limit(1).execute().data or []
-            resolved = _email_from_row(rows[0] if rows else None)
-            if resolved:
-                email_to_use = resolved
-                student_id_to_confirm = rows[0].get("id")
-            elif rows:
+            resolved = _set_student_login_candidates(rows[0]) if rows else False
+            if rows and not resolved:
                 resolution_note.append("code row found but no email/username")
         except Exception as e:
             resolution_note.append(f"code lookup error: {e}")
@@ -1605,10 +1607,8 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
                 normalized_identifier = _normalize_student_username(identifier)
                 rows = service_supabase.table("students").select("id, email, username").ilike(
                     "username", normalized_identifier).limit(1).execute().data or []
-                resolved = _email_from_row(rows[0] if rows else None)
-                if resolved:
-                    email_to_use = resolved
-                    student_id_to_confirm = rows[0].get("id")
+                if rows:
+                    _set_student_login_candidates(rows[0])
             except Exception as e:
                 resolution_note.append(f"username lookup error: {e}")
 
@@ -1621,22 +1621,17 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
             # Try exact match first (limit(1): duplicates must not 406 the login)
             rows = service_supabase.table("students").select("id, email, username").eq(
                 "phone", identifier).limit(1).execute().data or []
-            resolved = _email_from_row(rows[0] if rows else None)
-            if resolved:
-                student_id_to_confirm = rows[0].get("id")
+            resolved = _set_student_login_candidates(rows[0]) if rows else False
             if not resolved:
                 # Digits-normalized match (handles +91 prefix variations)
                 all_students = service_supabase.table("students").select("id, email, username, phone").not_.is_("phone", "null").execute()
                 for s in (all_students.data or []):
                     stored_digits = re.sub(r'\D', '', s.get("phone", ""))
                     if stored_digits and (stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits)):
-                        resolved = _email_from_row(s)
-                        student_id_to_confirm = s.get("id")
+                        resolved = _set_student_login_candidates(s)
                         break
-            if resolved:
-                email_to_use = resolved
-            else:
-                print(f"[login] unresolved identifier '{identifier}' — {'; '.join(resolution_note) or 'no matching student row'}")
+            if not resolved:
+                print(f"[login] unresolved identifier '{identifier}' - {'; '.join(resolution_note) or 'no matching student row'}")
                 raise HTTPException(status_code=401, detail="Invalid credentials")
         except HTTPException:
             raise
@@ -1651,46 +1646,73 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
         })
 
     try:
-        response = None
-        try:
-            response = _sign_in(email_to_use)
-        except Exception as first_err:
-            err_text = str(first_err).lower()
-            confirm_email = email_to_use
+        login_emails = []
+        if student_login_emails:
+            _extend_unique(login_emails, student_login_emails)
+        else:
+            _append_unique(login_emails, email_to_use)
             local_suffix = f"@{STUDENT_AUTH_DOMAIN}"
-            if "not confirmed" not in err_text and email_to_use.lower().endswith(local_suffix):
-                legacy_email = f"{email_to_use[:-len(local_suffix)]}@{LEGACY_STUDENT_AUTH_DOMAIN}"
-                try:
-                    response = _sign_in(legacy_email)
-                    err_text = ""
-                except Exception as legacy_err:
-                    first_err = legacy_err
-                    confirm_email = legacy_email
-                    err_text = str(first_err).lower()
+            email_lower = _clean_optional_text(email_to_use).lower()
+            if email_lower.endswith(local_suffix):
+                _append_unique(
+                    login_emails,
+                    f"{email_lower[:-len(local_suffix)]}@{LEGACY_STUDENT_AUTH_DOMAIN}",
+                )
 
-            # Self-heal: admin-created accounts that somehow ended up unconfirmed
-            # (e.g. created by an older backend where email_confirm didn't stick)
-            # fail sign-in with "email not confirmed". Confirm once and retry.
-            if response is not None:
-                pass
-            elif "not confirmed" in err_text and service_supabase:
-                try:
-                    target_id = student_id_to_confirm
-                    if not target_id:
-                        row = service_supabase.table("students").select("id").eq("email", confirm_email).limit(1).execute().data
-                        target_id = row[0]["id"] if row else None
-                        
+        def _target_student_id_for_email(auth_email):
+            if student_id_to_confirm:
+                return student_id_to_confirm
+            if not service_supabase:
+                return None
+            try:
+                row = service_supabase.table("students").select("id").eq(
+                    "email", auth_email).limit(1).execute().data
+                return row[0]["id"] if row else None
+            except Exception:
+                return None
+
+        def _is_retryable_auth_error(err_text: str) -> bool:
+            return any(k in err_text for k in [
+                "invalid login",
+                "invalid credentials",
+                "invalid email",
+                "email not confirmed",
+                "not confirmed",
+                "not found",
+            ])
+
+        response = None
+        last_auth_error = None
+        for auth_email in login_emails:
+            try:
+                response = _sign_in(auth_email)
+                break
+            except Exception as auth_err:
+                last_auth_error = auth_err
+                err_text = str(auth_err).lower()
+
+                # Confirm legacy/unconfirmed admin-created accounts once and
+                # retry the same candidate before moving to the next one.
+                if "not confirmed" in err_text and service_supabase:
+                    target_id = _target_student_id_for_email(auth_email)
                     if target_id:
-                        service_supabase.auth.admin.update_user_by_id(target_id, {"email_confirm": True})
-                        response = _sign_in(confirm_email)
-                    else:
-                        raise first_err
-                except HTTPException:
-                    raise
-                except Exception:
-                    raise first_err
-            else:
-                raise first_err
+                        try:
+                            service_supabase.auth.admin.update_user_by_id(
+                                target_id, {"email_confirm": True})
+                            response = _sign_in(auth_email)
+                            break
+                        except Exception as retry_err:
+                            last_auth_error = retry_err
+                            err_text = str(retry_err).lower()
+
+                if _is_retryable_auth_error(err_text):
+                    continue
+                raise auth_err
+
+        if response is None:
+            if last_auth_error:
+                raise last_auth_error
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
         if not response.user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -6024,7 +6046,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-report-pdf-and-auth-fix"
+BUILD_MARKER = "2026-07-03-report-pdf-whatsapp-auth-candidate-fix"
 
 @app.get("/api/health")
 def health_check():
@@ -8744,14 +8766,21 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
         auth_user_id = None
         try:
             normalized_username = _normalize_student_username(s.username)
+            email_to_use = _student_auth_email_for_create(normalized_username, s.email)
             # 0. Check if student already exists by username or email to update instead of skipping
             existing = []
             if normalized_username:
                 existing = service_supabase.table("students").select("id, student_code").eq("username", normalized_username).execute().data or []
                 if not existing and s.username != normalized_username:
                     existing = service_supabase.table("students").select("id, student_code").eq("username", s.username).execute().data or []
-            if not existing and s.email:
-                existing = service_supabase.table("students").select("id, student_code").eq("email", s.email).execute().data or []
+            if not existing:
+                for email_candidate in [email_to_use, _clean_optional_text(s.email).lower()]:
+                    if not email_candidate:
+                        continue
+                    existing = service_supabase.table("students").select("id, student_code").eq(
+                        "email", email_candidate).execute().data or []
+                    if existing:
+                        break
             
             if existing:
                 auth_user_id = existing[0]["id"]
@@ -8762,9 +8791,8 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                     "name": s.name,
                     "standard_id": s.standard_id,
                     "username": normalized_username,
+                    "email": email_to_use,
                 }
-                if s.email:
-                    update_data["email"] = s.email
                 if s.phone:
                     update_data["phone"] = s.phone
                 service_supabase.table("students").update(update_data).eq("id", auth_user_id).execute()
@@ -8778,7 +8806,15 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 if s.temp_password:
                     try:
                         service_supabase.table("students").update({"plain_password": s.temp_password}).eq("id", auth_user_id).execute()
-                        service_supabase.auth.admin.update_user_by_id(auth_user_id, {"password": s.temp_password})
+                        service_supabase.auth.admin.update_user_by_id(auth_user_id, {
+                            "password": s.temp_password,
+                            "email_confirm": True,
+                            "user_metadata": {
+                                "role": "student",
+                                "username": normalized_username,
+                                "name": s.name,
+                            },
+                        })
                     except Exception:
                         pass
                 
@@ -8788,7 +8824,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                     "name": s.name,
                     "username": normalized_username,
                     "student_code": student_code,
-                    "email": s.email,
+                    "email": email_to_use,
                     "phone": s.phone,
                     "parent_phone": s.parent_phone or "",
                     "standard_name": std_name_map.get(s.standard_id),
@@ -8798,7 +8834,6 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 continue
 
             # 1. Create Supabase Auth user
-            email_to_use = _student_auth_email_for_create(normalized_username, s.email)
             auth_res = service_supabase.auth.admin.create_user({
                 "email": email_to_use,
                 "password": s.temp_password,
@@ -8828,7 +8863,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 "id": auth_user_id,
                 "name": s.name,
                 "username": normalized_username,
-                "email": s.email,
+                "email": email_to_use,
                 "phone": s.phone,
                 "standard_id": s.standard_id,
                 "must_change_pwd": True
@@ -8862,9 +8897,9 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 "id": auth_user_id,
                 "standard_id": s.standard_id,
                 "name": s.name,
-                "username": s.username,
+                "username": normalized_username,
                 "student_code": student_code,
-                "email": s.email,
+                "email": email_to_use,
                 "phone": s.phone,
                 "parent_phone": s.parent_phone or "",
                 "standard_name": std_name_map.get(s.standard_id),

@@ -34,12 +34,27 @@ class _FakeStudentTable:
             return SimpleNamespace(data=[])
         if self.filters.get("username") == "aarav.p":
             return SimpleNamespace(data=[{"email": None, "username": "aarav.p"}])
+        if self.filters.get("username") == "candidate.test":
+            return SimpleNamespace(data=[{
+                "id": "student-2",
+                "email": "parent@example.com",
+                "username": "candidate.test",
+            }])
         if self.filters.get("id") == "student-1":
             return SimpleNamespace(data={
                 "id": "student-1",
                 "standard_id": "std-1",
                 "name": "Aarav Patel",
                 "username": "aarav.p",
+                "must_change_pwd": False,
+                "blocked": False,
+            })
+        if self.filters.get("id") == "student-2":
+            return SimpleNamespace(data={
+                "id": "student-2",
+                "standard_id": "std-1",
+                "name": "Candidate Test",
+                "username": "candidate.test",
                 "must_change_pwd": False,
                 "blocked": False,
             })
@@ -61,12 +76,22 @@ class _FakeAuth:
         self.emails.append(email)
         if email == "aarav.p@tutoria.local":
             raise Exception("Invalid login credentials")
-        assert email == "aarav.p@tutoria.internal"
+        if email == "parent@example.com":
+            raise Exception("Invalid login credentials")
+        if email == "candidate.test@tutoria.local":
+            user_id = "student-2"
+            name = "Candidate Test"
+            username = "candidate.test"
+        else:
+            assert email == "aarav.p@tutoria.internal"
+            user_id = "student-1"
+            name = "Aarav Patel"
+            username = "aarav.p"
         return SimpleNamespace(
             user=SimpleNamespace(
-                id="student-1",
+                id=user_id,
                 email=email,
-                user_metadata={"role": "student", "name": "Aarav Patel", "username": "aarav.p"},
+                user_metadata={"role": "student", "name": name, "username": username},
             ),
             session=SimpleNamespace(access_token="token", refresh_token="refresh"),
         )
@@ -130,6 +155,21 @@ def run():
         ]
         assert result["token"] == "token"
         assert result["user"]["student_id"] == "student-1"
+
+        fake_supabase = _FakeSupabase()
+        main.supabase = fake_supabase
+
+        result = main.login(
+            main.LoginRequest(email_or_username="candidate.test", password="secret"),
+            _rl=None,
+        )
+
+        assert fake_supabase.auth.emails == [
+            "parent@example.com",
+            "candidate.test@tutoria.local",
+        ]
+        assert result["token"] == "token"
+        assert result["user"]["student_id"] == "student-2"
     finally:
         main.supabase = old_supabase
         main.service_supabase = old_service
