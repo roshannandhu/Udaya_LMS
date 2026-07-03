@@ -153,7 +153,7 @@ async function rawSend(phone, text, media) {
       let finalMime = 'audio/mp4';
       let outData = mediaData;
       
-      if ((media.type || '').includes('webm') || mtype.includes('webm')) {
+      if (((media.type || '').includes('webm') || mtype.includes('webm')) && Buffer.isBuffer(mediaData)) {
         const tmpIn = path.join(SESSION_DIR, `wa-in-${Date.now()}.webm`);
         const tmpOut = path.join(SESSION_DIR, `wa-out-${Date.now()}.ogg`);
         try {

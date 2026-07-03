@@ -11996,10 +11996,12 @@ async def _wa_upload_bytes(data: bytes, ext: str, content_type: str) -> str:
     ext = ext if ext.startswith(".") else f".{ext}"
     fname = f"{uuid.uuid4()}{ext}"
     key = f"whatsapp/{fname}"
+    # Supabase Storage rejects MIME types with parameters (e.g. "audio/webm;codecs=opus")
+    clean_type = content_type.split(";")[0].strip()
     try:
         await _wa_ensure_bucket()
         return await asyncio.to_thread(
-            lambda: filestore.upload_public(service_supabase, "whatsapp", key, data, content_type)
+            lambda: filestore.upload_public(service_supabase, "whatsapp", key, data, clean_type)
         )
     except Exception as e:
         # If object storage is temporarily/misconfigured, still expose a public URL
@@ -13772,7 +13774,7 @@ def wa_inbox_delete_chat(phone: str, user = Depends(verify_token)):
     try:
         # Wipe all inbound and outbound messages for this phone and teacher
         service_supabase.table("whatsapp_inbox").delete().eq("teacher_id", user["teacher_id"]).eq("from_phone", phone).execute()
-        service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("recipient", phone).execute()
+        service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("to_phone", phone).execute()
     except Exception as e:
         print(f"[wa] inbox delete chat failed: {e}")
     return {"ok": True}
