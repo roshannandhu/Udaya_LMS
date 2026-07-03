@@ -1554,6 +1554,16 @@ def login_rate_limit(request: Request):
     except Exception:
         pass  # fail open
 
+@app.get("/api/debug-student/{student_code}")
+def debug_student(student_code: str):
+    try:
+        row = service_supabase.table("students").select("*").eq("student_code", student_code.upper()).limit(1).execute().data
+        if not row: return {"error": "not found"}
+        auth_user = service_supabase.auth.admin.get_user_by_id(row[0]["id"])
+        return {"row": row[0], "auth_email": auth_user.user.email}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.post("/api/auth/login")
 def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
     if not supabase:
