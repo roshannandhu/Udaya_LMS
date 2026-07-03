@@ -209,19 +209,19 @@ export default function StudentProfilePage() {
               <h2 className="text-xs font-extrabold uppercase tracking-widest text-orange-600 mb-4 flex items-center justify-center md:justify-start gap-2">
                 <Trophy size={16} /> Leaderboard Status
               </h2>
-              <div className="flex flex-col md:flex-row items-center md:items-end gap-2 md:gap-4 mb-2">
-                <h3 className="text-6xl md:text-7xl font-extrabold text-orange-950 tracking-tight leading-none" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+              <div className="flex flex-col md:flex-row items-center md:items-end gap-1 md:gap-4 mb-2">
+                <h3 className="text-5xl md:text-7xl font-extrabold text-orange-950 tracking-tight leading-none" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
                   {points}
                 </h3>
-                <span className="text-xl font-bold text-orange-800 pb-2">XP</span>
+                <span className="text-lg md:text-xl font-bold text-orange-800 pb-1 md:pb-2">XP</span>
               </div>
-              <p className="text-orange-700 font-bold flex items-center justify-center md:justify-start gap-1">
+              <p className="text-sm md:text-base text-orange-700 font-bold flex items-center justify-center md:justify-start gap-1">
                 Keep learning to earn more points! <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </p>
             </div>
 
-            <div className="relative z-10 w-32 h-32 md:w-48 md:h-48 rounded-full bg-white/40 backdrop-blur-sm border-8 border-white/60 shadow-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
-              <Trophy className="w-16 h-16 md:w-24 md:h-24 text-amber-400 drop-shadow-md" fill="currentColor" />
+            <div className="relative z-10 w-24 h-24 md:w-48 md:h-48 rounded-full bg-white/40 backdrop-blur-sm border-8 border-white/60 shadow-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500 mt-2 md:mt-0">
+              <Trophy className="w-12 h-12 md:w-24 md:h-24 text-amber-400 drop-shadow-md" fill="currentColor" />
             </div>
           </motion.div>
 
@@ -262,12 +262,12 @@ export default function StudentProfilePage() {
                 { icon: CheckCircle2, color: 'text-blue-500',   bg: 'bg-blue-50',     value: attendancePct !== null ? `${Math.round(attendancePct)}%` : '—', label: 'Attendance' },
                 { icon: BookOpen,     color: 'text-purple-500', bg: 'bg-purple-50',   value: subjects.length,                                                label: 'Subjects'   },
               ].map((s, i) => (
-                <div key={i} className="flex flex-col p-4 rounded-2xl bg-neutral-50 hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-md transition-all group min-w-0 break-words">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 flex-shrink-0 ${s.bg} group-hover:scale-110 transition-transform`}>
-                    <s.icon size={20} className={s.color} />
+                <div key={i} className="flex flex-col p-3.5 md:p-4 rounded-2xl bg-neutral-50 hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-md transition-all group min-w-0 break-words">
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center mb-3 md:mb-4 flex-shrink-0 ${s.bg} group-hover:scale-110 transition-transform`}>
+                    <s.icon className={`w-5 h-5 md:w-6 md:h-6 ${s.color}`} />
                   </div>
-                  <p className="text-3xl font-extrabold text-neutral-900 leading-none mb-2 truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{s.value}</p>
-                  <p className="text-xs font-bold uppercase tracking-wider text-neutral-400 leading-snug">{s.label}</p>
+                  <p className="text-2xl md:text-3xl font-extrabold text-neutral-900 leading-none mb-1 md:mb-2 truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{s.value}</p>
+                  <p className="text-[10px] md:text-xs font-bold uppercase tracking-wide text-neutral-400 leading-tight">{s.label}</p>
                 </div>
               ))}
             </div>
