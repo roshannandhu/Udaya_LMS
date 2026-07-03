@@ -1640,10 +1640,28 @@ def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
     def _sign_in(email):
-        return supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": request.password
-        })
+        try:
+            return supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": request.password
+            })
+        except Exception as e:
+            if "invalid login credentials" in str(e).lower() and request.password != request.password.strip():
+                # If they copy-pasted with a trailing space into the login box, try without it
+                return supabase.auth.sign_in_with_password({
+                    "email": email,
+                    "password": request.password.strip()
+                })
+            # Also try the reverse: if the DB has a trailing space but they didn't type it
+            elif "invalid login credentials" in str(e).lower():
+                try:
+                    return supabase.auth.sign_in_with_password({
+                        "email": email,
+                        "password": request.password + " "
+                    })
+                except Exception:
+                    pass
+            raise e
 
     try:
         login_emails = []
