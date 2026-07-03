@@ -55,10 +55,29 @@ function normalizeIn(raw) {
 }
 const jidFor = (phone) => `${normalizeIn(phone)}@s.whatsapp.net`;
 
-function downloadFile(url) {
+// Decode a data: URI (data:<mime>;base64,<payload>) to a Buffer. The backend
+// falls back to a data URI when object storage is unavailable; Baileys can't
+// fetch a data: URL, so we must turn it into bytes here or media never sends.
+function bufferFromDataUri(url) {
+  const m = /^data:([^;,]*)?(;base64)?,(.*)$/s.exec(url || '');
+  if (!m) return null;
+  const isB64 = !!m[2];
+  const payload = m[3] || '';
+  return isB64 ? Buffer.from(payload, 'base64')
+               : Buffer.from(decodeURIComponent(payload), 'utf-8');
+}
+
+function downloadFile(url, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
     client.get(url, { rejectUnauthorized: false }, (res) => {
+      // Follow redirects (R2/CDN public URLs, http→https, trailing-slash) so a
+      // 301/302 doesn't abort the pre-download and drop the attachment.
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirectsLeft > 0) {
+        res.resume();
+        const next = new URL(res.headers.location, url).toString();
+        return resolve(downloadFile(next, redirectsLeft - 1));
+      }
       if (res.statusCode < 200 || res.statusCode >= 300) {
         return reject(new Error(`HTTP status ${res.statusCode}`));
       }
@@ -91,7 +110,13 @@ async function rawSend(phone, text, media) {
   let content;
   if (media?.url) {
     let mediaData;
-    if (media.url.startsWith('http')) {
+    if (media.url.startsWith('data:')) {
+      // Base64 fallback from the backend — decode to bytes (Baileys can't fetch
+      // a data: URL). If decoding fails, there's nothing sendable.
+      const buf = bufferFromDataUri(media.url);
+      if (!buf) throw new Error('unsupported data: media URL');
+      mediaData = buf;
+    } else if (media.url.startsWith('http')) {
       try {
         mediaData = await downloadFile(media.url);
       } catch (e) {
@@ -103,11 +128,18 @@ async function rawSend(phone, text, media) {
       mediaData = { url: media.url };
     }
 
-    const isImage = String(media.type || '').startsWith('image');
+    const mtype = String(media.type || '').toLowerCase();
+    const isImage = mtype.startsWith('image');
+    // Give documents a sensible extension so the file arrives usable (a PDF as
+    // .pdf, etc.) instead of a generic "report.pdf" for everything.
+    const ext = mtype.includes('pdf') ? 'pdf'
+      : mtype.includes('word') || mtype.includes('document') ? 'docx'
+      : mtype.includes('sheet') || mtype.includes('excel') ? 'xlsx'
+      : mtype.split('/')[1] || 'pdf';
     content = isImage
       ? { image: mediaData, caption: text || '' }
       : { document: mediaData, mimetype: media.type || 'application/pdf',
-          fileName: 'report.pdf', caption: text || '' };
+          fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
   } else {
     content = { text: text || '' };
   }

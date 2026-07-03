@@ -6130,7 +6130,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-reset-default-pw-and-wa-creds"
+BUILD_MARKER = "2026-07-03-wa-media-fix"
 
 @app.get("/api/health")
 def health_check():
@@ -11936,7 +11936,12 @@ def _wa_public_base_url() -> str:
         val = (os.getenv(key) or "").strip().rstrip("/")
         if val:
             return val
-    return "https://www.udaya-learn.com"
+    # Default MUST be the API's own host — the fallback media route
+    # (/api/teacher/whatsapp/media/{file}) is served by THIS backend, and the
+    # WhatsApp sender has to fetch it. www.udaya-learn.com is the frontend SPA
+    # (Cloudflare), which returns HTML/404 for that path and silently breaks
+    # every fallback media send (image/PDF "not sending").
+    return "https://api.udaya-learn.com"
 
 
 def _wa_cleanup_local_media():
