@@ -11958,7 +11958,11 @@ def _wa_cleanup_local_media():
 
 @app.get("/api/teacher/whatsapp/media/{filename}")
 def wa_public_media(filename: str):
-    if not re.match(r"^[0-9a-fA-F-]+\.(pdf|png|jpg|jpeg)$", filename or ""):
+    # Filenames are always server-generated UUIDs + the original extension. The
+    # ext allowlist must cover everything the upload endpoint accepts — a teacher's
+    # .webp photo used to 404 here, which killed the whole media send downstream.
+    if not re.match(r"^[0-9a-fA-F-]+\.(pdf|png|jpg|jpeg|webp|gif|docx|doc|xlsx|xls|pptx|ppt|mp4|mp3)$",
+                    (filename or "").lower()):
         raise HTTPException(status_code=404, detail="File not found")
     path = (_WA_LOCAL_MEDIA_DIR / filename).resolve()
     if _WA_LOCAL_MEDIA_DIR.resolve() not in path.parents or not path.exists():
@@ -11969,6 +11973,16 @@ def wa_public_media(filename: str):
         ".png": "image/png",
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".ppt": "application/vnd.ms-powerpoint",
+        ".mp4": "video/mp4",
+        ".mp3": "audio/mpeg",
     }.get(ext, "application/octet-stream")
     return FileResponse(path, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
 

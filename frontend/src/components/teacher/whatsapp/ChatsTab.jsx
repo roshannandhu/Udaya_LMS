@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
-  ArrowLeft, Check, CheckCheck, Clock, MessagesSquare, Paperclip,
-  RefreshCw, Search, Send, WifiOff,
+  ArrowLeft, Check, CheckCheck, ChevronDown, ChevronRight, Clock, MessagesSquare,
+  Paperclip, RefreshCw, Search, Send, Users, WifiOff,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
@@ -75,9 +75,11 @@ function Bubble({ m }) {
   );
 }
 
-export default function ChatsTab({ connection, onUnreadChange }) {
+export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
   const [threads, setThreads] = useState(null); // null = loading
   const [activeKey, setActiveKey] = useState(null);
+  const [view, setView] = useState('chats'); // 'chats' | 'parents'
+  const [openStd, setOpenStd] = useState(null); // expanded standard in parents view
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -156,6 +158,23 @@ export default function ChatsTab({ connection, onUnreadChange }) {
     [threads, activeKey]
   );
 
+  // Start (or jump to) a chat with any parent from the directory. A parent with
+  // no prior conversation gets a client-side empty thread — the first sent
+  // message makes it real server-side (logged to whatsapp_messages).
+  const startChatWith = (s, standardName) => {
+    if (!s.phone) return;
+    const key = keyOf(s.phone);
+    const existing = (threads || []).find((t) => keyOf(t.from_phone) === key);
+    setView('chats');
+    if (existing) { openThread(existing); return; }
+    setThreads((prev) => [{
+      from_phone: s.phone, student_id: s.id, student_name: s.name,
+      standard_name: standardName, unread: 0, messages: [],
+    }, ...(prev || [])]);
+    setActiveKey(key);
+    setSendError('');
+  };
+
   // Stick to the bottom like WhatsApp when opening / receiving.
   useEffect(() => {
     const el = scrollRef.current;
@@ -204,62 +223,138 @@ export default function ChatsTab({ connection, onUnreadChange }) {
     return out;
   }, [current]);
 
+  // Parents directory: search across every class; otherwise grouped by standard.
+  const parentSearch = view === 'parents' ? search.trim().toLowerCase() : '';
+  const parentMatches = useMemo(() => {
+    if (!parentSearch) return null;
+    const out = [];
+    (groups || []).forEach((g) => (g.students || []).forEach((s) => {
+      if ((s.name || '').toLowerCase().includes(parentSearch)
+        || (g.standard_name || '').toLowerCase().includes(parentSearch)
+        || (s.phone || '').includes(parentSearch)) {
+        out.push({ ...s, standard_name: g.standard_name });
+      }
+    }));
+    return out;
+  }, [groups, parentSearch]);
+
   if (threads === null) {
     return <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div>;
   }
 
-  if (threads.length === 0) {
-    return (
-      <div className="glass-panel border border-[#EBEAE7] rounded-card p-8 text-center">
-        <MessagesSquare size={28} className="mx-auto text-neutral-300 mb-2" />
-        <p className="text-sm text-neutral-500">No chats yet.</p>
-        <p className="text-xs text-neutral-400 mt-1">
-          When a parent replies on WhatsApp, the conversation appears here with the student's name — and you can reply right from this screen.
-        </p>
+  const threadKeys = new Set((threads || []).map((t) => keyOf(t.from_phone)));
+  const effectiveOpenStd = openStd ?? groups[0]?.standard_id;
+
+  const ParentRow = ({ s, standardName }) => (
+    <button key={s.id} onClick={() => startChatWith(s, standardName)} disabled={!s.phone}
+      className="w-full text-left glass-panel border border-[#EBEAE7] rounded-xl px-3 py-2.5 flex items-center gap-3 transition-colors hover:bg-[#F4F2EF] disabled:opacity-50 disabled:cursor-not-allowed">
+      <Avatar name={s.name} size="sm" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold truncate">{s.name}</p>
+        <p className="text-xs text-neutral-500 truncate">{s.phone || 'No number'}</p>
       </div>
-    );
-  }
+      <div className="flex items-center gap-1.5 shrink-0">
+        {s.opted_out && <span className="text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">Opted out</span>}
+        {s.phone && threadKeys.has(keyOf(s.phone)) && <span className="w-2 h-2 rounded-full bg-whatsapp-green" title="Existing chat" />}
+      </div>
+    </button>
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[minmax(230px,1fr)_2fr] gap-3 md:h-[calc(100vh-220px)] md:min-h-[420px]">
-      {/* ── Thread list ── */}
+      {/* ── Thread list / parents directory ── */}
       <div className={`${activeKey ? 'hidden md:flex' : 'flex'} flex-col min-h-0`}>
+        {/* View toggle: conversations vs the full parent directory by class */}
+        <div className="flex items-center gap-0.5 p-1 bg-neutral-100/80 rounded-xl mb-2 self-start">
+          <button onClick={() => setView('chats')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${view === 'chats' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}>
+            <MessagesSquare size={13} /> Chats
+          </button>
+          <button onClick={() => setView('parents')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${view === 'parents' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}>
+            <Users size={13} /> All Parents
+          </button>
+        </div>
         <div className="flex items-center gap-2 mb-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats"
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder={view === 'parents' ? 'Search parents' : 'Search chats'}
               className="w-full pl-8 pr-3 py-2 text-sm rounded-xl border border-[#EBEAE7] bg-white focus:outline-none focus:border-whatsapp-green-fg/50" />
           </div>
           <button onClick={load} className="p-2 rounded-lg hover:bg-[#F4F2EF]" title="Refresh">
             <RefreshCw size={15} className="text-neutral-500" />
           </button>
         </div>
+
         <div className="space-y-1.5 overflow-y-auto min-h-0 flex-1 pr-0.5">
-          {filtered.map((t) => {
-            const key = keyOf(t.from_phone);
-            return (
-              <button key={key} onClick={() => openThread(t)}
-                className={`w-full text-left glass-panel border rounded-xl px-3 py-2.5 flex items-center gap-3 transition-colors ${
-                  activeKey === key ? 'border-whatsapp-green-fg/40 bg-whatsapp-green-light/40' : 'border-[#EBEAE7] hover:bg-[#F4F2EF]'
-                }`}>
-                <Avatar name={t.student_name || t.from_phone} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{t.student_name || t.from_phone}</p>
-                  <p className="text-xs text-neutral-500 truncate">
-                    {t.last_body || (t.messages?.length ? '📎 Attachment' : '')}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-[10px] text-neutral-400">{timeShort(t.last_at)}</span>
-                  {t.unread > 0 && (
-                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-whatsapp-green text-white text-[10px] font-bold flex items-center justify-center">{t.unread}</span>
+          {view === 'parents' ? (
+            /* ── All parents, classified by standard ── */
+            parentMatches ? (
+              parentMatches.length === 0
+                ? <p className="text-sm text-neutral-400 text-center py-8">No parents match "{search}"</p>
+                : parentMatches.map((s) => <ParentRow key={s.id} s={s} standardName={s.standard_name} />)
+            ) : (groups || []).length === 0 ? (
+              <p className="text-sm text-neutral-400 text-center py-8">No students yet.</p>
+            ) : (
+              (groups || []).map((g) => (
+                <div key={g.standard_id}>
+                  <button onClick={() => setOpenStd(effectiveOpenStd === g.standard_id ? '' : g.standard_id)}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-left">
+                    {effectiveOpenStd === g.standard_id
+                      ? <ChevronDown size={15} className="text-neutral-400" />
+                      : <ChevronRight size={15} className="text-neutral-400" />}
+                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-600 flex-1">{g.standard_name}</span>
+                    <span className="text-[10px] font-bold text-neutral-400 bg-neutral-100 rounded-full px-2 py-0.5">{(g.students || []).length}</span>
+                  </button>
+                  {effectiveOpenStd === g.standard_id && (
+                    <div className="space-y-1.5 mb-2">
+                      {(g.students || []).map((s) => <ParentRow key={s.id} s={s} standardName={g.standard_name} />)}
+                    </div>
                   )}
                 </div>
+              ))
+            )
+          ) : threads.length === 0 ? (
+            /* ── No conversations yet ── */
+            <div className="glass-panel border border-[#EBEAE7] rounded-card p-6 text-center">
+              <MessagesSquare size={26} className="mx-auto text-neutral-300 mb-2" />
+              <p className="text-sm text-neutral-500">No chats yet.</p>
+              <p className="text-xs text-neutral-400 mt-1 mb-3">Parent replies appear here — or start the conversation yourself.</p>
+              <button onClick={() => setView('parents')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-pill text-xs font-semibold bg-whatsapp-green text-white hover:brightness-95">
+                <Users size={13} /> Browse all parents
               </button>
-            );
-          })}
-          {filtered.length === 0 && (
-            <p className="text-sm text-neutral-400 text-center py-8">No chats match "{search}"</p>
+            </div>
+          ) : (
+            <>
+              {filtered.map((t) => {
+                const key = keyOf(t.from_phone);
+                return (
+                  <button key={key} onClick={() => openThread(t)}
+                    className={`w-full text-left glass-panel border rounded-xl px-3 py-2.5 flex items-center gap-3 transition-colors ${
+                      activeKey === key ? 'border-whatsapp-green-fg/40 bg-whatsapp-green-light/40' : 'border-[#EBEAE7] hover:bg-[#F4F2EF]'
+                    }`}>
+                    <Avatar name={t.student_name || t.from_phone} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{t.student_name || t.from_phone}</p>
+                      <p className="text-xs text-neutral-500 truncate">
+                        {t.last_body || (t.messages?.length ? '📎 Attachment' : `${t.standard_name || ''}`)}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[10px] text-neutral-400">{timeShort(t.last_at)}</span>
+                      {t.unread > 0 && (
+                        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-whatsapp-green text-white text-[10px] font-bold flex items-center justify-center">{t.unread}</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && (
+                <p className="text-sm text-neutral-400 text-center py-8">No chats match "{search}"</p>
+              )}
+            </>
           )}
         </div>
       </div>

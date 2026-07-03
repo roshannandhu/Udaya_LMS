@@ -70,7 +70,9 @@ function bufferFromDataUri(url) {
 function downloadFile(url, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
-    client.get(url, { rejectUnauthorized: false }, (res) => {
+    // Hard timeout: a stalled download used to hang the queue worker forever,
+    // freezing EVERY send (text included) until the service was restarted.
+    const req = client.get(url, { rejectUnauthorized: false, timeout: 45000 }, (res) => {
       // Follow redirects (R2/CDN public URLs, http→https, trailing-slash) so a
       // 301/302 doesn't abort the pre-download and drop the attachment.
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirectsLeft > 0) {
@@ -86,6 +88,7 @@ function downloadFile(url, redirectsLeft = 5) {
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', (err) => reject(err));
     }).on('error', (err) => reject(err));
+    req.on('timeout', () => req.destroy(new Error('media download timed out')));
   });
 }
 
@@ -339,7 +342,9 @@ async function startSock() {
 
 // ── HTTP API (internal only) ────────────────────────────────────────────────────
 const app = express();
-app.use(express.json({ limit: '256kb' }));
+// Media can arrive inline as a data: URI (backend storage fallback) — a base64
+// PDF/photo is easily megabytes. The old 256kb cap 413-rejected every such send.
+app.use(express.json({ limit: '30mb' }));
 
 function requireToken(req, res, next) {
   if (!SHARED_TOKEN) return next(); // dev: no token configured

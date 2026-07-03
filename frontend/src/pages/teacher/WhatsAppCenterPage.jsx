@@ -137,7 +137,7 @@ export default function WhatsAppCenterPage() {
               <sub.icon size={18} className="text-whatsapp-green-fg" /> {sub.title}
             </h2>
             {screen === 'history' && <HistoryTab />}
-            {screen === 'inbox' && <ChatsTab connection={connection} onUnreadChange={setInboxUnread} />}
+            {screen === 'inbox' && <ChatsTab connection={connection} groups={groups} onUnreadChange={setInboxUnread} />}
             {screen === 'automation' && <AutomationTab templates={templates} groups={groups} />}
             {screen === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} variables={variables} provider={provider} />}
             {screen === 'dashboard' && <OverviewTab onNavigate={navigateFromOverview} currency={currency} />}

@@ -387,8 +387,11 @@ class BaileysProvider(WhatsAppProvider):
         import whatsapp_client as client
         # Stable (process-independent) dedupe key: digits + content digest. Built-in
         # hash() is salted per-process, so it would break cross-restart dedup.
+        # The digest MUST cover text AND media together: keying on text alone made
+        # every report re-send with an unchanged message body a silent "duplicate"
+        # (dropped by the queue but shown as sent) — the "PDF not sending" bug.
         digits = "".join(c for c in (to or "") if c.isdigit())
-        digest = hashlib.md5((text or media_url or "").encode("utf-8")).hexdigest()[:16]
+        digest = hashlib.md5(f"{text or ''}|{media_url or ''}".encode("utf-8")).hexdigest()[:16]
         dedupe_key = f"{digits}:{digest}"
         try:
             reply = await client.send(to, text or "", media_url=media_url,

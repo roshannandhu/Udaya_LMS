@@ -53,7 +53,13 @@ export class MessageQueue {
     this.state = readJson(this.stateFile, {
       firstConnectDate: null, sentDate: todayStr(), sentCount: 0,
     });
-    this.dedupe = new Set(readJson(this.dedupeFile, []));
+    // Dedupe is TIME-BOUNDED (24h): key -> enqueue timestamp. The old permanent
+    // Set silently dropped every later send with identical content — a weekly
+    // report whose text hadn't changed since last week was never delivered again.
+    // Migrate the legacy array format (no timestamps) by expiring it outright.
+    this.dedupeTtlMs = Number(opts.dedupeTtlMs) || 24 * 60 * 60 * 1000;
+    const rawDedupe = readJson(this.dedupeFile, {});
+    this.dedupe = new Map(Array.isArray(rawDedupe) ? [] : Object.entries(rawDedupe));
 
     this.q = [];
     this._running = false;
@@ -99,17 +105,36 @@ export class MessageQueue {
     writeJson(this.stateFile, this.state);
   }
 
-  // ── dedupe ──────────────────────────────────────────────────────────────────
+  // ── dedupe (24h sliding window) ──────────────────────────────────────────────
+  _pruneDedupe() {
+    const cutoff = Date.now() - this.dedupeTtlMs;
+    for (const [k, ts] of this.dedupe) {
+      if (ts < cutoff) this.dedupe.delete(k);
+    }
+  }
+  _persistDedupe() {
+    // Keep the file bounded (last ~5000 keys) so it can't grow forever.
+    if (this.dedupe.size > 5000) {
+      const arr = [...this.dedupe.entries()].slice(-5000);
+      this.dedupe = new Map(arr);
+    }
+    writeJson(this.dedupeFile, Object.fromEntries(this.dedupe));
+  }
   _seen(key) {
-    return key && this.dedupe.has(key);
+    if (!key) return false;
+    this._pruneDedupe();
+    return this.dedupe.has(key);
   }
   _remember(key) {
     if (!key) return;
-    this.dedupe.add(key);
-    // Keep the file bounded (last ~5000 keys) so it can't grow forever.
-    const arr = [...this.dedupe];
-    if (arr.length > 5000) this.dedupe = new Set(arr.slice(-5000));
-    writeJson(this.dedupeFile, [...this.dedupe]);
+    this.dedupe.set(key, Date.now());
+    this._persistDedupe();
+  }
+  _forget(key) {
+    // A permanently-failed send must not block a manual retry of the same message.
+    if (!key || !this.dedupe.has(key)) return;
+    this.dedupe.delete(key);
+    this._persistDedupe();
   }
 
   // ── logging ─────────────────────────────────────────────────────────────────
@@ -132,7 +157,7 @@ export class MessageQueue {
     this._remember(dedupeKey);
     const id = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     this.q.push({
-      id, phone, text,
+      id, phone, text, dedupeKey,
       media: mediaUrl ? { url: mediaUrl, type: mediaType } : null,
       attempts: 0,
     });
@@ -183,6 +208,7 @@ export class MessageQueue {
         setTimeout(() => { this.q.push(item); this._ensureRunning(); }, this.retryMs);
       } else {
         this._log(item.phone, 'failed', msg);
+        this._forget(item.dedupeKey); // allow a manual re-send of the same content
       }
     }
   }
