@@ -644,6 +644,8 @@ export const whatsappApi = {
   getInbox:      ()     => apiClient('/teacher/whatsapp/inbox'),
   markInboxRead: (data) => apiClient('/teacher/whatsapp/inbox/mark-read', { method: 'POST', body: JSON.stringify(data || {}) }),
   replyInbox:    (data) => apiClient('/teacher/whatsapp/inbox/reply', { method: 'POST', body: JSON.stringify(data || {}) }),
+  deleteMessage: (id)   => apiClient(`/teacher/whatsapp/inbox/message/${id}`, { method: 'DELETE' }),
+  deleteChat:    (phone)=> apiClient(`/teacher/whatsapp/inbox/chat/${phone}`, { method: 'DELETE' }),
 
   // Variables (picker source of truth — auto vs ask)
   getVariables:    ()       => apiClient('/teacher/whatsapp/variables'),

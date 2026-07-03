@@ -46,12 +46,17 @@ function Ticks({ status }) {
   return null;
 }
 
-function Bubble({ m }) {
+function Bubble({ m, onDelete }) {
   const out = m.direction === 'out';
   const isImage = (m.media_type || '').startsWith('image/');
   const isAudio = (m.media_type || '').startsWith('audio/');
   return (
-    <div className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex group ${out ? 'justify-end' : 'justify-start'}`}>
+      {out && onDelete && (
+        <button onClick={onDelete} className="opacity-0 group-hover:opacity-100 p-1.5 text-neutral-400 hover:text-red-500 transition-opacity self-center mt-1 mr-1" title="Delete message">
+          <Trash2 size={13} />
+        </button>
+      )}
       <div className={`max-w-[80%] rounded-2xl px-3 py-2 shadow-sm ${
         out ? 'bg-whatsapp-green-light rounded-br-sm' : 'bg-white border border-[#EFEDEA] rounded-bl-sm'
       }`}>
@@ -75,6 +80,11 @@ function Bubble({ m }) {
           {out && <Ticks status={m.status} />}
         </div>
       </div>
+      {!out && onDelete && (
+        <button onClick={onDelete} className="opacity-0 group-hover:opacity-100 p-1.5 text-neutral-400 hover:text-red-500 transition-opacity self-center mt-1 ml-1" title="Delete message">
+          <Trash2 size={13} />
+        </button>
+      )}
     </div>
   );
 }
@@ -175,6 +185,29 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
     () => (threads || []).find((t) => keyOf(t.from_phone) === activeKey) || null,
     [threads, activeKey]
   );
+
+  const handleDeleteChat = async () => {
+    if (!current || !window.confirm('Delete this entire chat history? This cannot be undone.')) return;
+    try {
+      await whatsappApi.deleteChat(current.from_phone);
+      setThreads((prev) => (prev || []).filter((t) => keyOf(t.from_phone) !== activeKey));
+      setActiveKey(null);
+    } catch (e) {
+      setSendError('Failed to delete chat.');
+    }
+  };
+
+  const handleDeleteMessage = async (msgId) => {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      await whatsappApi.deleteMessage(msgId);
+      setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
+        ? { ...t, messages: t.messages.filter((m) => m.id !== msgId) }
+        : t));
+    } catch (e) {
+      setSendError('Failed to delete message.');
+    }
+  };
 
   // Start (or jump to) a chat with any parent from the directory. A parent with
   // no prior conversation gets a client-side empty thread — the first sent
@@ -485,6 +518,9 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
                   {current.standard_name ? `${current.standard_name} · ` : ''}{current.from_phone}
                 </p>
               </div>
+              <button onClick={handleDeleteChat} className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-[#F4F2EF] transition-colors" title="Delete entire chat">
+                <Trash2 size={16} />
+              </button>
             </div>
 
             {/* Messages */}
@@ -494,7 +530,7 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
                   <span className="text-[10px] font-semibold text-neutral-400 bg-white border border-[#EFEDEA] rounded-full px-2.5 py-0.5 shadow-sm">{m.separator}</span>
                 </div>
               ) : (
-                <Bubble key={m.id} m={m} />
+                <Bubble key={m.id} m={m} onDelete={() => handleDeleteMessage(m.id)} />
               ))}
             </div>
 

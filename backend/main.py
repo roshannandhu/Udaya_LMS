@@ -13755,6 +13755,28 @@ def wa_inbox_mark_read(data: WhatsAppInboxReadInput, user = Depends(verify_token
         print(f"[wa] inbox mark-read failed: {e}")
     return {"ok": True}
 
+@app.delete("/api/teacher/whatsapp/inbox/message/{message_id}")
+def wa_inbox_delete_message(message_id: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        # It could be an inbound message (inbox) or outbound (messages)
+        service_supabase.table("whatsapp_inbox").delete().eq("teacher_id", user["teacher_id"]).eq("id", message_id).execute()
+        service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("id", message_id).execute()
+    except Exception as e:
+        print(f"[wa] inbox delete message failed: {e}")
+    return {"ok": True}
+
+@app.delete("/api/teacher/whatsapp/inbox/chat/{phone}")
+def wa_inbox_delete_chat(phone: str, user = Depends(verify_token)):
+    _wa_require_teacher(user)
+    try:
+        # Wipe all inbound and outbound messages for this phone and teacher
+        service_supabase.table("whatsapp_inbox").delete().eq("teacher_id", user["teacher_id"]).eq("from_phone", phone).execute()
+        service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("recipient", phone).execute()
+    except Exception as e:
+        print(f"[wa] inbox delete chat failed: {e}")
+    return {"ok": True}
+
 
 # ── Scheduled / automatic jobs ────────────────────────────────────────────────
 def _wa_parse_interval(cfg: dict) -> timedelta:
