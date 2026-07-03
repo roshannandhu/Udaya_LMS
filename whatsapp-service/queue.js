@@ -39,6 +39,12 @@ export class MessageQueue {
    */
   constructor(sendFn, opts = {}) {
     this.sendFn = sendFn;
+    // Optional: called after each successful send with (item, sendResult) so the
+    // service can report real delivery status back to the backend (the UI's
+    // sent/delivered/read ticks depend on it — without this everything stays
+    // "queued" forever).
+    this.onSent = opts.onSent || null;
+    this.onFailed = opts.onFailed || null;
     this.delayMs = opts.delayMs ?? 4000;
     this.retryMs = opts.retryMs ?? 60000;
     this.warmupEnabled = opts.warmupEnabled ?? true;
@@ -199,6 +205,7 @@ export class MessageQueue {
       const res = await this.sendFn(item.phone, item.text, item.media);
       this._countSent();
       this._log(item.phone, 'sent', res?.key?.id || '');
+      try { this.onSent?.(item, res); } catch (e) { console.warn('[queue] onSent failed:', e.message); }
     } catch (e) {
       const msg = e?.message || String(e);
       if (item.attempts < 1) {
@@ -209,6 +216,7 @@ export class MessageQueue {
       } else {
         this._log(item.phone, 'failed', msg);
         this._forget(item.dedupeKey); // allow a manual re-send of the same content
+        try { this.onFailed?.(item, msg); } catch (e2) { console.warn('[queue] onFailed failed:', e2.message); }
       }
     }
   }

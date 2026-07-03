@@ -47,6 +47,10 @@ services:
       - WARMUP_ENABLED=${WARMUP_ENABLED:-true}
       - SESSION_DIR=./session
       - LOG_FILE=./logs/messages.log
+      # Incoming parent messages + delivery-status callbacks go to the FastAPI
+      # container over the compose network. The default (localhost:8001) points at
+      # THIS container inside Docker — with it, no parent reply ever reaches the app.
+      - BACKEND_WEBHOOK_URL=http://api:8001/api/teacher/whatsapp/webhook
     volumes:
       - wa_session:/app/session       # WhatsApp credentials + warm-up/dedupe state
       - wa_logs:/app/logs             # messages.log

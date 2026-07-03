@@ -12093,12 +12093,15 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
     }
     if test_id and _wa_messages_have_test_id():
         row["test_id"] = test_id
+    row_id = None
     try:
-        service_supabase.table("whatsapp_messages").insert(row).execute()
+        ins = service_supabase.table("whatsapp_messages").insert(row).execute()
+        row_id = (ins.data or [{}])[0].get("id")
     except Exception as e:
         print(f"[wa] message log insert failed: {e}")
     return {"student_id": recipient.get("id"), "name": recipient.get("name"),
-            "status": status, "error": res.get("error"), "cost": cost}
+            "status": status, "error": res.get("error"), "cost": cost,
+            "message_id": row_id}
 
 
 def _wa_student_score(report: dict, test_id: Optional[str] = None):
@@ -13434,7 +13437,10 @@ async def _wa_handle_baileys_event(body: dict):
                 "received_at": at_iso,
             }).execute().data
         except Exception as e:
-            print(f"[wa] inbox insert failed: {e}")
+            hint = ""
+            if "does not exist" in str(e).lower() or "42P01" in str(e):
+                hint = " — the whatsapp_inbox table is missing: run backend/migrations/whatsapp_inbox.sql in the Supabase SQL Editor"
+            print(f"[wa] inbox insert failed: {e}{hint}")
             return
         msg = {
             "id": (row or [{}])[0].get("id"), "direction": "in", "body": msg_body,
@@ -13503,11 +13509,25 @@ async def wa_webhook(request: Request):
     pid = body.get("id") or body.get("message_id")
     status = body.get("status")
 
-    # 1) Delivery-status update for a message we sent.
+    # 1) Delivery-status update for a message we sent. Rank-guarded so a late
+    #    'delivered' can never downgrade an already-'read' row, then pushed to any
+    #    open Chats screens so the ticks move live.
     if pid and status:
+        _rank = {"queued": 0, "not_configured": 0, "failed": 1, "sent": 1, "delivered": 2, "read": 3}
         try:
-            service_supabase.table("whatsapp_messages").update(
-                {"status": status}).eq("provider_message_id", pid).execute()
+            rows = service_supabase.table("whatsapp_messages").select(
+                "id, teacher_id, to_phone, status").eq("provider_message_id", pid).limit(1).execute().data or []
+            if rows:
+                r = rows[0]
+                if _rank.get(status, 0) > _rank.get(r.get("status") or "queued", 0):
+                    upd = {"status": status}
+                    if body.get("error"):
+                        upd["error"] = str(body["error"])[:500]
+                    service_supabase.table("whatsapp_messages").update(upd).eq("id", r["id"]).execute()
+                    await _wa_inbox_emit(r["teacher_id"], {
+                        "type": "wa_status", "id": r["id"], "status": status,
+                        "thread_phone": r.get("to_phone"),
+                    })
         except Exception as e:
             print(f"[wa] webhook status update failed: {e}")
 
@@ -13564,8 +13584,11 @@ def wa_inbox(limit: int = 300, user = Depends(verify_token)):
     try:
         out_rows = service_supabase.table("whatsapp_messages").select(
             "id, to_phone, student_id, body_text, media_url, media_type, status, category, sent_at, created_at"
-        ).eq("teacher_id", user["teacher_id"]).neq("status", "failed").neq(
+        ).eq("teacher_id", user["teacher_id"]).neq(
             "status", "not_configured").order("created_at", desc=True).limit(limit).execute().data or []
+        # Failed report/announcement blasts don't belong in a conversation, but a
+        # failed CHAT reply must stay visible (red mark) or the teacher thinks it went.
+        out_rows = [r for r in out_rows if r.get("status") != "failed" or r.get("category") == "chat"]
     except Exception:
         out_rows = []
 

@@ -149,6 +149,19 @@ async function rawSend(phone, text, media) {
   return sock.sendMessage(jid, content);
 }
 
+// WhatsApp message id → our queue id, so delivery/read receipts (which carry
+// only the WA id) can be mapped back to the whatsapp_messages row the backend
+// logged (provider_message_id = queue id). Bounded to the most recent 2000.
+const waIdToQueueId = new Map();
+function rememberWaId(waId, queueId) {
+  if (!waId || !queueId) return;
+  waIdToQueueId.set(waId, queueId);
+  if (waIdToQueueId.size > 2000) {
+    const firstKey = waIdToQueueId.keys().next().value;
+    waIdToQueueId.delete(firstKey);
+  }
+}
+
 const queue = new MessageQueue(rawSend, {
   delayMs: 4000,
   retryMs: 60000,
@@ -156,6 +169,14 @@ const queue = new MessageQueue(rawSend, {
   dailyLimit: DAILY_MESSAGE_LIMIT,
   sessionDir: SESSION_DIR,
   logFile: LOG_FILE,
+  // Report the real outcome to the backend so the UI's ticks move past "queued".
+  onSent: (item, res) => {
+    rememberWaId(res?.key?.id, item.id);
+    postToBackend({ id: item.id, status: 'sent' });
+  },
+  onFailed: (item, error) => {
+    postToBackend({ id: item.id, status: 'failed', error: String(error || '').slice(0, 300) });
+  },
 });
 
 function clearSessionDir() {
@@ -290,6 +311,17 @@ async function startSock() {
       if (type !== 'notify') return;
       for (const msg of messages || []) {
         forwardChatMessage(msg).catch((e) => console.warn('[wa] inbound forward error:', e.message));
+      }
+    });
+
+    // Delivery/read receipts for messages WE sent → backend status updates
+    // (drives the ✓✓ ticks). Baileys status enum: 2=server ack, 3=delivered, 4=read.
+    sock.ev.on('messages.update', (updates) => {
+      for (const u of updates || []) {
+        const queueId = waIdToQueueId.get(u?.key?.id);
+        const st = u?.update?.status;
+        if (!queueId || typeof st !== 'number' || st < 3) continue;
+        postToBackend({ id: queueId, status: st >= 4 ? 'read' : 'delivered' });
       }
     });
 

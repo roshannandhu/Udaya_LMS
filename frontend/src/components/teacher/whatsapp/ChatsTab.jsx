@@ -38,6 +38,7 @@ const dayLabel = (iso) => {
 };
 
 function Ticks({ status }) {
+  if (status === 'failed') return <span className="text-[10px] font-bold text-red-500" title="Not delivered">!</span>;
   if (!status || status === 'queued') return <Clock size={12} className="text-neutral-400" />;
   if (status === 'sent') return <Check size={13} className="text-neutral-400" />;
   if (status === 'delivered') return <CheckCheck size={13} className="text-neutral-400" />;
@@ -109,6 +110,15 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
 
   // Live: append messages pushed by the backend (parent replies, phone-sent, other devices).
   useWaInboxSocket(useCallback((data) => {
+    // Tick updates: queued → sent → delivered → read for messages we sent.
+    if (data?.type === 'wa_status' && data.id) {
+      setThreads((prev) => (prev || []).map((t) => (
+        t.messages.some((m) => m.id === data.id)
+          ? { ...t, messages: t.messages.map((m) => (m.id === data.id ? { ...m, status: data.status } : m)) }
+          : t
+      )));
+      return;
+    }
     if (data?.type !== 'wa_message' || !data.message) return;
     const key = keyOf(data.thread_phone);
     setThreads((prev) => {
