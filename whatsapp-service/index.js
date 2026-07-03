@@ -17,6 +17,12 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 
 import { MessageQueue } from './queue.js';
+import os from 'os';
+import path from 'path';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from 'ffmpeg-static';
+
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 const PORT = Number(process.env.PORT) || 3100;
 const SESSION_DIR = process.env.SESSION_DIR || './session';
@@ -143,9 +149,28 @@ async function rawSend(phone, text, media) {
     if (isImage) {
       content = { image: mediaData, caption: text || '' };
     } else if (isAudio) {
-      // Sending as standard audio (without ptt: true) is more robust since
-      // browser-recorded WebM buffers are often rejected by WhatsApp as PTT.
-      content = { audio: mediaData, mimetype: 'audio/mp4' };
+      if ((media.type || '').includes('webm') || mtype.includes('webm')) {
+        const tmpIn = path.join(os.tmpdir(), `wa-in-${Date.now()}.webm`);
+        const tmpOut = path.join(os.tmpdir(), `wa-out-${Date.now()}.ogg`);
+        fs.writeFileSync(tmpIn, mediaData);
+        try {
+          await new Promise((resolve, reject) => {
+            ffmpeg(tmpIn)
+              .outputOptions(['-c:a libopus', '-vbr on'])
+              .toFormat('ogg')
+              .save(tmpOut)
+              .on('end', resolve)
+              .on('error', reject);
+          });
+          mediaData = fs.readFileSync(tmpOut);
+        } catch (e) {
+          console.error('[wa] ffmpeg conversion failed:', e.message);
+        } finally {
+          if (fs.existsSync(tmpIn)) fs.unlinkSync(tmpIn);
+          if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+        }
+      }
+      content = { audio: mediaData, mimetype: 'audio/ogg; codecs=opus', ptt: true };
     } else {
       content = { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
