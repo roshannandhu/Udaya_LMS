@@ -13717,6 +13717,14 @@ async def wa_inbox_reply(data: WhatsAppReplyInput, user = Depends(verify_token))
     if not provider.configured:
         raise HTTPException(status_code=503, detail="WhatsApp is not connected. Link it in Settings first.")
 
+@app.get("/api/dev/debug-messages")
+def dev_debug_messages():
+    try:
+        rows = service_supabase.table("whatsapp_messages").select("id, status, error, media_url").order("created_at", desc=True).limit(5).execute().data
+        return {"messages": rows}
+    except Exception as e:
+        return {"error": str(e)}
+
     # Keep the thread identity: resolve the student on this number if we can.
     match = _wa_match_inbound(to) or {}
     recipient = {"id": match.get("student_id"), "name": match.get("student_name") or "",
