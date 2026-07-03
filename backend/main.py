@@ -1523,42 +1523,80 @@ class ResendOtpRequest(BaseModel):
     pending_id: str
 
 
-# ── Login rate limiting (Cloudflare-aware, in-memory sliding window) ──
-# Keyed on the real client IP (CF-Connecting-IP behind Cloudflare, not the socket
-# address). Fails OPEN on any internal error so a bug can never lock users out.
-# OTP endpoints already cap attempts/resends separately.
-_login_attempts: dict = {}
-LOGIN_RL_MAX = 8
-LOGIN_RL_WINDOW = 300  # seconds
+# ── Login rate limiting (failure-based, in-memory sliding window) ──
+# Only FAILED attempts count, tracked on two keys:
+#   id:{identifier} — 5 fails / 5 min: a student hammering a wrong password only
+#     locks further tries on THAT account, never anyone else's login.
+#   ip:{client_ip}  — 30 fails / 5 min: brute-force backstop. Deliberately high
+#     because whole classrooms share one WiFi IP and Indian carriers use CGNAT —
+#     the old 8-attempts-per-IP counter (which even counted successes) blocked
+#     innocent students the moment a few classmates logged in or fat-fingered
+#     a password on the same network.
+# Successful logins are never throttled and clear the account's counter.
+# Fails OPEN on any internal error so a bug can never lock users out.
+_login_fail_attempts: dict = {}
+LOGIN_FAIL_WINDOW = 300  # seconds
+LOGIN_FAIL_MAX_PER_ID = 5
+LOGIN_FAIL_MAX_PER_IP = 30
 
 def _client_ip(request: Request) -> str:
     return (request.headers.get("cf-connecting-ip")
             or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
             or (request.client.host if request.client else "unknown"))
 
-def login_rate_limit(request: Request):
+def _login_fail_hits(key: str, now: float) -> list:
+    hits = [t for t in _login_fail_attempts.get(key, []) if now - t < LOGIN_FAIL_WINDOW]
+    _login_fail_attempts[key] = hits
+    return hits
+
+def _check_login_blocked(ip: str, identifier: str):
     try:
-        ip = _client_ip(request)
         now = time_module.time()
-        hits = [t for t in _login_attempts.get(ip, []) if now - t < LOGIN_RL_WINDOW]
-        if len(hits) >= LOGIN_RL_MAX:
-            raise HTTPException(status_code=429, detail="Too many login attempts. Please wait a few minutes and try again.")
-        hits.append(now)
-        _login_attempts[ip] = hits
-        if len(_login_attempts) > 5000:  # bound memory
-            stale = [k for k, v in _login_attempts.items() if not any(now - t < LOGIN_RL_WINDOW for t in v)]
-            for k in stale:
-                _login_attempts.pop(k, None)
+        if identifier and len(_login_fail_hits(f"id:{identifier}", now)) >= LOGIN_FAIL_MAX_PER_ID:
+            raise HTTPException(status_code=429, detail="Too many failed attempts for this account. Please wait a few minutes and try again.")
+        if len(_login_fail_hits(f"ip:{ip}", now)) >= LOGIN_FAIL_MAX_PER_IP:
+            raise HTTPException(status_code=429, detail="Too many failed login attempts from this network. Please wait a few minutes and try again.")
     except HTTPException:
         raise
     except Exception:
         pass  # fail open
 
+def _record_login_failure(ip: str, identifier: str):
+    try:
+        now = time_module.time()
+        for key in ([f"id:{identifier}"] if identifier else []) + [f"ip:{ip}"]:
+            _login_fail_hits(key, now).append(now)
+        if len(_login_fail_attempts) > 5000:  # bound memory
+            stale = [k for k, v in _login_fail_attempts.items() if not any(now - t < LOGIN_FAIL_WINDOW for t in v)]
+            for k in stale:
+                _login_fail_attempts.pop(k, None)
+    except Exception:
+        pass
+
+def _clear_login_failures(identifier: str):
+    if identifier:
+        _login_fail_attempts.pop(f"id:{identifier}", None)
+
 # NOTE: the unauthenticated /api/debug-student endpoint was removed — it exposed
 # every student's plain_password + auth email to anyone on the public internet.
 
 @app.post("/api/auth/login")
-def login(request: LoginRequest, _rl: None = Depends(login_rate_limit)):
+def login(request: LoginRequest, http_request: Request):
+    ip = _client_ip(http_request)
+    identifier_key = (request.email_or_username or "").strip().lower()
+    _check_login_blocked(ip, identifier_key)
+    try:
+        result = _login_impl(request)
+    except HTTPException as e:
+        # Only bad-credential outcomes consume the budget — 5xx/config errors don't.
+        if e.status_code in (401, 403):
+            _record_login_failure(ip, identifier_key)
+        raise
+    _clear_login_failures(identifier_key)
+    return result
+
+
+def _login_impl(request: LoginRequest):
     if not supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
