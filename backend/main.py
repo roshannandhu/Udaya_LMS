@@ -8743,10 +8743,11 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
     for s in req.students:
         auth_user_id = None
         try:
+            normalized_username = _normalize_student_username(s.username)
             # 0. Check if student already exists by username or email to update instead of skipping
             existing = []
-            if s.username:
-                existing = service_supabase.table("students").select("id, student_code").eq("username", s.username).execute().data or []
+            if normalized_username:
+                existing = service_supabase.table("students").select("id, student_code").eq("username", normalized_username).execute().data or []
             if not existing and s.email:
                 existing = service_supabase.table("students").select("id, student_code").eq("email", s.email).execute().data or []
             
@@ -8782,7 +8783,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                     "id": auth_user_id,
                     "standard_id": s.standard_id,
                     "name": s.name,
-                    "username": s.username,
+                    "username": normalized_username,
                     "student_code": student_code,
                     "email": s.email,
                     "phone": s.phone,
@@ -8794,13 +8795,13 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                 continue
 
             # 1. Create Supabase Auth user
-            email_to_use = _student_auth_email_for_create(s.username, s.email)
+            email_to_use = _student_auth_email_for_create(normalized_username, s.email)
             auth_res = service_supabase.auth.admin.create_user({
                 "email": email_to_use,
                 "password": s.temp_password,
                 "user_metadata": {
                     "role": "student",
-                    "username": s.username,
+                    "username": normalized_username,
                     "name": s.name
                 },
                 "email_confirm": True
@@ -8813,11 +8814,17 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
 
             auth_user_id = auth_res.user.id
 
+            # Force auto-confirm (Python SDK sometimes ignores email_confirm=True flag)
+            try:
+                service_supabase.auth.admin.update_user_by_id(auth_user_id, {"email_confirm": True})
+            except Exception:
+                pass
+
             # 2. Insert into students table
             service_supabase.table("students").insert({
                 "id": auth_user_id,
                 "name": s.name,
-                "username": s.username,
+                "username": normalized_username,
                 "email": s.email,
                 "phone": s.phone,
                 "standard_id": s.standard_id,
