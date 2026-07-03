@@ -70,13 +70,18 @@ class _FakeServiceSupabase:
 class _FakeAuth:
     def __init__(self):
         self.emails = []
+        self.attempts = []
 
     def sign_in_with_password(self, payload):
         email = payload["email"]
+        password = payload["password"]
         self.emails.append(email)
+        self.attempts.append((email, password))
         if email == "aarav.p@tutoria.local":
             raise Exception("Invalid login credentials")
         if email == "parent@example.com":
+            raise Exception("Invalid login credentials")
+        if password != "secret":
             raise Exception("Invalid login credentials")
         if email == "candidate.test@tutoria.local":
             user_id = "student-2"
@@ -149,9 +154,27 @@ def run():
             _rl=None,
         )
 
-        assert fake_supabase.auth.emails == [
-            "aarav.p@tutoria.local",
-            "aarav.p@tutoria.internal",
+        assert fake_supabase.auth.attempts == [
+            ("aarav.p@tutoria.local", "secret"),
+            ("aarav.p@tutoria.local", "secret "),
+            ("aarav.p@tutoria.internal", "secret"),
+        ]
+        assert result["token"] == "token"
+        assert result["user"]["student_id"] == "student-1"
+
+        fake_supabase = _FakeSupabase()
+        main.supabase = fake_supabase
+
+        result = main.login(
+            main.LoginRequest(email_or_username="aarav.p", password="secret "),
+            _rl=None,
+        )
+
+        assert fake_supabase.auth.attempts == [
+            ("aarav.p@tutoria.local", "secret "),
+            ("aarav.p@tutoria.local", "secret"),
+            ("aarav.p@tutoria.internal", "secret "),
+            ("aarav.p@tutoria.internal", "secret"),
         ]
         assert result["token"] == "token"
         assert result["user"]["student_id"] == "student-1"
@@ -164,9 +187,10 @@ def run():
             _rl=None,
         )
 
-        assert fake_supabase.auth.emails == [
-            "parent@example.com",
-            "candidate.test@tutoria.local",
+        assert fake_supabase.auth.attempts == [
+            ("parent@example.com", "secret"),
+            ("parent@example.com", "secret "),
+            ("candidate.test@tutoria.local", "secret"),
         ]
         assert result["token"] == "token"
         assert result["user"]["student_id"] == "student-2"

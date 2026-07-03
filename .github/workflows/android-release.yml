@@ -52,7 +52,7 @@ jobs:
         run: |
           NAME="${GITHUB_REF_NAME#v}"          # v1.1.0 -> 1.1.0
           if ! [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            NAME="1.4.8"
+            NAME="1.4.9"
           fi
           IFS=. read -r MAJOR MINOR PATCH <<< "$NAME"
           CODE="$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))"

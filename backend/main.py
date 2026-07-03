@@ -6064,7 +6064,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-report-pdf-whatsapp-auth-candidate-fix"
+BUILD_MARKER = "2026-07-03-student-auth-candidate-password-retry"
 
 @app.get("/api/health")
 def health_check():
