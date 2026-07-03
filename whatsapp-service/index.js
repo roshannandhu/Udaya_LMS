@@ -159,12 +159,13 @@ async function rawSend(phone, text, media) {
         try {
           fs.writeFileSync(tmpIn, mediaData);
           await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('ffmpeg timeout')), 10000);
             ffmpeg(tmpIn)
-              .outputOptions(['-c:a libopus', '-vbr on'])
+              .outputOptions(['-y', '-c:a libopus', '-vbr on'])
               .toFormat('ogg')
               .save(tmpOut)
-              .on('end', resolve)
-              .on('error', reject);
+              .on('end', () => { clearTimeout(timeout); resolve(); })
+              .on('error', (err) => { clearTimeout(timeout); reject(err); });
           });
           outData = fs.readFileSync(tmpOut);
           isPtt = true;

@@ -239,22 +239,30 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
     setSendError('');
     try {
       const ext = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : 'webm';
-      const file = new File([blob], `voice-note.${ext}`, { type: mime });
-      const up = await whatsappApi.uploadMedia(file);
-      const r = await whatsappApi.replyInbox({
-        to_phone: current.from_phone, text: '',
-        media_url: up.url, media_type: up.type || mime, media_name: up.filename,
-      });
-      const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: '',
-        media_url: up.url, media_type: up.type || mime, media_name: up.filename,
-        at: new Date().toISOString(), status: 'queued', read: true };
-      setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
-        ? { ...t, messages: t.messages.some((m) => m.id === msg.id) ? t.messages : [...t.messages, msg],
-            last_at: msg.at, last_body: '🎤 Voice message' }
-        : t));
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        try {
+          const dataUrl = reader.result;
+          const r = await whatsappApi.replyInbox({
+            to_phone: current.from_phone, text: '',
+            media_url: dataUrl, media_type: mime || 'audio/webm', media_name: `voice-note.${ext}`,
+          });
+          const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: '',
+            media_url: dataUrl, media_type: mime || 'audio/webm', media_name: `voice-note.${ext}`,
+            at: new Date().toISOString(), status: 'queued', read: true };
+          setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
+            ? { ...t, messages: t.messages.some((m) => m.id === msg.id) ? t.messages : [...t.messages, msg],
+                last_at: msg.at, last_body: '🎤 Voice message' }
+            : t));
+        } catch (e) {
+          setSendError(e?.message || 'Voice message failed to send.');
+        } finally {
+          setSending(false);
+        }
+      };
     } catch (e) {
-      setSendError(e?.message || 'Voice message failed to send.');
-    } finally {
+      setSendError(e?.message || 'Voice message failed to process.');
       setSending(false);
     }
   };
