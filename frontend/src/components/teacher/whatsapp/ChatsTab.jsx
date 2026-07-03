@@ -210,10 +210,10 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
       const up = await whatsappApi.uploadMedia(file);
       const r = await whatsappApi.replyInbox({
         to_phone: current.from_phone, text: '',
-        media_url: up.url, media_type: up.type || mime,
+        media_url: up.url, media_type: up.type || mime, media_name: up.filename,
       });
       const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: '',
-        media_url: up.url, media_type: up.type || mime,
+        media_url: up.url, media_type: up.type || mime, media_name: up.filename,
         at: new Date().toISOString(), status: 'queued', read: true };
       setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
         ? { ...t, messages: t.messages.some((m) => m.id === msg.id) ? t.messages : [...t.messages, msg],
@@ -294,12 +294,12 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
     try {
       const r = await whatsappApi.replyInbox({
         to_phone: current.from_phone, text,
-        media_url: media?.url || null, media_type: media?.type || null,
+        media_url: media?.url || null, media_type: media?.type || null, media_name: media?.name || null,
       });
       setDraft('');
       setAttachment(null);
       const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: text,
-        media_url: media?.url || null, media_type: media?.type || null,
+        media_url: media?.url || null, media_type: media?.type || null, media_name: media?.name || null,
         at: new Date().toISOString(), status: 'queued', read: true };
       setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
         ? { ...t, messages: t.messages.some((m) => m.id === msg.id) ? t.messages : [...t.messages, msg],

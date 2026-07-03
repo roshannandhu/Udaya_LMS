@@ -144,7 +144,9 @@ async function rawSend(phone, text, media) {
       content = { image: mediaData, caption: text || '' };
     } else if (isAudio) {
       // ptt renders as a WhatsApp voice note (mic bubble) instead of a file.
-      content = { audio: mediaData, mimetype: media.type || 'audio/ogg; codecs=opus', ptt: true };
+      // Force 'audio/mp4' as it ensures better cross-platform compatibility for voice notes in Baileys
+      // when the source might be audio/webm from browser MediaRecorder.
+      content = { audio: mediaData, mimetype: 'audio/mp4', ptt: true };
     } else {
       content = { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
@@ -405,11 +407,11 @@ app.get('/status', requireToken, (_req, res) => {
 });
 
 app.post('/send', requireToken, (req, res) => {
-  const { phone, text, mediaUrl, mediaType, dedupeKey } = req.body || {};
+  const { phone, text, mediaUrl, mediaType, mediaName, dedupeKey } = req.body || {};
   if (!phone || (!text && !mediaUrl)) {
     return res.status(400).json({ error: 'phone and text (or media) required' });
   }
-  const result = queue.enqueue({ phone, text, mediaUrl, mediaType, dedupeKey });
+  const result = queue.enqueue({ phone, text, mediaUrl, mediaType, mediaName, dedupeKey });
   res.json(result);
 });
 

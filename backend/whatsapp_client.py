@@ -36,14 +36,14 @@ def _headers() -> dict:
 
 
 async def send(phone: str, text: str, *, media_url: Optional[str] = None,
-               media_type: Optional[str] = None, dedupe_key: Optional[str] = None) -> dict:
+               media_type: Optional[str] = None, media_name: Optional[str] = None, dedupe_key: Optional[str] = None) -> dict:
     """Enqueue one message on the Node service. Returns the service's JSON reply
     ({queued, id} or {queued:false, duplicate:true}). Raises ServiceDownError if
     the service is unreachable; raises RuntimeError on a 4xx/5xx response."""
     if not WHATSAPP_SERVICE_URL:
         raise ServiceDownError("WHATSAPP_SERVICE_URL is not set")
     payload = {"phone": phone, "text": text,
-               "mediaUrl": media_url, "mediaType": media_type, "dedupeKey": dedupe_key}
+               "mediaUrl": media_url, "mediaType": media_type, "mediaName": media_name, "dedupeKey": dedupe_key}
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.post(f"{WHATSAPP_SERVICE_URL}/send",

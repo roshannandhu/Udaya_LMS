@@ -93,7 +93,7 @@ class WhatsAppProvider:
         raise NotImplementedError
 
     async def send_freeform(self, to: str, text: str, media_url: Optional[str] = None,
-                            media_type: Optional[str] = None) -> dict:
+                            media_type: Optional[str] = None, media_name: Optional[str] = None) -> dict:
         raise NotImplementedError
 
     async def create_template(self, name: str, category: str, language: str,
@@ -199,7 +199,7 @@ class WANotifierProvider(WhatsAppProvider):
             payload["template"]["header"] = {"type": media_type or "document", "url": media_url}
         return await self._post("messages", payload)
 
-    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+    async def send_freeform(self, to, text, media_url=None, media_type=None, media_name=None) -> dict:
         if not self.verified:
             return dict(self._PAUSED)
         payload: Dict[str, Any] = {"to": to, "type": "text", "text": {"body": text}}
@@ -281,7 +281,7 @@ class MetaCloudProvider(WhatsAppProvider):
         except Exception as e:  # network/timeout — never raise into the request path
             return {"_ok": False, "error": str(e)}
 
-    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+    async def send_freeform(self, to, text, media_url=None, media_type=None, media_name=None) -> dict:
         payload: Dict[str, Any] = {"messaging_product": "whatsapp",
                                    "recipient_type": "individual", "to": self._digits(to)}
         if media_url:
@@ -382,7 +382,7 @@ class BaileysProvider(WhatsAppProvider):
         return {"status": "failed", "provider_message_id": None,
                 "error": reply.get("error") or "send rejected"}
 
-    async def send_freeform(self, to, text, media_url=None, media_type=None) -> dict:
+    async def send_freeform(self, to, text, media_url=None, media_type=None, media_name=None) -> dict:
         import hashlib
         import whatsapp_client as client
         # Stable (process-independent) dedupe key: digits + content digest. Built-in
@@ -395,13 +395,13 @@ class BaileysProvider(WhatsAppProvider):
         dedupe_key = f"{digits}:{digest}"
         try:
             reply = await client.send(to, text or "", media_url=media_url,
-                                      media_type=media_type, dedupe_key=dedupe_key)
+                                      media_type=media_type, media_name=media_name, dedupe_key=dedupe_key)
         except client.ServiceDownError:
             # Node service briefly unreachable — buffer for delivery on recovery
             # rather than dropping the message. Counts as queued, not failed.
             import whatsapp_outbox
             whatsapp_outbox.append(to, text or "", media_url=media_url,
-                                   media_type=media_type, dedupe_key=dedupe_key)
+                                   media_type=media_type, media_name=media_name, dedupe_key=dedupe_key)
             return {"status": "queued", "provider_message_id": None, "error": None}
         except Exception as e:
             return {"status": "failed", "provider_message_id": None, "error": str(e)}

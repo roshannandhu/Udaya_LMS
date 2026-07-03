@@ -155,7 +155,7 @@ export class MessageQueue {
   }
 
   // ── enqueue + worker ─────────────────────────────────────────────────────────
-  enqueue({ phone, text, mediaUrl, mediaType, dedupeKey }) {
+  enqueue({ phone, text, mediaUrl, mediaType, mediaName, dedupeKey }) {
     if (this._seen(dedupeKey)) {
       this._log(phone, 'skipped-duplicate', dedupeKey);
       return { queued: false, duplicate: true };
@@ -164,7 +164,7 @@ export class MessageQueue {
     const id = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     this.q.push({
       id, phone, text, dedupeKey,
-      media: mediaUrl ? { url: mediaUrl, type: mediaType } : null,
+      media: mediaUrl ? { url: mediaUrl, type: mediaType, fileName: mediaName } : null,
       attempts: 0,
     });
     this._ensureRunning();

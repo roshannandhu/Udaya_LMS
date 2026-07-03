@@ -12033,7 +12033,7 @@ def _wa_messages_have_test_id() -> bool:
 async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_name=None,
                            variables=None, body_text=None, manual_values=None,
                            template_body=None, meta_approved=False,
-                           media_url=None, media_type=None,
+                           media_url=None, media_type=None, media_name=None,
                            category="utility", language="en", standard_id=None, job_id=None,
                            test_id=None):
     """Send one message and write a whatsapp_messages row. Returns a per-recipient
@@ -12070,7 +12070,7 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
             positional = _wa_positional_values(template_body or raw_body or "", recipient, manual_values)
             res = await provider.send_template(to, template_name, positional, media_url, media_type, language)
         else:
-            res = await provider.send_freeform(to, rendered, media_url, media_type)
+            res = await provider.send_freeform(to, rendered, media_url, media_type, media_name)
     except Exception as e:
         res = {"status": "failed", "provider_message_id": None, "error": str(e)}
 
@@ -13492,6 +13492,35 @@ async def _wa_handle_baileys_event(body: dict):
     })
 
 
+async def _wa_handle_baileys_event(body: dict):
+    from_phone = body.get("phone") or ""
+    msg_body = body.get("body") or ""
+    media_b64 = body.get("media_b64")
+    media_type = body.get("media_type")
+    
+    media_url = None
+    if media_b64:
+        # Use a data URI to display the media in the UI
+        media_url = f"data:{media_type or 'application/octet-stream'};base64,{media_b64}"
+            
+    match = _wa_match_inbound(from_phone)
+    if match:
+        try:
+            service_supabase.table("whatsapp_inbox").insert({
+                "teacher_id": match["teacher_id"],
+                "from_phone": from_phone,
+                "student_id": match.get("student_id"),
+                "student_name": match.get("student_name"),
+                "standard_id": match.get("standard_id"),
+                "standard_name": match.get("standard_name"),
+                "body": msg_body,
+                "media_url": media_url,
+                "media_type": media_type,
+                "provider_message_id": body.get("id"),
+            }).execute()
+        except Exception as e:
+            print(f"[wa] inbox insert failed: {e}")
+
 # ── Webhook (no auth — provider-signed callbacks). Handles BOTH outbound delivery
 #    status updates AND inbound parent replies (read-only inbox). ───────────────
 @app.post("/api/teacher/whatsapp/webhook")
@@ -13671,6 +13700,7 @@ class WhatsAppReplyInput(BaseModel):
     text: str = ""
     media_url: Optional[str] = None
     media_type: Optional[str] = None
+    media_name: Optional[str] = None
 
 
 @app.post("/api/teacher/whatsapp/inbox/reply")
@@ -13691,7 +13721,7 @@ async def wa_inbox_reply(data: WhatsAppReplyInput, user = Depends(verify_token))
                  "phone": to, "standard_id": match.get("standard_id")}
     res = await _wa_send_and_log(provider, user["teacher_id"], recipient,
                                  mode="freeform", body_text=text, category="chat",
-                                 media_url=data.media_url, media_type=data.media_type)
+                                 media_url=data.media_url, media_type=data.media_type, media_name=data.media_name)
     if res.get("status") in ("failed", "not_configured"):
         raise HTTPException(status_code=502, detail=res.get("error") or "Send failed")
     msg = {
