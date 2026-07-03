@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   ArrowLeft, Check, CheckCheck, ChevronDown, ChevronRight, Clock, MessagesSquare,
-  Paperclip, RefreshCw, Search, Send, Users, WifiOff,
+  Mic, Paperclip, RefreshCw, Search, Send, Trash2, Users, WifiOff,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
@@ -49,6 +49,7 @@ function Ticks({ status }) {
 function Bubble({ m }) {
   const out = m.direction === 'out';
   const isImage = (m.media_type || '').startsWith('image/');
+  const isAudio = (m.media_type || '').startsWith('audio/');
   return (
     <div className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[80%] rounded-2xl px-3 py-2 shadow-sm ${
@@ -59,6 +60,8 @@ function Bubble({ m }) {
             <a href={m.media_url} target="_blank" rel="noreferrer">
               <img src={m.media_url} alt="attachment" className="rounded-lg max-h-56 mb-1 object-cover" loading="lazy" />
             </a>
+          ) : isAudio ? (
+            <audio controls preload="metadata" src={m.media_url} className="max-w-[240px] h-10 mb-1" />
           ) : (
             <a href={m.media_url} target="_blank" rel="noreferrer"
               className="flex items-center gap-1.5 text-xs font-medium text-whatsapp-green-fg underline mb-1">
@@ -85,6 +88,11 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [attachment, setAttachment] = useState(null); // {url, type, name} | {uploading: true}
+  const [recording, setRecording] = useState(null); // {startedAt} while the mic is live
+  const [recElapsed, setRecElapsed] = useState(0);
+  const recRef = useRef(null); // {recorder, chunks, stream, discard}
+  const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
   const activeKeyRef = useRef(null);
   activeKeyRef.current = activeKey;
@@ -191,19 +199,111 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [activeKey, current?.messages?.length]);
 
-  const handleSend = async () => {
-    const text = draft.trim();
-    if (!text || !current || sending) return;
+  // ── Voice notes (WhatsApp-style: mic → record → send on stop) ────────────────
+  const sendVoiceBlob = async (blob, mime) => {
+    if (!current || !blob || blob.size < 200) return; // ignore empty/accidental taps
     setSending(true);
     setSendError('');
     try {
-      const r = await whatsappApi.replyInbox({ to_phone: current.from_phone, text });
-      setDraft('');
-      const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: text,
+      const ext = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : 'webm';
+      const file = new File([blob], `voice-note.${ext}`, { type: mime });
+      const up = await whatsappApi.uploadMedia(file);
+      const r = await whatsappApi.replyInbox({
+        to_phone: current.from_phone, text: '',
+        media_url: up.url, media_type: up.type || mime,
+      });
+      const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: '',
+        media_url: up.url, media_type: up.type || mime,
         at: new Date().toISOString(), status: 'queued', read: true };
       setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
         ? { ...t, messages: t.messages.some((m) => m.id === msg.id) ? t.messages : [...t.messages, msg],
-            last_at: msg.at, last_body: msg.body }
+            last_at: msg.at, last_body: '🎤 Voice message' }
+        : t));
+    } catch (e) {
+      setSendError(e?.message || 'Voice message failed to send.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (recording) return;
+    setSendError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const ctx = recRef.current;
+        recRef.current = null;
+        setRecording(null);
+        if (!ctx || ctx.discard) return;
+        const type = recorder.mimeType || mime || 'audio/webm';
+        sendVoiceBlob(new Blob(chunks, { type }), type);
+      };
+      recRef.current = { recorder, chunks, stream, discard: false };
+      recorder.start();
+      setRecording({ startedAt: Date.now() });
+      setRecElapsed(0);
+    } catch {
+      setSendError('Microphone unavailable — allow mic access to send voice messages.');
+    }
+  };
+
+  const stopRecording = (discard = false) => {
+    const ctx = recRef.current;
+    if (!ctx) return;
+    ctx.discard = discard;
+    try { ctx.recorder.stop(); } catch { /* already stopped */ }
+  };
+
+  // Recording timer + cleanup if the component unmounts mid-recording.
+  useEffect(() => {
+    if (!recording) return;
+    const t = setInterval(() => setRecElapsed(Math.floor((Date.now() - recording.startedAt) / 1000)), 500);
+    return () => clearInterval(t);
+  }, [recording]);
+  useEffect(() => () => { if (recRef.current) { recRef.current.discard = true; try { recRef.current.recorder.stop(); } catch { /* noop */ } } }, []);
+
+  const handlePickFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // same file can be re-picked later
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { setSendError('File too large (max 25 MB).'); return; }
+    setSendError('');
+    setAttachment({ uploading: true, name: file.name });
+    try {
+      const r = await whatsappApi.uploadMedia(file);
+      setAttachment({ url: r.url, type: r.type || file.type, name: r.filename || file.name });
+    } catch (err) {
+      setAttachment(null);
+      setSendError(err?.message || 'Attachment upload failed.');
+    }
+  };
+
+  const handleSend = async () => {
+    const text = draft.trim();
+    const media = attachment && !attachment.uploading ? attachment : null;
+    if ((!text && !media) || !current || sending || attachment?.uploading) return;
+    setSending(true);
+    setSendError('');
+    try {
+      const r = await whatsappApi.replyInbox({
+        to_phone: current.from_phone, text,
+        media_url: media?.url || null, media_type: media?.type || null,
+      });
+      setDraft('');
+      setAttachment(null);
+      const msg = r.message || { id: `tmp-${Date.now()}`, direction: 'out', body: text,
+        media_url: media?.url || null, media_type: media?.type || null,
+        at: new Date().toISOString(), status: 'queued', read: true };
+      setThreads((prev) => (prev || []).map((t) => keyOf(t.from_phone) === activeKey
+        ? { ...t, messages: t.messages.some((m) => m.id === msg.id) ? t.messages : [...t.messages, msg],
+            last_at: msg.at, last_body: msg.body || '📎 Attachment' }
         : t));
     } catch (e) {
       setSendError(e?.message || 'Could not send. Check the WhatsApp connection.');
@@ -407,7 +507,45 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
               ) : (
                 <>
                   {sendError && <p className="text-xs text-red-500 mb-1.5">{sendError}</p>}
+                  {attachment && (
+                    <div className="flex items-center gap-2 mb-1.5 bg-[#F4F2EF] border border-[#EBEAE7] rounded-xl px-3 py-1.5 text-xs text-neutral-600">
+                      <Paperclip size={13} className="shrink-0 text-neutral-400" />
+                      <span className="flex-1 truncate font-medium">
+                        {attachment.uploading ? `Uploading ${attachment.name}…` : attachment.name}
+                      </span>
+                      {!attachment.uploading && (
+                        <button onClick={() => setAttachment(null)} className="text-neutral-400 hover:text-red-500 font-bold px-1">✕</button>
+                      )}
+                    </div>
+                  )}
+                  {recording ? (
+                    /* ── Recording bar: cancel · pulsing timer · stop-and-send ── */
+                    <div className="flex items-center gap-3 py-1">
+                      <button onClick={() => stopRecording(true)} title="Discard"
+                        className="w-10 h-10 shrink-0 rounded-full bg-[#F4F2EF] text-neutral-500 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all">
+                        <Trash2 size={17} />
+                      </button>
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-sm font-semibold text-neutral-700 tabular-nums">
+                          {Math.floor(recElapsed / 60)}:{String(recElapsed % 60).padStart(2, '0')}
+                        </span>
+                        <span className="text-xs text-neutral-400">Recording…</span>
+                      </div>
+                      <button onClick={() => stopRecording(false)} title="Send voice message"
+                        className="w-10 h-10 shrink-0 rounded-full bg-whatsapp-green text-white flex items-center justify-center hover:brightness-95 transition-all">
+                        <Send size={17} className="-ml-0.5" />
+                      </button>
+                    </div>
+                  ) : (
                   <div className="flex items-end gap-2">
+                    <input ref={fileInputRef} type="file" className="hidden" onChange={handlePickFile}
+                      accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" />
+                    <button onClick={() => fileInputRef.current?.click()} disabled={attachment?.uploading}
+                      title="Attach a photo, PDF or document"
+                      className="w-10 h-10 shrink-0 rounded-full bg-[#F4F2EF] text-neutral-500 flex items-center justify-center hover:bg-[#EBEAE7] disabled:opacity-40 transition-all">
+                      <Paperclip size={17} />
+                    </button>
                     <textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
@@ -418,11 +556,21 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
                       rows={Math.min(4, Math.max(1, draft.split('\n').length))}
                       className="flex-1 resize-none px-3.5 py-2.5 text-sm rounded-2xl border border-[#EBEAE7] bg-white focus:outline-none focus:border-whatsapp-green-fg/50"
                     />
-                    <button onClick={handleSend} disabled={!draft.trim() || sending}
-                      className="w-10 h-10 shrink-0 rounded-full bg-whatsapp-green text-white flex items-center justify-center disabled:opacity-40 hover:brightness-95 transition-all">
-                      <Send size={17} className="-ml-0.5" />
-                    </button>
+                    {draft.trim() || attachment ? (
+                      <button onClick={handleSend}
+                        disabled={(!draft.trim() && !(attachment && !attachment.uploading)) || sending || attachment?.uploading}
+                        className="w-10 h-10 shrink-0 rounded-full bg-whatsapp-green text-white flex items-center justify-center disabled:opacity-40 hover:brightness-95 transition-all">
+                        <Send size={17} className="-ml-0.5" />
+                      </button>
+                    ) : (
+                      /* WhatsApp behaviour: empty composer shows the mic */
+                      <button onClick={startRecording} disabled={sending} title="Record a voice message"
+                        className="w-10 h-10 shrink-0 rounded-full bg-whatsapp-green text-white flex items-center justify-center disabled:opacity-40 hover:brightness-95 transition-all">
+                        <Mic size={17} />
+                      </button>
+                    )}
                   </div>
+                  )}
                 </>
               )}
             </div>

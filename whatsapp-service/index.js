@@ -133,16 +133,22 @@ async function rawSend(phone, text, media) {
 
     const mtype = String(media.type || '').toLowerCase();
     const isImage = mtype.startsWith('image');
+    const isAudio = mtype.startsWith('audio');
     // Give documents a sensible extension so the file arrives usable (a PDF as
     // .pdf, etc.) instead of a generic "report.pdf" for everything.
     const ext = mtype.includes('pdf') ? 'pdf'
       : mtype.includes('word') || mtype.includes('document') ? 'docx'
       : mtype.includes('sheet') || mtype.includes('excel') ? 'xlsx'
       : mtype.split('/')[1] || 'pdf';
-    content = isImage
-      ? { image: mediaData, caption: text || '' }
-      : { document: mediaData, mimetype: media.type || 'application/pdf',
+    if (isImage) {
+      content = { image: mediaData, caption: text || '' };
+    } else if (isAudio) {
+      // ptt renders as a WhatsApp voice note (mic bubble) instead of a file.
+      content = { audio: mediaData, mimetype: media.type || 'audio/ogg; codecs=opus', ptt: true };
+    } else {
+      content = { document: mediaData, mimetype: media.type || 'application/pdf',
           fileName: media.fileName || `attachment.${ext}`, caption: text || '' };
+    }
   } else {
     content = { text: text || '' };
   }
@@ -265,9 +271,11 @@ async function forwardChatMessage(msg) {
   let mediaB64 = null;
   let mediaType = null;
   let mediaName = null;
-  const mediaNode = node.imageMessage || node.documentMessage;
+  // Voice notes / audio from parents are forwarded too, not just images and docs.
+  const mediaNode = node.imageMessage || node.documentMessage || node.audioMessage;
   if (mediaNode) {
-    mediaType = mediaNode.mimetype || (node.imageMessage ? 'image/jpeg' : 'application/octet-stream');
+    mediaType = mediaNode.mimetype
+      || (node.imageMessage ? 'image/jpeg' : node.audioMessage ? 'audio/ogg' : 'application/octet-stream');
     mediaName = node.documentMessage?.fileName || null;
     const declared = Number(mediaNode.fileLength || 0);
     if (declared <= MAX_INBOUND_MEDIA_BYTES) {

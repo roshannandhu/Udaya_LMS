@@ -11961,7 +11961,7 @@ def wa_public_media(filename: str):
     # Filenames are always server-generated UUIDs + the original extension. The
     # ext allowlist must cover everything the upload endpoint accepts — a teacher's
     # .webp photo used to 404 here, which killed the whole media send downstream.
-    if not re.match(r"^[0-9a-fA-F-]+\.(pdf|png|jpg|jpeg|webp|gif|docx|doc|xlsx|xls|pptx|ppt|mp4|mp3)$",
+    if not re.match(r"^[0-9a-fA-F-]+\.(pdf|png|jpg|jpeg|webp|gif|docx|doc|xlsx|xls|pptx|ppt|mp4|mp3|ogg|opus|webm|m4a|aac)$",
                     (filename or "").lower()):
         raise HTTPException(status_code=404, detail="File not found")
     path = (_WA_LOCAL_MEDIA_DIR / filename).resolve()
@@ -11983,6 +11983,11 @@ def wa_public_media(filename: str):
         ".ppt": "application/vnd.ms-powerpoint",
         ".mp4": "video/mp4",
         ".mp3": "audio/mpeg",
+        ".ogg": "audio/ogg",
+        ".opus": "audio/ogg",
+        ".webm": "audio/webm",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
     }.get(ext, "application/octet-stream")
     return FileResponse(path, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
 
@@ -13364,12 +13369,15 @@ async def _wa_store_inbound_media(media_b64: str, media_type: str, media_name: O
         data = _b64.b64decode(media_b64)
         if not data or len(data) > 8 * 1024 * 1024:
             return None
+        # Base mime without codec suffixes: "audio/ogg; codecs=opus" -> "audio/ogg"
+        mime = (media_type or "").split(";")[0].strip().lower()
         ext = ""
         if media_name and "." in media_name:
             ext = "." + media_name.rsplit(".", 1)[-1][:8]
-        elif (media_type or "").startswith("image/"):
-            ext = "." + (media_type.split("/")[-1] or "jpg")
-        elif media_type == "application/pdf":
+        elif mime.startswith("image/") or mime.startswith("audio/") or mime.startswith("video/"):
+            sub = mime.split("/")[-1]
+            ext = "." + {"jpeg": "jpg", "mpeg": "mp3", "x-m4a": "m4a"}.get(sub, sub or "bin")
+        elif mime == "application/pdf":
             ext = ".pdf"
         path = f"whatsapp/in_{uuid.uuid4().hex}{ext}"
         return await asyncio.to_thread(
@@ -13660,17 +13668,19 @@ def wa_inbox(limit: int = 300, user = Depends(verify_token)):
 
 class WhatsAppReplyInput(BaseModel):
     to_phone: str
-    text: str
+    text: str = ""
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
 
 
 @app.post("/api/teacher/whatsapp/inbox/reply")
 async def wa_inbox_reply(data: WhatsAppReplyInput, user = Depends(verify_token)):
-    """Send a chat reply to a parent from the Chats screen."""
+    """Send a chat reply (text and/or attachment) to a parent from the Chats screen."""
     _wa_require_teacher(user)
     text = (data.text or "").strip()
     to = (data.to_phone or "").strip()
-    if not text or not to:
-        raise HTTPException(status_code=400, detail="Message text and phone are required")
+    if not to or (not text and not data.media_url):
+        raise HTTPException(status_code=400, detail="A message or an attachment is required")
     provider = wa.get_provider()
     if not provider.configured:
         raise HTTPException(status_code=503, detail="WhatsApp is not connected. Link it in Settings first.")
@@ -13680,12 +13690,14 @@ async def wa_inbox_reply(data: WhatsAppReplyInput, user = Depends(verify_token))
     recipient = {"id": match.get("student_id"), "name": match.get("student_name") or "",
                  "phone": to, "standard_id": match.get("standard_id")}
     res = await _wa_send_and_log(provider, user["teacher_id"], recipient,
-                                 mode="freeform", body_text=text, category="chat")
+                                 mode="freeform", body_text=text, category="chat",
+                                 media_url=data.media_url, media_type=data.media_type)
     if res.get("status") in ("failed", "not_configured"):
         raise HTTPException(status_code=502, detail=res.get("error") or "Send failed")
     msg = {
         "id": res.get("message_id") or f"tmp-{uuid.uuid4().hex}",
-        "direction": "out", "body": text, "media_url": None, "media_type": None,
+        "direction": "out", "body": text,
+        "media_url": data.media_url, "media_type": data.media_type,
         "at": datetime.now(timezone.utc).isoformat(), "status": res.get("status", "queued"),
         "read": True,
     }
