@@ -4185,6 +4185,13 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
         raise HTTPException(status_code=500, detail="Database not available")
 
     username = _normalize_student_username(request.username)
+    
+    # 1. Enforce strict username uniqueness BEFORE creating the Auth user
+    # This prevents ghost users in auth.users when the DB insert fails.
+    existing = service_supabase.table("students").select("id").eq("username", username).execute().data
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
     auth_email = _student_auth_email_for_create(username, request.email)
 
     try:
@@ -4207,11 +4214,15 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
         except Exception:
             pass
 
+        # 2. Only store the email if they provided one. Hide synthetic emails.
+        provided_email = _clean_optional_text(request.email).lower() if request.email else None
+        valid_provided_email = provided_email if _looks_like_real_email(provided_email) else None
+
         student_data = {
             "id": response.user.id,
             "name": request.name,
             "username": username,
-            "email": auth_email,
+            "email": valid_provided_email,
             "phone": request.phone,
             "standard_id": request.standard_id,
         }
@@ -8875,8 +8886,13 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
                     "name": s.name,
                     "standard_id": s.standard_id,
                     "username": normalized_username,
-                    "email": email_to_use,
                 }
+                
+                # Only update the email if a valid one was provided in the import
+                provided_email = _clean_optional_text(s.email).lower() if s.email else None
+                if provided_email and _looks_like_real_email(provided_email):
+                    update_data["email"] = provided_email
+
                 if s.phone:
                     update_data["phone"] = s.phone
                 service_supabase.table("students").update(update_data).eq("id", auth_user_id).execute()
@@ -8942,12 +8958,15 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
             except Exception:
                 pass
 
-            # 2. Insert into students table
+            # 2. Insert into students table, hiding synthetic emails
+            provided_email = _clean_optional_text(s.email).lower() if s.email else None
+            valid_provided_email = provided_email if _looks_like_real_email(provided_email) else None
+
             service_supabase.table("students").insert({
                 "id": auth_user_id,
                 "name": s.name,
                 "username": normalized_username,
-                "email": email_to_use,
+                "email": valid_provided_email,
                 "phone": s.phone,
                 "standard_id": s.standard_id,
                 "must_change_pwd": True
