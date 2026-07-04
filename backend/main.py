@@ -2148,6 +2148,7 @@ async def get_dashboard_overview(user = Depends(verify_token)):
         "today_live": [],
         "upcoming_tests": [],
         "low_attendance": {"count": 0, "items": []},
+        "per_standard": {},
     }
 
     # ── Scope: standards → subjects → students ────────────────────────────────
@@ -2159,9 +2160,12 @@ async def get_dashboard_overview(user = Depends(verify_token)):
         return empty
     standard_ids = [s["id"] for s in standards]
     std_name = {s["id"]: s.get("name", "") for s in standards}
+    # Exact per-class counts for the home page's class cards. Built from the FULL
+    # lists below (the `items` arrays are capped, so counting those undercounts).
+    per_standard = {sid: {"grading": 0, "join_requests": 0, "low_attendance": 0} for sid in standard_ids}
 
     def fetch_subs(): return service_supabase.table("subject_classes").select("id, name, standard_id").in_("standard_id", standard_ids).execute()
-    def fetch_studs(): return service_supabase.table("students").select("id, name, username, points, avg_score, attendance_pct, avatar_url").in_("standard_id", standard_ids).execute()
+    def fetch_studs(): return service_supabase.table("students").select("id, name, username, points, avg_score, attendance_pct, avatar_url, standard_id").in_("standard_id", standard_ids).execute()
     def fetch_links(): return service_supabase.table("invite_links").select("code, standard_id").eq("created_by", teacher_id).execute()
 
     subs_res, studs_res, links_res = await asyncio.gather(
@@ -2173,6 +2177,7 @@ async def get_dashboard_overview(user = Depends(verify_token)):
     subjects = subs_res.data or []
     class_ids = [c["id"] for c in subjects]
     subject_name = {c["id"]: c.get("name", "") for c in subjects}
+    class_std = {c["id"]: c.get("standard_id") for c in subjects}
 
     students = studs_res.data or []
     links = links_res.data or []
@@ -2234,6 +2239,10 @@ async def get_dashboard_overview(user = Depends(verify_token)):
             ).in_("assignment_id", list(asg_map.keys())).is_("graded_at", "null").execute())
             ungraded = subs2.data or []
             grading_count = len(ungraded)
+            for sub in ungraded:
+                sid = class_std.get(asg_map.get(sub["assignment_id"], {}).get("class_id"))
+                if sid in per_standard:
+                    per_standard[sid]["grading"] += 1
             ungraded.sort(key=lambda x: x.get("submitted_at") or "", reverse=True)
             for sub in ungraded[:6]:
                 a = asg_map.get(sub["assignment_id"], {})
@@ -2257,12 +2266,17 @@ async def get_dashboard_overview(user = Depends(verify_token)):
             "invite_code", list(code_std.keys())).eq("status", "pending").execute())
         pending = reqs.data or []
         join_count = len(pending)
+        for r in pending:
+            sid = code_std.get(r.get("invite_code"))
+            if sid in per_standard:
+                per_standard[sid]["join_requests"] += 1
         pending.sort(key=lambda x: x.get("created_at") or "", reverse=True)
         for r in pending[:6]:
             join_items.append({
                 "id": r["id"],
                 "student_name": r.get("student_name", "Student"),
                 "student_email": r.get("student_email"),
+                "standard_id": code_std.get(r.get("invite_code")),
                 "standard_name": std_name.get(code_std.get(r.get("invite_code")), ""),
                 "invite_code": r.get("invite_code"),
                 "created_at": r.get("created_at"),
@@ -2272,14 +2286,14 @@ async def get_dashboard_overview(user = Depends(verify_token)):
     today_live = []
     upcoming_tests = []
     if class_ids:
-        for lc in today_live_data[:6]:
+        for lc in today_live_data[:10]:
             today_live.append({
                 "id": lc["id"], "title": lc.get("title"), "class_id": lc.get("class_id"),
                 "subject": subject_name.get(lc.get("class_id"), ""),
                 "scheduled_at": lc.get("scheduled_at"), "status": lc.get("status"),
             })
 
-        for t in upcoming_tests_data[:6]:
+        for t in upcoming_tests_data[:10]:
             upcoming_tests.append({
                 "id": t["id"], "title": t.get("title"), "class_id": t.get("class_id"),
                 "subject": subject_name.get(t.get("class_id"), ""),
@@ -2293,8 +2307,13 @@ async def get_dashboard_overview(user = Depends(verify_token)):
     threshold = min(thresholds) if thresholds else 75
     low = [s for s in students if s.get("attendance_pct") is not None and float(s["attendance_pct"]) < threshold]
     low.sort(key=lambda s: float(s.get("attendance_pct") or 0))
+    for s in low:
+        sid = s.get("standard_id")
+        if sid in per_standard:
+            per_standard[sid]["low_attendance"] += 1
     low_items = [
-        {"student_id": s["id"], "name": s.get("name"), "attendance_pct": round(float(s["attendance_pct"]), 1)}
+        {"student_id": s["id"], "name": s.get("name"), "standard_id": s.get("standard_id"),
+         "attendance_pct": round(float(s["attendance_pct"]), 1)}
         for s in low[:6]
     ]
 
@@ -2307,6 +2326,7 @@ async def get_dashboard_overview(user = Depends(verify_token)):
         "today_live": today_live,
         "upcoming_tests": upcoming_tests,
         "low_attendance": {"count": len(low), "items": low_items},
+        "per_standard": per_standard,
     }
 
 def _parse_answers(raw):

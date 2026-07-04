@@ -1,16 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Users, BookOpen, FileQuestion, Calendar, AlertCircle, MessageSquare,
-  UserPlus, Activity, Sparkles, Video, ClipboardCheck, Check, Plus,
-  ChevronRight, Target, TrendingUp, X, Loader2
+  AlertCircle, BookOpen, Calendar, Check, ChevronRight, ClipboardCheck,
+  FileQuestion, Loader2, Plus, UserPlus, Video, X
 } from 'lucide-react';
-import { Avatar, Skeleton, Btn } from '../../components/ui';
-import StatCard from '../../components/cards/StatCard';
-import Card from '../../components/cards/Card';
-import EventCard from '../../components/cards/EventCard';
-import { dashboardApi, joinRequestApi, reminderApi } from '../../lib/api';
+import { Skeleton, Btn } from '../../components/ui';
+import { dashboardApi, joinRequestApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
 import { useAppCache } from '../../store';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
@@ -22,38 +18,130 @@ import { useTheme } from '../../lib/theme';
 import { fadeUp, staggerChildren } from '../../lib/motion';
 import PendingReattemptsCard from '../../components/teacher/PendingReattemptsCard';
 
+// Teacher home = ONE simple idea: your classes, and what each class needs from
+// you today, written in plain words. No stats, no grids of shortcuts — a person
+// who has never used an app should be able to read this page top to bottom.
+
 // ── sessionStorage warm-cache (instant re-render, no skeleton flash) ──────────
 const readCache = (k) => { try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch { return null; } };
 const writeCache = (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-// ── Action Center row ─────────────────────────────────────────────────────────
-const ATTN = {
-  join:     { icon: UserPlus,       tile: 'bg-sky-50 text-sky-600' },
-  grade:    { icon: ClipboardCheck, tile: 'bg-violet-50 text-violet-600' },
-  attend:   { icon: AlertCircle,    tile: 'bg-orange-50 text-orange-600' },
+const getStdNum = (name = '') => { const m = String(name).match(/\d+/); return m ? m[0] : ''; };
+
+const fmtWhen = (d) => {
+  if (!d) return '';
+  const date = new Date(d);
+  const now = new Date();
+  const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
+  const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
+  if (date.toDateString() === tmr.toDateString()) return `Tomorrow, ${time}`;
+  return `${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
 };
 
-function ActionRow({ kind, eyebrow, title, meta, onClick, children }) {
-  const k = ATTN[kind] || ATTN.grade;
-  const Icon = k.icon;
-  const Wrapper = onClick ? 'button' : 'div';
+// One notification line: icon + plain sentence + chevron. Tap target ≥52px.
+function NoticeRow({ icon: Icon, tint, text, sub, onClick }) {
   return (
-    <Wrapper
-      {...(onClick ? { onClick } : {})}
-      className={`w-full flex items-center gap-4 p-4 text-left border-b border-black/5 last:border-0 transition-colors group ${onClick ? 'hover:bg-neutral-50' : ''}`}
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 min-h-[52px] py-2.5 text-left hover:bg-neutral-50 transition-colors group"
     >
-      <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${k.tile}`}>
-        <Icon size={18} />
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${tint}`}>
+        <Icon size={16} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-extrabold uppercase tracking-widest mb-0.5 text-neutral-400">{eyebrow}</p>
-        <h4 className="font-bold text-neutral-900 leading-snug truncate">{title}</h4>
-        {meta && <p className="text-xs text-neutral-500 mt-0.5 truncate">{meta}</p>}
+        <p className="text-[15px] font-medium text-neutral-800 leading-snug truncate">{text}</p>
+        {sub && <p className="text-xs text-neutral-500 truncate mt-0.5">{sub}</p>}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {children || (onClick && <ChevronRight size={18} className="text-neutral-300 group-hover:text-neutral-500 transition-colors" />)}
+      <ChevronRight size={18} className="text-neutral-300 group-hover:text-neutral-500 transition-colors flex-shrink-0" />
+    </button>
+  );
+}
+
+// A student asking to join — the ONLY place in the app with approve/reject.
+function JoinRow({ req, busy, onJoin }) {
+  return (
+    <div className="flex items-center gap-3 px-4 min-h-[56px] py-2.5">
+      <div className="w-9 h-9 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
+        <UserPlus size={16} />
       </div>
-    </Wrapper>
+      <div className="flex-1 min-w-0">
+        <p className="text-[15px] font-medium text-neutral-800 leading-snug truncate">{req.student_name} wants to join</p>
+        {req.student_email && <p className="text-xs text-neutral-500 truncate mt-0.5">{req.student_email}</p>}
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button
+          disabled={busy}
+          onClick={() => onJoin(req, 'reject')}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+          title="Reject"
+        >
+          <X size={16} />
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => onJoin(req, 'approve')}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+          Approve
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ClassCard({ card, dark, navigate, busyJoin, onJoin }) {
+  const { std, sid, studentCount, subjectCount, rows } = card;
+  const num = getStdNum(std.name);
+  const pastel = pastelTokens(pastelFor(std.name), dark);
+
+  return (
+    <motion.div variants={fadeUp} className="bg-white rounded-card shadow-soft border border-[#EFEDEA] overflow-hidden">
+      {/* Class header — whole row opens the class */}
+      <button
+        onClick={() => navigate(`/teacher/standards/${sid}`)}
+        className="w-full flex items-center gap-4 p-4 md:p-5 text-left hover:bg-neutral-50 transition-colors group"
+      >
+        <div
+          className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold flex-shrink-0"
+          style={{ background: pastel.hex, color: pastel.fgHex }}
+        >
+          {num || <SubjectIcon value={std.emoji} size={26} fallback="graduation" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-lg font-bold text-neutral-900 leading-tight truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+            {std.name}
+          </h3>
+          <p className="text-sm text-neutral-500 mt-0.5">
+            {studentCount} student{studentCount === 1 ? '' : 's'} · {subjectCount} subject{subjectCount === 1 ? '' : 's'}
+          </p>
+        </div>
+        <ChevronRight size={20} className="text-neutral-300 group-hover:text-neutral-500 transition-colors flex-shrink-0" />
+      </button>
+
+      {/* Class-wise notifications, needs-action first */}
+      <div className="border-t border-black/5 divide-y divide-black/5">
+        {rows.length === 0 ? (
+          <div className="flex items-center gap-3 px-4 min-h-[52px] py-2.5">
+            <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center flex-shrink-0">
+              <Check size={16} />
+            </div>
+            <p className="text-[15px] font-medium text-emerald-600">All good today</p>
+          </div>
+        ) : rows.map((row) => {
+          if (row.type === 'join') return <JoinRow key={row.key} req={row.req} busy={!!busyJoin[row.req.id]} onJoin={onJoin} />;
+          if (row.type === 'joinMore') return (
+            <p key={row.key} className="px-4 py-2.5 pl-16 text-xs font-bold text-neutral-500">
+              +{row.count} more waiting to join
+            </p>
+          );
+          return (
+            <NoticeRow key={row.key} icon={row.icon} tint={row.tint} text={row.text} sub={row.sub} onClick={() => navigate(row.to)} />
+          );
+        })}
+      </div>
+    </motion.div>
   );
 }
 
@@ -61,24 +149,20 @@ export default function TodayPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const dark = useTheme(s => s.dark);
-  const { standards, subjects, students, refreshStandards, refreshSubjects, refreshStudents } =
+  const { standards, subjects, students, standardsReady, refreshStandards, refreshSubjects, refreshStudents } =
     useAppCache(useShallow(s => ({
       standards:        s.standards,
       subjects:         s.subjects,
       students:         s.students,
+      standardsReady:   s.standardsReady,
       refreshStandards: s.refreshStandards,
       refreshSubjects:  s.refreshSubjects,
       refreshStudents:  s.refreshStudents,
     })));
 
-  const [overview, setOverview]   = useState(() => readCache('tutoria_dash_overview'));
-  const [activities, setActivities] = useState(() => readCache('tutoria_dash_activity') || []);
-  const [reminders, setReminders] = useState(() => readCache('tutoria_dash_reminders') || []);
-  const [insights, setInsights]   = useState(() => readCache('tutoria_dash_insights'));
-  const [loading, setLoading]     = useState(!readCache('tutoria_dash_overview'));
-  const [busyJoin, setBusyJoin]   = useState({});      // {requestId: true}
-  const [newReminder, setNewReminder] = useState('');
-  const [addingReminder, setAddingReminder] = useState(false);
+  const [overview, setOverview] = useState(() => readCache('tutoria_dash_overview'));
+  const [loading, setLoading]   = useState(!readCache('tutoria_dash_overview'));
+  const [busyJoin, setBusyJoin] = useState({}); // {requestId: true}
 
   const now = new Date();
   const displayName = user?.name?.split(' ')[0] || 'Teacher';
@@ -88,48 +172,35 @@ export default function TodayPage() {
     refreshStandards?.();
     refreshSubjects?.();
     refreshStudents?.();
-    let cancelled = false;
     try {
-      const [ov, act, rem] = await Promise.all([
-        dashboardApi.getOverview(),
-        dashboardApi.getActivity().catch(() => ({ activities: [] })),
-        reminderApi.list().catch(() => []),
-      ]);
-      if (cancelled) return;
-      setOverview(ov);             writeCache('tutoria_dash_overview', ov);
-      const acts = act?.activities || [];
-      setActivities(acts);         writeCache('tutoria_dash_activity', acts);
-      const rems = Array.isArray(rem) ? rem : [];
-      setReminders(rems);          writeCache('tutoria_dash_reminders', rems);
+      const ov = await dashboardApi.getOverview();
+      setOverview(ov);
+      writeCache('tutoria_dash_overview', ov);
     } catch (err) {
       console.error('Dashboard error:', err);
     } finally {
-      if (!cancelled) setLoading(false);
+      setLoading(false);
     }
-    // Insights: heavier endpoint, fetch independently so page never blocks on it.
-    const ac = new AbortController();
-    dashboardApi.getInsights()
-      .then(ins => { if (!cancelled) { setInsights(ins); writeCache('tutoria_dash_insights', ins); } })
-      .catch(err => console.error('Insights error:', err));
-    return () => { cancelled = true; ac.abort(); };
   }, [refreshStandards, refreshSubjects, refreshStudents]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
-
-  // Refresh dashboard data on window focus / server data-changed events.
   useAutoRefresh(loadDashboard);
 
-  const standardIdForClass = (classId) => subjects.find(s => s.id === classId)?.standard_id;
-
-  // ── Inline actions ──────────────────────────────────────────────────────────
   const handleJoin = async (req, action) => {
     setBusyJoin(prev => ({ ...prev, [req.id]: true }));
     try {
       await joinRequestApi[action](req.id);
       setOverview(prev => {
         if (!prev) return prev;
-        const items = prev.join_requests.items.filter(r => r.id !== req.id);
-        const next = { ...prev, join_requests: { count: Math.max(0, prev.join_requests.count - 1), items } };
+        const items = (prev.join_requests?.items || []).filter(r => r.id !== req.id);
+        const next = { ...prev, join_requests: { count: Math.max(0, (prev.join_requests?.count || 1) - 1), items } };
+        const sid = req.standard_id;
+        if (sid && prev.per_standard?.[sid]) {
+          next.per_standard = {
+            ...prev.per_standard,
+            [sid]: { ...prev.per_standard[sid], join_requests: Math.max(0, (prev.per_standard[sid].join_requests || 1) - 1) },
+          };
+        }
         writeCache('tutoria_dash_overview', next);
         return next;
       });
@@ -142,79 +213,76 @@ export default function TodayPage() {
     }
   };
 
-  const addReminder = async () => {
-    const title = newReminder.trim();
-    if (!title) return;
-    setAddingReminder(true);
-    try {
-      const created = await reminderApi.create({ title });
-      setReminders(prev => { const n = [created, ...prev]; writeCache('tutoria_dash_reminders', n); return n; });
-      setNewReminder('');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setAddingReminder(false);
-    }
-  };
+  // ── Per-class model: [{std, counts, notification rows}] ────────────────────
+  const classCards = useMemo(() => {
+    const stdOf = new Map(subjects.map(c => [c.id, c.standard_id]));
+    const per = overview?.per_standard || {};
+    const joinItems  = overview?.join_requests?.items || [];
+    const gradeItems = overview?.grading_queue?.items || [];
+    const lowItems   = overview?.low_attendance?.items || [];
+    const liveItems  = overview?.today_live || [];
+    const testItems  = overview?.upcoming_tests || [];
 
-  const toggleReminder = async (r) => {
-    const done = !r.done;
-    setReminders(prev => { const n = prev.map(x => x.id === r.id ? { ...x, done } : x); writeCache('tutoria_dash_reminders', n); return n; });
-    try {
-      await reminderApi.update(r.id, { done });
-    } catch (err) {
-      console.error(err);
-      setReminders(prev => prev.map(x => x.id === r.id ? { ...x, done: !done } : x)); // revert
-    }
-  };
+    return standards.map(std => {
+      const sid = std.id;
+      // standard_id is missing on items cached from the old overview shape —
+      // fall back to name matching (joins) / item grouping (counts).
+      const joins  = joinItems.filter(r => (r.standard_id ? r.standard_id === sid : r.standard_name === std.name));
+      const live   = liveItems.filter(l => stdOf.get(l.class_id) === sid);
+      const tests  = testItems.filter(t => stdOf.get(t.class_id) === sid);
+      const grades = gradeItems.filter(g => stdOf.get(g.class_id) === sid);
+      const lows   = lowItems.filter(x => x.standard_id === sid);
 
-  const removeReminder = async (r) => {
-    setReminders(prev => { const n = prev.filter(x => x.id !== r.id); writeCache('tutoria_dash_reminders', n); return n; });
-    try { await reminderApi.remove(r.id); } catch (err) { console.error(err); }
-  };
+      const joinTotal  = per[sid]?.join_requests ?? joins.length;
+      const gradeTotal = per[sid]?.grading ?? grades.length;
+      const lowTotal   = per[sid]?.low_attendance ?? lows.length;
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
-  const counts = overview?.counts || {};
-  const perf = overview?.performance || {};
-  const joinReqs = overview?.join_requests || { count: 0, items: [] };
-  const grading = overview?.grading_queue || { count: 0, items: [] };
-  const lowAtt = overview?.low_attendance || { count: 0, items: [] };
-  const todayLive = overview?.today_live || [];
-  const upcomingTests = overview?.upcoming_tests || [];
-  const topStudents = overview?.top_students || [];
+      const rows = [];
+      joins.slice(0, 3).forEach(req => rows.push({ key: `j-${req.id}`, type: 'join', req }));
+      const shownJoins = Math.min(joins.length, 3);
+      if (joinTotal > shownJoins) rows.push({ key: 'j-more', type: 'joinMore', count: joinTotal - shownJoins });
 
-  const hasAttention = joinReqs.count > 0 || grading.count > 0 || lowAtt.count > 0;
-  const countFor = (sid) => ({
-    subjects: subjects.filter(s => s.standard_id === sid).length,
-    students: students.filter(s => s.standard_id === sid).length,
-  });
+      live.slice(0, 2).forEach(l => rows.push({
+        key: `l-${l.id}`, type: 'live', icon: Video, tint: 'bg-rose-50 text-rose-500',
+        text: `Live class: ${l.subject || l.title || ''}`.trim(),
+        sub: l.status === 'live' ? 'Happening now' : fmtWhen(l.scheduled_at),
+        to: '/teacher/live-classes',
+      }));
 
-  const fmtWhen = (d) => {
-    if (!d) return '';
-    const date = new Date(d);
-    const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
-    const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
-    if (date.toDateString() === tmr.toDateString()) return `Tomorrow, ${time}`;
-    return `${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
-  };
+      tests.slice(0, 2).forEach(t => rows.push({
+        key: `t-${t.id}`, type: 'test', icon: FileQuestion, tint: 'bg-amber-50 text-amber-600',
+        text: `Test: ${t.title}`,
+        sub: [t.status === 'active' ? 'Running now' : fmtWhen(t.scheduled_for), t.subject].filter(Boolean).join(' · '),
+        to: '/teacher/tests',
+      }));
 
-  const quickActions = [
-    { label: 'Create test',    icon: FileQuestion,  to: '/teacher/tests',         color: 'lavender' },
-    { label: 'Send broadcast', icon: MessageSquare, to: '/teacher/broadcasts',    color: 'sky' },
-    { label: 'Add student',    icon: UserPlus,      to: '/teacher/students',      color: 'peach' },
-    { label: 'Schedule live',  icon: Video,         to: '/teacher/live-classes',  color: 'mint' },
-    { label: 'Mark attendance',icon: Calendar,      to: '/teacher/attendance',    color: 'cream' },
-    { label: 'View reports',   icon: TrendingUp,    to: '/teacher/reports',       color: 'pink' },
-  ];
+      if (gradeTotal > 0) rows.push({
+        key: 'g', type: 'grade', icon: ClipboardCheck, tint: 'bg-violet-50 text-violet-600',
+        text: `${gradeTotal} answer${gradeTotal === 1 ? '' : 's'} to check`,
+        sub: grades[0] ? `${grades[0].student_name} · ${grades[0].assignment_title}` : '',
+        to: grades[0]?.class_id ? `/teacher/standards/${sid}/subjects/${grades[0].class_id}` : `/teacher/standards/${sid}`,
+      });
+
+      if (lowTotal > 0) rows.push({
+        key: 'a', type: 'attend', icon: AlertCircle, tint: 'bg-orange-50 text-orange-600',
+        text: `${lowTotal} student${lowTotal === 1 ? '' : 's'} missing classes often`,
+        sub: lows.slice(0, 2).map(x => x.name).join(', '),
+        to: '/teacher/reports',
+      });
+
+      return {
+        std, sid, rows,
+        studentCount: students.filter(s => s.standard_id === sid).length,
+        subjectCount: subjects.filter(c => c.standard_id === sid).length,
+      };
+    });
+  }, [standards, subjects, students, overview]);
 
   if (loading && !overview) {
     return (
-      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto space-y-6">
-        <Skeleton className="h-12 w-64 rounded-card" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-card" />)}</div>
-        <Skeleton className="h-56 w-full rounded-card" />
-        <div className="grid lg:grid-cols-3 gap-6"><Skeleton className="lg:col-span-2 h-72 rounded-card" /><Skeleton className="h-72 rounded-card" /></div>
+      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto space-y-4">
+        <Skeleton className="h-10 w-56 rounded-card" />
+        <div className="grid lg:grid-cols-2 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-44 rounded-card" />)}</div>
       </div>
     );
   }
@@ -245,152 +313,42 @@ export default function TodayPage() {
             <div>
               <p className="text-sm text-neutral-500">{greeting}, {displayName}</p>
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
-                Here's your day
+                My Classes
               </h1>
             </div>
             <p className="text-sm text-neutral-500">{now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           </motion.div>
 
-          {/* ── 1. STAT ROW ── */}
-          <motion.div variants={staggerChildren} className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard value={counts.students ?? 0} label="Students" icon={Users} color="mint" emphasis />
-            <StatCard value={counts.subjects ?? 0} label="Subjects" icon={BookOpen} color="lavender" />
-            <StatCard value={counts.scheduled_tests ?? 0} label="Tests scheduled" icon={FileQuestion} color="cream" />
-            <StatCard value={perf.avg_score != null ? `${Math.round(perf.avg_score)}%` : '—'} label="Class avg score" icon={Target} color="sky" />
-          </motion.div>
-
           {/* Pending re-attempt requests (tests + assignments) — self-hides when none */}
           <PendingReattemptsCard />
 
-          {/* ── 2. ACTION CENTER ── */}
+          {/* ── Classes, with class-wise notifications ── */}
           <motion.div variants={fadeUp}>
-            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
-              <Sparkles size={15} /> Needs attention
-            </h2>
-            <div className="bg-white rounded-card shadow-soft border border-[#EFEDEA] overflow-hidden">
-              {!hasAttention ? (
-                <div className="flex flex-col items-center justify-center text-center py-14 px-6">
-                  <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-4">
-                    <Check size={26} />
+            <h2 className="lg:hidden text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">My Classes</h2>
+            {classCards.length === 0 ? (
+              standardsReady ? (
+                <div className="bg-white rounded-card shadow-soft border border-[#EFEDEA] flex flex-col items-center text-center py-14 px-6">
+                  <div className="w-16 h-16 rounded-2xl bg-pastel-sky text-pastel-sky-fg flex items-center justify-center mb-4">
+                    <BookOpen size={28} />
                   </div>
-                  <p className="font-bold text-neutral-900">You're all caught up 🎉</p>
-                  <p className="text-sm text-neutral-500 mt-1">No approvals, grading or alerts right now.</p>
+                  <p className="text-lg font-bold text-neutral-900">No classes yet</p>
+                  <p className="text-sm text-neutral-500 mt-1 mb-5">Create your first class to get started.</p>
+                  <Btn variant="primary" onClick={() => navigate('/teacher/standards')}>
+                    <Plus size={16} /> Add your first class
+                  </Btn>
                 </div>
               ) : (
-                <>
-                  {/* Join requests — inline approve/reject */}
-                  {joinReqs.items.map(req => (
-                    <ActionRow
-                      key={`jr-${req.id}`}
-                      kind="join"
-                      eyebrow="Join request"
-                      title={req.student_name}
-                      meta={[req.standard_name, req.student_email].filter(Boolean).join(' · ')}
-                    >
-                      <button
-                        disabled={busyJoin[req.id]}
-                        onClick={() => handleJoin(req, 'reject')}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
-                        title="Reject"
-                      >
-                        <X size={16} />
-                      </button>
-                      <button
-                        disabled={busyJoin[req.id]}
-                        onClick={() => handleJoin(req, 'approve')}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
-                      >
-                        {busyJoin[req.id] ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                        Approve
-                      </button>
-                    </ActionRow>
-                  ))}
-                  {joinReqs.count > joinReqs.items.length && (
-                    <button onClick={() => navigate('/teacher/students')} className="w-full text-center py-2 text-xs font-bold text-neutral-500 hover:text-neutral-900 border-b border-black/5">
-                      +{joinReqs.count - joinReqs.items.length} more requests
-                    </button>
-                  )}
-
-                  {/* Grading queue */}
-                  {grading.count > 0 && (
-                    <ActionRow
-                      kind="grade"
-                      eyebrow="Grading queue"
-                      title={`${grading.count} submission${grading.count > 1 ? 's' : ''} to grade`}
-                      meta={grading.items.slice(0, 2).map(g => `${g.student_name} · ${g.assignment_title}`).join('  •  ')}
-                      onClick={() => {
-                        const g = grading.items[0];
-                        const sid = g && standardIdForClass(g.class_id);
-                        navigate(sid && g ? `/teacher/standards/${sid}/subjects/${g.class_id}` : '/teacher/standards');
-                      }}
-                    />
-                  )}
-
-                  {/* Low attendance */}
-                  {lowAtt.count > 0 && (
-                    <ActionRow
-                      kind="attend"
-                      eyebrow="Attendance alert"
-                      title={`${lowAtt.count} student${lowAtt.count > 1 ? 's' : ''} below threshold`}
-                      meta={lowAtt.items.slice(0, 3).map(s => `${s.name} (${Math.round(s.attendance_pct)}%)`).join(', ')}
-                      onClick={() => navigate('/teacher/reports')}
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          </motion.div>
-
-          {/* ── 3. TODAY & UPCOMING ── */}
-          <motion.div variants={fadeUp}>
-            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1 flex items-center gap-2">
-              <Calendar size={15} /> Today &amp; upcoming
-            </h2>
-            {(todayLive.length > 0 || upcomingTests.length > 0) ? (
-              <div className="grid sm:grid-cols-2 gap-3">
-                {todayLive.map(l => (
-                  <EventCard
-                    key={`live-${l.id}`}
-                    color="peach"
-                    icon={Video}
-                    kicker={l.status === 'live' ? 'Live now' : 'Live class'}
-                    date={fmtWhen(l.scheduled_at)}
-                    title={l.title}
-                    body={l.subject}
-                    onClick={() => navigate('/teacher/live-classes')}
-                  />
-                ))}
-                {upcomingTests.map(t => (
-                  <EventCard
-                    key={`test-${t.id}`}
-                    color="cream"
-                    icon={FileQuestion}
-                    kicker={t.status === 'active' ? 'Test live' : 'Test scheduled'}
-                    date={t.scheduled_for ? fmtWhen(t.scheduled_for) : ''}
-                    title={t.title}
-                    body={t.subject}
-                    onClick={() => navigate('/teacher/tests')}
-                  />
-                ))}
-              </div>
+                <div className="grid lg:grid-cols-2 gap-4">{[1, 2].map(i => <Skeleton key={i} className="h-44 rounded-card" />)}</div>
+              )
             ) : (
-              <Card className="py-10 text-center text-sm text-neutral-500">Nothing scheduled. Create a test or schedule a live class.</Card>
+              <motion.div variants={staggerChildren} className="grid lg:grid-cols-2 gap-4 items-start">
+                {classCards.map(card => (
+                  <ClassCard key={card.sid} card={card} dark={dark} navigate={navigate} busyJoin={busyJoin} onJoin={handleJoin} />
+                ))}
+              </motion.div>
             )}
           </motion.div>
 
-          {/* ── 4. QUICK ACTIONS ── */}
-          <motion.div variants={fadeUp}>
-            <h2 className="text-[13px] font-extrabold uppercase tracking-widest text-neutral-500 mb-3 px-1">Quick actions</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {quickActions.map((a, i) => (
-                <Card key={i} as="button" color={a.color} interactive padded={false}
-                  onClick={() => navigate(a.to)} className="p-3 md:p-4 rounded-2xl sm:rounded-card flex flex-col items-start gap-1.5 md:gap-2">
-                      <a.icon size={18} style={{ color: pastelTokens(a.color, dark).fgHex }} />
-                      <span className="text-xs font-semibold">{a.label}</span>
-                    </Card>
-                  ))}
-                </div>
-              </motion.div>
         </motion.div>
       </div>
     </div>
