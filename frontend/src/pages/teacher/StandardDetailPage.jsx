@@ -13,6 +13,59 @@ import BulkImportModal from '../../components/teacher/BulkImportModal';
 import TerminateStandardModal from '../../components/teacher/TerminateStandardModal';
 import SubjectIcon, { IconPicker, suggestIconForSubject } from '../../components/shared/SubjectIcon';
 
+function EditStandardModal({ open, onClose, standard, onSuccess }) {
+  const [name, setName] = useState('');
+  const [shortName, setShortName] = useState('');
+  const [emoji, setEmoji] = useState('graduation');
+  const [loading, setLoading] = useState(false);
+  const { refreshStandards, invalidate } = useAppCache();
+
+  useEffect(() => {
+    if (open && standard) {
+      setName(standard.name || '');
+      setShortName(standard.short_name || '');
+      setEmoji(standard.emoji || 'graduation');
+    }
+  }, [open, standard]);
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      const result = await apiClient(`/standards/${standard.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name, short_name: shortName, emoji })
+      });
+      invalidate();
+      await refreshStandards();
+      onClose();
+      if (onSuccess) onSuccess(result);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to update standard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Class" size="sm">
+      <div className="space-y-4">
+        <Input label="Class Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Class 10" />
+        <Input label="Short Name" value={shortName} onChange={(e) => setShortName(e.target.value)} placeholder="e.g. 10th" />
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
+          <IconPicker value={emoji} onChange={setEmoji} />
+        </div>
+        <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
+          {loading && <Loader2 size={14} className="animate-spin" />}
+          Save Changes
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
 function NewSubjectModal({ open, onClose, standardId, onSuccess, editSubject }) {
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('book');
@@ -285,6 +338,7 @@ export default function StandardDetailPage() {
   const [deletingSubject, setDeletingSubject] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [terminateOpen, setTerminateOpen] = useState(false);
+  const [editStandardOpen, setEditStandardOpen] = useState(false);
   const [perfSummary, setPerfSummary] = useState(null);
 
   useEffect(() => {
@@ -393,6 +447,9 @@ export default function StandardDetailPage() {
             <p className="hidden lg:block text-[11px] text-neutral-400 leading-none mb-0.5">Subjects</p>
             <h1 className="text-lg md:text-xl font-semibold truncate">{standard?.name || 'Standard'}</h1>
           </div>
+          <button onClick={() => setEditStandardOpen(true)} className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md transition-colors ml-auto" title="Edit Class">
+            <Edit2 size={18} />
+          </button>
         </div>
       </div>
 
@@ -496,7 +553,7 @@ export default function StandardDetailPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/teacher/standards/${standardId}/subjects/${c.id}`); }}
                   className="relative glass-panel rounded-2xl p-5 text-left hover:bg-white/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group flex flex-col min-h-[130px] cursor-pointer"
                 >
-                  <div className="absolute top-2.5 right-2.5 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <div className="absolute top-2.5 right-2.5 z-10 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditSubject(c); setNewSubjectOpen(true); }}
                       title="Edit subject"
@@ -559,6 +616,7 @@ export default function StandardDetailPage() {
         </div>
       </div>
 
+      <EditStandardModal open={editStandardOpen} onClose={() => setEditStandardOpen(false)} standard={standard} onSuccess={setStandard} />
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} standardId={standardId} />
       <AddStudentModal
         open={addStudentOpen}

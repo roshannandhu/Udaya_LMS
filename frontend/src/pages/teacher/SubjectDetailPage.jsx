@@ -30,6 +30,58 @@ import AssignmentsSection from '../../components/teacher/subject/AssignmentsSect
 import LiveSection from '../../components/teacher/subject/LiveSection';
 import NotesSection from '../../components/teacher/subject/NotesSection';
 import SecureFileViewer from '../../components/shared/SecureFileViewer';
+import { IconPicker } from '../../components/shared/SubjectIcon';
+import { Input } from '../../components/ui';
+
+function EditSubjectModal({ open, onClose, subject, onSuccess }) {
+  const [name, setName] = useState('');
+  const [emoji, setEmoji] = useState('book');
+  const [loading, setLoading] = useState(false);
+  const { invalidate, refreshSubjects } = useAppCache();
+
+  useEffect(() => {
+    if (open && subject) {
+      setName(subject.name || '');
+      setEmoji(subject.emoji || 'book');
+    }
+  }, [open, subject]);
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      const result = await apiClient(`/subjects/${subject.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name, emoji })
+      });
+      invalidate();
+      await refreshSubjects();
+      onClose();
+      if (onSuccess) onSuccess(result);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to update subject');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Subject" size="sm">
+      <div className="space-y-4">
+        <Input label="Subject Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
+        <div>
+          <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Icon</label>
+          <IconPicker value={emoji} onChange={setEmoji} />
+        </div>
+        <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
+          {loading && <Loader2 size={14} className="animate-spin" />}
+          Save Changes
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
 
 const VALID_TABS = ['learn', 'assess', 'live', 'people', 'performance'];
 // Old tab ids (bookmarks / older links) map onto the merged tabs.
@@ -112,6 +164,7 @@ export default function SubjectDetailPage() {
   const [showNoteForm, setShowNoteForm]         = useState(false);
   const [editNote, setEditNote]                 = useState(null);
   const [viewerNote, setViewerNote]             = useState(null);
+  const [editSubjectOpen, setEditSubjectOpen]   = useState(false);
   const deepLinkedTestRef = useRef(false);
 
   // Deep link from the dashboard copy-suspects card: ?test=<id> opens the
@@ -353,6 +406,9 @@ export default function SubjectDetailPage() {
             <p className="text-[11px] text-neutral-400 leading-none mb-0.5 truncate">{standard?.name || 'Standard'}</p>
             <h1 className="text-lg md:text-xl font-semibold truncate">{subject?.name || 'Subject'}</h1>
           </div>
+          <button onClick={() => setEditSubjectOpen(true)} className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md transition-colors ml-auto" title="Edit Subject">
+            <Edit2 size={18} />
+          </button>
         </div>
       </div>
 
@@ -581,6 +637,12 @@ export default function SubjectDetailPage() {
       </div>
 
       {/* ── Modals ── */}
+      <EditSubjectModal 
+        open={editSubjectOpen} 
+        onClose={() => setEditSubjectOpen(false)} 
+        subject={subject} 
+        onSuccess={setSubject} 
+      />
       <VideoAddModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
