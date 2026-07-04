@@ -117,6 +117,7 @@ export default function SettingsPage() {
     notifTestSubmission, notifNewStudent, notifBroadcastReply, notifWeeklyReport, setNotif,
     securitySingleDevice, securityAutoLogout, securityTwoStepVerification, otpEmailReady, setSecurityPref,
     studentsCanViewReport, setStudentsCanViewReport,
+    studentsCanUploadFiles, setStudentsCanUploadFiles,
   } = useSettingsStore();
 
   const logoInputRef = useRef(null);
@@ -609,6 +610,7 @@ export default function SettingsPage() {
         {/* Student Portal */}
         <Section title="Student Portal">
           <Row label="Students can view their report card" sub="If off, the Report Card button is hidden from students" checked={studentsCanViewReport} onChange={setStudentsCanViewReport} />
+          <Row label="Allow student file uploads" sub="If off, students cannot upload images or attachments anywhere in the app" checked={studentsCanUploadFiles} onChange={setStudentsCanUploadFiles} />
         </Section>
 
         {/* Security — now persisted */}

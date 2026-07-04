@@ -10650,6 +10650,7 @@ class TeacherSettingsInput(BaseModel):
     notif_weekly_report: Optional[bool] = None
     # Student portal
     students_can_view_report: Optional[bool] = None
+    students_can_upload_files: Optional[bool] = None
     # Backups — auto-backup cadence: off | daily | weekly | monthly
     backup_frequency: Optional[str] = None
 

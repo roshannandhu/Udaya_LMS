@@ -25,7 +25,7 @@ function relTime(iso) {
 export default function StudentProfilePage() {
   const navigate = useNavigate();
   const { user, clearAuth } = useAuthStore();
-  const studentsCanViewReport = useSettingsStore(s => s.studentsCanViewReport);
+  const { studentsCanViewReport, studentsCanUploadFiles } = useSettingsStore();
 
   const [student, setStudent] = useState(null);
   const [subjects, setSubjects] = useState([]);
@@ -145,8 +145,8 @@ export default function StudentProfilePage() {
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#e0f7fa] rounded-full mix-blend-multiply filter blur-3xl opacity-50 -translate-x-1/3 translate-y-1/2 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
 
             <div className="relative z-10 w-full flex flex-col items-center">
-              <div className="relative cursor-pointer mb-6 transform group-hover:scale-105 transition-transform duration-300" onClick={() => avatarInputRef.current?.click()}>
-                <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={handleAvatarChange} />
+              <div className={`relative mb-6 ${studentsCanUploadFiles ? 'cursor-pointer transform group-hover:scale-105 transition-transform duration-300' : ''}`} onClick={() => studentsCanUploadFiles && avatarInputRef.current?.click()}>
+                {studentsCanUploadFiles && <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={handleAvatarChange} />}
                 
                 <div className="w-32 h-32 rounded-[2rem] overflow-hidden shadow-xl shadow-black/5 bg-white border-4 border-white flex items-center justify-center">
                   {student?.avatar_url ? (
@@ -156,9 +156,11 @@ export default function StudentProfilePage() {
                   )}
                 </div>
                 
-                <div className="absolute -bottom-3 -right-3 w-12 h-12 bg-neutral-900 rounded-full border-4 border-white flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-                  {avatarUploading ? <Loader2 size={18} className="text-white animate-spin" /> : <Camera size={18} className="text-white" />}
-                </div>
+                {studentsCanUploadFiles && (
+                  <div className="absolute -bottom-3 -right-3 w-12 h-12 bg-neutral-900 rounded-full border-4 border-white flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+                    {avatarUploading ? <Loader2 size={18} className="text-white animate-spin" /> : <Camera size={18} className="text-white" />}
+                  </div>
+                )}
               </div>
 
               <h1 className="text-2xl font-extrabold text-neutral-900 mb-1 leading-tight" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>

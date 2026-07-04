@@ -67,6 +67,7 @@ const SETTINGS_SERVER_KEYS = {
   securityTwoStepVerification: 'security_two_step_verification',
   otpEmailReady: 'otp_email_ready',   // read-only (server-computed; never POSTed — no setter)
   studentsCanViewReport: 'students_can_view_report',
+  studentsCanUploadFiles: 'students_can_upload_files',
 };
 const SETTINGS_LOCAL_KEYS = Object.fromEntries(
   Object.entries(SETTINGS_SERVER_KEYS).map(([local, server]) => [server, local])
@@ -118,8 +119,10 @@ export const useSettingsStore = create(
       setSecurityPref: (key, val) => { set({ [key]: val }); persistSettings({ [key]: val }); },
 
       // Report visibility
-      studentsCanViewReport: true,   // teacher toggles this; false = hides report from students
+      studentsCanViewReport: true,
       setStudentsCanViewReport: (val) => { set({ studentsCanViewReport: val }); persistSettings({ studentsCanViewReport: val }); },
+      studentsCanUploadFiles: false,
+      setStudentsCanUploadFiles: (val) => { set({ studentsCanUploadFiles: val }); persistSettings({ studentsCanUploadFiles: val }); },
 
       // Pull server-stored settings into the store (call after teacher login / on boot).
       // Only overwrites keys the server actually has, so first-run defaults survive.

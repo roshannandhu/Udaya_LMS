@@ -286,10 +286,12 @@ export default function StudentAssignmentSheet({
           {/* Not submitted — upload UI */}
           {!isSubmitted && (
             <div className="space-y-4">
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment"
-                className="hidden" onChange={handleFileChange} />
-              <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx"
-                className="hidden" onChange={handleFileChange} />
+              {studentsCanUploadFiles ? (
+                <>
+                  <input ref={cameraRef} type="file" accept="image/*" capture="environment"
+                    className="hidden" onChange={handleFileChange} />
+                  <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx"
+                    className="hidden" onChange={handleFileChange} />
 
               {!selectedFile ? (
                 <div className="flex gap-3">
@@ -354,6 +356,13 @@ export default function StudentAssignmentSheet({
                       <span className="text-xs text-neutral-400">{formatBytes(selectedFile.size)}</span>
                     </div>
                   )}
+                </div>
+              )}
+                </>
+              ) : (
+                <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100 text-center text-sm text-neutral-500">
+                  <p>File uploads have been disabled by your teacher.</p>
+                  <p>You cannot attach files to this assignment.</p>
                 </div>
               )}
 
