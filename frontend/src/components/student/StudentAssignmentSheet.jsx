@@ -68,7 +68,8 @@ export default function StudentAssignmentSheet({
     setError('');
     try {
       const fd = new FormData();
-      fd.append('file', selectedFile);
+      const safeName = selectedFile.name?.includes('.') ? selectedFile.name : `${selectedFile.name || 'assignment'}.${selectedFile.type?.split('/')[1] || 'bin'}`;
+      fd.append('file', selectedFile, safeName);
       const result = await assignmentApi.submit(assignment.id, fd);
       onSubmitted?.(result);
       clearFile();

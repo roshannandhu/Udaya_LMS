@@ -182,7 +182,8 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     if (!file) return;
     setUploading(true);
     const formData = new FormData();
-    formData.append('file', file);
+    const safeName = file.name?.includes('.') ? file.name : `${file.name || 'broadcast'}.${file.type?.split('/')[1] || 'bin'}`;
+    formData.append('file', file, safeName);
     try {
       const token = localStorage.getItem('tutoria_token');
       const apiBase = getApiBaseUrl();

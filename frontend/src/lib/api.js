@@ -294,7 +294,8 @@ export const notesApi = {
   uploadFile: async (file, classId) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
-    formData.append('file', file);
+    const safeName = file.name?.includes('.') ? file.name : `${file.name || 'upload'}.${file.type?.split('/')[1] || 'bin'}`;
+    formData.append('file', file, safeName);
     formData.append('class_id', classId);
     const res = await fetch(`${API_BASE}/notes/upload`, {
       method: 'POST',
@@ -415,7 +416,10 @@ export const teacherApi = {
   uploadThumbnail: async ({ file, textSide }) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
-    if (file) formData.append('file', file);
+    if (file) {
+      const safeName = file.name?.includes('.') ? file.name : `${file.name || 'thumb'}.${file.type?.split('/')[1] || 'jpg'}`;
+      formData.append('file', file, safeName);
+    }
     formData.append('text_side', textSide || 'right');
     const res = await fetch(`${API_BASE}/teacher/thumbnail`, {
       method: 'POST',
@@ -432,7 +436,10 @@ export const teacherApi = {
   uploadProfilePhoto: async (file) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
-    if (file) formData.append('file', file);
+    if (file) {
+      const safeName = file.name?.includes('.') ? file.name : `${file.name || 'photo'}.${file.type?.split('/')[1] || 'jpg'}`;
+      formData.append('file', file, safeName);
+    }
     const res = await fetch(`${API_BASE}/teacher/profile-photo`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -684,7 +691,8 @@ export const whatsappApi = {
   uploadMedia: async (file) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
-    formData.append('file', file);
+    const safeName = file.name?.includes('.') ? file.name : `${file.name || 'media'}.${file.type?.split('/')[1] || 'bin'}`;
+    formData.append('file', file, safeName);
     const res = await fetch(`${API_BASE}/teacher/whatsapp/upload-media`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },

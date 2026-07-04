@@ -76,7 +76,8 @@ export default function StudentProfilePage() {
     setAvatarUploading(true);
     try {
       const form = new FormData();
-      form.append('file', file);
+      const safeName = file.name?.includes('.') ? file.name : `${file.name || 'avatar'}.${file.type?.split('/')[1] || 'jpg'}`;
+      form.append('file', file, safeName);
       const token = localStorage.getItem('tutoria_token');
       const { getApiBaseUrl } = await import('../../lib/api');
       const apiBase = getApiBaseUrl();
