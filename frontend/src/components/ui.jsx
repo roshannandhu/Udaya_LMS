@@ -168,10 +168,10 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40" onClick={onClose}>
       <motion.div onClick={(e) => e.stopPropagation()}
         variants={popIn} initial="hidden" animate="show"
-        className={`w-full ${sizes[size]} max-h-[90vh] overflow-y-auto glass-panel`}>
-        <div className="px-5 py-4 border-b border-[#EFEDEA] flex items-center justify-between sticky top-0 z-10 bg-white rounded-t-card">
+        className={`w-full ${sizes[size]} max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-[#EFEDEA]`}>
+        <div className="px-5 py-4 border-b border-[#EFEDEA] flex items-center justify-between sticky top-0 z-10 bg-white rounded-t-2xl">
           <h2 className="text-sm font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded-lg hover:bg-[#F4F2EF]"><X size={16} /></button>
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded-lg hover:bg-[#F4F2EF] dark:hover:bg-white/10"><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>
       </motion.div>
