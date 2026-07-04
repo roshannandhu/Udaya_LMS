@@ -147,38 +147,39 @@ function NewClassCard({ std, sid, studentCount, subjectCount, navigate, dark, ov
   return (
     <motion.div variants={fadeUp} 
       onClick={() => navigate(`/teacher/standards/${sid}`)}
-      className="relative rounded-[24px] shadow-sm hover:shadow-xl overflow-hidden cursor-pointer group transition-all duration-300 md:col-span-1"
+      className="relative rounded-2xl md:rounded-[24px] shadow-sm hover:shadow-xl overflow-hidden cursor-pointer group transition-all duration-300 md:col-span-1"
       style={{ backgroundColor: pastel.hex }}
     >
       {/* Decorative large number/emoji watermarks */}
-      <div className="absolute -bottom-6 -right-6 text-9xl font-black opacity-5 pointer-events-none transform group-hover:scale-110 transition-transform duration-500" style={{ color: isLight ? '#000' : '#fff' }}>
+      <div className="absolute -bottom-4 -right-4 md:-bottom-6 md:-right-6 text-7xl md:text-9xl font-black opacity-10 pointer-events-none transform group-hover:scale-110 transition-transform duration-500" style={{ color: isLight ? '#000' : '#fff' }}>
         {num || <SubjectIcon value={std.emoji} fallback="graduation" />}
       </div>
       
-      {/* Laptop Layout (md:flex-row), Phone layout (flex-col) */}
-      <div className="p-4 md:p-6 relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 h-full">
+      {/* Laptop Layout (md:flex-row), Phone layout (just compact square) */}
+      <div className="p-4 md:p-6 relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6 h-full">
         
         {/* Left Side: Icon & Details */}
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
-          <div className="w-12 h-12 md:w-16 md:h-16 rounded-[18px] md:rounded-3xl flex items-center justify-center text-xl md:text-3xl font-black shadow-sm" style={{ backgroundColor: isLight ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.3)', color: pastel.fgHex }}>
+        <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+          <div className="w-10 h-10 md:w-16 md:h-16 rounded-[14px] md:rounded-3xl flex items-center justify-center text-lg md:text-3xl font-black shadow-sm" style={{ backgroundColor: isLight ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.3)', color: pastel.fgHex }}>
             {num || <SubjectIcon value={std.emoji} fallback="graduation" />}
           </div>
           
           <div>
-            <h3 className={`text-[17px] md:text-[22px] font-black leading-tight truncate mb-1 ${textColor}`} style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+            <h3 className={`text-[16px] md:text-[22px] font-black leading-tight truncate mb-0.5 md:mb-1 ${textColor}`} style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
               {std.name}
             </h3>
-            <p className={`text-[11px] md:text-[13px] font-bold uppercase tracking-wider ${subTextColor}`}>
+            {/* Hide stats on mobile */}
+            <p className={`hidden md:block text-[13px] font-bold uppercase tracking-wider ${subTextColor}`}>
               {studentCount} Student{studentCount === 1 ? '' : 's'} <span className="opacity-50 mx-1">•</span> {subjectCount} Subject{subjectCount === 1 ? '' : 's'}
             </p>
           </div>
         </div>
 
-        {/* Right Side: Health Widget */}
-        <div className="self-start md:self-auto flex-shrink-0">
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-full ${isLight ? 'bg-white/60' : 'bg-black/30'} backdrop-blur-md shadow-sm border ${isLight ? 'border-white/50' : 'border-white/10'}`}>
+        {/* Right Side: Health Widget - hidden on mobile */}
+        <div className="hidden md:block self-start md:self-auto flex-shrink-0">
+          <div className={`flex items-center gap-1.5 px-4 py-2 rounded-full ${isLight ? 'bg-white/60' : 'bg-black/30'} backdrop-blur-md shadow-sm border ${isLight ? 'border-white/50' : 'border-white/10'}`}>
             <Activity size={14} className={textColor} strokeWidth={3} />
-            <span className={`text-[11px] md:text-sm font-black ${textColor}`}>{healthScore}%</span>
+            <span className={`text-sm font-black ${textColor}`}>{healthScore}%</span>
           </div>
         </div>
       </div>
@@ -349,17 +350,20 @@ export default function TodayPage() {
 
           {/* My Classes Grid */}
           <motion.div variants={fadeUp}>
-            {/* Centered My Classes Header */}
-            <div className="flex flex-col items-center justify-center mb-8 relative">
-              <h2 className="text-[28px] font-black tracking-tight text-neutral-900 dark:text-white" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
+            {/* Centered My Classes Header with proper spacing */}
+            <div className="grid grid-cols-3 items-center mb-6">
+              <div className="col-span-1"></div>
+              <h2 className="col-span-1 text-center text-[24px] md:text-[28px] font-black tracking-tight text-neutral-900 dark:text-white whitespace-nowrap" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>
                 My Classes
               </h2>
-              <button 
-                onClick={() => navigate('/teacher/standards')} 
-                className="absolute right-0 text-[11px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 px-4 py-2 rounded-full flex items-center gap-1.5 transition-colors"
-              >
-                <Plus size={14} strokeWidth={3} /> Add
-              </button>
+              <div className="col-span-1 flex justify-end">
+                <button 
+                  onClick={() => navigate('/teacher/standards')} 
+                  className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 px-3 py-1.5 md:px-4 md:py-2 rounded-full flex items-center gap-1 transition-colors"
+                >
+                  <Plus size={14} strokeWidth={3} /> <span className="hidden md:inline">Add</span>
+                </button>
+              </div>
             </div>
             
             {standards.length === 0 ? (
