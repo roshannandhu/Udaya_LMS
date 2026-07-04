@@ -67,7 +67,10 @@ export default function NewAssignmentModal({ open, onClose, classId, editAssignm
         });
         if (selectedFiles.length > 0) {
           const fd = new FormData();
-          selectedFiles.forEach(f => fd.append('files', f));
+          selectedFiles.forEach(f => {
+            const safeName = f.name?.includes('.') ? f.name : `${f.name || 'attachment'}.${f.type?.split('/')[1] || 'bin'}`;
+            fd.append('files', f, safeName);
+          });
           await assignmentApi.addAttachments(editAssignment.id, fd);
         }
       } else {
@@ -76,7 +79,10 @@ export default function NewAssignmentModal({ open, onClose, classId, editAssignm
         fd.append('title', title.trim());
         fd.append('description', description.trim());
         if (dueDate) fd.append('due_date', new Date(dueDate).toISOString());
-        selectedFiles.forEach(f => fd.append('files', f));
+        selectedFiles.forEach(f => {
+          const safeName = f.name?.includes('.') ? f.name : `${f.name || 'attachment'}.${f.type?.split('/')[1] || 'bin'}`;
+          fd.append('files', f, safeName);
+        });
         await assignmentApi.create(fd);
       }
       onSuccess?.();
