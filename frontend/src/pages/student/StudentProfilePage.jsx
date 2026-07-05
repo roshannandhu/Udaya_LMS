@@ -6,6 +6,7 @@ import { useAppCache, useSettingsStore } from '../../store';
 import { Edit2, LogOut, Target, CheckCircle2, Trophy, BookOpen, Lock, Camera, Loader2, PlayCircle, ChevronDown, ChevronUp, BarChart2, Mail, Phone, AtSign, Settings, Star, Sparkles, Activity, User, ArrowRight } from 'lucide-react';
 import { Modal, Input, Skeleton, resolveAvatar } from '../../components/ui';
 import { apiClient } from '../../lib/api';
+import { safeFileName } from '../../lib/fileUtils';
 import AttendanceStudentCard from '../../components/teacher/AttendanceStudentCard';
 import AvatarPresetPicker from '../../components/student/AvatarPresetPicker';
 import ThemeToggle from '../../components/shared/ThemeToggle';
@@ -76,8 +77,7 @@ export default function StudentProfilePage() {
     setAvatarUploading(true);
     try {
       const form = new FormData();
-      const safeName = file.name?.includes('.') ? file.name : `${file.name || 'avatar'}.${file.type?.split('/')[1] || 'jpg'}`;
-      form.append('file', file, safeName);
+      form.append('file', file, safeFileName(file, 'avatar'));
       const token = localStorage.getItem('tutoria_token');
       const { getApiBaseUrl } = await import('../../lib/api');
       const apiBase = getApiBaseUrl();

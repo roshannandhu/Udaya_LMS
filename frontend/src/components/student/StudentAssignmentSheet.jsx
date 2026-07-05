@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Sheet, Btn, Tag } from '../ui';
 import { assignmentApi } from '../../lib/api';
+import { safeFileName } from '../../lib/fileUtils';
 import SecureFileViewer from '../shared/SecureFileViewer';
 
 function formatBytes(bytes) {
@@ -68,8 +69,7 @@ export default function StudentAssignmentSheet({
     setError('');
     try {
       const fd = new FormData();
-      const safeName = selectedFile.name?.includes('.') ? selectedFile.name : `${selectedFile.name || 'assignment'}.${selectedFile.type?.split('/')[1] || 'bin'}`;
-      fd.append('file', selectedFile, safeName);
+      fd.append('file', selectedFile, safeFileName(selectedFile, 'assignment'));
       const result = await assignmentApi.submit(assignment.id, fd);
       onSubmitted?.(result);
       clearFile();

@@ -11,6 +11,7 @@ import { pastelFor, pastelTokens } from '../cards/pastel';
 import { useTheme } from '../../lib/theme';
 import { resolveAvatar } from '../ui';
 import { fmtTime, fmtChatDate, fmtShortDateTime } from '../../lib/datetime';
+import { safeFileName } from '../../lib/fileUtils';
 
 const formatChatDate = fmtChatDate;
 
@@ -182,8 +183,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     if (!file) return;
     setUploading(true);
     const formData = new FormData();
-    const safeName = file.name?.includes('.') ? file.name : `${file.name || 'broadcast'}.${file.type?.split('/')[1] || 'bin'}`;
-    formData.append('file', file, safeName);
+    formData.append('file', file, safeFileName(file, 'broadcast'));
     try {
       const token = localStorage.getItem('tutoria_token');
       const apiBase = getApiBaseUrl();
@@ -193,9 +193,10 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         body: formData,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || 'Upload failed');
       setAttachments([...attachments, { url: data.url, type: data.type, name: data.filename }]);
     } catch (err) {
-      alert('Upload failed');
+      alert(err?.message || 'Upload failed');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -676,7 +677,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
 
       {/* Input area */}
       <div className="bg-[#f0f2f5] px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] flex items-end gap-2 shrink-0">
-        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt" onChange={handleFileChange} />
         
         {recording ? (
           <div className="flex-1 bg-white rounded-3xl flex items-center px-4 shadow-sm min-h-[44px] gap-3">

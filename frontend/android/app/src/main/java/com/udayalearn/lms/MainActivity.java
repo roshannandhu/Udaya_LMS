@@ -25,8 +25,9 @@ public class MainActivity extends BridgeActivity {
         clearStaleWebViewCachesOnUpgrade();
         super.onCreate(savedInstanceState);
         
-        // Request Camera and microphone permission upfront, but delay it to avoid startup crash
-        new Handler(Looper.getMainLooper()).postDelayed(this::requestCameraAndAudioPermissions, 2000);
+        // Request camera, microphone and media/storage permissions upfront, but
+        // delay it to avoid startup crash
+        new Handler(Looper.getMainLooper()).postDelayed(this::requestStartupPermissions, 2000);
 
         // FLAG_SECURE is ON for EVERYONE, always (like Google Pay) — blocks OS
         // screenshots, screen recording, and the recents thumbnail. Set here at
@@ -39,12 +40,22 @@ public class MainActivity extends BridgeActivity {
         handleNavigate(getIntent());
     }
 
-    private void requestCameraAndAudioPermissions() {
+    private void requestStartupPermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            String[] permissions = {
-                android.Manifest.permission.CAMERA,
-                android.Manifest.permission.RECORD_AUDIO
-            };
+            java.util.ArrayList<String> permissions = new java.util.ArrayList<>();
+            permissions.add(android.Manifest.permission.CAMERA);
+            permissions.add(android.Manifest.permission.RECORD_AUDIO);
+            // Media/storage: the manifest declares these but nothing requested them
+            // at runtime, so the app never showed the media prompt on first open.
+            // Android 13+ uses the granular READ_MEDIA_*; older versions use
+            // READ_EXTERNAL_STORAGE (maxSdkVersion=32 in the manifest).
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                permissions.add("android.permission.READ_MEDIA_IMAGES");
+                permissions.add("android.permission.READ_MEDIA_VIDEO");
+                permissions.add("android.permission.READ_MEDIA_AUDIO");
+            } else {
+                permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
             boolean needsRequest = false;
             for (String perm : permissions) {
                 if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -53,7 +64,7 @@ public class MainActivity extends BridgeActivity {
                 }
             }
             if (needsRequest) {
-                requestPermissions(permissions, 1024);
+                requestPermissions(permissions.toArray(new String[0]), 1024);
             }
         }
     }

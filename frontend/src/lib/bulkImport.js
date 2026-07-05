@@ -7,12 +7,25 @@
 const NAME_KEYS = ['name', 'student name', 'full name', 'student', 'sname'];
 const EMAIL_KEYS = ['email', 'email address', 'mail', 'e-mail'];
 const PHONE_KEYS = ['phone', 'mobile', 'contact', 'phone number', 'mob', 'phno'];
-const PARENT_PHONE_KEYS = ['parent phone', 'parent_phone', 'parent contact', 'parent mobile', 'parentphone', 'p_phone', 'pphone', 'parent_mobile'];
+// Extra keys only used for the parent column, where they're unambiguous
+// ("Parent Number", "Guardian No.") — too greedy for the student columns.
+const PARENT_EXTRA_KEYS = ['number', 'no.'];
+// Abbreviated parent headers that carry no parent word of their own.
+const PARENT_PHONE_KEYS = ['p_phone', 'pphone', 'p phone'];
 const STANDARD_KEYS = ['standard', 'class', 'std', 'grade', 'batch', 'section'];
 
-function matchKey(headers, keysToMatch) {
+// Words marking a column as the PARENT'S, not the student's ("Guardian Phone",
+// "Father's Mobile No"). The student matchers must skip these headers, otherwise
+// a parent column that appears first gets swallowed as the student's
+// (matchKey returns the FIRST header that contains any key).
+const PARENT_WORDS = ['parent', 'guardian', 'father', 'mother'];
+const isParentHeader = (clean) => PARENT_WORDS.some(w => clean.includes(w));
+
+function matchKey(headers, keysToMatch, { parent = null } = {}) {
   for (const h of headers) {
     const clean = h.toLowerCase().trim();
+    if (parent === false && isParentHeader(clean)) continue;
+    if (parent === true && !isParentHeader(clean)) continue;
     if (keysToMatch.some(k => clean.includes(k) || clean === k)) {
       return h;
     }
@@ -122,10 +135,11 @@ export async function parseImportFile(file, existingStandards, existingUsernames
       // 3. Detect Columns
       const headers = Object.keys(rawData[0]);
       const colMap = {
-        name: matchKey(headers, NAME_KEYS),
-        email: matchKey(headers, EMAIL_KEYS),
-        phone: matchKey(headers, PHONE_KEYS),
-        parent_phone: matchKey(headers, PARENT_PHONE_KEYS),
+        name: matchKey(headers, NAME_KEYS, { parent: false }),
+        email: matchKey(headers, EMAIL_KEYS, { parent: false }),
+        phone: matchKey(headers, PHONE_KEYS, { parent: false }),
+        parent_phone: matchKey(headers, [...PHONE_KEYS, ...PARENT_EXTRA_KEYS], { parent: true })
+          || matchKey(headers, PARENT_PHONE_KEYS),
         standard: matchKey(headers, STANDARD_KEYS) || '_SheetName'
       };
 

@@ -1,3 +1,5 @@
+import { safeFileName } from './fileUtils';
+
 const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const port = '8001';
 const envApiUrl = import.meta.env.VITE_API_URL;
@@ -294,8 +296,7 @@ export const notesApi = {
   uploadFile: async (file, classId) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
-    const safeName = file.name?.includes('.') ? file.name : `${file.name || 'upload'}.${file.type?.split('/')[1] || 'bin'}`;
-    formData.append('file', file, safeName);
+    formData.append('file', file, safeFileName(file, 'upload'));
     formData.append('class_id', classId);
     const res = await fetch(`${API_BASE}/notes/upload`, {
       method: 'POST',
@@ -417,8 +418,7 @@ export const teacherApi = {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
     if (file) {
-      const safeName = file.name?.includes('.') ? file.name : `${file.name || 'thumb'}.${file.type?.split('/')[1] || 'jpg'}`;
-      formData.append('file', file, safeName);
+      formData.append('file', file, safeFileName(file, 'thumb'));
     }
     formData.append('text_side', textSide || 'right');
     const res = await fetch(`${API_BASE}/teacher/thumbnail`, {
@@ -437,8 +437,7 @@ export const teacherApi = {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
     if (file) {
-      const safeName = file.name?.includes('.') ? file.name : `${file.name || 'photo'}.${file.type?.split('/')[1] || 'jpg'}`;
-      formData.append('file', file, safeName);
+      formData.append('file', file, safeFileName(file, 'photo'));
     }
     const res = await fetch(`${API_BASE}/teacher/profile-photo`, {
       method: 'POST',
@@ -691,8 +690,7 @@ export const whatsappApi = {
   uploadMedia: async (file) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
-    const safeName = file.name?.includes('.') ? file.name : `${file.name || 'media'}.${file.type?.split('/')[1] || 'bin'}`;
-    formData.append('file', file, safeName);
+    formData.append('file', file, safeFileName(file, 'media'));
     const res = await fetch(`${API_BASE}/teacher/whatsapp/upload-media`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },

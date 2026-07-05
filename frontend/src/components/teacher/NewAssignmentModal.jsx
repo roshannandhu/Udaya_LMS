@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Paperclip, X, Upload, Loader2 } from 'lucide-react';
 import { Modal, Btn, Input, Textarea } from '../ui';
 import { assignmentApi } from '../../lib/api';
+import { safeFileName } from '../../lib/fileUtils';
 
 export default function NewAssignmentModal({ open, onClose, classId, editAssignment, onSuccess }) {
   const [title, setTitle]             = useState('');
@@ -68,8 +69,7 @@ export default function NewAssignmentModal({ open, onClose, classId, editAssignm
         if (selectedFiles.length > 0) {
           const fd = new FormData();
           selectedFiles.forEach(f => {
-            const safeName = f.name?.includes('.') ? f.name : `${f.name || 'attachment'}.${f.type?.split('/')[1] || 'bin'}`;
-            fd.append('files', f, safeName);
+            fd.append('files', f, safeFileName(f, 'attachment'));
           });
           await assignmentApi.addAttachments(editAssignment.id, fd);
         }
@@ -80,8 +80,7 @@ export default function NewAssignmentModal({ open, onClose, classId, editAssignm
         fd.append('description', description.trim());
         if (dueDate) fd.append('due_date', new Date(dueDate).toISOString());
         selectedFiles.forEach(f => {
-          const safeName = f.name?.includes('.') ? f.name : `${f.name || 'attachment'}.${f.type?.split('/')[1] || 'bin'}`;
-          fd.append('files', f, safeName);
+          fd.append('files', f, safeFileName(f, 'attachment'));
         });
         await assignmentApi.create(fd);
       }

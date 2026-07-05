@@ -162,6 +162,7 @@ async def _ensure_live_class_columns():
         service_supabase.table("live_classes").select("thumbnail_url").limit(1).execute()
         service_supabase.table("teacher_branding").select("profile_photo_url").limit(1).execute()
         service_supabase.table("whatsapp_templates").select("media_url").limit(1).execute()
+        service_supabase.table("students").select("parent_phone").limit(1).execute()
         return
     except Exception:
         pass
@@ -186,6 +187,7 @@ async def _ensure_live_class_columns():
         ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_url TEXT;
         ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_type TEXT;
         ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS media_name TEXT;
+        ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_phone TEXT;
     """
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -3036,14 +3038,24 @@ def get_students(standard_id: Optional[str] = None, include_passwords: bool = Fa
                 return None
             return service_supabase.table("students").select(sel).in_("standard_id", standard_ids).execute()
 
+        # parent_phone + plain_password may not exist on older DBs — try the richest
+        # selection first and degrade column-by-column instead of 500ing. Without
+        # parent_phone here the Manage grid renders the Parent Phone column blank
+        # even though the bulk import saved it.
+        candidates = []
         if include_passwords:
-            # The Manage grid asks for plain_password explicitly (teacher-only).
-            # Guard the column — older DBs without it must fall back, not 500.
+            candidates += [teacher_fields + ", parent_phone, plain_password",
+                           teacher_fields + ", plain_password"]
+        candidates += [teacher_fields + ", parent_phone"]
+        for sel in candidates:
             try:
-                response = _run(teacher_fields + ", plain_password")
+                response = _run(sel)
+                break
             except Exception:
-                response = _run(teacher_fields)
+                continue
         else:
+            # All rich selections failed — run the bare list unguarded so a real
+            # DB error still surfaces as a 500 instead of an empty roster.
             response = _run(teacher_fields)
         if response is None:
             return []
@@ -3072,7 +3084,11 @@ def get_student(student_id: str, user = Depends(verify_token)):
         fields = safe_fields
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
-    response = service_supabase.table("students").select(fields).eq("id", student_id).single().execute()
+    # parent_phone may not exist on older DBs — try with it, fall back without.
+    try:
+        response = service_supabase.table("students").select(fields + ", parent_phone").eq("id", student_id).single().execute()
+    except Exception:
+        response = service_supabase.table("students").select(fields).eq("id", student_id).single().execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Student not found")
     return response.data
@@ -4629,16 +4645,92 @@ _UPLOAD_MIME_OK = {
     "audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/webm", "audio/aac", "audio/x-wav",
 }
 
-def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: int = UPLOAD_MAX_MB):
+# Android WebView content:// pickers often deliver files with no extension and an
+# empty or generic content-type; the old client-side shim then names them
+# "<file>.bin", which the extension check rejects. Recover the real type from the
+# multipart content-type or the file's magic bytes before rejecting.
+_MIME_TO_EXT = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "application/pdf": "pdf",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/plain": "txt",
+    "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/aac": "aac",
+    "audio/ogg": "ogg", "audio/wav": "wav", "audio/x-wav": "wav", "audio/webm": "weba",
+    "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+    "video/x-matroska": "mkv",
+}
+
+# Reverse direction: when the browser sends no/generic content-type, derive it from
+# the resolved extension so bucket routing (audio → public) and the client viewer's
+# type classification stay correct.
+_EXT_TO_MIME = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp",
+    "gif": "image/gif",
+    "pdf": "application/pdf", "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "txt": "text/plain",
+    "mp3": "audio/mpeg", "m4a": "audio/mp4", "aac": "audio/aac", "ogg": "audio/ogg",
+    "oga": "audio/ogg", "wav": "audio/wav", "weba": "audio/webm", "webm": "audio/webm",
+    "mp4": "video/mp4", "mov": "video/quicktime", "mkv": "video/x-matroska", "m4v": "video/mp4",
+}
+
+
+def _sniff_ext(content: bytes) -> str:
+    """Best-effort magic-byte detection for the formats Android strips names from."""
+    if content.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if content.startswith(b"\x89PNG"):
+        return "png"
+    if content.startswith(b"GIF8"):
+        return "gif"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "webp"
+    if content[:4] == b"RIFF" and content[8:12] == b"WAVE":
+        return "wav"
+    if content.startswith(b"%PDF"):
+        return "pdf"
+    if content.startswith(b"ID3") or content[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "mp3"
+    if content.startswith(b"OggS"):
+        return "ogg"
+    if content[4:8] == b"ftyp":
+        # MP4 container family — brand tells audio (M4A) apart from video.
+        return "m4a" if content[8:11] == b"M4A" else "mp4"
+    if content.startswith(b"\x1a\x45\xdf\xa3"):
+        return "webm"
+    return ""
+
+
+def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: int = UPLOAD_MAX_MB,
+                    content_type: str = None) -> str:
     """Reject empty/oversize files, disallowed extensions, and (when libmagic is
-    present) disallowed sniffed MIME types. Raises HTTPException(400/422)."""
+    present) disallowed sniffed MIME types. Raises HTTPException(400/422).
+    Returns the resolved extension — when the filename carries no usable extension
+    (Android content:// pickers), it is recovered from `content_type` or the magic
+    bytes, so callers should build the stored name from the return value."""
     if not content:
         raise HTTPException(status_code=422, detail="File is empty.")
     if len(content) > max_mb * 1024 * 1024:
         raise HTTPException(status_code=400, detail=f"File too large. Max {max_mb} MB.")
     ext = (filename or "").rsplit(".", 1)[-1].lower() if "." in (filename or "") else ""
     if ext not in allowed_exts:
-        raise HTTPException(status_code=400, detail=f"File type '.{ext or '?'}' not allowed.")
+        ct = (content_type or "").split(";")[0].strip().lower()
+        guessed = _MIME_TO_EXT.get(ct, "")
+        if guessed not in allowed_exts:
+            guessed = _sniff_ext(content[:16])
+        if guessed in allowed_exts:
+            ext = guessed
+        else:
+            raise HTTPException(status_code=400, detail=f"File type '.{ext or '?'}' not allowed.")
     try:
         import magic
         mime = magic.from_buffer(content[:2048], mime=True)
@@ -4648,6 +4740,20 @@ def validate_upload(filename: str, content: bytes, allowed_exts: set, max_mb: in
         raise
     except Exception:
         pass  # libmagic unavailable → extension + size check only
+    return ext
+
+
+def _normalize_upload(filename: str, content: bytes, allowed_exts: set, content_type: str,
+                      max_mb: int = UPLOAD_MAX_MB):
+    """validate_upload + rebuild (upload_name, ext, content_type) around the resolved
+    extension, so Android's extension-less / '.bin' / octet-stream files come out the
+    other side with a name, extension, and MIME that all agree."""
+    ext = validate_upload(filename, content, allowed_exts, max_mb=max_mb, content_type=content_type)
+    base = (filename or "file").rsplit(".", 1)[0] or "file"
+    ct = (content_type or "").split(";")[0].strip()
+    if not ct or ct == "application/octet-stream":
+        ct = _EXT_TO_MIME.get(ext, "application/octet-stream")
+    return f"{base}.{ext}", ext, ct
 
 
 # Office binary formats LibreOffice converts to PDF so they open in the in-app
@@ -4697,8 +4803,9 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
         raise HTTPException(status_code=503, detail="Database not available")
 
     file_bytes = await file.read()
-    validate_upload(file.filename or "avatar.jpg", file_bytes, IMAGE_EXTS, max_mb=10)
-    file_ext = os.path.splitext(file.filename or "avatar.jpg")[1] or ".jpg"
+    resolved_ext = validate_upload(file.filename or "avatar.jpg", file_bytes, IMAGE_EXTS, max_mb=10,
+                                   content_type=file.content_type)
+    file_ext = f".{resolved_ext}"
     file_name = f"avatars/{user['user_id']}{file_ext}"
 
     try:
@@ -4767,8 +4874,9 @@ async def upload_teacher_thumbnail(
 
     if file is not None:
         file_bytes = await file.read()
-        validate_upload(file.filename or "thumb.jpg", file_bytes, IMAGE_EXTS, max_mb=10)
-        file_ext = os.path.splitext(file.filename or "thumb.jpg")[1] or ".jpg"
+        resolved_ext = validate_upload(file.filename or "thumb.jpg", file_bytes, IMAGE_EXTS, max_mb=10,
+                                       content_type=file.content_type)
+        file_ext = f".{resolved_ext}"
         file_name = f"thumbnails/{user['teacher_id']}{file_ext}"
         try:
             if not filestore.is_r2_enabled():
@@ -4790,7 +4898,10 @@ async def upload_teacher_thumbnail(
     # Upsert branding row. If no new file, keep the existing URL and just update the side.
     payload = {"teacher_id": user["teacher_id"], "thumbnail_text_side": side}
     if public_url is not None:
-        payload["thumbnail_url"] = str(public_url)
+        # The storage key is fixed per teacher, so a replaced image gets the SAME
+        # URL and browsers/CDN keep showing the old picture. Version the URL so
+        # every change busts the cache (same pattern as the student avatar).
+        payload["thumbnail_url"] = f"{str(public_url).split('?')[0]}?v={int(time_module.time())}"
     await asyncio.to_thread(
         lambda: service_supabase.table("teacher_branding").upsert(payload, on_conflict="teacher_id").execute()
     )
@@ -4811,8 +4922,9 @@ async def upload_teacher_profile_photo(
     public_url = None
     if file is not None:
         file_bytes = await file.read()
-        validate_upload(file.filename or "photo.jpg", file_bytes, IMAGE_EXTS, max_mb=10)
-        file_ext = os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg"
+        resolved_ext = validate_upload(file.filename or "photo.jpg", file_bytes, IMAGE_EXTS, max_mb=10,
+                                       content_type=file.content_type)
+        file_ext = f".{resolved_ext}"
         file_name = f"profile-photos/{user['teacher_id']}{file_ext}"
         try:
             if not filestore.is_r2_enabled():
@@ -4833,7 +4945,9 @@ async def upload_teacher_profile_photo(
 
     payload = {"teacher_id": user["teacher_id"]}
     if public_url is not None:
-        payload["profile_photo_url"] = str(public_url)
+        # Fixed storage key per teacher — version the URL so a changed photo isn't
+        # masked by the browser/CDN cache (same pattern as the student avatar).
+        payload["profile_photo_url"] = f"{str(public_url).split('?')[0]}?v={int(time_module.time())}"
     await asyncio.to_thread(
         lambda: service_supabase.table("teacher_branding").upsert(payload, on_conflict="teacher_id").execute()
     )
@@ -5569,8 +5683,11 @@ async def upload_video(
             raise HTTPException(status_code=503, detail="Database not available")
 
         file_bytes = await file.read()
-        validate_upload(file.filename or "video.mp4", file_bytes, VIDEO_EXTS, max_mb=2048)
+        resolved_ext = validate_upload(file.filename or "video.mp4", file_bytes, VIDEO_EXTS, max_mb=2048,
+                                       content_type=file.content_type)
         safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'video.mp4')
+        if "." not in safe_name:
+            safe_name += f".{resolved_ext}"
         storage_path = f"{class_id}/{uuid.uuid4()}_{safe_name}"
 
         # Auto-create bucket in thread (sync I/O must not block event loop)
@@ -5611,7 +5728,8 @@ async def upload_video(
         return db_resp.data[0]
 
     file_bytes = await file.read()
-    validate_upload(file.filename or "video.mp4", file_bytes, VIDEO_EXTS, max_mb=2048)
+    validate_upload(file.filename or "video.mp4", file_bytes, VIDEO_EXTS, max_mb=2048,
+                    content_type=file.content_type)
     allow_dl = allow_download.lower() not in ("false", "0", "no")
 
     async with httpx.AsyncClient(timeout=300.0) as client:
@@ -8614,11 +8732,11 @@ async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(..
     if not service_supabase:
         raise HTTPException(status_code=503, detail="DB not configured")
     contents = await file.read()
-    validate_upload(file.filename, contents, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
-    ct = file.content_type or "application/octet-stream"
+    upload_name, resolved_ext, ct = _normalize_upload(
+        file.filename, contents, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS, file.content_type)
     # Office files (ppt/xls/doc/…) → PDF once at upload so they open in the viewer.
-    contents, ext, ct, _ = await _maybe_convert_office_to_pdf(file.filename, contents, ct)
-    path = f"{class_id}/{uuid.uuid4()}.{ext or 'bin'}"
+    contents, ext, ct, _ = await _maybe_convert_office_to_pdf(upload_name, contents, ct)
+    path = f"{class_id}/{uuid.uuid4()}.{ext or resolved_ext}"
     # PRIVATE bucket: the file is never publicly reachable. Students view it only
     # through the authed streaming endpoint GET /api/notes/{id}/file (no URL, no
     # download). We return the storage key, not a public URL.
@@ -8803,11 +8921,11 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
         raise HTTPException(status_code=503, detail="Database not available")
 
     file_bytes = await file.read()
-    validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS)
-    ct = file.content_type or "application/octet-stream"
+    upload_name, resolved_ext, ct = _normalize_upload(
+        file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS | AUDIO_EXTS, file.content_type)
     # Office files → PDF once at upload so they open in the in-app viewer.
-    file_bytes, conv_ext, ct, _ = await _maybe_convert_office_to_pdf(file.filename, file_bytes, ct)
-    file_name = f"{uuid.uuid4()}.{conv_ext}" if conv_ext else f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    file_bytes, conv_ext, ct, upload_name = await _maybe_convert_office_to_pdf(upload_name, file_bytes, ct)
+    file_name = f"{uuid.uuid4()}.{conv_ext or resolved_ext}"
     # Only VOICE NOTES (audio) stay public/inline in the chat. Images and documents
     # both go to the PRIVATE bucket and are viewed only through the authed, app-only
     # secure viewer (no download, no public URL) — the `secure` flag tells the client
@@ -8824,14 +8942,14 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
             public_url = await asyncio.to_thread(
                 lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, ct)
             )
-            return {"url": public_url, "type": ct, "filename": file.filename, "secure": False}
+            return {"url": public_url, "type": ct, "filename": upload_name, "secure": False}
 
         # Document → private bucket; store the KEY (not a URL) in attachment_url.
         # `type` reflects any office→PDF conversion so the viewer classifies correctly.
         await asyncio.to_thread(
             lambda: filestore.upload_private(service_supabase, "broadcasts", file_name, file_bytes, ct)
         )
-        return {"url": file_name, "type": ct, "filename": file.filename, "secure": True}
+        return {"url": file_name, "type": ct, "filename": upload_name, "secure": True}
     except Exception as e:
         # Never embed the file as a base64 data: URL — that would store a large
         # binary inside the broadcasts table. Fail loudly so the file genuinely
@@ -9963,10 +10081,10 @@ async def create_assignment(
             file_bytes = await f.read()
             if not file_bytes:
                 continue
-            validate_upload(f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
-            ct = f.content_type or "application/octet-stream"
+            upload_name, _res_ext, ct = _normalize_upload(
+                f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS, f.content_type)
             # Office files → PDF once at upload so students view them in the secure viewer.
-            file_bytes, _ext, ct, disp_name = await _maybe_convert_office_to_pdf(f.filename, file_bytes, ct)
+            file_bytes, _ext, ct, disp_name = await _maybe_convert_office_to_pdf(upload_name, file_bytes, ct)
             safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in disp_name)
             storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
             await asyncio.to_thread(
@@ -10102,10 +10220,10 @@ async def add_assignment_attachments(
         file_bytes = await f.read()
         if not file_bytes:
             continue
-        validate_upload(f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
-        ct = f.content_type or "application/octet-stream"
+        upload_name, _res_ext, ct = _normalize_upload(
+            f.filename, file_bytes, IMAGE_EXTS | DOC_EXTS, f.content_type)
         # Office files → PDF once at upload so students view them in the secure viewer.
-        file_bytes, _ext, ct, disp_name = await _maybe_convert_office_to_pdf(f.filename, file_bytes, ct)
+        file_bytes, _ext, ct, disp_name = await _maybe_convert_office_to_pdf(upload_name, file_bytes, ct)
         safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in disp_name)
         storage_path = f"question-files/{assignment_id}/{uuid.uuid4()}_{safe_name}"
         await asyncio.to_thread(
@@ -10220,13 +10338,13 @@ async def submit_assignment(
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=422, detail="File is empty")
-    validate_upload(file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS)
+    upload_name, _res_ext, ct = _normalize_upload(
+        file.filename, file_bytes, IMAGE_EXTS | DOC_EXTS, file.content_type)
 
-    safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in file.filename)
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in upload_name)
     storage_path = f"submissions/{assignment_id}/{student_id}_{uuid.uuid4()}_{safe_name}"
 
     await _ensure_assignments_bucket()
-    ct = file.content_type or "application/octet-stream"
     await asyncio.to_thread(
         lambda: filestore.upload_private(service_supabase, "assignments", storage_path, file_bytes, ct)
     )
@@ -10238,8 +10356,8 @@ async def submit_assignment(
         "assignment_id": assignment_id,
         "student_id": student_id,
         "file_url": str(public_url),
-        "file_name": file.filename,
-        "file_type": file.content_type,
+        "file_name": upload_name,
+        "file_type": ct,
         "storage_path": storage_path,
     }).execute()
     return row.data[0] if row.data else {}
@@ -12316,7 +12434,15 @@ async def wa_upload_media(file: UploadFile = File(...), user = Depends(verify_to
     _wa_require_teacher(user)
     data = await file.read()
     ext = os.path.splitext(file.filename or "")[1] or ""
-    ctype = file.content_type or "application/octet-stream"
+    ctype = (file.content_type or "").split(";")[0].strip() or "application/octet-stream"
+    # Android pickers often send no extension and a generic MIME — recover both so
+    # the stored key and the type WhatsApp receives are real.
+    if not ext:
+        guessed = _MIME_TO_EXT.get(ctype.lower(), "") or _sniff_ext(data[:16])
+        if guessed:
+            ext = f".{guessed}"
+    if ctype == "application/octet-stream" and ext:
+        ctype = _EXT_TO_MIME.get(ext.lstrip(".").lower(), ctype)
     try:
         url = await _wa_upload_bytes(data, ext, ctype)
         return {"url": url, "type": ctype, "filename": file.filename}
