@@ -80,14 +80,9 @@ export default function StudentProfilePage() {
       form.append('file', file, safeFileName(file, 'avatar'));
       const token = localStorage.getItem('tutoria_token');
       const { getApiBaseUrl } = await import('../../lib/api');
+      const { xhrUpload } = await import('../../lib/xhrUpload');
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/students/me/avatar`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Avatar upload failed');
+      const data = await xhrUpload(`${apiBase}/students/me/avatar`, form, token);
       const newUrl = data.avatar_url;
       setStudent(prev => ({ ...prev, avatar_url: newUrl }));
       const { user: authUser, role, setUser } = useAuthStore.getState();
