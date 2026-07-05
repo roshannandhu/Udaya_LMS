@@ -4893,7 +4893,7 @@ async def upload_teacher_thumbnail(
             )
         except Exception as e:
             print("Thumbnail upload error:", e)
-            raise HTTPException(status_code=500, detail="Upload failed")
+            raise HTTPException(status_code=500, detail=f"Upload failed ({type(e).__name__}: {str(e)[:160]})")
 
     # Upsert branding row. If no new file, keep the existing URL and just update the side.
     payload = {"teacher_id": user["teacher_id"], "thumbnail_text_side": side}
@@ -4941,7 +4941,7 @@ async def upload_teacher_profile_photo(
             )
         except Exception as e:
             print("Profile photo upload error:", e)
-            raise HTTPException(status_code=500, detail="Upload failed")
+            raise HTTPException(status_code=500, detail=f"Upload failed ({type(e).__name__}: {str(e)[:160]})")
 
     payload = {"teacher_id": user["teacher_id"]}
     if public_url is not None:
@@ -6279,12 +6279,55 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
 # cron actually picked up the latest code (there is no other version signal).
-BUILD_MARKER = "2026-07-03-wa-media-fix"
+BUILD_MARKER = "2026-07-05-storage-health"
 
 @app.get("/api/health")
 def health_check():
     db_status = "connected" if supabase else "disconnected"
     return {"status": "ok", "database": db_status, "build": BUILD_MARKER}
+
+
+@app.get("/api/health/storage")
+async def storage_health_check():
+    """Live file-storage diagnosis. Every upload endpoint funnels through
+    backend/storage.py, so when both probes pass, uploads work. Exposes only
+    presence booleans and sanitized error strings — never env values."""
+    out = {
+        "backend": "r2" if filestore.is_r2_enabled() else "supabase-fallback",
+        "r2_enabled": filestore.is_r2_enabled(),
+        "supabase_fallback_allowed": filestore._supabase_fallback_allowed(),
+        "vars_present": {
+            k: bool(os.getenv(k))
+            for k in (
+                "R2_ACCOUNT_ID", "R2_ACCESS_KEY", "R2_ACCESS_KEY_ID",
+                "R2_SECRET_KEY", "R2_SECRET_ACCESS_KEY",
+                "R2_PUBLIC_BUCKET", "R2_PRIVATE_BUCKET", "R2_PUBLIC_BASE_URL",
+            )
+        },
+        "build": BUILD_MARKER,
+    }
+    probe_key = f"healthcheck/probe-{uuid.uuid4().hex}.txt"
+    try:
+        await asyncio.to_thread(
+            lambda: filestore.upload_public(service_supabase, "broadcasts", probe_key, b"ok", "text/plain")
+        )
+        await asyncio.to_thread(
+            lambda: filestore.remove(service_supabase, "broadcasts", probe_key, public=True)
+        )
+        out["public_write"] = "ok"
+    except Exception as e:
+        out["public_write"] = f"{type(e).__name__}: {str(e)[:200]}"
+    try:
+        await asyncio.to_thread(
+            lambda: filestore.upload_private(service_supabase, "broadcasts", probe_key, b"ok", "text/plain")
+        )
+        await asyncio.to_thread(
+            lambda: filestore.remove(service_supabase, "broadcasts", probe_key, public=False)
+        )
+        out["private_write"] = "ok"
+    except Exception as e:
+        out["private_write"] = f"{type(e).__name__}: {str(e)[:200]}"
+    return out
 
 # ─── Teacher Team Management ─────────────────────────────────────────────────
 
@@ -8956,7 +8999,8 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
         # binary inside the broadcasts table. Fail loudly so the file genuinely
         # lands in file storage (the teacher can retry).
         print("Upload error:", e)
-        raise HTTPException(status_code=502, detail="File storage upload failed. Please try again.")
+        raise HTTPException(status_code=502,
+                            detail=f"File storage upload failed ({type(e).__name__}: {str(e)[:160]}). Please try again.")
 
 # --- Bulk Student Import ---
 

@@ -45,6 +45,16 @@ def _public_base() -> str:
     return os.environ.get("R2_PUBLIC_BASE_URL", "").rstrip("/")
 
 
+def _bucket_name(private: bool) -> str:
+    """Bucket name from env with a clear error (a bare KeyError('R2_PRIVATE_BUCKET')
+    surfaces to callers as an unreadable quoted string)."""
+    var = "R2_PRIVATE_BUCKET" if private else "R2_PUBLIC_BUCKET"
+    name = os.getenv(var, "").strip()
+    if not name:
+        raise RuntimeError(f"{var} env var is not set — cannot access the R2 {'private' if private else 'public'} bucket")
+    return name
+
+
 def _supabase_fallback_allowed() -> bool:
     """Fail-closed: production must never write files to Supabase Storage. The
     Supabase fallback is only permitted when explicitly opted in (local dev),
@@ -71,7 +81,7 @@ def upload_public(supa, bucket: str, path: str, data: bytes, content_type: str) 
         if not base:
             raise RuntimeError("R2_PUBLIC_BASE_URL is required for public uploads")
         _r2().put_object(
-            Bucket=os.environ["R2_PUBLIC_BUCKET"], Key=path, Body=data, ContentType=content_type
+            Bucket=_bucket_name(private=False), Key=path, Body=data, ContentType=content_type
         )
         return f"{base}/{path}"
     supa.storage.from_(bucket).upload(path, data, {"content-type": content_type})
@@ -83,7 +93,7 @@ def upload_private(supa, bucket: str, path: str, data: bytes, content_type: str)
     _require_backend()
     if is_r2_enabled():
         _r2().put_object(
-            Bucket=os.environ["R2_PRIVATE_BUCKET"], Key=path, Body=data, ContentType=content_type
+            Bucket=_bucket_name(private=True), Key=path, Body=data, ContentType=content_type
         )
         return path
     supa.storage.from_(bucket).upload(path, data, {"content-type": content_type})
@@ -95,7 +105,7 @@ def get_bytes(supa, bucket: str, path: str, private: bool = True) -> bytes:
     never gets a file URL). R2 get_object or Supabase download."""
     _require_backend()
     if is_r2_enabled():
-        target = os.environ["R2_PRIVATE_BUCKET"] if private else os.environ["R2_PUBLIC_BUCKET"]
+        target = _bucket_name(private=True) if private else _bucket_name(private=False)
         obj = _r2().get_object(Bucket=target, Key=path)
         return obj["Body"].read()
     return supa.storage.from_(bucket).download(path)
@@ -107,7 +117,7 @@ def signed_url(supa, bucket: str, path: str, expires: int = 3600) -> str:
     if is_r2_enabled():
         return _r2().generate_presigned_url(
             "get_object",
-            Params={"Bucket": os.environ["R2_PRIVATE_BUCKET"], "Key": path},
+            Params={"Bucket": _bucket_name(private=True), "Key": path},
             ExpiresIn=expires,
         )
     s = supa.storage.from_(bucket).create_signed_url(path, expires)
@@ -132,7 +142,7 @@ def remove(supa, bucket: str, paths, public: bool = True):
         return
     _require_backend()
     if is_r2_enabled():
-        target = os.environ["R2_PUBLIC_BUCKET"] if public else os.environ["R2_PRIVATE_BUCKET"]
+        target = _bucket_name(private=False) if public else _bucket_name(private=True)
         for k in keys:
             _r2().delete_object(Bucket=target, Key=k)
         return
@@ -147,7 +157,7 @@ def list_private(prefix: str = "") -> list:
         return []
     out, token = [], None
     while True:
-        kw = {"Bucket": os.environ["R2_PRIVATE_BUCKET"], "Prefix": prefix}
+        kw = {"Bucket": _bucket_name(private=True), "Prefix": prefix}
         if token:
             kw["ContinuationToken"] = token
         resp = _r2().list_objects_v2(**kw)
