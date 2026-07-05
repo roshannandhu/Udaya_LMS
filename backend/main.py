@@ -8933,12 +8933,13 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
     is_inline_media = ct.startswith("audio/")
 
     try:
+        if not filestore.is_r2_enabled():
+            try:
+                await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("broadcasts"))
+            except:
+                await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("broadcasts", options={"public": True}))
+
         if is_inline_media:
-            if not filestore.is_r2_enabled():
-                try:
-                    await asyncio.to_thread(lambda: service_supabase.storage.get_bucket("broadcasts"))
-                except:
-                    await asyncio.to_thread(lambda: service_supabase.storage.create_bucket("broadcasts", options={"public": True}))
             public_url = await asyncio.to_thread(
                 lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, ct)
             )
