@@ -15,6 +15,9 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          R2_AK: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SK: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCT: ${{ secrets.R2_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           test -n "${EC2_HOST:-}" || { echo "EC2_HOST secret is missing"; exit 1; }
@@ -40,6 +43,25 @@ jobs:
           }
 
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Sync R2 credentials from GitHub Secrets into the box's backend/.env.
+          # Passes values via stdin (not args) so they never appear in process list.
+          # Uses R2_ACCESS_KEY / R2_SECRET_KEY names that storage.py checks first.
+          if [ -n "${R2_AK:-}" ] && [ -n "${R2_SK:-}" ]; then
+            printf 'R2_ACCESS_KEY=%s\nR2_SECRET_KEY=%s\n' "$R2_AK" "$R2_SK" \
+              | ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" \
+                  'while IFS= read -r line; do
+                     key="${line%%=*}"
+                     if grep -q "^${key}=" /opt/udaya/backend/.env 2>/dev/null; then
+                       sed -i "s|^${key}=.*|${line}|" /opt/udaya/backend/.env
+                     else
+                       echo "$line" >> /opt/udaya/backend/.env
+                     fi
+                   done
+                   echo "R2 credentials synced to backend/.env"'
+          else
+            echo "R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY secrets not set — skipping credential sync"
+          fi
 
           # Stash any drift on the box so a fast-forward pull always applies.
           # The health check retries: containers need a few seconds to boot, so a
