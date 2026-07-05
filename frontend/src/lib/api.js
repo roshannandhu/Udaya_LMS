@@ -1,4 +1,5 @@
 import { safeFileName } from './fileUtils';
+import { xhrUpload } from './xhrUpload';
 
 const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const port = '8001';
@@ -298,17 +299,9 @@ export const notesApi = {
     const formData = new FormData();
     formData.append('file', file, safeFileName(file, 'upload'));
     formData.append('class_id', classId);
-    const res = await fetch(`${API_BASE}/notes/upload`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Upload failed');
-    }
+    const resData = await xhrUpload(`${API_BASE}/notes/upload`, formData, token);
     _cache.clear();
-    return res.json();
+    return resData;
   },
 };
 
@@ -421,17 +414,11 @@ export const teacherApi = {
       formData.append('file', file, safeFileName(file, 'thumb'));
     }
     formData.append('text_side', textSide || 'right');
-    const res = await fetch(`${API_BASE}/teacher/thumbnail`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Failed to upload thumbnail');
+    try {
+      return await xhrUpload(`${API_BASE}/teacher/thumbnail`, formData, token);
+    } catch (e) {
+      throw new Error(e.message || 'Failed to upload thumbnail');
     }
-    _cache.clear();
-    return res.json();
   },
   uploadProfilePhoto: async (file) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -439,16 +426,11 @@ export const teacherApi = {
     if (file) {
       formData.append('file', file, safeFileName(file, 'photo'));
     }
-    const res = await fetch(`${API_BASE}/teacher/profile-photo`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Failed to upload profile photo');
+    try {
+      return await xhrUpload(`${API_BASE}/teacher/profile-photo`, formData, token);
+    } catch (e) {
+      throw new Error(e.message || 'Failed to upload photo');
     }
-    return res.json();
   },
 };
 
@@ -488,17 +470,11 @@ export const assignmentApi = {
 
   create: async (formData) => {
     const token = localStorage.getItem(TOKEN_KEY);
-    const res = await fetch(`${API_BASE}/assignments/create`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Failed to create assignment');
+    try {
+      return await xhrUpload(`${API_BASE}/assignments/create`, formData, token);
+    } catch (e) {
+      throw new Error(e.message || 'Failed to create assignment');
     }
-    _cache.clear();
-    return res.json();
   },
 
   update: (id, data) =>
@@ -509,17 +485,11 @@ export const assignmentApi = {
 
   addAttachments: async (id, formData) => {
     const token = localStorage.getItem(TOKEN_KEY);
-    const res = await fetch(`${API_BASE}/assignments/${id}/attachments`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Failed to upload files');
+    try {
+      return await xhrUpload(`${API_BASE}/assignments/${id}/attachments`, formData, token);
+    } catch (e) {
+      throw new Error(e.message || 'Failed to add attachments');
     }
-    _cache.clear();
-    return res.json();
   },
 
   deleteAttachment: (id, attId) =>
@@ -529,17 +499,11 @@ export const assignmentApi = {
 
   submit: async (id, formData) => {
     const token = localStorage.getItem(TOKEN_KEY);
-    const res = await fetch(`${API_BASE}/assignments/${id}/submit`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Failed to submit assignment');
+    try {
+      return await xhrUpload(`${API_BASE}/assignments/${id}/submit`, formData, token);
+    } catch (e) {
+      throw new Error(e.message || 'Failed to submit assignment');
     }
-    _cache.clear();
-    return res.json();
   },
 
   grade: (id, subId, data) =>
@@ -691,16 +655,10 @@ export const whatsappApi = {
     const token = localStorage.getItem(TOKEN_KEY);
     const formData = new FormData();
     formData.append('file', file, safeFileName(file, 'media'));
-    const res = await fetch(`${API_BASE}/teacher/whatsapp/upload-media`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Upload failed');
+    try {
+      return await xhrUpload(`${API_BASE}/teacher/whatsapp/upload-media`, formData, token);
+    } catch (e) {
+      throw new Error(e.message || 'Failed to upload media');
     }
-    _cache.clear();
-    return res.json();
   },
 };

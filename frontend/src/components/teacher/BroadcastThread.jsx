@@ -12,6 +12,7 @@ import { useTheme } from '../../lib/theme';
 import { resolveAvatar } from '../ui';
 import { fmtTime, fmtChatDate, fmtShortDateTime } from '../../lib/datetime';
 import { safeFileName } from '../../lib/fileUtils';
+import { xhrUpload } from '../../lib/xhrUpload';
 
 const formatChatDate = fmtChatDate;
 
@@ -187,13 +188,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     try {
       const token = localStorage.getItem('tutoria_token');
       const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.detail || 'Upload failed');
+      const data = await xhrUpload(`${apiBase}/upload`, formData, token);
       setAttachments([...attachments, { url: data.url, type: data.type, name: data.filename }]);
     } catch (err) {
       alert(err?.message || 'Upload failed');
@@ -266,13 +261,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         try {
           const token = localStorage.getItem('tutoria_token');
           const apiBase = getApiBaseUrl();
-          const res = await fetch(`${apiBase}/upload`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData,
-          });
-          if (!res.ok) throw new Error('upload failed');
-          const data = await res.json();
+          const data = await xhrUpload(`${apiBase}/upload`, formData, token);
           const payload = {
             standard_id: std.id,
             message: '',
