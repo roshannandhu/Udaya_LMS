@@ -76,8 +76,9 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       setQuestions(mapped);
       setPdfResult({
         count:       mapped.length,
-        iterations:  data.iterations  || 1,
-        avg_quality: data.avg_quality || 0,
+        iterations:  data.iterations           || 1,
+        quality10:   data.quality_out_of_10    || 0,
+        difficulty:  data.difficulty_distribution || {},
       });
       setPdfFile(null);
       if (pdfInputRef.current) pdfInputRef.current.value = '';
@@ -356,11 +357,18 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
               )}
 
               {pdfResult && !pdfLoading && (
-                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                  <Check size={13} className="flex-shrink-0" />
-                  <span>
-                    {pdfResult.count} questions generated · {pdfResult.iterations} loop iteration{pdfResult.iterations !== 1 ? 's' : ''} · avg quality {pdfResult.avg_quality}/5
-                  </span>
+                <div className="text-xs bg-green-50 border border-green-200 rounded-lg px-3 py-2 space-y-1">
+                  <div className="flex items-center gap-2 text-green-700 font-medium">
+                    <Check size={13} className="flex-shrink-0" />
+                    <span>{pdfResult.count} questions · {pdfResult.iterations} loop iteration{pdfResult.iterations !== 1 ? 's' : ''} · quality {pdfResult.quality10}/10</span>
+                  </div>
+                  {pdfResult.difficulty && (
+                    <div className="flex gap-3 text-green-600 pl-5">
+                      <span>Easy: {pdfResult.difficulty.easy || 0}</span>
+                      <span>Medium: {pdfResult.difficulty.medium || 0}</span>
+                      <span>Hard: {pdfResult.difficulty.hard || 0}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
