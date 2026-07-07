@@ -169,7 +169,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fafafa] pb-24 md:pb-8">
+    <div className="min-h-screen bg-[#FAFAF9] pb-24 md:pb-8">
       {/* Header */}
       <div className="bg-white px-6 py-8 md:py-10 shadow-sm border-b border-neutral-100 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto">

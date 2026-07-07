@@ -352,7 +352,7 @@ export default function StudentSubjectViewPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#F8F9FA]">
+      <div className="flex items-center justify-center h-screen bg-[#FAFAF9]">
         <Loader2 className="animate-spin text-pink-400" size={32} />
       </div>
     );
@@ -364,7 +364,7 @@ export default function StudentSubjectViewPage() {
   const progressPct = totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] pb-24 font-sans selection:bg-pink-100 selection:text-pink-900">
+    <div className="min-h-screen bg-[#FAFAF9] pb-24 font-sans selection:bg-pink-100 selection:text-pink-900">
       
       {/* â”€â”€ Compact header (slim on phone AND laptop) â”€â”€ */}
       <div className="relative overflow-hidden bg-white border-b border-neutral-100 shadow-sm">

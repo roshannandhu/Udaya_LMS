@@ -95,8 +95,8 @@ export default function TestsPage() {
   }
 
   return (
-    <div className="pb-28 min-h-screen bg-[#F4F7F6]">
-      <div className="sticky top-0 z-30 bg-[#F4F7F6] border-b border-black/5">
+    <div className="pb-28 min-h-screen bg-[#FAFAF9]">
+      <div className="sticky top-0 z-30 bg-[#FAFAF9] border-b border-black/5">
         <div className="px-3 md:px-8 py-4 flex items-center gap-3 max-w-6xl mx-auto">
           <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-black/5 rounded-full transition-colors">
             <ArrowLeft size={18} />

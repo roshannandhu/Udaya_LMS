@@ -176,18 +176,18 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
             ].join(' ')}
           >
             {/* Top gradient accent bar */}
-            <div className="h-[3px] w-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-purple-400" />
+            <div className="h-[2px] w-full bg-neutral-900/10" />
 
             <div className="p-5">
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-200/70 flex-shrink-0">
+                  <div className="w-10 h-10 rounded-2xl bg-neutral-900 flex items-center justify-center shadow-sm flex-shrink-0">
                     <Sparkles size={18} className="text-white" />
                   </div>
                   <div>
                     <p className="font-extrabold text-[15px] text-neutral-900 leading-tight">AI Mentor</p>
-                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-purple-500 leading-none mt-0.5">
+                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-neutral-400 leading-none mt-0.5">
                       {cfg.subtitle}
                     </p>
                   </div>
@@ -207,14 +207,14 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
                   <WordReveal text={greeting} isActive={open} onDone={() => setMsgDone(true)} />
                   {!msgDone && (
                     <motion.span
-                      className="inline-block w-[2px] h-[13px] ml-0.5 bg-purple-500 rounded-full align-middle"
+                      className="inline-block w-[2px] h-[13px] ml-0.5 bg-neutral-700 rounded-full align-middle"
                       animate={{ opacity: [1, 0] }}
                       transition={{ duration: 0.65, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
                     />
                   )}
                   {msgDone && (
                     <motion.span
-                      className="inline-block w-[2px] h-[13px] ml-0.5 bg-purple-500 rounded-full align-middle"
+                      className="inline-block w-[2px] h-[13px] ml-0.5 bg-neutral-700 rounded-full align-middle"
                       initial={{ opacity: 1 }}
                       animate={{ opacity: 0 }}
                       transition={{ duration: 0.6, delay: 0.5, ease: 'easeOut' }}
@@ -239,7 +239,7 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
                 animate={{ opacity: msgDone ? 1 : 0, y: msgDone ? 0 : 6 }}
                 transition={{ duration: 0.35, delay: 0.08, ease: 'easeOut' }}
                 onClick={handleCTA}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-[13px] shadow-md shadow-purple-300/40 hover:from-violet-700 hover:to-purple-700 active:scale-[0.98] transition-all"
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-neutral-900 text-white font-bold text-[13px] shadow-sm hover:bg-neutral-800 active:scale-[0.98] transition-all"
               >
                 <span>{cfg.ctaLabel}</span>
                 <ChevronRight size={16} />
@@ -259,33 +259,22 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
         whileTap={reduce ? undefined : { scale: 0.9 }}
         className={[
           'fixed z-50',
-          // Phone: above bottom nav (~90px tall) + safe area
           'right-4 bottom-28',
-          // Desktop: no bottom nav
           'lg:right-8 lg:bottom-8',
-          'w-14 h-14 rounded-full',
-          'bg-gradient-to-br from-violet-500 to-purple-600',
+          'w-12 h-12 rounded-full',
+          'bg-neutral-900',
           'flex items-center justify-center',
-          'shadow-lg shadow-purple-400/40',
-          'hover:shadow-xl hover:shadow-purple-400/50',
-          'transition-shadow',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2',
+          'shadow-md shadow-neutral-900/20',
+          'hover:bg-neutral-800 transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2',
         ].join(' ')}
       >
-        {/* Pulse ring 1 */}
-        {!open && (
+        {/* Pulse ring */}
+        {!open && !reduce && (
           <motion.span
-            className="absolute inset-0 rounded-full bg-violet-400/30"
-            animate={{ scale: [1, 1.65], opacity: [0.55, 0] }}
-            transition={{ duration: 1.9, repeat: Infinity, ease: 'easeOut' }}
-          />
-        )}
-        {/* Pulse ring 2 (offset) */}
-        {!open && (
-          <motion.span
-            className="absolute inset-0 rounded-full bg-violet-400/20"
-            animate={{ scale: [1, 2.1], opacity: [0.4, 0] }}
-            transition={{ duration: 1.9, repeat: Infinity, ease: 'easeOut', delay: 0.45 }}
+            className="absolute inset-0 rounded-full bg-neutral-900/20"
+            animate={{ scale: [1, 1.7], opacity: [0.5, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
           />
         )}
 
@@ -295,8 +284,8 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
           transition={{ duration: 0.28, ease: 'easeInOut' }}
         >
           {open
-            ? <X size={22} className="text-white" />
-            : <Sparkles size={22} className="text-white" />
+            ? <X size={18} className="text-white" />
+            : <Sparkles size={18} className="text-white" />
           }
         </motion.div>
       </motion.button>

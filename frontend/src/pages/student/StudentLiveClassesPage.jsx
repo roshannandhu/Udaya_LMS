@@ -208,7 +208,7 @@ export default function StudentLiveClassesPage() {
     : null;
 
   return (
-    <div className="bg-[#F4F7F6]">
+    <div className="bg-[#FAFAF9]">
       <TopBar title="Live Classes" />
 
       <div className="px-5 md:px-8 pt-8 pb-[calc(96px+env(safe-area-inset-bottom))] lg:pb-8 max-w-6xl mx-auto">

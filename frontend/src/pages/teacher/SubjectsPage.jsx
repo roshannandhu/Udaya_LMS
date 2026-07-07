@@ -237,7 +237,7 @@ export default function SubjectsPage() {
   const getStudentsCount = (stdId) => students.filter(s => String(s.standard_id) === String(stdId)).length;
 
   return (
-    <div className="pb-28 bg-[#F8F9FA] min-h-screen">
+    <div className="pb-28 bg-[#FAFAF9] min-h-screen">
       {/* Hide the default TopBar since we are building a custom Bento header */}
       <div className="hidden"><TopBar title="Classes" /></div>
       

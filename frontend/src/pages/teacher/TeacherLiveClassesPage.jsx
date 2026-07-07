@@ -420,7 +420,7 @@ export default function TeacherLiveClassesPage() {
 
   /* ── Main render ── */
   return (
-    <div className="pb-28 min-h-screen bg-[#F4F7F6]">
+    <div className="pb-28 min-h-screen bg-[#FAFAF9]">
       <TopBar
         title="Live Classes"
         action={
