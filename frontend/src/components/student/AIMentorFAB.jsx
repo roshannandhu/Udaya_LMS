@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Sparkles, X, ChevronRight, Target, Zap, TrendingUp } from 'lucide-react';
+import { Sparkles, X, ChevronRight, Target, Zap, TrendingUp, Users, BarChart3, Brain } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
 
-// ── Messages pool (pick one randomly each time the card opens) ─────────────────
-const MESSAGES = [
+// ── Message pools per role ─────────────────────────────────────────────────────
+const STUDENT_MESSAGES = [
   "You're building great habits! Your consistency is paying off.",
   "Based on your scores, you're on the right track. Keep pushing!",
   "Every lesson you complete gets you closer to your goal.",
@@ -13,10 +13,18 @@ const MESSAGES = [
   "You're doing great! A little effort each day makes a big difference.",
 ];
 
+const TEACHER_MESSAGES = [
+  "Your class data is ready — check who needs extra support today.",
+  "Stay ahead of the curve. Review the latest class analytics now.",
+  "Some students may need attention. A quick look at reports can help.",
+  "Great teaching shapes futures. See how your class is progressing.",
+  "Your insights are updated. Spot trends before they become problems.",
+];
+
 // ── Word-by-word reveal with blur-fade animation ───────────────────────────────
 function WordReveal({ text, isActive, onDone }) {
   const reduce = useReducedMotion();
-  const words = text.split(' ');
+  const words  = text.split(' ');
   const lastIdx = words.length - 1;
 
   if (reduce) return <span>{text}</span>;
@@ -50,45 +58,83 @@ function WordReveal({ text, isActive, onDone }) {
 // ── Stat chip ─────────────────────────────────────────────────────────────────
 function Chip({ icon: Icon, label, value, color }) {
   const palette = {
-    purple: 'bg-purple-50 text-purple-700',
-    indigo: 'bg-indigo-50 text-indigo-700',
+    purple:  'bg-purple-50 text-purple-700',
+    indigo:  'bg-indigo-50 text-indigo-700',
     emerald: 'bg-emerald-50 text-emerald-700',
+    amber:   'bg-amber-50 text-amber-700',
+    rose:    'bg-rose-50 text-rose-700',
   };
   return (
     <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-extrabold ${palette[color]}`}>
       <Icon size={11} />
       {label}
-      <span className="opacity-50">·</span>
-      {value}
+      {value && <><span className="opacity-50">·</span>{value}</>}
     </span>
   );
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-export default function AIMentorFAB({ hidden }) {
+// type: "student" | "teacher"
+export default function AIMentorFAB({ hidden, type = 'student' }) {
   const [open, setOpen]       = useState(false);
   const [msgDone, setMsgDone] = useState(false);
-  const [message, setMessage] = useState(MESSAGES[0]);
+  const [message, setMessage] = useState('');
   const { user } = useAuthStore();
-  const navigate  = useNavigate();
-  const reduce    = useReducedMotion();
+  const navigate = useNavigate();
+  const reduce   = useReducedMotion();
+
+  const isTeacher = type === 'teacher';
+  const pool      = isTeacher ? TEACHER_MESSAGES : STUDENT_MESSAGES;
 
   // Pick a fresh random message each time the card opens
   useEffect(() => {
     if (open) {
       setMsgDone(false);
-      setMessage(MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
+      setMessage(pool[Math.floor(Math.random() * pool.length)]);
     }
   }, [open]);
 
+  // Seed message on mount so it's ready when the popup first opens
+  useEffect(() => {
+    setMessage(pool[Math.floor(Math.random() * pool.length)]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (hidden) return null;
 
-  const name     = user?.name?.split(' ')[0] || 'there';
-  const avgScore = user?.avg_score != null ? Math.round(user.avg_score) : null;
-  const greeting = `Hey ${name}! ${message}`;
+  const name     = user?.name?.split(' ')[0] || (isTeacher ? 'Teacher' : 'there');
+  const avgScore = !isTeacher && user?.avg_score != null ? Math.round(user.avg_score) : null;
+
+  const greeting = isTeacher
+    ? `Hi ${name}! ${message}`
+    : `Hey ${name}! ${message}`;
 
   const handleClose  = () => setOpen(false);
-  const handleReport = () => { setOpen(false); navigate('/student/report?ai=1'); };
+  const handleCTA    = () => {
+    setOpen(false);
+    navigate(isTeacher ? '/teacher/reports' : '/student/report?ai=1');
+  };
+
+  // ── Config per role ──────────────────────────────────────────────────────────
+  const cfg = isTeacher ? {
+    subtitle:   'Class performance overview',
+    ctaLabel:   'View class analytics',
+    chips: [
+      <Chip key="a" icon={Users}    label="Students"  color="indigo"  />,
+      <Chip key="b" icon={BarChart3} label="Analytics" color="purple"  />,
+      <Chip key="c" icon={Brain}    label="AI Insights" color="emerald" />,
+    ],
+  } : {
+    subtitle:   'Personalised for you',
+    ctaLabel:   'See my full report',
+    chips: [
+      avgScore != null
+        ? <Chip key="a" icon={Target}    label="Avg score" value={`${avgScore}%`} color="purple" />
+        : null,
+      <Chip key="b" icon={Zap}        label="Streak"   value="Active" color="indigo"  />,
+      <Chip key="c" icon={TrendingUp}  label="Progress" value="↑"     color="emerald" />,
+    ].filter(Boolean),
+  };
 
   return (
     <>
@@ -119,9 +165,9 @@ export default function AIMentorFAB({ hidden }) {
             style={{ transformOrigin: 'bottom right' }}
             className={[
               'fixed z-[49]',
-              // Phone: sits above the FAB (FAB is at ~bottom-28 = 112px, FAB height 56px → popup bottom = 180px)
+              // Phone: above FAB (FAB bottom-28=112px + h-14=56px + 12px gap = 180px)
               'right-4 bottom-[180px]',
-              // Desktop: FAB at bottom-8 (32px), height 56px → popup bottom ≈ 100px
+              // Desktop: FAB bottom-8=32px + h-14=56px + 12px gap = 100px
               'lg:right-8 lg:bottom-[100px]',
               'w-[min(340px,calc(100vw-2rem))]',
               'bg-white rounded-[1.75rem]',
@@ -142,7 +188,7 @@ export default function AIMentorFAB({ hidden }) {
                   <div>
                     <p className="font-extrabold text-[15px] text-neutral-900 leading-tight">AI Mentor</p>
                     <p className="text-[10px] font-extrabold uppercase tracking-widest text-purple-500 leading-none mt-0.5">
-                      Personalised for you
+                      {cfg.subtitle}
                     </p>
                   </div>
                 </div>
@@ -159,7 +205,6 @@ export default function AIMentorFAB({ hidden }) {
               <div className="min-h-[60px] mb-4">
                 <p className="text-[14px] font-semibold text-neutral-800 leading-relaxed">
                   <WordReveal text={greeting} isActive={open} onDone={() => setMsgDone(true)} />
-                  {/* Cursor: blinks while text is animating, fades out once done */}
                   {!msgDone && (
                     <motion.span
                       className="inline-block w-[2px] h-[13px] ml-0.5 bg-purple-500 rounded-full align-middle"
@@ -185,11 +230,7 @@ export default function AIMentorFAB({ hidden }) {
                 transition={{ duration: 0.35, ease: 'easeOut' }}
                 className="flex flex-wrap gap-2 mb-4"
               >
-                {avgScore != null && (
-                  <Chip icon={Target} label="Avg score" value={`${avgScore}%`} color="purple" />
-                )}
-                <Chip icon={Zap}        label="Streak"    value="Active"  color="indigo"  />
-                <Chip icon={TrendingUp} label="Progress"  value="↑"       color="emerald" />
+                {cfg.chips}
               </motion.div>
 
               {/* CTA button */}
@@ -197,10 +238,10 @@ export default function AIMentorFAB({ hidden }) {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: msgDone ? 1 : 0, y: msgDone ? 0 : 6 }}
                 transition={{ duration: 0.35, delay: 0.08, ease: 'easeOut' }}
-                onClick={handleReport}
+                onClick={handleCTA}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-[13px] shadow-md shadow-purple-300/40 hover:from-violet-700 hover:to-purple-700 active:scale-[0.98] transition-all"
               >
-                <span>See my full report</span>
+                <span>{cfg.ctaLabel}</span>
                 <ChevronRight size={16} />
               </motion.button>
             </div>
@@ -218,9 +259,9 @@ export default function AIMentorFAB({ hidden }) {
         whileTap={reduce ? undefined : { scale: 0.9 }}
         className={[
           'fixed z-50',
-          // Phone: above bottom nav (nav ~90px, add 22px gap = 112px from bottom)
+          // Phone: above bottom nav (~90px tall) + safe area
           'right-4 bottom-28',
-          // Desktop: no bottom nav, just 32px from edges
+          // Desktop: no bottom nav
           'lg:right-8 lg:bottom-8',
           'w-14 h-14 rounded-full',
           'bg-gradient-to-br from-violet-500 to-purple-600',
@@ -231,7 +272,7 @@ export default function AIMentorFAB({ hidden }) {
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2',
         ].join(' ')}
       >
-        {/* Outer pulse ring 1 */}
+        {/* Pulse ring 1 */}
         {!open && (
           <motion.span
             className="absolute inset-0 rounded-full bg-violet-400/30"
@@ -239,7 +280,7 @@ export default function AIMentorFAB({ hidden }) {
             transition={{ duration: 1.9, repeat: Infinity, ease: 'easeOut' }}
           />
         )}
-        {/* Outer pulse ring 2 (offset) */}
+        {/* Pulse ring 2 (offset) */}
         {!open && (
           <motion.span
             className="absolute inset-0 rounded-full bg-violet-400/20"
@@ -248,7 +289,7 @@ export default function AIMentorFAB({ hidden }) {
           />
         )}
 
-        {/* Icon: Sparkles ↔ X with rotation */}
+        {/* Icon: Sparkles ↔ X */}
         <motion.div
           animate={open ? { rotate: 90, scale: 0.9 } : { rotate: 0, scale: 1 }}
           transition={{ duration: 0.28, ease: 'easeInOut' }}

@@ -5,6 +5,7 @@ import { useThreadStore } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
 import PageTransition from '../../components/shared/PageTransition';
+import AIMentorFAB from '../../components/student/AIMentorFAB';
 
 function getActiveTab(path) {
   if (path === '/teacher' || path === '/teacher/') return 'today';
@@ -77,6 +78,8 @@ export default function TeacherLayout() {
         </Suspense>
       </div>
       {!threadOpen && <BottomNav active={active} setActive={setActive} type="teacher" />}
+      {/* AI Mentor FAB — hidden on broadcast route (fullscreen thread view) */}
+      <AIMentorFAB type="teacher" hidden={isBroadcastRoute || threadOpen} />
     </div>
   );
 }
