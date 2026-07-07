@@ -287,10 +287,22 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
                     {qIdx + 1}
                   </div>
                   <textarea
-                    className="flex-1 bg-white/50 border border-white/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400 min-h-[64px]"
+                    className="flex-1 bg-white/50 border border-white/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400"
+                    style={{ resize: 'none', overflow: 'hidden', minHeight: '64px' }}
                     placeholder="Type your question here..."
                     value={q.question}
-                    onChange={(e) => updateQuestion(qIdx, 'question', e.target.value)}
+                    onChange={(e) => {
+                      updateQuestion(qIdx, 'question', e.target.value);
+                      const el = e.target;
+                      el.style.height = 'auto';
+                      el.style.height = el.scrollHeight + 'px';
+                    }}
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = Math.max(64, el.scrollHeight) + 'px';
+                      }
+                    }}
                   />
                   {questions.length > 1 && (
                     <button onClick={() => removeQuestion(qIdx)} className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0 mt-1">
@@ -310,12 +322,25 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
                       >
                         {q.correct_idx === optIdx && <Check size={11} strokeWidth={3} />}
                       </button>
-                      <input
-                        type="text"
+                      <textarea
+                        rows={1}
                         className="flex-1 bg-white/50 border border-white/60 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400"
+                        style={{ resize: 'none', overflow: 'hidden', minHeight: '34px' }}
                         placeholder={`Option ${optIdx + 1}`}
                         value={opt}
-                        onChange={(e) => updateOption(qIdx, optIdx, e.target.value)}
+                        onChange={(e) => {
+                          updateOption(qIdx, optIdx, e.target.value);
+                          const el = e.target;
+                          el.style.height = 'auto';
+                          el.style.height = el.scrollHeight + 'px';
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = Math.max(34, el.scrollHeight) + 'px';
+                          }
+                        }}
                       />
                     </div>
                   ))}
