@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, FileText, Sparkles, RefreshCw } from 'lucide-react';
 import { Modal, Input, Btn } from '../ui';
 import { apiClient, testApi } from '../../lib/api';
 
@@ -27,6 +27,50 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
   ]);
 
   const [fetchingTest, setFetchingTest] = useState(false);
+
+  // PDF generator state
+  const [pdfFile, setPdfFile]             = useState(null);
+  const [pdfCount, setPdfCount]           = useState(10);
+  const [pdfLoading, setPdfLoading]       = useState(false);
+  const [pdfError, setPdfError]           = useState('');
+  const [pdfStatusIdx, setPdfStatusIdx]   = useState(0);
+  const [confirmReplace, setConfirmReplace] = useState(false);
+  const pdfInputRef = useRef(null);
+
+  const PDF_STATUS = ['Reading PDF...', 'Generating questions...', 'Reviewing quality...'];
+
+  useEffect(() => {
+    if (!pdfLoading) { setPdfStatusIdx(0); return; }
+    const t = setInterval(() => setPdfStatusIdx(i => Math.min(i + 1, PDF_STATUS.length - 1)), 6000);
+    return () => clearInterval(t);
+  }, [pdfLoading]);
+
+  const hasRealQuestions = questions.some(q => q.question.trim());
+
+  const handleGenerateFromPdf = async (force = false) => {
+    if (!pdfFile) return;
+    if (hasRealQuestions && !force) { setConfirmReplace(true); return; }
+    setConfirmReplace(false);
+    setPdfLoading(true);
+    setPdfError('');
+    try {
+      const data = await testApi.generateFromPdf(pdfFile, pdfCount, title);
+      const mapped = data.questions.map((q, i) => ({
+        id: Date.now() + i,
+        question: q.question,
+        options: q.options,
+        correct_idx: q.correct_idx,
+        order_num: q.order_num,
+      }));
+      setQuestions(mapped);
+      setPdfFile(null);
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+    } catch (err) {
+      setPdfError(err.message || 'Failed to generate questions. Please try again.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   // Reset form when modal closes/opens; fetch test details if in edit mode
   React.useEffect(() => {
@@ -250,6 +294,65 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
           </div>
         ) : (
           <div className="space-y-6">
+
+            {/* ── PDF Generator Card ─────────────────────────────────── */}
+            <div className="p-4 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles size={15} className="text-neutral-500" />
+                <span className="text-sm font-semibold text-neutral-700">Generate from PDF</span>
+                <span className="text-xs text-neutral-400 ml-auto">Groq AI · Free</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <label className="flex-1 flex items-center gap-2 px-3 py-2 bg-white border border-neutral-200 rounded-lg cursor-pointer hover:border-neutral-400 transition-colors text-sm text-neutral-500 min-w-0">
+                  <FileText size={14} className="flex-shrink-0 text-neutral-400" />
+                  <span className="truncate">{pdfFile ? pdfFile.name : 'Choose PDF file...'}</span>
+                  <input
+                    ref={pdfInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    className="hidden"
+                    onChange={e => { setPdfFile(e.target.files[0] || null); setPdfError(''); setConfirmReplace(false); }}
+                  />
+                </label>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <label className="text-xs text-neutral-500 whitespace-nowrap">Questions:</label>
+                  <input
+                    type="number"
+                    min={3} max={30}
+                    value={pdfCount}
+                    onChange={e => setPdfCount(Math.max(3, Math.min(30, parseInt(e.target.value) || 10)))}
+                    className="w-16 px-2 py-2 text-sm border border-neutral-200 rounded-lg bg-white text-center focus:outline-none focus:ring-2 focus:ring-neutral-900/20"
+                  />
+                </div>
+              </div>
+
+              {confirmReplace && !pdfLoading && (
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <span className="flex-1">This will replace your {questions.length} existing question{questions.length !== 1 ? 's' : ''}.</span>
+                  <button onClick={() => handleGenerateFromPdf(true)} className="font-semibold underline">Replace</button>
+                  <button onClick={() => setConfirmReplace(false)} className="text-neutral-500 ml-1">Cancel</button>
+                </div>
+              )}
+
+              {pdfError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pdfError}</p>
+              )}
+
+              <Btn
+                onClick={() => handleGenerateFromPdf(false)}
+                disabled={!pdfFile || pdfLoading}
+                variant="default"
+                className="w-full"
+              >
+                {pdfLoading
+                  ? <><Loader2 size={14} className="animate-spin mr-2" />{PDF_STATUS[pdfStatusIdx]}</>
+                  : <><RefreshCw size={14} className="mr-2" />Generate Questions</>
+                }
+              </Btn>
+            </div>
+            {/* ────────────────────────────────────────────────────────── */}
+
             {questions.map((q, qIdx) => (
               <div key={q.id} className="p-4 glass-panel border-white/60 rounded-xl space-y-4 relative group">
                 <div className="flex items-start gap-3">

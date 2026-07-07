@@ -19,3 +19,7 @@ boto3==1.34.69
 # without it the mint raises ImportError and every FCM send silently fails.
 google-auth==2.30.0
 requests==2.32.3
+
+# PDF test generator (AI-powered MCQ generation from uploaded PDFs)
+pdfplumber==0.11.4
+groq==0.9.0

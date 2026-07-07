@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Literal, Any
 from datetime import date, datetime, timedelta, timezone
 import asyncio
 import csv
-from io import StringIO
+from io import StringIO, BytesIO
 from fastapi.responses import StreamingResponse, Response, FileResponse
 import uuid
 import re
@@ -24,6 +24,19 @@ from supabase import create_client, Client
 
 import whatsapp as wa
 import storage as filestore
+
+# PDF test generator deps — optional, guarded so startup never crashes if absent.
+try:
+    import pdfplumber as _pdfplumber
+    _pdfplumber_ok = True
+except ImportError:
+    _pdfplumber_ok = False
+
+try:
+    from groq import Groq as _GroqClient
+    _groq_ok = True
+except ImportError:
+    _groq_ok = False
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
@@ -6788,6 +6801,142 @@ class SubmitTestRequest(BaseModel):
 
 class ReattemptRequest(BaseModel):
     reason: Optional[str] = None
+
+@app.post("/api/tests/generate-from-pdf")
+async def generate_test_from_pdf(
+    file: UploadFile = File(...),
+    num_questions: int = Form(10),
+    subject_hint: str = Form(""),
+    user: dict = Depends(verify_token),
+):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not _pdfplumber_ok:
+        raise HTTPException(status_code=503, detail="PDF extraction not available on this server.")
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(status_code=503, detail="AI generation not configured. Add GROQ_API_KEY to server .env.")
+    if not _groq_ok:
+        raise HTTPException(status_code=503, detail="AI client not available on this server.")
+
+    num_questions = max(3, min(30, num_questions))
+
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(pdf_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="PDF too large. Maximum size is 10 MB.")
+
+    ct = (file.content_type or "").lower()
+    fname = (file.filename or "").lower()
+    if "pdf" not in ct and not fname.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    def _run_generation():
+        # ── Step 1: Extract text ──────────────────────────────────────────────
+        with _pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            page_count = len(pdf.pages)
+            raw_text = "\n\n".join(
+                (p.extract_text() or "").strip() for p in pdf.pages
+            ).strip()
+
+        if len(raw_text) < 100:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract readable text from this PDF. It may be a scanned image-only PDF.",
+            )
+
+        text = raw_text[:12000]
+        hint = subject_hint.strip() or "general"
+
+        # ── Step 2: Generate (Call 1) ─────────────────────────────────────────
+        client = _GroqClient(api_key=groq_key)
+        generate_prompt = f"""You are creating a multiple-choice question paper for a {hint} class.
+
+Generate exactly {num_questions} MCQ questions from the content below.
+
+Rules:
+- Each question must have exactly 4 options
+- Exactly one option is correct — mark it with correct_idx (0 = first option)
+- Base ALL questions strictly on the provided content — never invent facts
+- Mix difficulty: some straightforward recall, some application, some analysis
+- Options must be plausible — no obviously silly distractors
+
+Return ONLY valid JSON, no explanation:
+{{"questions": [{{"question": "...", "options": ["A", "B", "C", "D"], "correct_idx": 0}}]}}
+
+CONTENT:
+{text}"""
+
+        r1 = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": generate_prompt}],
+            temperature=0.4,
+            response_format={"type": "json_object"},
+            max_tokens=4000,
+        )
+        raw_questions = json.loads(r1.choices[0].message.content).get("questions", [])
+        if not raw_questions:
+            raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer PDF.")
+
+        # ── Step 3: Reflect (Call 2) ──────────────────────────────────────────
+        reflect_prompt = f"""You are a test quality reviewer. Below are {len(raw_questions)} MCQ questions generated from educational content.
+
+Review them and return an improved version. Fix ONLY these problems if present:
+1. DUPLICATES — if two questions test the exact same concept, replace the weaker one with a new question on a different topic from the content snippet
+2. AMBIGUOUS — if a question has more than one defensible correct answer, rewrite it to be unambiguous
+3. PLACEHOLDER OPTIONS — replace "None of the above", "All of the above", "Cannot be determined" with real specific options
+4. WRONG ANSWER — if the marked correct_idx is factually wrong based on the content, fix it
+5. DIFFICULTY BALANCE — if all questions are the same difficulty level, adjust 2-3 to create variety
+
+DO NOT rewrite questions that are already correct and clear.
+Return exactly {len(raw_questions)} questions (same count).
+Same JSON schema: {{"questions": [{{"question": "...", "options": ["...", "...", "...", "..."], "correct_idx": 0}}]}}
+
+QUESTIONS TO REVIEW:
+{json.dumps(raw_questions, indent=2)}
+
+ORIGINAL CONTENT SNIPPET (for reference when replacing duplicates):
+{text[:3000]}"""
+
+        reflected = False
+        try:
+            r2 = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": reflect_prompt}],
+                temperature=0.2,
+                response_format={"type": "json_object"},
+                max_tokens=4000,
+            )
+            reviewed = json.loads(r2.choices[0].message.content).get("questions", [])
+            if reviewed and len(reviewed) >= 1:
+                raw_questions = reviewed
+                reflected = True
+        except Exception:
+            pass  # reflection failed → use Call 1 result
+
+        # ── Step 4: Validate + normalise ─────────────────────────────────────
+        final = []
+        for i, q in enumerate(raw_questions):
+            opts = q.get("options", [])
+            if not isinstance(opts, list) or len(opts) < 2:
+                continue
+            while len(opts) < 4:
+                opts.append("")
+            final.append({
+                "question": str(q.get("question", "")).strip(),
+                "options": [str(o) for o in opts[:4]],
+                "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
+                "order_num": i + 1,
+            })
+
+        if not final:
+            raise HTTPException(status_code=500, detail="AI returned malformed questions. Please try again.")
+
+        return {"questions": final, "page_count": page_count, "chars_extracted": len(raw_text), "reflected": reflected}
+
+    return await asyncio.to_thread(_run_generation)
+
 
 # Test attempt for results
 @app.post("/api/tests/with-questions")
