@@ -7099,7 +7099,7 @@ CONTENT:
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_loop():
-        client = _GroqClient(api_key=groq_key)
+        client = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
 
         # ── Extract text ────────────────────────────────────────────────────
         if is_pdf:
@@ -7283,7 +7283,7 @@ async def regenerate_flagged_questions(
         return out
 
     def _do_regenerate():
-        client   = _GroqClient(api_key=groq_key)
+        client   = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
         avoid    = "\n".join(f"- {s}" for s in req.good_stems[:25]) or "none"
         rejected = "\n".join(
             f"[{i+1}] {q.get('question', '')[:100]}" for i, q in enumerate(req.flagged)
@@ -11546,6 +11546,19 @@ def build_insights_prompt(stats: dict, viewer_role: str) -> str:
             "priority matter more than any single test."
         )
 
+    # Privacy: for teacher view strip the real name from the prompt — the AI
+    # writes in third-person ("the student") anyway, so quality is unchanged.
+    # Student self-view keeps the real name (it is the student's own data).
+    if viewer_role == "teacher":
+        real_first = (stats.get("student_name") or "Student").split()[0]
+        name_for_prompt = "Student"
+        # Replace first occurrence of real name in the pre-built profile string
+        raw_profile = stats.get("profile", stats.get("standing_data", "N/A")) or "N/A"
+        profile_for_prompt = raw_profile.replace(real_first + ",", "Student,", 1)
+    else:
+        name_for_prompt = (stats.get("student_name", "Student") or "Student").split()[0]
+        profile_for_prompt = stats.get("profile", stats.get("standing_data", "N/A"))
+
     return f"""You are an expert learning mentor and student-success coach for a private tuition academy. Your job is to diagnose the student's learning BEHAVIOUR from the data and coach them — never just restate statistics back.
 
 {role_context}
@@ -11605,10 +11618,10 @@ Weekly Timetable
 Mentor Message
 
 STUDENT DATA:
-Name: {(stats.get("student_name", "Student") or "Student").split()[0]}
+Name: {name_for_prompt}
 Standard: {stats.get("standard_name", "N/A")}
 Report period: {period}
-Profile & standing: {stats.get("profile", stats.get("standing_data", "N/A"))}
+Profile & standing: {profile_for_prompt}
 Study streak & activity patterns: {stats.get("activity_patterns", stats.get("streak_data", "N/A"))}
 Score trend: {stats.get("trend_data", "N/A")}
 Best subject: {stats.get("best_subject", "N/A")}
@@ -11929,6 +11942,7 @@ def _store_insights(cache_key: str, text: str):
     }
     try:
         INSIGHTS_CACHE_FILE.write_text(json.dumps(_insights_cache, indent=2), encoding="utf-8")
+        INSIGHTS_CACHE_FILE.chmod(0o600)  # owner-only read/write on Linux (no-op on Windows)
     except Exception as e:
         print(f"[!] insights cache save failed (ignored): {e}")
 
@@ -11993,7 +12007,7 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
             else:  # openai_compatible (openai, groq, …)
                 url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
-                headers = {"Authorization": f"Bearer {api_key}"}
+                headers = {"Authorization": f"Bearer {api_key}", "X-Groq-No-Store": "true"}
                 payload = {
                     "model": cfg["model"],
                     "messages": [{"role": "user", "content": prompt}],
@@ -12109,7 +12123,7 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
 
     async def openai_compatible_stream():
         url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {"Authorization": f"Bearer {api_key}", "X-Groq-No-Store": "true"}
         payload = {
             "model": cfg["model"],
             "messages": [{"role": "user", "content": prompt}],

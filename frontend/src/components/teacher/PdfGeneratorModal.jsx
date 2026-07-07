@@ -218,6 +218,12 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
               <span><strong className="text-neutral-700">Upload → AI generates → You review.</strong> AI runs up to 4 quality loops, then you flag bad questions for instant replacement.</span>
             </div>
 
+            {/* Privacy warning */}
+            <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              <span className="flex-shrink-0 mt-0.5">⚠️</span>
+              <span><strong>Study material only.</strong> Upload textbooks, notes, or question papers. Do not upload marksheets, attendance registers, or any file containing student names or personal details — the file content is processed by an external AI service.</span>
+            </div>
+
             {/* Drop zone */}
             <label className={`block border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-colors ${
               pdfFile
