@@ -173,7 +173,7 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
           <h2 className="text-sm font-semibold">{title}</h2>
           <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded-lg hover:bg-[#F4F2EF] dark:hover:bg-white/10"><X size={16} /></button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-4 sm:p-5">{children}</div>
       </motion.div>
     </motion.div>
   );

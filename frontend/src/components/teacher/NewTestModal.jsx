@@ -209,11 +209,11 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       {fetchingTest ? (
         <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-neutral-400" /></div>
       ) : (
-      <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-3 max-h-[82vh] overflow-y-auto pr-1 custom-scrollbar">
         {error && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-md font-medium sticky top-0 z-10">{error}</div>}
 
         {step === 1 ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {!defaultClassId && (
               <div>
                 <label className="block text-xs font-medium text-neutral-600 mb-1">Subject</label>
@@ -231,7 +231,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
             )}
             <Input label="Test title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Weekly Quiz 1" />
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <Input label="Duration (mins)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
               <Input label="Total marks" type="number" value={totalMarks} onChange={(e) => setTotalMarks(e.target.value)} />
             </div>
@@ -256,14 +256,14 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
               <Input label="End Time" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="pt-1">
               <Btn onClick={handleNext} variant="primary" className="w-full">
                 Next: Add Questions <ArrowRight size={16} className="ml-2" />
               </Btn>
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
 
             {/* ── PDF Generator trigger ────────────────────────────────── */}
             <div className="flex items-center gap-2">
@@ -281,41 +281,38 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
             {/* ─────────────────────────────────────────────────────────── */}
 
             {questions.map((q, qIdx) => (
-              <div key={q.id} className="p-4 glass-panel border-white/60 rounded-xl space-y-4 relative group">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-2">
+              <div key={q.id} className="p-3 glass-panel border-white/60 rounded-xl space-y-3 relative">
+                <div className="flex items-start gap-2">
+                  <div className="w-6 h-6 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-1.5">
                     {qIdx + 1}
                   </div>
-                  <div className="flex-1">
-                    <textarea 
-                      className="w-full bg-white/50 border border-white/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400 min-h-[80px]"
-                      placeholder="Type your question here..."
-                      value={q.question}
-                      onChange={(e) => updateQuestion(qIdx, 'question', e.target.value)}
-                    />
-                  </div>
+                  <textarea
+                    className="flex-1 bg-white/50 border border-white/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400 min-h-[64px]"
+                    placeholder="Type your question here..."
+                    value={q.question}
+                    onChange={(e) => updateQuestion(qIdx, 'question', e.target.value)}
+                  />
                   {questions.length > 1 && (
-                    <button onClick={() => removeQuestion(qIdx)} className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100 absolute top-2 right-2">
-                      <Trash2 size={16} />
+                    <button onClick={() => removeQuestion(qIdx)} className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0 mt-1">
+                      <Trash2 size={14} />
                     </button>
                   )}
                 </div>
 
-                <div className="pl-2 sm:pl-9 space-y-2">
+                <div className="space-y-1.5">
                   {q.options.map((opt, optIdx) => (
                     <div key={optIdx} className="flex items-center gap-2">
-                      <button 
+                      <button
                         onClick={() => updateQuestion(qIdx, 'correct_idx', optIdx)}
                         className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${
                           q.correct_idx === optIdx ? 'bg-green-500 border-green-500 text-white' : 'border-neutral-300 hover:border-neutral-400 bg-white'
                         }`}
-                        title="Mark as correct answer"
                       >
-                        {q.correct_idx === optIdx && <Check size={12} strokeWidth={3} />}
+                        {q.correct_idx === optIdx && <Check size={11} strokeWidth={3} />}
                       </button>
-                      <input 
+                      <input
                         type="text"
-                        className="flex-1 bg-white/50 border border-white/60 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400"
+                        className="flex-1 bg-white/50 border border-white/60 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/20 placeholder-neutral-400"
                         placeholder={`Option ${optIdx + 1}`}
                         value={opt}
                         onChange={(e) => updateOption(qIdx, optIdx, e.target.value)}
@@ -326,11 +323,11 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
               </div>
             ))}
 
-            <Btn onClick={addQuestion} variant="default" className="w-full border-dashed border-2 py-6 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400">
-              <Plus size={18} className="mr-2" /> Add Question
+            <Btn onClick={addQuestion} variant="default" className="w-full border-dashed border-2 py-4 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400">
+              <Plus size={16} className="mr-1.5" /> Add Question
             </Btn>
 
-            <div className="flex gap-3 pt-4 border-t border-white/40 sticky bottom-0 bg-white/80 backdrop-blur-md p-3 -mx-2 rounded-xl">
+            <div className="flex gap-3 pt-3 border-t border-white/40 sticky bottom-0 bg-white/80 backdrop-blur-md p-3 -mx-1 rounded-xl">
               <Btn onClick={() => setStep(1)} variant="ghost" icon={ArrowLeft}>Back</Btn>
               <Btn variant="primary" onClick={handleSubmit} disabled={loading} className="flex-1">
                 {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : <Check size={16} className="mr-2" />}

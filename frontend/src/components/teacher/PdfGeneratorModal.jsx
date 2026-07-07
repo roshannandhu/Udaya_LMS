@@ -35,18 +35,18 @@ function DiffBadge({ diff }) {
 // ── Single question review card ──────────────────────────────────────────────
 function QuestionCard({ index, question, flagged, onToggle }) {
   return (
-    <div className={`rounded-xl border p-4 space-y-3 transition-all ${
+    <div className={`rounded-xl border p-3 space-y-2 transition-all ${
       flagged ? 'border-red-300 bg-red-50/40' : 'border-[#EBEAE7] bg-white'
     }`}>
       {/* Row: number + difficulty + redo button */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-bold text-neutral-400 flex-shrink-0">Q{index + 1}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[11px] font-bold text-neutral-400 flex-shrink-0">Q{index + 1}</span>
           <DiffBadge diff={question.difficulty} />
         </div>
         <button
           onClick={onToggle}
-          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors flex-shrink-0 ${
+          className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg font-medium transition-colors flex-shrink-0 ${
             flagged
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700'
@@ -57,23 +57,23 @@ function QuestionCard({ index, question, flagged, onToggle }) {
       </div>
 
       {/* Question stem */}
-      <p className="text-sm font-medium text-neutral-800 leading-snug pl-3 sm:pl-8">
+      <p className="text-sm font-medium text-neutral-800 leading-snug">
         {question.question}
       </p>
 
       {/* Options */}
-      <div className="pl-3 sm:pl-8 space-y-1">
+      <div className="space-y-0.5">
         {(question.options || []).map((opt, oi) => (
-          <div key={oi} className={`flex items-center gap-2 text-sm rounded-lg px-3 py-1.5 ${
+          <div key={oi} className={`flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1 ${
             oi === question.correct_idx
               ? 'bg-green-100 text-green-800 font-medium'
               : 'text-neutral-500'
           }`}>
-            <span className="text-xs font-bold w-4 flex-shrink-0 text-neutral-400">
+            <span className="font-bold w-3.5 flex-shrink-0 text-neutral-400">
               {String.fromCharCode(65 + oi)}
             </span>
             <span className="flex-1">{opt}</span>
-            {oi === question.correct_idx && <Check size={12} className="text-green-600 flex-shrink-0" />}
+            {oi === question.correct_idx && <Check size={11} className="text-green-600 flex-shrink-0" />}
           </div>
         ))}
       </div>
@@ -210,37 +210,12 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
 
         {/* ── UPLOAD PHASE ─────────────────────────────────────────────── */}
         {phase === 'upload' && (
-          <div className="space-y-5">
+          <div className="space-y-4">
 
-            {/* 3-step guidance */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {[
-                {
-                  n: 1, title: 'Upload File',
-                  desc: 'PDF, photo of textbook, whiteboard shot, or scanned notes (JPG, PNG, WEBP)',
-                },
-                {
-                  n: 2, title: 'AI Generates',
-                  desc: '4-round quality loop scores & fixes every question automatically',
-                },
-                {
-                  n: 3, title: 'You Review',
-                  desc: 'Flag any question you dislike — AI regenerates only those',
-                },
-              ].map(({ n, title, desc }) => (
-                <div key={n} className="bg-neutral-50 border border-[#EBEAE7] rounded-xl p-3 flex sm:block items-start gap-3">
-                  <div className="flex items-center gap-2 flex-shrink-0 sm:mb-1.5">
-                    <span className="w-5 h-5 rounded-full bg-neutral-900 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                      {n}
-                    </span>
-                    <span className="text-xs font-semibold text-neutral-700 sm:hidden">{title}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-xs font-semibold text-neutral-700 hidden sm:block mb-0.5">{title}</span>
-                    <p className="text-[11px] text-neutral-500 leading-relaxed">{desc}</p>
-                  </div>
-                </div>
-              ))}
+            {/* Compact how-it-works strip */}
+            <div className="flex items-center gap-2 text-[11px] text-neutral-500 bg-neutral-50 border border-[#EBEAE7] rounded-xl px-3 py-2.5">
+              <span className="flex-shrink-0 text-base">🤖</span>
+              <span><strong className="text-neutral-700">Upload → AI generates → You review.</strong> AI runs up to 4 quality loops, then you flag bad questions for instant replacement.</span>
             </div>
 
             {/* Drop zone */}
@@ -382,18 +357,8 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
               </div>
             )}
 
-            {/* Inline tip */}
-            <div className="text-xs text-neutral-500 bg-neutral-50 border border-[#EBEAE7] rounded-xl p-3 flex gap-2">
-              <span className="flex-shrink-0">💡</span>
-              <span>
-                Click <strong className="text-neutral-700">Redo</strong> on any question you want replaced.
-                The AI generates a fresh question on a different topic.
-                You can do this as many times as you like.
-              </span>
-            </div>
-
             {/* Question cards */}
-            <div className="max-h-[38vh] sm:max-h-[45vh] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+            <div className="max-h-[48vh] sm:max-h-[50vh] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {questions.map((q, i) => (
                 <QuestionCard
                   key={i}
@@ -406,7 +371,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
             </div>
 
             {/* Bottom actions */}
-            <div className="space-y-2 pt-2 border-t border-[#EBEAE7]">
+            <div className="space-y-2 pt-2 border-t border-[#EBEAE7] sticky bottom-0 bg-white pb-1">
               {flagged.size > 0 && (
                 <Btn
                   onClick={handleRegenerateFlagged}
