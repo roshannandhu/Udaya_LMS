@@ -57,12 +57,12 @@ function QuestionCard({ index, question, flagged, onToggle }) {
       </div>
 
       {/* Question stem */}
-      <p className="text-sm font-medium text-neutral-800 leading-snug pl-8">
+      <p className="text-sm font-medium text-neutral-800 leading-snug pl-3 sm:pl-8">
         {question.question}
       </p>
 
       {/* Options */}
-      <div className="pl-8 space-y-1">
+      <div className="pl-3 sm:pl-8 space-y-1">
         {(question.options || []).map((opt, oi) => (
           <div key={oi} className={`flex items-center gap-2 text-sm rounded-lg px-3 py-1.5 ${
             oi === question.correct_idx
@@ -213,35 +213,38 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
           <div className="space-y-5">
 
             {/* 3-step guidance */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
                 {
-                  n: 1, icon: '📄', title: 'Upload File',
+                  n: 1, title: 'Upload File',
                   desc: 'PDF, photo of textbook, whiteboard shot, or scanned notes (JPG, PNG, WEBP)',
                 },
                 {
-                  n: 2, icon: '🤖', title: 'AI Generates',
+                  n: 2, title: 'AI Generates',
                   desc: '4-round quality loop scores & fixes every question automatically',
                 },
                 {
-                  n: 3, icon: '✅', title: 'You Review',
+                  n: 3, title: 'You Review',
                   desc: 'Flag any question you dislike — AI regenerates only those',
                 },
-              ].map(({ n, icon, title, desc }) => (
-                <div key={n} className="bg-neutral-50 border border-[#EBEAE7] rounded-xl p-3 space-y-1.5">
-                  <div className="flex items-center gap-2">
+              ].map(({ n, title, desc }) => (
+                <div key={n} className="bg-neutral-50 border border-[#EBEAE7] rounded-xl p-3 flex sm:block items-start gap-3">
+                  <div className="flex items-center gap-2 flex-shrink-0 sm:mb-1.5">
                     <span className="w-5 h-5 rounded-full bg-neutral-900 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {n}
                     </span>
-                    <span className="text-xs font-semibold text-neutral-700">{title}</span>
+                    <span className="text-xs font-semibold text-neutral-700 sm:hidden">{title}</span>
                   </div>
-                  <p className="text-[11px] text-neutral-500 leading-relaxed">{desc}</p>
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-neutral-700 hidden sm:block mb-0.5">{title}</span>
+                    <p className="text-[11px] text-neutral-500 leading-relaxed">{desc}</p>
+                  </div>
                 </div>
               ))}
             </div>
 
             {/* Drop zone */}
-            <label className={`block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${
+            <label className={`block border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-colors ${
               pdfFile
                 ? 'border-neutral-400 bg-neutral-50'
                 : 'border-neutral-200 hover:border-neutral-400 bg-[#FAFAF9]'
@@ -313,7 +316,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
 
         {/* ── GENERATING PHASE ─────────────────────────────────────────── */}
         {phase === 'generating' && (
-          <div className="py-10 flex flex-col items-center space-y-8">
+          <div className="py-6 sm:py-10 flex flex-col items-center space-y-6 sm:space-y-8">
             {/* Spinner */}
             <div className="relative">
               <div className="w-16 h-16 rounded-full border-4 border-neutral-100 border-t-neutral-900 animate-spin" />
@@ -357,22 +360,24 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
 
             {/* Quality summary bar */}
             {quality && (
-              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
-                <div>
-                  <p className="text-sm font-bold text-green-900">
-                    Quality {quality.quality10}/10
-                  </p>
-                  <p className="text-xs text-green-600">
-                    {quality.iterations} AI loop iteration{quality.iterations !== 1 ? 's' : ''}
-                    {humanLoops > 0 && ` · ${humanLoops} manual refinement${humanLoops !== 1 ? 's' : ''}`}
-                  </p>
-                </div>
-                <div className="flex gap-2 text-xs text-green-700 bg-white/60 rounded-lg px-3 py-1.5 border border-green-200">
-                  <span>Easy&nbsp;{quality.difficulty?.easy ?? 0}</span>
-                  <span className="text-green-300">·</span>
-                  <span>Med&nbsp;{quality.difficulty?.medium ?? 0}</span>
-                  <span className="text-green-300">·</span>
-                  <span>Hard&nbsp;{quality.difficulty?.hard ?? 0}</span>
+              <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="text-sm font-bold text-green-900">
+                      Quality {quality.quality10}/10
+                    </p>
+                    <p className="text-xs text-green-600">
+                      {quality.iterations} AI loop iteration{quality.iterations !== 1 ? 's' : ''}
+                      {humanLoops > 0 && ` · ${humanLoops} manual refinement${humanLoops !== 1 ? 's' : ''}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 text-xs text-green-700 bg-white/60 rounded-lg px-3 py-1.5 border border-green-200 flex-shrink-0">
+                    <span>Easy&nbsp;{quality.difficulty?.easy ?? 0}</span>
+                    <span className="text-green-300">·</span>
+                    <span>Med&nbsp;{quality.difficulty?.medium ?? 0}</span>
+                    <span className="text-green-300">·</span>
+                    <span>Hard&nbsp;{quality.difficulty?.hard ?? 0}</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -388,7 +393,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
             </div>
 
             {/* Question cards */}
-            <div className="max-h-[42vh] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+            <div className="max-h-[38vh] sm:max-h-[45vh] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
               {questions.map((q, i) => (
                 <QuestionCard
                   key={i}

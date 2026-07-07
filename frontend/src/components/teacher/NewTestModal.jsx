@@ -251,7 +251,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
               <Input label="Penalty per wrong answer" type="number" step="0.25" value={penalty} onChange={(e) => setPenalty(e.target.value)} />
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Start Time" type="datetime-local" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
               <Input label="End Time" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
             </div>
@@ -301,7 +301,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
                   )}
                 </div>
 
-                <div className="pl-9 space-y-2">
+                <div className="pl-2 sm:pl-9 space-y-2">
                   {q.options.map((opt, optIdx) => (
                     <div key={optIdx} className="flex items-center gap-2">
                       <button 

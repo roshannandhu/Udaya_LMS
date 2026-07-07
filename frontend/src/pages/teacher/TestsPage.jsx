@@ -108,13 +108,15 @@ export default function TestsPage() {
 
       <div className="px-3 md:px-8 py-8 max-w-6xl mx-auto">
         {/* Filter tabs */}
-        <div className="flex items-center gap-2 p-1.5 bg-black/5 rounded-[20px] mb-8 w-max flex-wrap">
+        <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 mb-8 pb-1 [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-2 p-1.5 bg-black/5 rounded-[20px] w-max">
           {filters.map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)}
-              className={`flex items-center gap-1.5 px-5 py-2 text-[13px] font-bold rounded-full transition-all ${filter === f.id ? 'bg-white shadow-sm text-black' : 'text-neutral-500 hover:text-black'}`}>
+              className={`flex items-center gap-1.5 px-5 py-2 text-[13px] font-bold rounded-full transition-all flex-shrink-0 ${filter === f.id ? 'bg-white shadow-sm text-black' : 'text-neutral-500 hover:text-black'}`}>
               {f.label} <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${filter === f.id ? 'bg-black/5 text-black' : 'bg-black/5 text-neutral-400'}`}>{f.count}</span>
             </button>
           ))}
+        </div>
         </div>
 
         {loading ? (
