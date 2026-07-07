@@ -11051,7 +11051,7 @@ Weekly Timetable
 Mentor Message
 
 STUDENT DATA:
-Name: {stats.get("student_name", "Student")}
+Name: {(stats.get("student_name", "Student") or "Student").split()[0]}
 Standard: {stats.get("standard_name", "N/A")}
 Report period: {period}
 Profile & standing: {stats.get("profile", stats.get("standing_data", "N/A"))}

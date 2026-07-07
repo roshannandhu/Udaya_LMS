@@ -270,7 +270,7 @@ export default function TodayPage() {
   return (
     <div className="min-h-screen bg-canvas dark:bg-neutral-950 pb-24 lg:pb-8 transition-colors duration-300">
       {/* Mobile header */}
-      <div className="lg:hidden sticky top-0 z-30 bg-canvas/80 dark:bg-neutral-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
+      <div className="lg:hidden sticky top-0 z-30 pt-[max(env(safe-area-inset-top),1rem)] bg-canvas/80 dark:bg-neutral-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
         <div className="px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-black text-sm shadow-sm">
@@ -382,8 +382,8 @@ export default function TodayPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-2 gap-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-32 md:h-40 rounded-[28px]" />)}</div>
               )
             ) : (
-              // 2-column grid on mobile, 2-column wide on desktop
-              <motion.div variants={staggerChildren} className="grid grid-cols-2 lg:grid-cols-2 gap-3 md:gap-5 items-start">
+              // 1-column grid on mobile, 2/3-column wide on desktop
+              <motion.div variants={staggerChildren} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-5 items-start">
                 {standards.map(std => {
                   const studentCount = students.filter(s => s.standard_id === std.id).length;
                   const subjectCount = subjects.filter(c => c.standard_id === std.id).length;

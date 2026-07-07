@@ -164,7 +164,7 @@ function ScheduleLiveClassModal({ open, onClose, subjects, onScheduled }) {
         {/* Step 2 */}
         <div className="bg-[#EAF3EB] p-5 sm:p-6 rounded-[32px] shadow-sm">
           <label className="text-[14px] font-bold text-green-950 mb-3 block">2. When is it happening?</label>
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <input
               type="date"
               value={date}
