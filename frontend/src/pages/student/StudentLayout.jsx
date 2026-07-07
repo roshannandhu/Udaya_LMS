@@ -5,6 +5,7 @@ import { useWhatsNew, useExamLock, useThreadStore } from '../../store';
 import BottomNav from '../../components/shared/BottomNav';
 import TopNav from '../../components/shared/TopNav';
 import PageTransition from '../../components/shared/PageTransition';
+import AIMentorFAB from '../../components/student/AIMentorFAB';
 
 function getActiveTab(path) {
   if (path === '/student' || path === '/student/') return 'home';
@@ -103,6 +104,14 @@ export default function StudentLayout() {
         </Suspense>
       </div>
       {!examLocked && !threadOpen && <BottomNav active={active} setActive={setActive} type="student" badges={badges} />}
+      {/* AI Mentor floating button — hidden during exams and on video/test pages */}
+      <AIMentorFAB
+        hidden={
+          examLocked ||
+          location.pathname.includes('/take') ||
+          location.pathname.includes('/video/')
+        }
+      />
     </div>
   );
 }

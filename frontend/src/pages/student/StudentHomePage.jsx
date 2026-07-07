@@ -6,7 +6,7 @@ import { CountUp, ProgressRing } from '../../components/shared/Animated';
 import {
   Play, Calendar, FileText, ArrowRight, FileQuestion,
   ChevronRight, Video, Target,
-  CheckCircle2, ListChecks, Zap, Sparkles,
+  CheckCircle2, ListChecks, Zap,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
 import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi } from '../../lib/api';
@@ -450,24 +450,6 @@ export default function StudentHomePage() {
               />
             </TiltCard>
           </motion.div>
-
-          {/* ── 2b. AI MENTOR (professional) → opens report with AI running ── */}
-          <motion.button
-            variants={fadeUp}
-            onClick={() => navigate('/student/report?ai=1')}
-            whileHover={reduceMotion ? undefined : { scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="flex items-center gap-4 bg-white rounded-[1.75rem] p-4 shadow-card text-left"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-[#6D28D9]/10 flex items-center justify-center flex-shrink-0 text-[#6D28D9]">
-              <Sparkles size={20} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-extrabold text-[15px] text-neutral-900 leading-tight">AI Mentor</p>
-              <p className="text-[12px] font-semibold text-neutral-500 leading-snug">Personalised insights from your performance.</p>
-            </div>
-            <ChevronRight size={20} className="text-neutral-400 flex-shrink-0" />
-          </motion.button>
 
           {/* ── 3. WHAT'S NEXT (flat, scannable agenda — no accordion chrome) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
