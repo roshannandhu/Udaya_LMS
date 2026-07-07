@@ -1,14 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Loader2, FileText, Sparkles, Check, RefreshCw,
+  Loader2, FileText, Image, Sparkles, Check, RefreshCw,
   Upload, X, AlertCircle,
 } from 'lucide-react';
+
+const IMG_EXTS  = ['.jpg', '.jpeg', '.png', '.webp'];
+const isImageFile = (f) => f && IMG_EXTS.some(e => f.name.toLowerCase().endsWith(e));
 import { Modal, Btn } from '../ui';
 import { testApi } from '../../lib/api';
 
 // ── Loop status displayed during AI generation ───────────────────────────────
 const LOOP_STEPS = [
-  'Reading PDF text...',
+  'Reading file...',
   'Generating questions...',
   'Evaluating quality & duplicates...',
   'Fixing weak questions...',
@@ -213,8 +216,8 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
             <div className="grid grid-cols-3 gap-2">
               {[
                 {
-                  n: 1, icon: '📄', title: 'Upload PDF',
-                  desc: 'Textbook chapter, notes, or past paper — any text-based PDF',
+                  n: 1, icon: '📄', title: 'Upload File',
+                  desc: 'PDF, photo of textbook, whiteboard shot, or scanned notes (JPG, PNG, WEBP)',
                 },
                 {
                   n: 2, icon: '🤖', title: 'AI Generates',
@@ -246,7 +249,9 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
               <div className="space-y-2">
                 {pdfFile ? (
                   <>
-                    <FileText size={28} className="mx-auto text-neutral-600" />
+                    {isImageFile(pdfFile)
+                      ? <Image size={28} className="mx-auto text-neutral-600" />
+                      : <FileText size={28} className="mx-auto text-neutral-600" />}
                     <p className="text-sm font-medium text-neutral-800">{pdfFile.name}</p>
                     <p className="text-xs text-neutral-400">
                       {(pdfFile.size / 1024).toFixed(0)} KB · Click to change
@@ -256,10 +261,10 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
                   <>
                     <Upload size={28} className="mx-auto text-neutral-300" />
                     <p className="text-sm font-medium text-neutral-600">
-                      Drop PDF here or click to browse
+                      Drop a PDF or image here, or click to browse
                     </p>
                     <p className="text-xs text-neutral-400">
-                      Max 10 MB · Text-based PDFs only (not scanned images)
+                      PDF · JPG · PNG · WEBP · Max 10 MB
                     </p>
                   </>
                 )}
@@ -267,7 +272,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
               <input
                 ref={fileRef}
                 type="file"
-                accept=".pdf,application/pdf"
+                accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={e => { setPdfFile(e.target.files[0] || null); setError(''); }}
               />

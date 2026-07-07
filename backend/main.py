@@ -6821,8 +6821,6 @@ async def generate_test_from_pdf(
 ):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
-    if not _pdfplumber_ok:
-        raise HTTPException(status_code=503, detail="PDF extraction not available on this server.")
     groq_key = os.getenv("GROQ_API_KEY", "")
     if not groq_key:
         raise HTTPException(status_code=503, detail="AI generation not configured. Add GROQ_API_KEY to server .env.")
@@ -6831,16 +6829,26 @@ async def generate_test_from_pdf(
 
     num_questions = max(3, min(30, num_questions))
 
-    pdf_bytes = await file.read()
-    if not pdf_bytes:
+    file_bytes = await file.read()
+    if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    if len(pdf_bytes) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="PDF too large. Maximum size is 10 MB.")
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
 
-    ct = (file.content_type or "").lower()
+    ct    = (file.content_type or "").lower()
     fname = (file.filename or "").lower()
-    if "pdf" not in ct and not fname.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    _IMG_CT   = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+    _IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+    is_pdf   = "pdf" in ct or fname.endswith(".pdf")
+    is_image = ct in _IMG_CT or any(fname.endswith(e) for e in _IMG_EXTS)
+
+    if not is_pdf and not is_image:
+        raise HTTPException(status_code=400, detail="Upload a PDF or an image file (JPG, PNG, WEBP).")
+    if is_pdf and not _pdfplumber_ok:
+        raise HTTPException(status_code=503, detail="PDF extraction not available on this server.")
+
+    # Alias so existing helpers that reference pdf_bytes still work
+    pdf_bytes = file_bytes
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -7048,30 +7056,85 @@ CONTENT:
 
         return selected[:target_n]
 
+    def _extract_from_image(client, img_bytes, mime):
+        """Use Groq Vision to read text from a photo/screenshot of educational material.
+        Handles typed text, handwritten notes, whiteboard shots, and scanned pages."""
+        safe_mime = mime if mime in {"image/jpeg", "image/png", "image/webp"} else "image/jpeg"
+        b64 = base64.b64encode(img_bytes).decode()
+        try:
+            r = client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{safe_mime};base64,{b64}"},
+                        },
+                        {
+                            "type": "text",
+                            "text": (
+                                "Extract ALL educational content from this image. "
+                                "This could be a textbook page, class notes, whiteboard, or past paper.\n\n"
+                                "Output the complete text exactly as it appears — preserve paragraphs, "
+                                "numbered lists, definitions, formulas (write them out in words), "
+                                "and examples. Do not summarise or skip anything. "
+                                "The text will be used to generate MCQ exam questions.\n\n"
+                                "Output only the extracted content, no commentary."
+                            ),
+                        },
+                    ],
+                }],
+                temperature=0.05,
+                max_tokens=4000,
+            )
+            return r.choices[0].message.content.strip()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Image text extraction failed: {str(e)[:120]}. "
+                       "Check that your GROQ_API_KEY has access to Llama 4 vision models.",
+            )
+
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_loop():
-        with _pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-            page_count = len(pdf.pages)
-            raw_text = "\n\n".join(
-                (p.extract_text() or "").strip() for p in pdf.pages
-            ).strip()
+        client = _GroqClient(api_key=groq_key)
 
-        if len(raw_text) < 100:
+        # ── Extract text ────────────────────────────────────────────────────
+        if is_pdf:
+            with _pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+                page_count = len(pdf.pages)
+                raw_text = "\n\n".join(
+                    (p.extract_text() or "").strip() for p in pdf.pages
+                ).strip()
+            source_type = "pdf"
+        else:
+            page_count = 1
+            raw_text   = _extract_from_image(client, pdf_bytes, ct)
+            source_type = "image"
+
+        if len(raw_text) < 80:
+            if source_type == "image":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not extract enough text from the image. "
+                           "Make sure the image is clear and contains printed or handwritten educational content.",
+                )
             raise HTTPException(
                 status_code=400,
-                detail="Could not extract readable text from this PDF. It may be a scanned image-only PDF.",
+                detail="Could not extract readable text from this PDF. It may be a scanned image-only PDF — "
+                       "try uploading the page as an image (JPG/PNG) instead.",
             )
 
         text = raw_text[:12000]
         hint = subject_hint.strip() or "general"
-        client = _GroqClient(api_key=groq_key)
 
         # Generate 2× — wide initial pool so the loop can be selective without running long
         initial_count = num_questions * 2
         current_batch = _generate(client, text, initial_count, hint)
         if not current_batch:
-            raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer PDF.")
+            raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer file.")
 
         # verified_pool: questions confirmed 5/5. Never re-evaluated — locked in.
         verified_pool: list = []
