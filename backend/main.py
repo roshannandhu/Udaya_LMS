@@ -11946,9 +11946,10 @@ def _store_insights(cache_key: str, text: str):
     except Exception as e:
         print(f"[!] insights cache save failed (ignored): {e}")
 
-# At most this many upstream LLM streams at once — a class-wide burst queues
-# here instead of opening hundreds of connections on one API key.
-_AI_SEMAPHORE = asyncio.Semaphore(3)
+# Serialize upstream LLM streams — one at a time prevents concurrent token
+# bursts that blow through the free-tier TPM (tokens/minute) limit and cause
+# 429s. Students queue here instead of all hitting the API simultaneously.
+_AI_SEMAPHORE = asyncio.Semaphore(1)
 # Single-flight: one generation per student:period at a time.
 _insights_inflight: set = set()
 # Cooldown: regenerate-spamming within this window replays the cached text.
@@ -12133,37 +12134,41 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
                     f"https://generativelanguage.googleapis.com/v1beta/models/"
                     f"{model}:streamGenerateContent?alt=sse&key={api_key}"
                 )
-                try:
-                    async with client.stream("POST", url, json=payload) as resp:
-                        # 404 on this model → retry with the next fallback model name
-                        if resp.status_code == 404 and idx + 1 < len(models):
-                            continue
-                        if resp.status_code == 429:
-                            yield {"error": AI_BUSY_MSG}
+                for attempt in range(3):
+                    try:
+                        async with client.stream("POST", url, json=payload) as resp:
+                            # 404 on this model → retry with next fallback model name
+                            if resp.status_code == 404 and idx + 1 < len(models):
+                                break  # break retry loop, outer loop advances model
+                            if resp.status_code == 429:
+                                if attempt < 2:
+                                    await asyncio.sleep(3 * (attempt + 1))
+                                    continue  # retry
+                                yield {"error": AI_BUSY_MSG}
+                                return
+                            if resp.status_code >= 400:
+                                body = (await resp.aread()).decode("utf-8", "ignore")
+                                yield {"error": f"Gemini API error: {body[:400]}"}
+                                return
+                            async for line in resp.aiter_lines():
+                                if not line or not line.startswith("data:"):
+                                    continue
+                                chunk = line[5:].strip()
+                                if not chunk or chunk == "[DONE]":
+                                    continue
+                                try:
+                                    obj = json.loads(chunk)
+                                    parts = obj["candidates"][0]["content"]["parts"]
+                                    delta = "".join(p.get("text", "") for p in parts)
+                                    if delta:
+                                        yield {"text": delta}
+                                except (KeyError, IndexError, json.JSONDecodeError):
+                                    continue
+                            yield {"done": True}
                             return
-                        if resp.status_code >= 400:
-                            body = (await resp.aread()).decode("utf-8", "ignore")
-                            yield {"error": f"Gemini API error: {body[:400]}"}
-                            return
-                        async for line in resp.aiter_lines():
-                            if not line or not line.startswith("data:"):
-                                continue
-                            chunk = line[5:].strip()
-                            if not chunk or chunk == "[DONE]":
-                                continue
-                            try:
-                                obj = json.loads(chunk)
-                                parts = obj["candidates"][0]["content"]["parts"]
-                                delta = "".join(p.get("text", "") for p in parts)
-                                if delta:
-                                    yield {"text": delta}
-                            except (KeyError, IndexError, json.JSONDecodeError):
-                                continue
-                        yield {"done": True}
+                    except httpx.HTTPError as e:
+                        yield {"error": f"Connection error: {e}"}
                         return
-                except httpx.HTTPError as e:
-                    yield {"error": f"Connection error: {e}"}
-                    return
 
     async def openai_compatible_stream():
         url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
@@ -12175,31 +12180,37 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
             "temperature": OPENAI_TEMPERATURE,
         }
         async with httpx.AsyncClient(timeout=60) as client:
-            try:
-                async with client.stream("POST", url, headers=headers, json=payload) as resp:
-                    if resp.status_code == 429:
-                        yield {"error": AI_BUSY_MSG}
+            for attempt in range(3):
+                try:
+                    async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                        if resp.status_code == 429:
+                            if attempt < 2:
+                                await asyncio.sleep(3 * (attempt + 1))
+                                continue  # retry
+                            yield {"error": AI_BUSY_MSG}
+                            return
+                        if resp.status_code >= 400:
+                            body = (await resp.aread()).decode("utf-8", "ignore")
+                            yield {"error": f"AI API error: {body[:400]}"}
+                            return
+                        async for line in resp.aiter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            chunk = line[5:].strip()
+                            if not chunk or chunk == "[DONE]":
+                                continue
+                            try:
+                                obj = json.loads(chunk)
+                                delta = obj["choices"][0]["delta"].get("content")
+                                if delta:
+                                    yield {"text": delta}
+                            except (KeyError, IndexError, json.JSONDecodeError):
+                                continue
+                        yield {"done": True}
                         return
-                    if resp.status_code >= 400:
-                        body = (await resp.aread()).decode("utf-8", "ignore")
-                        yield {"error": f"AI API error: {body[:400]}"}
-                        return
-                    async for line in resp.aiter_lines():
-                        if not line or not line.startswith("data:"):
-                            continue
-                        chunk = line[5:].strip()
-                        if not chunk or chunk == "[DONE]":
-                            continue
-                        try:
-                            obj = json.loads(chunk)
-                            delta = obj["choices"][0]["delta"].get("content")
-                            if delta:
-                                yield {"text": delta}
-                        except (KeyError, IndexError, json.JSONDecodeError):
-                            continue
-                    yield {"done": True}
-            except httpx.HTTPError as e:
-                yield {"error": f"Connection error: {e}"}
+                except httpx.HTTPError as e:
+                    yield {"error": f"Connection error: {e}"}
+                    return
 
     async def event_generator():
         _insights_inflight.add(cache_key)
