@@ -1,3 +1,4 @@
+/* v2 */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
