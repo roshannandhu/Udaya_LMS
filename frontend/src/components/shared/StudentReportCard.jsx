@@ -912,7 +912,7 @@ function AIMentorTrigger({ onClick, hasData, loading }) {
 }
 
 // ── AI Mentor popup (bottom sheet on phone, centered modal on desktop) ─────────
-function AIMentorPopup({ open, onClose, onRegenerate, suggestions, loading, isStreaming, error, generatedAt }) {
+function AIMentorPopup({ open, onClose, onRegenerate, suggestions, loading, isStreaming, error, generatedAt, tokens }) {
   const reduce = useReducedMotion();
   const dark   = useTheme(s => s.dark);
   const [copiedAI, setCopiedAI] = useState(false);
@@ -1059,10 +1059,19 @@ function AIMentorPopup({ open, onClose, onRegenerate, suggestions, loading, isSt
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.2 }}
                       >
-                        <button onClick={onRegenerate}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-neutral-900 text-white text-[11px] font-extrabold shadow-sm hover:bg-neutral-800 transition-colors">
-                          <RefreshCw size={12} /> Regenerate
-                        </button>
+                        {tokens && !tokens.unlimited && tokens.remaining === 0 ? (
+                          <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-neutral-100 text-neutral-400 text-[11px] font-extrabold cursor-not-allowed select-none">
+                            <RefreshCw size={12} /> Limit reached · resets tomorrow
+                          </span>
+                        ) : (
+                          <button onClick={onRegenerate}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-neutral-900 text-white text-[11px] font-extrabold shadow-sm hover:bg-neutral-800 transition-colors">
+                            <RefreshCw size={12} /> Regenerate
+                            {tokens && !tokens.unlimited && (
+                              <span className="ml-0.5 opacity-60">{tokens.remaining}/{tokens.limit}</span>
+                            )}
+                          </button>
+                        )}
                         <button onClick={copyAI}
                           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white text-neutral-700 text-[11px] font-extrabold shadow-sm border border-[#EBEAE7] hover:bg-neutral-50 transition-colors">
                           {copiedAI ? <CheckCircle2 size={12} className="text-emerald-600" /> : <Copy size={12} />}
@@ -1127,6 +1136,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const [isStreaming, setIsStreaming] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState('');
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [aiTokens, setAiTokens] = useState(null); // { remaining, limit, unlimited }
   const [heatmapSubject, setHeatmapSubject] = useState('all');
   const [copied, setCopied] = useState(false);
 
@@ -1264,6 +1274,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
   // ── AI mentor: backend owns ALL the analysis data — the browser only says
   // which student and which period. Stream a fresh analysis on demand.
+  const fetchTokens = useCallback(async () => {
+    try { setAiTokens(await aiApi.getTokens()); } catch { /* non-critical */ }
+  }, []);
+
   const runAnalysis = useCallback(async () => {
     setSuggestionsLoading(true); setSuggestionsError(''); setSuggestions(''); setGeneratedAt(null);
     try {
@@ -1271,8 +1285,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
       await aiApi.generateInsightsStream(student.id, { period: period || 'overall' }, (chunk) => { acc += chunk; setSuggestionsLoading(false); setIsStreaming(true); setSuggestions(acc); });
       setSuggestions(acc);
       setGeneratedAt(new Date().toISOString());
+      fetchTokens(); // refresh count after a successful generation
     } catch (e) { setSuggestionsError(e.message || 'Failed to generate insights.'); } finally { setSuggestionsLoading(false); setIsStreaming(false); }
-  }, [student?.id, period]);
+  }, [student?.id, period, fetchTokens]);
 
   // Cache-first open: the backend keeps the last analysis per student+period,
   // so most opens render instantly without an LLM call. Regenerate streams fresh.
@@ -1292,8 +1307,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const handleAnalyzePerformance = useCallback(() => {
     if (showSuggestions) { setShowSuggestions(false); return; }
     setShowSuggestions(true);
+    fetchTokens();
     if (!suggestions) loadInsights();
-  }, [showSuggestions, suggestions, loadInsights]);
+  }, [showSuggestions, suggestions, loadInsights, fetchTokens]);
 
   // When opened via the home "AI Mentor" shortcut (?ai=1), auto-open the popup.
   // Ref-guarded so it fires a single time even as data/loadInsights identities change.
@@ -1522,6 +1538,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               isStreaming={isStreaming}
               error={suggestionsError}
               generatedAt={generatedAt}
+              tokens={aiTokens}
             />
 
             {/* ── 3. MAIN GRID ── */}

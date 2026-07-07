@@ -576,6 +576,9 @@ export const aiApi = {
   getCachedInsights: (studentId, period = 'overall') =>
     apiClient(`/insights/cached/${studentId}?period=${period}`),
 
+  // Remaining AI calls for today. { remaining, limit, unlimited }
+  getTokens: () => apiClient('/insights/tokens'),
+
   // Streams coaching insights token-by-token. Calls onChunk(textDelta) as text
   // arrives; resolves when the stream closes. Throws on HTTP/stream errors.
   generateInsightsStream: async (studentId, stats, onChunk) => {

@@ -11955,7 +11955,39 @@ _insights_inflight: set = set()
 _insights_last_gen: dict = {}
 INSIGHTS_COOLDOWN_SECS = 30
 
+# ── Student daily token limits ────────────────────────────────────────────────
+# Teachers are unlimited. Students get STUDENT_DAILY_LIMIT AI calls per day.
+# Stored in memory: resets on server restart (acceptable — worst case a student
+# gets a free extra call that day). Structure: {student_id: {"2026-07-07": n}}
+STUDENT_DAILY_LIMIT = 3
+_student_daily_tokens: dict = {}
+
+def _tokens_used_today(student_id: str) -> int:
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    return _student_daily_tokens.get(student_id, {}).get(today, 0)
+
+def _consume_student_token(student_id: str):
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    bucket = _student_daily_tokens.setdefault(student_id, {})
+    bucket[today] = bucket.get(today, 0) + 1
+    # Drop old dates to prevent unbounded growth
+    for old in [d for d in bucket if d != today]:
+        del bucket[old]
+
 AI_BUSY_MSG = "The AI is busy right now — please try again in a minute."
+
+
+@app.get("/api/insights/tokens")
+async def get_insight_tokens(user: dict = Depends(get_current_user)):
+    """Return remaining AI insight calls for today. Teachers always get unlimited."""
+    if user.get("role") != "student":
+        return {"remaining": 999, "limit": 999, "unlimited": True}
+    sid = user.get("student_id") or user.get("id", "")
+    used = _tokens_used_today(sid)
+    remaining = max(0, STUDENT_DAILY_LIMIT - used)
+    return {"remaining": remaining, "limit": STUDENT_DAILY_LIMIT, "unlimited": False}
 
 
 @app.get("/api/insights/cached/{student_id}")
@@ -11974,6 +12006,11 @@ async def get_cached_insights(student_id: str, period: str = "overall", user: di
 @app.post("/api/insights/generate")
 async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_current_user)):
     _assert_insights_access(user, req.student_id)
+    # Token gate — students only; teachers are unlimited.
+    if user.get("role") == "student":
+        sid = user.get("student_id") or user.get("id", "")
+        if _tokens_used_today(sid) >= STUDENT_DAILY_LIMIT:
+            raise HTTPException(status_code=429, detail=f"Daily limit of {STUDENT_DAILY_LIMIT} AI insight calls reached. Resets tomorrow.")
     # Provider + key + model come ONLY from backend env vars (see _resolve_ai_config).
     # This keeps the key off the frontend and makes a future provider swap (Gemini →
     # Groq) a pure config change.
@@ -12023,6 +12060,8 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
             text = text.strip()
             if text:
                 _store_insights(cache_key, text)
+                if user.get("role") == "student":
+                    _consume_student_token(user.get("student_id") or user.get("id", ""))
             return {"insights": text}
     except Exception as e:
         print(f"[!] AI Generation Error: {e}")
@@ -12042,6 +12081,11 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
     semaphore caps concurrent upstream streams.
     """
     _assert_insights_access(user, req.student_id)
+    # Token gate — students only; teachers are unlimited.
+    if user.get("role") == "student":
+        sid = user.get("student_id") or user.get("id", "")
+        if _tokens_used_today(sid) >= STUDENT_DAILY_LIMIT:
+            raise HTTPException(status_code=429, detail=f"Daily limit of {STUDENT_DAILY_LIMIT} AI insight calls reached. Resets tomorrow.")
     # Provider + key + model come ONLY from backend env vars (see _resolve_ai_config).
     cfg = _resolve_ai_config()
     api_key = cfg["api_key"]
@@ -12177,6 +12221,8 @@ async def generate_ai_insights_stream(req: InsightsRequest, user: dict = Depends
             _insights_inflight.discard(cache_key)
         if finished and acc.strip():
             _store_insights(cache_key, acc.strip())
+            if user.get("role") == "student":
+                _consume_student_token(user.get("student_id") or user.get("id", ""))
 
     return sse_response(event_generator())
 
