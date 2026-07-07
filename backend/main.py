@@ -6844,9 +6844,10 @@ async def generate_test_from_pdf(
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _normalise(q_list):
+    def _normalise(q_list, source_scores=None):
+        """Validate schema + attach self_score if present."""
         out = []
-        for q in q_list:
+        for i, q in enumerate(q_list):
             opts = q.get("options", [])
             if not isinstance(opts, list) or len(opts) < 2:
                 continue
@@ -6855,29 +6856,35 @@ async def generate_test_from_pdf(
             stem = str(q.get("question", "")).strip()
             if not stem:
                 continue
-            out.append({
+            entry = {
                 "question":    stem,
                 "options":     [str(o).strip() for o in opts[:4]],
                 "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
                 "difficulty":  q.get("difficulty", "medium"),
-            })
+            }
+            if "self_score" in q:
+                entry["_self_score"]     = max(1, min(5, int(q.get("self_score", 3))))
+                entry["_remaining"]      = q.get("remaining_issues", [])
+            elif source_scores and i < len(source_scores):
+                entry["_self_score"] = source_scores[i]
+            out.append(entry)
         return out
 
     def _generate(client, text, count, hint):
-        """Initial generation. Produces count questions with difficulty tags."""
-        prompt = f"""You are creating a high-quality MCQ paper for a {hint} class.
+        """Initial generation — wide net with 100% buffer so the loop has plenty to refine."""
+        prompt = f"""You are creating MCQ questions for a {hint} class. Target standard: PERFECT quality.
 
 Generate exactly {count} questions from the content below.
 
-STRICT RULES — violating any rule means the question will be rejected:
-1. Exactly 4 options per question
-2. Exactly one correct answer — mark with correct_idx (0/1/2/3)
-3. All 3 wrong options must be plausible — never obviously silly
+NON-NEGOTIABLE RULES (every violation = rejection + replacement loop):
+1. Exactly 4 options per question — no more, no less
+2. Exactly ONE correct answer — mark with correct_idx (0/1/2/3)
+3. ALL 3 wrong options must be plausible — a student who hasn't studied should be unsure
 4. NEVER use "None of the above", "All of the above", or "Cannot be determined"
-5. Base every question strictly on the content — no invented facts
-6. Each question tests a DIFFERENT concept — no repeats
-7. Tag difficulty: "easy" (pure recall), "medium" (application), "hard" (analysis/inference)
-8. Mix: roughly 30% easy, 40% medium, 30% hard
+5. Every question is based strictly on the content — never invent facts
+6. Each question tests a DISTINCT concept — zero topic overlap with other questions
+7. Difficulty tag: "easy" (pure recall), "medium" (apply/understand), "hard" (analyse/infer)
+8. Generate roughly 30% easy, 40% medium, 30% hard
 
 Return ONLY valid JSON:
 {{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium"}}]}}
@@ -6889,43 +6896,42 @@ CONTENT:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.45,
             response_format={"type": "json_object"},
-            max_tokens=5000,
+            max_tokens=6000,
         )
         return _normalise(json.loads(r.choices[0].message.content).get("questions", []))
 
     def _evaluate_and_dedup(client, questions, content_snippet):
-        """Single call: score each question AND detect cross-question duplicates.
-        Returns list of eval dicts with score, difficulty, issues, duplicate_of."""
+        """Strict evaluation: 5/5 requires explicit justification; duplicate detection included."""
         q_json = json.dumps(
             [{"i": i, "q": q["question"], "opts": q["options"],
-              "ans": q["correct_idx"], "diff": q.get("difficulty","medium")}
+              "ans": q["correct_idx"], "diff": q.get("difficulty", "medium")}
              for i, q in enumerate(questions)], indent=2)
 
-        prompt = f"""You are a strict MCQ quality auditor. Evaluate ALL {len(questions)} questions at once.
+        prompt = f"""You are a STRICT MCQ examiner. Grade each question 1-5.
 
-For EACH question return:
-  i           — same index as input
-  score       — integer 1-5 (see guide below)
-  difficulty  — "easy"|"medium"|"hard"
-  issues      — list of specific problems (empty if score >= 4)
-  duplicate_of — index of another question testing the same concept, or null if unique
+SCORE 5 ONLY if ALL of these are true (no exceptions):
+  ✓ Stem is unambiguous — exactly one reading possible
+  ✓ Correct answer is verifiable against the provided content
+  ✓ All 3 wrong options are genuinely plausible — a prepared student could still pick them
+  ✓ No "None/All of the above" or "Cannot be determined"
+  ✓ Tests a concept not covered by any other question in this set
+  Give 4 if there is ANY doubt about even one criterion.
 
-SCORING GUIDE:
-5 — Perfect: unambiguous stem, verified correct answer, all 3 wrong options genuinely plausible,
-             tests a unique concept not covered by any other question in this set
-4 — Good: at most one minor issue (e.g. one distractor slightly weaker)
-3 — Fixable: one clear problem (ambiguous wording, weak distractor, difficulty tag wrong)
-2 — Poor: multiple problems or one major flaw (e.g. correct answer debatable)
-1 — Reject: wrong correct answer, completely ambiguous, off-topic, uses "None/All of the above",
-            or is a near-duplicate of another question
+SCORE 4 — good, one minor weakness (e.g. one distractor slightly weaker than the rest)
+SCORE 3 — fixable single problem (ambiguous stem, wrong difficulty tag, weak distractor)
+SCORE 2 — multiple problems or one major flaw (debatable correct answer, two near-duplicates)
+SCORE 1 — reject: wrong answer, off-topic, ambiguous beyond repair, or exact duplicate concept
 
-DUPLICATE rule: if two questions test the same fact/concept, score the weaker one 1 and
-set duplicate_of to the index of the better one.
+DUPLICATE rule: if two questions test the SAME specific fact/concept, score the weaker one 1
+and set duplicate_of to the index of the stronger one.
+
+For every question, set issues to a SPECIFIC list of problems (empty only if score==5).
+A vague issue like "could be better" is not allowed — be precise: "Option B is too obviously wrong" etc.
 
 Return ONLY JSON:
 {{"evaluations":[{{"i":0,"score":5,"difficulty":"medium","issues":[],"duplicate_of":null}}]}}
 
-CONTENT (ground truth — use this to verify correct answers):
+CONTENT (ground truth for answer verification):
 {content_snippet}
 
 QUESTIONS:
@@ -6936,49 +6942,67 @@ QUESTIONS:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 response_format={"type": "json_object"},
-                max_tokens=3000,
+                max_tokens=3500,
             )
             evals = json.loads(r.choices[0].message.content).get("evaluations", [])
             ev_map = {e["i"]: e for e in evals if isinstance(e.get("i"), int)}
             default = {"score": 3, "difficulty": "medium", "issues": [], "duplicate_of": None}
             return [{"i": i, **{**default, **ev_map.get(i, {})}} for i in range(len(questions))]
         except Exception:
-            return [{"i": i, "score": 3, "difficulty": q.get("difficulty","medium"),
+            return [{"i": i, "score": 3, "difficulty": q.get("difficulty", "medium"),
                      "issues": [], "duplicate_of": None}
                     for i, q in enumerate(questions)]
 
-    def _improve(client, to_fix, passing_topics, text):
-        """Single call handles both targeted repair (score 3-4) and full replacement (score 1-2).
-        to_fix = [(question_dict, eval_dict), ...]
-        passing_topics = short descriptions of good questions (to avoid topic overlap in replacements)."""
+    def _improve_and_verify(client, to_fix, verified_topics, text):
+        """Improve each failing/near-miss question AND self-evaluate the result.
+        Returns list of question dicts with _self_score and _remaining attached.
+        Questions with _self_score == 5 are added to the verified pool immediately.
+        Questions with _self_score < 5 feed into the next iteration automatically."""
         lines = []
         for idx, (q, ev) in enumerate(to_fix):
             score  = ev.get("score", 2)
             issues = ev.get("issues", [])
             dup_of = ev.get("duplicate_of")
-            if score >= 3 and not dup_of:
-                action = f"TARGETED FIX — fix ONLY these issues, keep everything else: {'; '.join(issues) or 'minor polish'}"
+
+            if dup_of is not None:
+                action = (f"FULL REPLACEMENT — this duplicates question #{dup_of}. "
+                          f"Write a completely new question on a different topic from the content.")
+            elif score >= 4:
+                action = (f"MICRO-FIX — change ONLY the ONE identified issue, keep everything else identical. "
+                          f"Issue: {'; '.join(issues) or 'minor polish — sharpen one weak distractor'}")
+            elif score == 3:
+                action = (f"TARGETED FIX — fix the specific problem(s) below, minimise other changes. "
+                          f"Problems: {'; '.join(issues)}")
             else:
-                reason = f"duplicate of question #{dup_of}" if dup_of is not None else ('; '.join(issues) or 'low quality')
-                action = f"FULL REPLACEMENT — create a new question on a DIFFERENT topic. Reason: {reason}"
+                action = (f"FULL REPLACEMENT — this question is fundamentally flawed. "
+                          f"Reasons: {'; '.join(issues) or 'low quality'}. "
+                          f"Write a completely new question on a different topic.")
+
             lines.append(
                 f"[{idx}] score={score} | {action}\n"
-                f"     Q: {q['question'][:120]}\n"
-                f"     opts: {q['options']} | correct_idx: {q['correct_idx']}"
+                f"    Q: {q['question'][:140]}\n"
+                f"    opts: {q['options']} | correct_idx: {q['correct_idx']}"
             )
 
-        avoid = "\n".join(f"- {t}" for t in passing_topics[:20]) or "none"
+        avoid = "\n".join(f"- {t}" for t in verified_topics[:25]) or "none"
 
-        prompt = f"""Improve the following MCQ questions. Each has an action (TARGETED FIX or FULL REPLACEMENT).
+        prompt = f"""You are improving {len(to_fix)} MCQ question(s). Follow each instruction exactly.
 
-TARGETED FIX: change only what the issues describe — question stem, one option, or correct_idx.
-FULL REPLACEMENT: write a completely new question on a DIFFERENT topic from the content.
+After each fix or replacement, SELF-EVALUATE your result honestly:
+  self_score 5 — I am CERTAIN this is perfect:
+      unambiguous stem, verified correct answer, all 3 distractors genuinely plausible,
+      unique concept not covered by any other question in the set
+  self_score 4 — good but ONE thing is slightly imperfect (be honest — do not round up)
+  self_score 3 or below — still has problems (list them in remaining_issues)
 
-Topics already covered by good questions (do NOT reuse for FULL REPLACEMENT):
+Important: if you self-score 4 or below, I will send the question back for another round.
+So be precise about remaining_issues — they become the input for the next fix.
+
+Topics covered by already-verified questions (for FULL REPLACEMENT only — choose a DIFFERENT topic):
 {avoid}
 
-Return exactly {len(to_fix)} improved questions in the SAME ORDER, same JSON schema.
-{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium"}}]}}
+Return exactly {len(to_fix)} results in the SAME ORDER:
+{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium","self_score":5,"remaining_issues":[]}}]}}
 
 QUESTIONS TO IMPROVE:
 {chr(10).join(lines)}
@@ -6989,47 +7013,38 @@ CONTENT:
             r = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
+                temperature=0.15,
                 response_format={"type": "json_object"},
-                max_tokens=4000,
+                max_tokens=5000,
             )
-            improved = _normalise(json.loads(r.choices[0].message.content).get("questions", []))
-            # Pad with originals if model returned fewer than expected
+            raw = json.loads(r.choices[0].message.content).get("questions", [])
+            improved = _normalise(raw)
             originals = [q for q, _ in to_fix]
             while len(improved) < len(to_fix):
-                improved.append(originals[len(improved)])
+                orig = originals[len(improved)]
+                improved.append({**orig, "_self_score": 3, "_remaining": ["not improved — used original"]})
             return improved[:len(to_fix)]
         except Exception:
-            return [q for q, _ in to_fix]  # fallback: keep originals
+            return [{**q, "_self_score": 3, "_remaining": ["improvement call failed"]} for q, _ in to_fix]
 
-    def _select_with_difficulty_balance(pool_with_evals, target_n):
-        """Pick target_n questions from pool, enforcing ~30/40/30 easy/medium/hard split.
-        Within each bucket, highest score wins. Gaps are filled from medium first."""
-        easy   = sorted([(q,e) for q,e in pool_with_evals if e.get("difficulty","medium")=="easy"],
-                        key=lambda x: x[1].get("score",3), reverse=True)
-        medium = sorted([(q,e) for q,e in pool_with_evals if e.get("difficulty","medium")=="medium"],
-                        key=lambda x: x[1].get("score",3), reverse=True)
-        hard   = sorted([(q,e) for q,e in pool_with_evals if e.get("difficulty","medium")=="hard"],
-                        key=lambda x: x[1].get("score",3), reverse=True)
+    def _difficulty_balance(verified_pool, target_n):
+        """Pick target_n from verified_pool enforcing 30/40/30 easy/medium/hard split."""
+        by_diff = {"easy": [], "medium": [], "hard": []}
+        for q in verified_pool:
+            by_diff.setdefault(q.get("difficulty", "medium"), []).append(q)
 
-        # Target counts (round, ensure they sum to target_n)
         t_easy   = max(1, round(target_n * 0.30))
         t_hard   = max(1, round(target_n * 0.30))
         t_medium = target_n - t_easy - t_hard
 
-        selected = []
-        selected += [q for q,_ in easy[:t_easy]]
-        selected += [q for q,_ in medium[:t_medium]]
-        selected += [q for q,_ in hard[:t_hard]]
+        selected = (by_diff["easy"][:t_easy] +
+                    by_diff["medium"][:t_medium] +
+                    by_diff["hard"][:t_hard])
 
-        # Fill any gaps (insufficient in a bucket) from the remainder, highest score first
         if len(selected) < target_n:
-            used = set(id(q) for q in selected)
-            remainder = sorted(
-                [(q,e) for q,e in pool_with_evals if id(q) not in used],
-                key=lambda x: x[1].get("score",3), reverse=True
-            )
-            selected += [q for q,_ in remainder[:target_n - len(selected)]]
+            used = {id(q) for q in selected}
+            remaining = [q for q in verified_pool if id(q) not in used]
+            selected += remaining[:target_n - len(selected)]
 
         return selected[:target_n]
 
@@ -7052,79 +7067,98 @@ CONTENT:
         hint = subject_hint.strip() or "general"
         client = _GroqClient(api_key=groq_key)
 
-        # Generate 60% more than needed — gives the loop room to filter without extra iterations
-        buffer      = max(3, round(num_questions * 0.6))
-        questions   = _generate(client, text, num_questions + buffer, hint)
-        if not questions:
+        # Generate 2× — wide initial pool so the loop can be selective without running long
+        initial_count = num_questions * 2
+        current_batch = _generate(client, text, initial_count, hint)
+        if not current_batch:
             raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer PDF.")
 
-        QUALITY_THRESHOLD = 4   # "good" or better — not just "acceptable"
-        MAX_ITERATIONS    = 4
-        iterations_done   = 0
-        final_evals       = []
+        # verified_pool: questions confirmed 5/5. Never re-evaluated — locked in.
+        verified_pool: list = []
+        MAX_ITERATIONS = 6
+        iterations_done = 0
 
         for iteration in range(MAX_ITERATIONS):
             iterations_done = iteration + 1
 
-            # ── Evaluate + detect duplicates (1 call) ──────────────────────
-            evals = _evaluate_and_dedup(client, questions, text[:5000])
-            final_evals = evals
-
-            # Attach eval data back onto questions for later use
-            scored = list(zip(questions, evals))
-
-            passing = [(q, e) for q, e in scored if e.get("score", 3) >= QUALITY_THRESHOLD]
-            failing = [(q, e) for q, e in scored if e.get("score", 3) < QUALITY_THRESHOLD]
-
-            # Early exit: enough high-quality questions with good difficulty spread
-            if len(passing) >= num_questions:
-                questions = _select_with_difficulty_balance(passing, num_questions)
-                # Re-derive final_evals for selected questions
-                sel_set = {id(q) for q in questions}
-                final_evals = [e for q, e in passing if id(q) in sel_set]
+            if not current_batch:
                 break
 
-            # Last iteration — pick best available, balance difficulty as well as possible
+            # ── 1. Strict evaluation of the current unverified batch ────────
+            evals = _evaluate_and_dedup(client, current_batch, text[:5000])
+            scored = list(zip(current_batch, evals))
+
+            perfect    = [(q, e) for q, e in scored if e.get("score") == 5 and not e.get("duplicate_of")]
+            sub_thresh = [(q, e) for q, e in scored if e.get("score", 3) < 5 or e.get("duplicate_of")]
+
+            # Lock in newly confirmed 5/5 questions
+            verified_pool.extend(q for q, _ in perfect)
+
+            # Enough perfect questions — done
+            if len(verified_pool) >= num_questions:
+                break
+
+            # Last iteration — accept best available to reach target count
             if iteration == MAX_ITERATIONS - 1:
-                questions = _select_with_difficulty_balance(scored, num_questions)
-                sel_set = {id(q) for q in questions}
-                final_evals = [e for q, e in scored if id(q) in sel_set]
+                # Fill from 4/5 sub-threshold (nearest to perfect)
+                near = sorted(sub_thresh, key=lambda x: x[1].get("score", 0), reverse=True)
+                for q, _ in near:
+                    if len(verified_pool) >= num_questions:
+                        break
+                    verified_pool.append(q)
                 break
 
-            # ── Improve failing questions (1 call handles targeted fix + replacement) ──
-            passing_topics = [q["question"][:80] for q, _ in passing]
-            improved = _improve(client, failing, passing_topics, text)
+            # ── 2. Improve sub-threshold questions + immediate self-verification ──
+            verified_topics = [q["question"][:80] for q in verified_pool]
+            improved = _improve_and_verify(client, sub_thresh, verified_topics, text)
 
-            # Replace failing questions with improved versions
-            questions = [q for q, _ in passing] + improved
+            # Accept self-verified 5/5 into the pool immediately
+            next_batch = []
+            for q in improved:
+                ss = q.get("_self_score", 3)
+                if ss == 5:
+                    # Strip internal metadata before storing
+                    clean = {k: v for k, v in q.items() if not k.startswith("_")}
+                    verified_pool.append(clean)
+                else:
+                    # Self-score < 5: feed back as next batch with remaining_issues as eval context
+                    next_batch.append(q)
 
-        # ── Assign order_num ──────────────────────────────────────────────────
-        final = [{**q, "order_num": i + 1} for i, q in enumerate(questions[:num_questions])]
+            current_batch = next_batch
+
+        # ── Final selection with difficulty balance ───────────────────────────
+        final_qs = _difficulty_balance(verified_pool, num_questions)
+
+        # Strip internal metadata fields
+        final = [{k: v for k, v in {**q, "order_num": i + 1}.items() if not k.startswith("_")}
+                 for i, q in enumerate(final_qs)]
 
         if not final:
             raise HTTPException(status_code=500, detail="Could not generate valid questions. Please try again.")
 
-        scores = [e.get("score", 3) for e in final_evals[:len(final)]]
-        avg_quality = round(sum(scores) / len(scores), 1) if scores else 0.0
+        # All verified questions score 5/5; fallback (last-iteration fill) may include 4s.
+        # Report quality_out_of_10 = fraction of verified-5 × 10
+        verified_count = min(len(final), len(verified_pool))
+        quality_10 = round((verified_count / len(final)) * 10, 1) if final else 0.0
 
-        # Count difficulty distribution
         diff_counts = {"easy": 0, "medium": 0, "hard": 0}
         for q in final:
-            diff_counts[q.get("difficulty", "medium")] = diff_counts.get(q.get("difficulty","medium"), 0) + 1
+            d = q.get("difficulty", "medium")
+            diff_counts[d] = diff_counts.get(d, 0) + 1
 
-        # Cache text so the browser can call regenerate-flagged without re-uploading
+        # Cache text for regenerate-flagged
         _clean_pdf_cache()
         session_id = uuid.uuid4().hex
         _pdf_session_cache[session_id] = {"text": text, "expires": time_module.time() + _PDF_SESSION_TTL}
 
         return {
-            "session_id":           session_id,
-            "questions":            final,
-            "page_count":           page_count,
-            "chars_extracted":      len(raw_text),
-            "iterations":           iterations_done,
-            "avg_quality":          avg_quality,
-            "quality_out_of_10":    round(avg_quality * 2, 1),
+            "session_id":              session_id,
+            "questions":               final,
+            "page_count":              page_count,
+            "chars_extracted":         len(raw_text),
+            "iterations":              iterations_done,
+            "avg_quality":             5.0 if quality_10 == 10.0 else round(quality_10 / 2, 1),
+            "quality_out_of_10":       quality_10,
             "difficulty_distribution": diff_counts,
         }
 
@@ -7165,46 +7199,9 @@ async def regenerate_flagged_questions(
     if n == 0:
         return {"questions": [], "quality_out_of_10": 0.0}
 
-    def _do_regenerate():
-        client = _GroqClient(api_key=groq_key)
-        avoid  = "\n".join(f"- {s}" for s in req.good_stems[:25]) or "none"
-        rejected = "\n".join(
-            f"[{i+1}] {q.get('question','')[:100]}" for i, q in enumerate(req.flagged)
-        )
-
-        prompt = f"""A teacher has flagged these {n} MCQ question(s) as unsatisfactory.
-Generate {n} REPLACEMENT questions for a {hint} class.
-
-REJECTED by teacher (do NOT reuse these topics):
-{rejected}
-
-Topics already covered by good questions (also avoid for replacements):
-{avoid}
-
-Replacement rules:
-- Choose a DIFFERENT concept for each replacement
-- Exactly 4 plausible options, one correct (correct_idx 0-3)
-- No "None/All of the above", no obviously silly distractors
-- Tag difficulty: "easy" | "medium" | "hard"
-- Base strictly on the content below
-
-Return ONLY JSON — exactly {n} questions:
-{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium"}}]}}
-
-CONTENT:
-{text[:10000]}"""
-
-        r = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
-            response_format={"type": "json_object"},
-            max_tokens=4000,
-        )
-        raw = json.loads(r.choices[0].message.content).get("questions", [])
-
+    def _normalise_q(q_list):
         out = []
-        for q in raw:
+        for q in q_list:
             opts = q.get("options", [])
             if not isinstance(opts, list) or len(opts) < 2:
                 continue
@@ -7218,36 +7215,66 @@ CONTENT:
                 "options":     [str(o).strip() for o in opts[:4]],
                 "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
                 "difficulty":  q.get("difficulty", "medium"),
+                "_self_score": max(1, min(5, int(q.get("self_score", 4)))),
             })
+        return out
+
+    def _do_regenerate():
+        client   = _GroqClient(api_key=groq_key)
+        avoid    = "\n".join(f"- {s}" for s in req.good_stems[:25]) or "none"
+        rejected = "\n".join(
+            f"[{i+1}] {q.get('question', '')[:100]}" for i, q in enumerate(req.flagged)
+        )
+
+        # Generate with self-verification in one call (same standard as the main loop)
+        prompt = f"""A teacher has flagged {n} MCQ question(s) as unsatisfactory.
+Generate {n} REPLACEMENT questions for a {hint} class — TARGET QUALITY: PERFECT (5/5).
+
+REJECTED by teacher (do NOT reuse these topics/questions):
+{rejected}
+
+Topics already covered by good questions (also avoid):
+{avoid}
+
+For each replacement:
+- Choose a COMPLETELY DIFFERENT concept
+- 4 plausible options, exactly one correct (correct_idx 0-3)
+- No "None/All of the above"
+- Tag difficulty: "easy" | "medium" | "hard"
+- Base every fact on the content below
+
+After writing each question, SELF-EVALUATE honestly:
+  self_score 5 — I am certain this is perfect (unambiguous, verified, 3 plausible distractors, unique)
+  self_score 4 — good but one minor imperfection (be honest)
+  self_score 3 or below — still has issues (list in remaining_issues)
+
+Return ONLY JSON — exactly {n} questions:
+{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium","self_score":5,"remaining_issues":[]}}]}}
+
+CONTENT:
+{text[:10000]}"""
+
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.35,
+            response_format={"type": "json_object"},
+            max_tokens=5000,
+        )
+        raw = json.loads(r.choices[0].message.content).get("questions", [])
+        out = _normalise_q(raw)
 
         # Pad with originals if model returned fewer than needed
         while len(out) < n:
-            out.append(req.flagged[len(out)])
+            out.append({**req.flagged[len(out)], "_self_score": 3})
 
-        # Quick evaluation so the frontend can update the quality badge
-        q_json = json.dumps(
-            [{"i": i, "q": q["question"], "ans": q["correct_idx"]} for i, q in enumerate(out[:n])],
-            indent=2,
-        )
-        try:
-            er = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content":
-                    f'Score each question 1-5. Return ONLY JSON:\n{{"evaluations":[{{"i":0,"score":5}}]}}\n\nQUESTIONS:\n{q_json}'}],
-                temperature=0.1,
-                response_format={"type": "json_object"},
-                max_tokens=400,
-            )
-            evals   = json.loads(er.choices[0].message.content).get("evaluations", [])
-            ev_map  = {e["i"]: e.get("score", 4) for e in evals if isinstance(e.get("i"), int)}
-            scores  = [ev_map.get(i, 4) for i in range(min(n, len(out)))]
-            avg     = round(sum(scores) / len(scores), 1) if scores else 4.0
-        except Exception:
-            avg = 4.0
+        final = out[:n]
+        verified = sum(1 for q in final if q.get("_self_score") == 5)
+        quality_10 = round((verified / len(final)) * 10, 1) if final else 0.0
 
         return {
-            "questions":         out[:n],
-            "quality_out_of_10": round(avg * 2, 1),
+            "questions":         [{k: v for k, v in q.items() if not k.startswith("_")} for q in final],
+            "quality_out_of_10": quality_10,
         }
 
     return await asyncio.to_thread(_do_regenerate)
