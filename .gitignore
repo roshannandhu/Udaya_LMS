@@ -46,7 +46,7 @@ screenshots/
 
 # ...but the app's own brand/icon assets in public/ MUST ship to Vercel
 !frontend/public/*.png
-!playstore-release/*.png
+!playstore/*.png
 !frontend/public/*.jpg
 !frontend/public/*.jpeg
 
