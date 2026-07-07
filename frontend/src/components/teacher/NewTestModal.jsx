@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, FileText, Sparkles, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { Modal, Input, Btn } from '../ui';
 import { apiClient, testApi } from '../../lib/api';
+import PdfGeneratorModal from './PdfGeneratorModal';
 
 export default function NewTestModal({ open, onClose, defaultClassId, onSuccess, editTestId }) {
   const [step, setStep] = useState(1);
@@ -28,65 +29,17 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
 
   const [fetchingTest, setFetchingTest] = useState(false);
 
-  // PDF generator state
-  const [pdfFile, setPdfFile]             = useState(null);
-  const [pdfCount, setPdfCount]           = useState(10);
-  const [pdfLoading, setPdfLoading]       = useState(false);
-  const [pdfError, setPdfError]           = useState('');
-  const [pdfStatusIdx, setPdfStatusIdx]   = useState(0);
-  const [confirmReplace, setConfirmReplace] = useState(false);
-  const pdfInputRef = useRef(null);
+  // PDF Generator modal
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfBadge, setPdfBadge]         = useState(null); // {count, quality10, iterations}
 
-  // Matches the real loop phases: extract → generate → [evaluate → fix] × N
-  const PDF_STATUS = [
-    'Reading PDF...',
-    'Generating questions...',
-    'Evaluating quality...',
-    'Fixing weak questions...',
-    'Final quality check...',
-  ];
-
-  useEffect(() => {
-    if (!pdfLoading) { setPdfStatusIdx(0); return; }
-    // Advance message every 7s to roughly track the loop iterations
-    const t = setInterval(() => setPdfStatusIdx(i => Math.min(i + 1, PDF_STATUS.length - 1)), 7000);
-    return () => clearInterval(t);
-  }, [pdfLoading]);
-
-  const [pdfResult, setPdfResult] = useState(null); // {iterations, avg_quality, count}
-
-  const hasRealQuestions = questions.some(q => q.question.trim());
-
-  const handleGenerateFromPdf = async (force = false) => {
-    if (!pdfFile) return;
-    if (hasRealQuestions && !force) { setConfirmReplace(true); return; }
-    setConfirmReplace(false);
-    setPdfLoading(true);
-    setPdfError('');
-    setPdfResult(null);
-    try {
-      const data = await testApi.generateFromPdf(pdfFile, pdfCount, title);
-      const mapped = data.questions.map((q, i) => ({
-        id: Date.now() + i,
-        question: q.question,
-        options: q.options,
-        correct_idx: q.correct_idx,
-        order_num: q.order_num,
-      }));
-      setQuestions(mapped);
-      setPdfResult({
-        count:       mapped.length,
-        iterations:  data.iterations           || 1,
-        quality10:   data.quality_out_of_10    || 0,
-        difficulty:  data.difficulty_distribution || {},
-      });
-      setPdfFile(null);
-      if (pdfInputRef.current) pdfInputRef.current.value = '';
-    } catch (err) {
-      setPdfError(err.message || 'Failed to generate questions. Please try again.');
-    } finally {
-      setPdfLoading(false);
-    }
+  const handleQuestionsFromPdf = (mapped, quality) => {
+    setQuestions(mapped);
+    setPdfBadge({
+      count:      mapped.length,
+      quality10:  quality?.quality10  || 0,
+      iterations: quality?.iterations || 1,
+    });
   };
 
   // Reset form when modal closes/opens; fetch test details if in edit mode
@@ -312,79 +265,20 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
         ) : (
           <div className="space-y-6">
 
-            {/* ── PDF Generator Card ─────────────────────────────────── */}
-            <div className="p-4 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 space-y-3">
-              <div className="flex items-center gap-2">
-                <Sparkles size={15} className="text-neutral-500" />
-                <span className="text-sm font-semibold text-neutral-700">Generate from PDF</span>
-                <span className="text-xs text-neutral-400 ml-auto">Groq AI · Free</span>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <label className="flex-1 flex items-center gap-2 px-3 py-2 bg-white border border-neutral-200 rounded-lg cursor-pointer hover:border-neutral-400 transition-colors text-sm text-neutral-500 min-w-0">
-                  <FileText size={14} className="flex-shrink-0 text-neutral-400" />
-                  <span className="truncate">{pdfFile ? pdfFile.name : 'Choose PDF file...'}</span>
-                  <input
-                    ref={pdfInputRef}
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    className="hidden"
-                    onChange={e => { setPdfFile(e.target.files[0] || null); setPdfError(''); setConfirmReplace(false); }}
-                  />
-                </label>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <label className="text-xs text-neutral-500 whitespace-nowrap">Questions:</label>
-                  <input
-                    type="number"
-                    min={3} max={30}
-                    value={pdfCount}
-                    onChange={e => setPdfCount(Math.max(3, Math.min(30, parseInt(e.target.value) || 10)))}
-                    className="w-16 px-2 py-2 text-sm border border-neutral-200 rounded-lg bg-white text-center focus:outline-none focus:ring-2 focus:ring-neutral-900/20"
-                  />
-                </div>
-              </div>
-
-              {confirmReplace && !pdfLoading && (
-                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <span className="flex-1">This will replace your {questions.length} existing question{questions.length !== 1 ? 's' : ''}.</span>
-                  <button onClick={() => handleGenerateFromPdf(true)} className="font-semibold underline">Replace</button>
-                  <button onClick={() => setConfirmReplace(false)} className="text-neutral-500 ml-1">Cancel</button>
-                </div>
-              )}
-
-              {pdfError && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pdfError}</p>
-              )}
-
-              {pdfResult && !pdfLoading && (
-                <div className="text-xs bg-green-50 border border-green-200 rounded-lg px-3 py-2 space-y-1">
-                  <div className="flex items-center gap-2 text-green-700 font-medium">
-                    <Check size={13} className="flex-shrink-0" />
-                    <span>{pdfResult.count} questions · {pdfResult.iterations} loop iteration{pdfResult.iterations !== 1 ? 's' : ''} · quality {pdfResult.quality10}/10</span>
-                  </div>
-                  {pdfResult.difficulty && (
-                    <div className="flex gap-3 text-green-600 pl-5">
-                      <span>Easy: {pdfResult.difficulty.easy || 0}</span>
-                      <span>Medium: {pdfResult.difficulty.medium || 0}</span>
-                      <span>Hard: {pdfResult.difficulty.hard || 0}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <Btn
-                onClick={() => handleGenerateFromPdf(false)}
-                disabled={!pdfFile || pdfLoading}
-                variant="default"
-                className="w-full"
-              >
-                {pdfLoading
-                  ? <><Loader2 size={14} className="animate-spin mr-2" />{PDF_STATUS[pdfStatusIdx]}</>
-                  : <><RefreshCw size={14} className="mr-2" />{pdfResult ? 'Regenerate' : 'Generate Questions'}</>
-                }
+            {/* ── PDF Generator trigger ────────────────────────────────── */}
+            <div className="flex items-center gap-2">
+              <Btn onClick={() => setPdfModalOpen(true)} variant="default" size="sm">
+                <Sparkles size={13} />
+                Generate from PDF
               </Btn>
+              {pdfBadge && (
+                <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+                  <Check size={11} />
+                  {pdfBadge.count} questions · quality {pdfBadge.quality10}/10
+                </span>
+              )}
             </div>
-            {/* ────────────────────────────────────────────────────────── */}
+            {/* ─────────────────────────────────────────────────────────── */}
 
             {questions.map((q, qIdx) => (
               <div key={q.id} className="p-4 glass-panel border-white/60 rounded-xl space-y-4 relative group">
@@ -447,6 +341,12 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
         )}
       </div>
       )}
+      <PdfGeneratorModal
+        open={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+        onQuestionsReady={handleQuestionsFromPdf}
+        subjectHint={title}
+      />
     </Modal>
   );
 }

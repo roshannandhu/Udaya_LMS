@@ -38,6 +38,16 @@ try:
 except ImportError:
     _groq_ok = False
 
+# PDF text cache: session_id → {text, expires}. Lets regenerate-flagged reuse
+# the extracted text without requiring the browser to re-upload the file.
+_pdf_session_cache: dict = {}
+_PDF_SESSION_TTL: int    = 1800  # 30 minutes
+
+def _clean_pdf_cache():
+    now = time_module.time()
+    for k in [k for k, v in _pdf_session_cache.items() if v.get("expires", 0) < now]:
+        del _pdf_session_cache[k]
+
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 # Error monitoring (Sentry) — dormant unless SENTRY_DSN is set in the host env.
@@ -7102,7 +7112,13 @@ CONTENT:
         for q in final:
             diff_counts[q.get("difficulty", "medium")] = diff_counts.get(q.get("difficulty","medium"), 0) + 1
 
+        # Cache text so the browser can call regenerate-flagged without re-uploading
+        _clean_pdf_cache()
+        session_id = uuid.uuid4().hex
+        _pdf_session_cache[session_id] = {"text": text, "expires": time_module.time() + _PDF_SESSION_TTL}
+
         return {
+            "session_id":           session_id,
             "questions":            final,
             "page_count":           page_count,
             "chars_extracted":      len(raw_text),
@@ -7113,6 +7129,128 @@ CONTENT:
         }
 
     return await asyncio.to_thread(_run_loop)
+
+
+class RegenerateFlaggedRequest(BaseModel):
+    session_id: str
+    flagged: List[dict]      # [{question, options, correct_idx, difficulty}, ...]
+    good_stems: List[str] = []   # question stems of passing questions (topics to avoid)
+    subject_hint: str = ""
+
+
+@app.post("/api/tests/regenerate-flagged")
+async def regenerate_flagged_questions(
+    req: RegenerateFlaggedRequest,
+    user: dict = Depends(verify_token),
+):
+    """Human-loop endpoint: teacher flags bad questions → AI replaces only those.
+    Reuses cached PDF text from the prior generate-from-pdf call (no re-upload)."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    if not _groq_ok:
+        raise HTTPException(status_code=503, detail="AI client not available.")
+
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(status_code=503, detail="AI generation not configured.")
+
+    _clean_pdf_cache()
+    cached = _pdf_session_cache.get(req.session_id)
+    if not cached:
+        raise HTTPException(status_code=400, detail="Session expired. Please re-upload the PDF.")
+
+    text  = cached["text"]
+    hint  = req.subject_hint.strip() or "general"
+    n     = len(req.flagged)
+    if n == 0:
+        return {"questions": [], "quality_out_of_10": 0.0}
+
+    def _do_regenerate():
+        client = _GroqClient(api_key=groq_key)
+        avoid  = "\n".join(f"- {s}" for s in req.good_stems[:25]) or "none"
+        rejected = "\n".join(
+            f"[{i+1}] {q.get('question','')[:100]}" for i, q in enumerate(req.flagged)
+        )
+
+        prompt = f"""A teacher has flagged these {n} MCQ question(s) as unsatisfactory.
+Generate {n} REPLACEMENT questions for a {hint} class.
+
+REJECTED by teacher (do NOT reuse these topics):
+{rejected}
+
+Topics already covered by good questions (also avoid for replacements):
+{avoid}
+
+Replacement rules:
+- Choose a DIFFERENT concept for each replacement
+- Exactly 4 plausible options, one correct (correct_idx 0-3)
+- No "None/All of the above", no obviously silly distractors
+- Tag difficulty: "easy" | "medium" | "hard"
+- Base strictly on the content below
+
+Return ONLY JSON — exactly {n} questions:
+{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium"}}]}}
+
+CONTENT:
+{text[:10000]}"""
+
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+            response_format={"type": "json_object"},
+            max_tokens=4000,
+        )
+        raw = json.loads(r.choices[0].message.content).get("questions", [])
+
+        out = []
+        for q in raw:
+            opts = q.get("options", [])
+            if not isinstance(opts, list) or len(opts) < 2:
+                continue
+            while len(opts) < 4:
+                opts.append("")
+            stem = str(q.get("question", "")).strip()
+            if not stem:
+                continue
+            out.append({
+                "question":    stem,
+                "options":     [str(o).strip() for o in opts[:4]],
+                "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
+                "difficulty":  q.get("difficulty", "medium"),
+            })
+
+        # Pad with originals if model returned fewer than needed
+        while len(out) < n:
+            out.append(req.flagged[len(out)])
+
+        # Quick evaluation so the frontend can update the quality badge
+        q_json = json.dumps(
+            [{"i": i, "q": q["question"], "ans": q["correct_idx"]} for i, q in enumerate(out[:n])],
+            indent=2,
+        )
+        try:
+            er = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content":
+                    f'Score each question 1-5. Return ONLY JSON:\n{{"evaluations":[{{"i":0,"score":5}}]}}\n\nQUESTIONS:\n{q_json}'}],
+                temperature=0.1,
+                response_format={"type": "json_object"},
+                max_tokens=400,
+            )
+            evals   = json.loads(er.choices[0].message.content).get("evaluations", [])
+            ev_map  = {e["i"]: e.get("score", 4) for e in evals if isinstance(e.get("i"), int)}
+            scores  = [ev_map.get(i, 4) for i in range(min(n, len(out)))]
+            avg     = round(sum(scores) / len(scores), 1) if scores else 4.0
+        except Exception:
+            avg = 4.0
+
+        return {
+            "questions":         out[:n],
+            "quality_out_of_10": round(avg * 2, 1),
+        }
+
+    return await asyncio.to_thread(_do_regenerate)
 
 
 # Test attempt for results

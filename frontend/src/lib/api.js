@@ -256,6 +256,24 @@ export const testApi = {
     }
     return res.json();
   },
+  regenerateFlagged: async (sessionId, flaggedQuestions, goodStems, subjectHint = '') => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_BASE}/tests/regenerate-flagged`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id:   sessionId,
+        flagged:      flaggedQuestions,
+        good_stems:   goodStems,
+        subject_hint: subjectHint,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || 'Regeneration failed');
+    }
+    return res.json();
+  },
 };
 
 export const leaderboardApi = {
