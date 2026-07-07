@@ -849,12 +849,75 @@ function ThinkingDots() {
   );
 }
 
-function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isStreaming, error, generatedAt }) {
+// ── AI Mentor trigger button (sits inside the report card) ────────────────────
+function AIMentorTrigger({ onClick, hasData, loading }) {
   const reduce = useReducedMotion();
-  const dark = useTheme(s => s.dark);
+  return (
+    <motion.button
+      onClick={onClick}
+      whileHover={reduce ? undefined : { scale: 1.015 }}
+      whileTap={reduce ? undefined : { scale: 0.975 }}
+      className="relative w-full flex items-center gap-4 rounded-[1.75rem] overflow-hidden text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
+      style={{ background: 'linear-gradient(135deg,#6D28D9 0%,#7C3AED 50%,#A855F7 100%)' }}
+    >
+      {/* shimmer sweep */}
+      {!reduce && (
+        <motion.span
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
+          animate={{ x: ['-100%', '200%'] }}
+          transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 1.8, ease: 'easeInOut' }}
+        />
+      )}
+      {/* pulse ring when unused */}
+      {!hasData && !loading && !reduce && (
+        <motion.span
+          className="absolute left-4 w-11 h-11 rounded-full bg-white/20"
+          animate={{ scale: [1, 1.7], opacity: [0.5, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+        />
+      )}
+      <div className="relative flex items-center gap-4 px-5 py-4 w-full">
+        <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center flex-shrink-0 backdrop-blur-sm">
+          {loading ? (
+            <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="inline-flex">
+              <Sparkles size={20} className="text-white" />
+            </motion.span>
+          ) : (
+            reduce ? <Sparkles size={20} className="text-white" /> : (
+              <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex">
+                <Sparkles size={20} className="text-white" />
+              </motion.span>
+            )
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-extrabold text-[15px] leading-tight">AI Mentor</p>
+          <p className="text-white/70 text-[11px] font-semibold leading-snug mt-0.5">
+            {loading ? 'Reading your learning patterns…' : hasData ? 'Tap to view personalised insights' : 'Get personalised coaching now'}
+          </p>
+        </div>
+        <motion.div
+          animate={loading ? { rotate: [0, 15, -15, 0] } : { x: [0, 4, 0] }}
+          transition={loading
+            ? { duration: 0.6, repeat: Infinity }
+            : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }
+          }
+          className="flex-shrink-0"
+        >
+          <ChevronRight size={20} className="text-white/80" />
+        </motion.div>
+      </div>
+    </motion.button>
+  );
+}
+
+// ── AI Mentor popup (bottom sheet on phone, centered modal on desktop) ─────────
+function AIMentorPopup({ open, onClose, onRegenerate, suggestions, loading, isStreaming, error, generatedAt }) {
+  const reduce = useReducedMotion();
+  const dark   = useTheme(s => s.dark);
   const [copiedAI, setCopiedAI] = useState(false);
   const sections = useMemo(() => (suggestions ? parseMentorSections(suggestions) : []), [suggestions]);
-  const active = isStreaming || loading;
+  const active   = isStreaming || loading;
 
   const copyAI = async () => {
     try {
@@ -864,86 +927,105 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
     } catch (e) { console.error(e); }
   };
 
+
   return (
-    <motion.div
-      className="relative rounded-[2rem] bg-white shadow-card overflow-hidden"
-      initial={reduce ? false : { opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-    >
-      {/* Subtle indigo top accent — a slow shimmer while the answer streams in,
-          a quiet static line otherwise. Transform-only, reduced-motion aware. */}
-      <div className="absolute inset-x-0 top-0 h-[3px] overflow-hidden">
-        {active && !reduce ? (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
           <motion.div
-            className="h-full w-1/2 bg-gradient-to-r from-transparent via-[#6D28D9] to-transparent"
-            animate={{ x: ['-120%', '320%'] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            key="ai-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px]"
+            onClick={onClose}
           />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-r from-transparent via-[#6D28D9]/35 to-transparent" />
-        )}
-      </div>
 
-      <div className="p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-[16px] font-extrabold text-neutral-900 leading-tight flex items-center gap-2 mb-1">
-              <span className="w-7 h-7 rounded-xl bg-[#6D28D9]/10 text-[#6D28D9] flex items-center justify-center flex-shrink-0">
-                {reduce ? <Sparkles size={15} /> : (
-                  <motion.span animate={{ scale: [1, 1.12, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex">
-                    <Sparkles size={15} />
-                  </motion.span>
-                )}
-              </span>
-              AI Mentor
-            </h3>
-            <p className="text-[12px] font-semibold text-neutral-500 leading-snug">Personalised coaching from your streaks, trends &amp; weak topics.</p>
-          </div>
-          <motion.button
-            onClick={onToggle}
-            whileHover={reduce ? undefined : { scale: 1.06 }}
-            whileTap={reduce ? undefined : { scale: 0.94 }}
-            aria-label={show ? 'Collapse AI Mentor' : 'Open AI Mentor'}
-            className="flex-shrink-0 w-9 h-9 bg-neutral-900 rounded-full flex items-center justify-center text-white shadow-sm"
-          >
-            {show ? <ChevronUp size={17} strokeWidth={2.5} /> : <Play size={15} fill="currentColor" className="ml-0.5" />}
-          </motion.button>
-        </div>
-
-        <AnimatePresence>
-          {show && (
+          {/* Sheet wrapper — bottom on phone, centered on desktop */}
+          <div className="fixed inset-0 z-[61] flex items-end justify-center lg:items-center pointer-events-none">
             <motion.div
-              key="mentor-body"
-              initial={reduce ? false : { opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={reduce ? undefined : { opacity: 0, height: 0 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden"
+              key="ai-sheet"
+              initial={reduce ? { opacity: 0 } : { y: '100%', opacity: 0, scale: 0.98 }}
+              animate={reduce ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { y: '100%', opacity: 0, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 32, mass: 0.9 }}
+              className={[
+                'pointer-events-auto w-full bg-white',
+                'rounded-t-[2rem] lg:rounded-[2rem]',
+                'max-h-[92dvh] lg:max-h-[85vh] lg:max-w-2xl lg:mx-4',
+                'flex flex-col overflow-hidden',
+                'shadow-[0_-8px_48px_rgba(109,40,217,0.18),0_0_0_1px_rgba(109,40,217,0.06)]',
+                dark ? 'bg-neutral-900' : 'bg-white',
+              ].join(' ')}
+              style={reduce ? undefined : { transformOrigin: 'bottom center' }}
             >
-              <div className="mt-5 pt-4 border-t border-[#EFEDEA]">
+              {/* Drag handle (phone) */}
+              <div className="flex justify-center pt-3 pb-1 lg:hidden flex-shrink-0">
+                <div className="w-10 h-1 rounded-full bg-neutral-200" />
+              </div>
+
+              {/* Top gradient accent + shimmer while streaming */}
+              <div className="relative h-[3px] w-full overflow-hidden flex-shrink-0">
+                {active && !reduce ? (
+                  <motion.div
+                    className="absolute h-full w-1/2 bg-gradient-to-r from-transparent via-violet-500 to-transparent"
+                    animate={{ x: ['-120%', '320%'] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                ) : (
+                  <div className="h-full w-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-purple-400" />
+                )}
+              </div>
+
+              {/* Header */}
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#EFEDEA] flex-shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-200/60 flex-shrink-0">
+                  {reduce ? <Sparkles size={17} className="text-white" /> : (
+                    <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2.4, repeat: Infinity }} className="inline-flex">
+                      <Sparkles size={17} className="text-white" />
+                    </motion.span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-extrabold text-[16px] text-neutral-900 leading-tight">AI Mentor</p>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-violet-500 leading-none mt-0.5">Personalised coaching</p>
+                </div>
+                <motion.button
+                  onClick={onClose}
+                  whileHover={reduce ? undefined : { scale: 1.08 }}
+                  whileTap={reduce ? undefined : { scale: 0.92 }}
+                  className="w-9 h-9 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center transition-colors flex-shrink-0"
+                  aria-label="Close AI Mentor"
+                >
+                  <ChevronUp size={18} className="text-neutral-600" />
+                </motion.button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5 space-y-3">
                 {loading && !suggestions ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4 py-4">
                     <ThinkingDots />
-                    {[80, 95, 60].map((w, i) => (
+                    {[85, 95, 65].map((w, i) => (
                       <motion.div key={i} className="h-3 rounded-full bg-neutral-200" style={{ width: `${w}%` }}
                         animate={reduce ? undefined : { opacity: [0.4, 0.9, 0.4] }}
                         transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.2 }} />
                     ))}
                   </div>
                 ) : error ? (
-                  <div className="p-3 bg-red-50 rounded-xl text-[12px] font-bold text-red-600 flex items-center gap-2">
-                    <AlertTriangle size={14} /> {error}
+                  <div className="p-4 bg-red-50 rounded-2xl text-[13px] font-bold text-red-600 flex items-center gap-2">
+                    <AlertTriangle size={16} /> {error}
                   </div>
                 ) : suggestions ? (
-                  <div className="space-y-3">
+                  <>
                     {sections.map((s, i) => {
                       const meta = MENTOR_SECTIONS.find(m => m.title.toLowerCase() === (s.title || '').toLowerCase());
                       const Icon = meta?.icon || Sparkles;
-                      const hex = mentorHex(meta?.hex || '#6D28D9', dark);
+                      const hex  = mentorHex(meta?.hex || '#6D28D9', dark);
                       const isLastSection = i === sections.length - 1;
-                      const isTimetable = /weekly timetable/i.test(s.title || '');
+                      const isTimetable   = /weekly timetable/i.test(s.title || '');
                       const Body = isTimetable ? TimetableBody : MentorBody;
                       const block = (
                         <div className="bg-[#FAFAF9] rounded-2xl p-4">
@@ -959,8 +1041,6 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                         </div>
                       );
                       if (reduce) return <div key={s.title || i}>{block}</div>;
-                      // One-time gentle fade-in per section (NO `layout` — that
-                      // re-animated on every streamed token and made the text jitter).
                       return (
                         <motion.div
                           key={s.title || i}
@@ -974,7 +1054,7 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                     })}
                     {!isStreaming && !loading && (
                       <motion.div
-                        className="flex items-center gap-2 pt-1 flex-wrap"
+                        className="flex items-center gap-2 pt-2 flex-wrap"
                         initial={reduce ? false : { opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.2 }}
@@ -995,18 +1075,18 @@ function AIMentorCard({ show, onToggle, onRegenerate, suggestions, loading, isSt
                         )}
                       </motion.div>
                     )}
-                  </div>
+                  </>
                 ) : (
-                  <div className="flex items-center gap-2 text-[13px] font-extrabold text-neutral-700">
+                  <div className="flex items-center gap-2 text-[13px] font-extrabold text-neutral-700 py-2">
                     <CheckCircle2 size={16} className="text-emerald-600" /> Looking sharp! Keep up the good work.
                   </div>
                 )}
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -1215,19 +1295,14 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     if (!suggestions) loadInsights();
   }, [showSuggestions, suggestions, loadInsights]);
 
-  // When opened via the home "AI Mentor" shortcut (?ai=1), auto-expand the box
-  // and run the analysis once, then scroll it into view. Ref-guarded so it fires
-  // a single time even as data/loadInsights identities change.
+  // When opened via the home "AI Mentor" shortcut (?ai=1), auto-open the popup.
+  // Ref-guarded so it fires a single time even as data/loadInsights identities change.
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (!autoOpenAI || autoOpenedRef.current || !student?.id) return;
     autoOpenedRef.current = true;
     setShowSuggestions(true);
     loadInsights();
-    const t = setTimeout(() => {
-      document.getElementById('ai-mentor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 250);
-    return () => clearTimeout(t);
   }, [autoOpenAI, student?.id, loadInsights]);
 
   // The cache is per-period: switching tabs must drop the old text and, if the
@@ -1428,21 +1503,26 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               </Section>
             )}
 
-            {/* ── AI MENTOR (prominent, full-width, near the top) ── */}
+            {/* ── AI MENTOR trigger button (opens popup) ── */}
             <Section>
-              <div id="ai-mentor" className="scroll-mt-24">
-                <AIMentorCard
-                  show={showSuggestions}
-                  onToggle={handleAnalyzePerformance}
-                  onRegenerate={runAnalysis}
-                  suggestions={suggestions}
-                  loading={suggestionsLoading}
-                  isStreaming={isStreaming}
-                  error={suggestionsError}
-                  generatedAt={generatedAt}
-                />
-              </div>
+              <AIMentorTrigger
+                onClick={handleAnalyzePerformance}
+                hasData={!!suggestions}
+                loading={suggestionsLoading}
+              />
             </Section>
+
+            {/* ── AI MENTOR popup (bottom sheet / modal) ── */}
+            <AIMentorPopup
+              open={showSuggestions}
+              onClose={() => setShowSuggestions(false)}
+              onRegenerate={runAnalysis}
+              suggestions={suggestions}
+              loading={suggestionsLoading}
+              isStreaming={isStreaming}
+              error={suggestionsError}
+              generatedAt={generatedAt}
+            />
 
             {/* ── 3. MAIN GRID ── */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-8">
