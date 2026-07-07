@@ -6,7 +6,7 @@ import { CountUp, ProgressRing } from '../../components/shared/Animated';
 import {
   Play, Calendar, FileText, ArrowRight, FileQuestion,
   ChevronRight, Video, Target,
-  CheckCircle2, ListChecks, Zap,
+  CheckCircle2, ListChecks, Zap, Sparkles,
 } from 'lucide-react';
 import { Avatar, Skeleton } from '../../components/ui';
 import { apiClient, leaderboardApi, testApi, assignmentApi, notesApi } from '../../lib/api';
@@ -450,6 +450,57 @@ export default function StudentHomePage() {
               />
             </TiltCard>
           </motion.div>
+
+          {/* ── 2b. AI MENTOR — gradient trigger card → opens report with AI popup ── */}
+          <motion.button
+            variants={fadeUp}
+            onClick={() => navigate('/student/report?ai=1')}
+            whileHover={reduceMotion ? undefined : { scale: 1.012 }}
+            whileTap={{ scale: 0.975 }}
+            className="relative w-full flex items-center gap-4 rounded-[1.75rem] overflow-hidden text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,#6D28D9 0%,#7C3AED 50%,#A855F7 100%)' }}
+          >
+            {/* shimmer sweep */}
+            {!reduceMotion && (
+              <motion.span
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 2, ease: 'easeInOut' }}
+              />
+            )}
+            {/* pulse ring */}
+            {!reduceMotion && (
+              <motion.span
+                className="absolute left-4 w-11 h-11 rounded-full bg-white/20"
+                animate={{ scale: [1, 1.7], opacity: [0.5, 0] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+              />
+            )}
+            <div className="relative flex items-center gap-4 px-5 py-4 w-full">
+              <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                {reduceMotion ? <Sparkles size={20} className="text-white" /> : (
+                  <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex">
+                    <Sparkles size={20} className="text-white" />
+                  </motion.span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-extrabold text-[15px] leading-tight">AI Mentor</p>
+                <p className="text-white/70 text-[12px] font-semibold leading-snug mt-0.5">Get personalised coaching from your performance</p>
+              </div>
+              {reduceMotion ? (
+                <ChevronRight size={20} className="text-white/80 flex-shrink-0" />
+              ) : (
+                <motion.div
+                  animate={{ x: [0, 4, 0] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  className="flex-shrink-0"
+                >
+                  <ChevronRight size={20} className="text-white/80" />
+                </motion.div>
+              )}
+            </div>
+          </motion.button>
 
           {/* ── 3. WHAT'S NEXT (flat, scannable agenda — no accordion chrome) ── */}
           <motion.div variants={fadeUp} id="whats-next" className="scroll-mt-24">
