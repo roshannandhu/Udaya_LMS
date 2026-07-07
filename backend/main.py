@@ -6832,8 +6832,137 @@ async def generate_test_from_pdf(
     if "pdf" not in ct and not fname.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    def _run_generation():
-        # ── Step 1: Extract text ──────────────────────────────────────────────
+    def _normalise(q_list):
+        """Validate schema + clamp correct_idx. Drops malformed entries."""
+        out = []
+        for q in q_list:
+            opts = q.get("options", [])
+            if not isinstance(opts, list) or len(opts) < 2:
+                continue
+            while len(opts) < 4:
+                opts.append("")
+            text_q = str(q.get("question", "")).strip()
+            if not text_q:
+                continue
+            out.append({
+                "question": text_q,
+                "options": [str(o).strip() for o in opts[:4]],
+                "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
+            })
+        return out
+
+    def _generate(client, text, count, hint):
+        """Call 1 — creative generation. Returns normalised question list."""
+        prompt = f"""You are creating a multiple-choice question paper for a {hint} class.
+
+Generate exactly {count} MCQ questions from the content below.
+
+Rules:
+- Each question must have exactly 4 options
+- Exactly one option is correct — mark it with correct_idx (0=first, 1=second, 2=third, 3=fourth)
+- Base ALL questions strictly on the provided content — never invent facts
+- Mix difficulty: recall, application, and analysis questions
+- All four options must be plausible — no obviously silly distractors
+- Never use "None of the above" or "All of the above" as options
+
+Return ONLY valid JSON:
+{{"questions": [{{"question": "...", "options": ["...", "...", "...", "..."], "correct_idx": 0}}]}}
+
+CONTENT:
+{text}"""
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.45,
+            response_format={"type": "json_object"},
+            max_tokens=4000,
+        )
+        return _normalise(json.loads(r.choices[0].message.content).get("questions", []))
+
+    def _evaluate(client, questions, content_snippet):
+        """Score each question 1-5 and return specific issues for failing ones.
+        This is the loop's feedback signal — output feeds directly into _regenerate."""
+        q_json = json.dumps(
+            [{"i": i, "question": q["question"], "options": q["options"], "correct_idx": q["correct_idx"]}
+             for i, q in enumerate(questions)],
+            indent=2,
+        )
+        prompt = f"""You are a strict MCQ quality auditor. Score each question 1-5 and list specific problems.
+
+Scoring guide:
+5 — Perfect: clear question, verified correct answer, all 4 options plausible, tests a distinct concept
+4 — Good: at most one very minor issue
+3 — Acceptable: has a fixable problem (e.g. one weak distractor, slight ambiguity)
+2 — Poor: multiple issues or one major flaw
+1 — Reject: wrong correct answer, completely ambiguous, off-topic, or uses "None/All of the above"
+
+For each question return:
+- i: the index number (same as input)
+- score: integer 1-5
+- issues: list of short specific problems (empty list if score >= 4)
+
+Return ONLY JSON:
+{{"evaluations": [{{"i": 0, "score": 5, "issues": []}}]}}
+
+CONTENT (ground truth for verifying correct answers):
+{content_snippet}
+
+QUESTIONS:
+{q_json}"""
+        try:
+            r = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                response_format={"type": "json_object"},
+                max_tokens=2000,
+            )
+            evals = json.loads(r.choices[0].message.content).get("evaluations", [])
+            # Build index map and fill any missing entries with score=3
+            ev_map = {e["i"]: e for e in evals if isinstance(e.get("i"), int)}
+            return [ev_map.get(i, {"i": i, "score": 3, "issues": []}) for i in range(len(questions))]
+        except Exception:
+            return [{"i": i, "score": 3, "issues": []} for i in range(len(questions))]
+
+    def _regenerate(client, failing_pairs, text, needed, hint):
+        """Regenerate replacements for failing questions.
+        failing_pairs = [(question_dict, eval_dict), ...]
+        The failure reasons from eval_dict are injected as INPUT — this is the loop."""
+        do_not_reuse = []
+        for q, ev in failing_pairs:
+            issues = "; ".join(ev.get("issues", ["quality issue"]))
+            do_not_reuse.append(f'- "{q["question"][:80]}..." → problems: {issues}')
+
+        prompt = f"""The following MCQ questions failed quality review. Generate {needed} REPLACEMENT questions.
+
+FAILED QUESTIONS — do NOT reuse these topics or questions:
+{chr(10).join(do_not_reuse)}
+
+Requirements for replacements:
+- Cover different topics from the content (not the ones above)
+- Each has exactly 4 plausible options, one correct answer
+- No "None/All of the above"
+- Strictly based on the content below
+
+Return ONLY JSON:
+{{"questions": [{{"question": "...", "options": ["...", "...", "...", "..."], "correct_idx": 0}}]}}
+
+CONTENT:
+{text[:9000]}"""
+        try:
+            r = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.55,
+                response_format={"type": "json_object"},
+                max_tokens=3000,
+            )
+            return _normalise(json.loads(r.choices[0].message.content).get("questions", []))
+        except Exception:
+            return []
+
+    def _run_loop():
+        # ── Extract text ──────────────────────────────────────────────────────
         with _pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
             page_count = len(pdf.pages)
             raw_text = "\n\n".join(
@@ -6848,94 +6977,72 @@ async def generate_test_from_pdf(
 
         text = raw_text[:12000]
         hint = subject_hint.strip() or "general"
-
-        # ── Step 2: Generate (Call 1) ─────────────────────────────────────────
         client = _GroqClient(api_key=groq_key)
-        generate_prompt = f"""You are creating a multiple-choice question paper for a {hint} class.
 
-Generate exactly {num_questions} MCQ questions from the content below.
-
-Rules:
-- Each question must have exactly 4 options
-- Exactly one option is correct — mark it with correct_idx (0 = first option)
-- Base ALL questions strictly on the provided content — never invent facts
-- Mix difficulty: some straightforward recall, some application, some analysis
-- Options must be plausible — no obviously silly distractors
-
-Return ONLY valid JSON, no explanation:
-{{"questions": [{{"question": "...", "options": ["A", "B", "C", "D"], "correct_idx": 0}}]}}
-
-CONTENT:
-{text}"""
-
-        r1 = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": generate_prompt}],
-            temperature=0.4,
-            response_format={"type": "json_object"},
-            max_tokens=4000,
-        )
-        raw_questions = json.loads(r1.choices[0].message.content).get("questions", [])
-        if not raw_questions:
+        # ── Initial generation with a buffer ─────────────────────────────────
+        # Generate more than needed so early failures don't cause a 3rd iteration.
+        buffer = max(2, num_questions // 4)
+        questions = _generate(client, text, num_questions + buffer, hint)
+        if not questions:
             raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer PDF.")
 
-        # ── Step 3: Reflect (Call 2) ──────────────────────────────────────────
-        reflect_prompt = f"""You are a test quality reviewer. Below are {len(raw_questions)} MCQ questions generated from educational content.
+        # ── Loop: evaluate → keep passing → regenerate failing ────────────────
+        QUALITY_THRESHOLD = 3   # score >= 3 is acceptable
+        MAX_ITERATIONS    = 3
+        iterations_done   = 0
+        scores_history    = []
 
-Review them and return an improved version. Fix ONLY these problems if present:
-1. DUPLICATES — if two questions test the exact same concept, replace the weaker one with a new question on a different topic from the content snippet
-2. AMBIGUOUS — if a question has more than one defensible correct answer, rewrite it to be unambiguous
-3. PLACEHOLDER OPTIONS — replace "None of the above", "All of the above", "Cannot be determined" with real specific options
-4. WRONG ANSWER — if the marked correct_idx is factually wrong based on the content, fix it
-5. DIFFICULTY BALANCE — if all questions are the same difficulty level, adjust 2-3 to create variety
+        for iteration in range(MAX_ITERATIONS):
+            iterations_done = iteration + 1
+            evals = _evaluate(client, questions, text[:4000])
+            scores_history = [e.get("score", 3) for e in evals]
 
-DO NOT rewrite questions that are already correct and clear.
-Return exactly {len(raw_questions)} questions (same count).
-Same JSON schema: {{"questions": [{{"question": "...", "options": ["...", "...", "...", "..."], "correct_idx": 0}}]}}
+            passing = [(q, e) for q, e in zip(questions, evals) if e.get("score", 3) >= QUALITY_THRESHOLD]
+            failing = [(q, e) for q, e in zip(questions, evals) if e.get("score", 3) < QUALITY_THRESHOLD]
 
-QUESTIONS TO REVIEW:
-{json.dumps(raw_questions, indent=2)}
+            # Enough good questions — done
+            if len(passing) >= num_questions:
+                # Take the highest-scoring ones
+                passing.sort(key=lambda x: x[1].get("score", 3), reverse=True)
+                questions = [q for q, _ in passing[:num_questions]]
+                break
 
-ORIGINAL CONTENT SNIPPET (for reference when replacing duplicates):
-{text[:3000]}"""
+            # Last iteration — use best available regardless of score
+            if iteration == MAX_ITERATIONS - 1:
+                all_scored = list(zip(questions, scores_history))
+                all_scored.sort(key=lambda x: x[1], reverse=True)
+                questions = [q for q, _ in all_scored[:num_questions]]
+                break
 
-        reflected = False
-        try:
-            r2 = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": reflect_prompt}],
-                temperature=0.2,
-                response_format={"type": "json_object"},
-                max_tokens=4000,
-            )
-            reviewed = json.loads(r2.choices[0].message.content).get("questions", [])
-            if reviewed and len(reviewed) >= 1:
-                raw_questions = reviewed
-                reflected = True
-        except Exception:
-            pass  # reflection failed → use Call 1 result
+            # Regenerate only failing questions, carrying their specific failure reasons
+            needed = num_questions - len(passing) + buffer
+            replacements = _regenerate(client, failing, text, needed, hint)
+            questions = [q for q, _ in passing] + replacements
 
-        # ── Step 4: Validate + normalise ─────────────────────────────────────
+            if not questions:
+                # Regeneration returned nothing — bail with what we have
+                questions = [q for q, _ in passing]
+                break
+
+        # ── Final normalise + order_num ───────────────────────────────────────
         final = []
-        for i, q in enumerate(raw_questions):
-            opts = q.get("options", [])
-            if not isinstance(opts, list) or len(opts) < 2:
-                continue
-            while len(opts) < 4:
-                opts.append("")
-            final.append({
-                "question": str(q.get("question", "")).strip(),
-                "options": [str(o) for o in opts[:4]],
-                "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
-                "order_num": i + 1,
-            })
+        for i, q in enumerate(questions[:num_questions]):
+            final.append({**q, "order_num": i + 1})
 
         if not final:
-            raise HTTPException(status_code=500, detail="AI returned malformed questions. Please try again.")
+            raise HTTPException(status_code=500, detail="Could not generate valid questions. Please try again.")
 
-        return {"questions": final, "page_count": page_count, "chars_extracted": len(raw_text), "reflected": reflected}
+        avg_quality = round(sum(scores_history[:len(final)]) / len(final), 1) if scores_history else 0.0
 
-    return await asyncio.to_thread(_run_generation)
+        return {
+            "questions":      final,
+            "page_count":     page_count,
+            "chars_extracted": len(raw_text),
+            "iterations":     iterations_done,
+            "avg_quality":    avg_quality,
+        }
+
+    return await asyncio.to_thread(_run_loop)
 
 
 # Test attempt for results

@@ -37,13 +37,23 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
   const [confirmReplace, setConfirmReplace] = useState(false);
   const pdfInputRef = useRef(null);
 
-  const PDF_STATUS = ['Reading PDF...', 'Generating questions...', 'Reviewing quality...'];
+  // Matches the real loop phases: extract → generate → [evaluate → fix] × N
+  const PDF_STATUS = [
+    'Reading PDF...',
+    'Generating questions...',
+    'Evaluating quality...',
+    'Fixing weak questions...',
+    'Final quality check...',
+  ];
 
   useEffect(() => {
     if (!pdfLoading) { setPdfStatusIdx(0); return; }
-    const t = setInterval(() => setPdfStatusIdx(i => Math.min(i + 1, PDF_STATUS.length - 1)), 6000);
+    // Advance message every 7s to roughly track the loop iterations
+    const t = setInterval(() => setPdfStatusIdx(i => Math.min(i + 1, PDF_STATUS.length - 1)), 7000);
     return () => clearInterval(t);
   }, [pdfLoading]);
+
+  const [pdfResult, setPdfResult] = useState(null); // {iterations, avg_quality, count}
 
   const hasRealQuestions = questions.some(q => q.question.trim());
 
@@ -53,6 +63,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
     setConfirmReplace(false);
     setPdfLoading(true);
     setPdfError('');
+    setPdfResult(null);
     try {
       const data = await testApi.generateFromPdf(pdfFile, pdfCount, title);
       const mapped = data.questions.map((q, i) => ({
@@ -63,6 +74,11 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
         order_num: q.order_num,
       }));
       setQuestions(mapped);
+      setPdfResult({
+        count:       mapped.length,
+        iterations:  data.iterations  || 1,
+        avg_quality: data.avg_quality || 0,
+      });
       setPdfFile(null);
       if (pdfInputRef.current) pdfInputRef.current.value = '';
     } catch (err) {
@@ -339,6 +355,15 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
                 <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pdfError}</p>
               )}
 
+              {pdfResult && !pdfLoading && (
+                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  <Check size={13} className="flex-shrink-0" />
+                  <span>
+                    {pdfResult.count} questions generated · {pdfResult.iterations} loop iteration{pdfResult.iterations !== 1 ? 's' : ''} · avg quality {pdfResult.avg_quality}/5
+                  </span>
+                </div>
+              )}
+
               <Btn
                 onClick={() => handleGenerateFromPdf(false)}
                 disabled={!pdfFile || pdfLoading}
@@ -347,7 +372,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
               >
                 {pdfLoading
                   ? <><Loader2 size={14} className="animate-spin mr-2" />{PDF_STATUS[pdfStatusIdx]}</>
-                  : <><RefreshCw size={14} className="mr-2" />Generate Questions</>
+                  : <><RefreshCw size={14} className="mr-2" />{pdfResult ? 'Regenerate' : 'Generate Questions'}</>
                 }
               </Btn>
             </div>
