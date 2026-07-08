@@ -15,6 +15,13 @@ import QuizBubbleScatter from '../../components/shared/graphs/QuizBubbleScatter'
 import QuizRangeChart from '../../components/shared/graphs/QuizRangeChart';
 import AttendanceCalendar from '../../components/shared/graphs/AttendanceCalendar';
 import TestCalendar from '../../components/shared/graphs/TestCalendar';
+import LeaderboardBumpChart from '../../components/shared/graphs/LeaderboardBumpChart';
+import AssignmentSpeedometer from '../../components/shared/graphs/AssignmentSpeedometer';
+import TestBellCurve from '../../components/shared/graphs/TestBellCurve';
+import TestQuadrantChart from '../../components/shared/graphs/TestQuadrantChart';
+import TopicPolarArea from '../../components/shared/graphs/TopicPolarArea';
+import ActivityStepper from '../../components/shared/graphs/ActivityStepper';
+
 
 // Basic Glass Card Wrapper
 const GlassCard = ({ title, subtitle, children, colSpan = 1, rowSpan = 1 }) => (
@@ -107,6 +114,56 @@ export default function ReportGraphReferencePage() {
     };
   });
 
+  
+  const bumpData = [
+    { week: 'W1', rank: 15 },
+    { week: 'W2', rank: 12 },
+    { week: 'W3', rank: 6 },
+    { week: 'W4', rank: 4 },
+  ];
+
+  const assignmentData = [
+    { name: 'Submitted', value: 24, color: '#00C2C7' },
+    { name: 'Pending', value: 4, color: '#FFC436' },
+    { name: 'Overdue', value: 2, color: '#FF6B6B' },
+  ];
+
+  const bellData = [
+    { scoreBin: 20, count: 1 },
+    { scoreBin: 30, count: 2 },
+    { scoreBin: 40, count: 5 },
+    { scoreBin: 50, count: 12 },
+    { scoreBin: 60, count: 18 },
+    { scoreBin: 70, count: 24 },
+    { scoreBin: 80, count: 15 },
+    { scoreBin: 90, count: 8 },
+    { scoreBin: 100, count: 3 },
+  ];
+
+  const quadrantData = [
+    { name: 'Test 1', score: 85, time: 20 },
+    { name: 'Test 2', score: 45, time: 20 },
+    { name: 'Test 3', score: 92, time: 55 },
+    { name: 'Test 4', score: 40, time: 60 },
+    { name: 'Test 5', score: 75, time: 30 },
+  ];
+
+  const polarData = [
+    { topic: 'Algebra', score: 90 },
+    { topic: 'Geometry', score: 65 },
+    { topic: 'Trigonometry', score: 80 },
+    { topic: 'Statistics', score: 45 },
+    { topic: 'Calculus', score: 85 },
+  ];
+
+  const activityData = [
+    { time: '09:00 AM', title: 'Logged In', color: 'bg-green-400' },
+    { time: '10:15 AM', title: 'Watched Algebra Video (45m)', color: 'bg-[#00C2C7]' },
+    { time: '11:30 AM', title: 'Submitted Assignment', color: 'bg-[#7059FF]' },
+    { time: '01:00 PM', title: 'Took Math Quiz (Score: 85%)', color: 'bg-[#FFC436]' },
+    { time: '02:30 PM', title: 'Read Science Notes', color: 'bg-[#FF6B6B]' },
+  ];
+
   const testDays = Array.from({length: 31}, (_, i) => {
     const hasTest = Math.random() > 0.85;
     return {
@@ -184,6 +241,32 @@ export default function ReportGraphReferencePage() {
 
         <GlassCard title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
           <QuizBubbleScatter data={scatterData} />
+        </GlassCard>
+
+        
+        {/* ROW 5: Advanced Analytics */}
+        <GlassCard title="Rank Progression" subtitle="Leaderboard (Bump Chart)" colSpan={2}>
+          <LeaderboardBumpChart data={bumpData} />
+        </GlassCard>
+
+        <GlassCard title="Assignments" subtitle="Health (Speedometer)">
+          <AssignmentSpeedometer data={assignmentData} />
+        </GlassCard>
+
+        <GlassCard title="Topic Mastery" subtitle="Math Breakdown (Polar Area)" rowSpan={2}>
+          <TopicPolarArea data={polarData} />
+        </GlassCard>
+
+        <GlassCard title="Class Distribution" subtitle="Science Test (Bell Curve)" colSpan={2}>
+          <TestBellCurve data={bellData} studentScore={85} />
+        </GlassCard>
+
+        <GlassCard title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)" colSpan={2}>
+          <TestQuadrantChart data={quadrantData} />
+        </GlassCard>
+
+        <GlassCard title="Today's Activity" subtitle="Chronological Stepper" rowSpan={2}>
+          <ActivityStepper data={activityData} />
         </GlassCard>
 
         {/* Mobile Alternative */}
