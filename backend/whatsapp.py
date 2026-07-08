@@ -585,10 +585,12 @@ def _report_fields(report: dict, test_id: Optional[str] = None) -> dict:
         "live_classes_stats": report.get("live_classes_stats") or {},
         "class_averages": report.get("class_averages") or {},
         "topic_mastery_pct": report.get("topic_mastery_pct"),
+        "topics": report.get("topic_map") or [],
         "attendance_heatmap": report.get("attendance_heatmap") or [],
         "video_heatmap": report.get("video_heatmap") or [],
         "test_heatmap": report.get("test_heatmap") or [],
         "assignment_heatmap": report.get("assignment_heatmap") or [],
+        "total_tests_in_standard": report.get("total_tests_in_standard") or 0,
         "period": period,
         "period_label": _period_label(period, is_exam),
         "is_exam": is_exam,
@@ -662,6 +664,50 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
     LIGHT = colors.HexColor("#F4F2EF")
     BORDER = colors.HexColor("#EBEAE7")
     INDIGO = colors.HexColor("#6366f1")
+    BLUE = colors.HexColor("#2563eb")
+    GREEN = colors.HexColor("#059669")
+    TEAL = colors.HexColor("#0f766e")
+    AMBER = colors.HexColor("#d97706")
+    RED = colors.HexColor("#dc2626")
+    VIOLET = colors.HexColor("#7c3aed")
+
+    def n(value, fallback=0.0):
+        try:
+            if value is None or value == "":
+                return fallback
+            return float(value)
+        except Exception:
+            return fallback
+
+    def clamp(value, lo=0.0, hi=100.0):
+        return max(lo, min(hi, n(value)))
+
+    def pct(part, total):
+        total = n(total)
+        return (n(part) / total * 100.0) if total > 0 else 0.0
+
+    def avg(values):
+        vals = [n(v, None) for v in values]
+        vals = [v for v in vals if v is not None]
+        return (sum(vals) / len(vals)) if vals else 0.0
+
+    def weighted(parts):
+        usable = [(clamp(v), w) for v, w, ok in parts if ok and n(w) > 0]
+        total_w = sum(w for _, w in usable)
+        return round(sum(v * w for v, w in usable) / total_w) if total_w else 0
+
+    def health_copy(score):
+        score = clamp(score)
+        if score >= 85:
+            return "Excellent momentum", GREEN
+        if score >= 70:
+            return "Healthy progress", BLUE
+        if score >= 50:
+            return "Needs steady practice", AMBER
+        return "Recovery plan needed", RED
+
+    def fmt_pct(value):
+        return f"{round(clamp(value))}%"
 
     def _image_reader(data: Optional[bytes]):
         if not data:
@@ -793,6 +839,80 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
         text = str(value)
         return text if len(text) <= max_chars else text[:max_chars - 1] + "..."
 
+    def ensure(space):
+        nonlocal y
+        if y < space + 25 * mm:
+            new_page()
+
+    def section(title, color=INK):
+        nonlocal y
+        ensure(18 * mm)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(M, y, title)
+        c.setStrokeColor(BORDER)
+        c.line(M, y - 2.5 * mm, W - M, y - 2.5 * mm)
+        y -= 8 * mm
+
+    def progress_bar(x, top, width, label, value, color, compare=None, compare_label="Class"):
+        value = clamp(value)
+        c.setFillColor(INK)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(x, top, cell_text(label, 18))
+        c.setFillColor(GRAY)
+        c.drawRightString(x + width, top, fmt_pct(value))
+        bar_y = top - 5 * mm
+        c.setFillColor(colors.HexColor("#E7E5E4"))
+        c.roundRect(x, bar_y, width, 3 * mm, 1.5 * mm, stroke=0, fill=1)
+        c.setFillColor(color)
+        c.roundRect(x, bar_y, width * value / 100.0, 3 * mm, 1.5 * mm, stroke=0, fill=1)
+        if compare is not None:
+            marker = x + width * clamp(compare) / 100.0
+            c.setStrokeColor(DARK)
+            c.setLineWidth(0.7)
+            c.line(marker, bar_y - 0.8 * mm, marker, bar_y + 4 * mm)
+            c.setFillColor(GRAY)
+            c.setFont("Helvetica", 6.8)
+            c.drawRightString(x + width, bar_y - 2.6 * mm, f"{compare_label}: {fmt_pct(compare)}")
+
+    def insight_box(x, top, width, height, title, value, subtitle, color):
+        c.setFillColor(colors.white)
+        c.setStrokeColor(BORDER)
+        c.roundRect(x, top - height, width, height, 3 * mm, stroke=1, fill=1)
+        c.setFillColor(color)
+        c.roundRect(x, top - height, 3 * mm, height, 1.5 * mm, stroke=0, fill=1)
+        c.setFillColor(GRAY)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(x + 6 * mm, top - 6 * mm, title.upper())
+        c.setFillColor(INK)
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(x + 6 * mm, top - 13 * mm, cell_text(value, 14))
+        c.setFillColor(GRAY)
+        c.setFont("Helvetica", 7.5)
+        c.drawString(x + 6 * mm, top - 19 * mm, cell_text(subtitle, 34))
+
+    def activity_squares(x, top, rows, key, color, label):
+        rows = sorted(rows or [], key=lambda r: str(r.get("date") or ""))[-28:]
+        if not rows:
+            return
+        c.setFillColor(GRAY)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(x, top, label.upper())
+        max_value = max([n(r.get(key)) for r in rows] + [1])
+        size = 3.1 * mm
+        gap = 1.0 * mm
+        sx, sy = x, top - 6 * mm
+        for i, row in enumerate(rows):
+            value = n(row.get(key))
+            col = i % 14
+            rr = i // 14
+            c.setFillColor(color if value > 0 else colors.HexColor("#E7E5E4"))
+            if value > 0:
+                c.setFillAlpha(max(0.30, min(1.0, value / max_value)))
+            c.roundRect(sx + col * (size + gap), sy - rr * (size + gap), size, size, 0.8 * mm, stroke=0, fill=1)
+            if value > 0:
+                c.setFillAlpha(1)
+
     # ── Table helper ───────────────────────────────────────────────────────
     def table(title, headers, rows, col_widths):
         nonlocal y
@@ -834,6 +954,125 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
 
     cw = W - 2 * M
 
+    ca = f["class_averages"] or {}
+    topics = f["topics"] or []
+    assignment_stats = f["assignment_stats"] or {}
+    live = f["live_classes_stats"] or {}
+    topic_mastery = f["topic_mastery_pct"]
+    if topic_mastery is None and topics:
+        topic_mastery = pct(len([t for t in topics if n(t.get("score_pct")) >= 60]), len(topics))
+    assignment_completion = pct(assignment_stats.get("submitted"), assignment_stats.get("total"))
+    video_completion = avg([
+        s.get("video_pct") for s in f["radar"]
+        if n(s.get("video_total")) > 0
+    ])
+    test_participation = pct(len(f["recent_tests"]), f["total_tests_in_standard"]) if f["total_tests_in_standard"] else 0
+    score_value = n(f["avg_score"], 0)
+    attendance_value = n(f["attendance_pct"], 0)
+
+    if is_exam:
+        exam = f["recent_tests"][0] if f["recent_tests"] else {}
+        class_avg = exam.get("class_avg_score_pct")
+        class_high = exam.get("class_max_score_pct")
+        integrity = 45 if exam.get("flagged") else 100
+        health = weighted([
+            (score_value, 0.75, f["avg_score"] is not None),
+            (100 if not class_avg else max(0, 100 + score_value - n(class_avg)), 0.15, class_avg is not None),
+            (integrity, 0.10, True),
+        ])
+        health_title, health_color = health_copy(health)
+        section("Exam Intelligence Snapshot", VIOLET)
+        panel_h = 47 * mm
+        ensure(panel_h)
+        top = y
+        c.setFillColor(colors.HexColor("#FAFAFA"))
+        c.setStrokeColor(BORDER)
+        c.roundRect(M, top - panel_h, cw, panel_h, 4 * mm, stroke=1, fill=1)
+        insight_box(M + 5 * mm, top - 5 * mm, 47 * mm, 25 * mm, "Exam Health", f"{health}/100", health_title, health_color)
+        insight_box(M + 57 * mm, top - 5 * mm, 42 * mm, 25 * mm, "Score", fmt_pct(score_value), f"{f['exam_title'] or 'Exam'}", INDIGO)
+        rank_text = f"{f['exam_rank']} of {f['exam_total']}" if f["exam_rank"] and f["exam_total"] else "-"
+        insight_box(M + 104 * mm, top - 5 * mm, 42 * mm, 25 * mm, "Rank", rank_text, "Exam position", AMBER)
+        xbar = M + 153 * mm
+        progress_bar(xbar, top - 8 * mm, 37 * mm, "Student", score_value, INDIGO, class_avg, "Class")
+        progress_bar(xbar, top - 24 * mm, 37 * mm, "Highest", class_high or score_value, GREEN)
+        y -= panel_h + 8 * mm
+        plan = []
+        if class_avg is not None and score_value < n(class_avg):
+            plan.append(f"Bridge the {round(n(class_avg) - score_value)}% gap to class average with one focused revision cycle.")
+        if score_value < 35:
+            plan.append("Rebuild basics first: review solved examples before attempting timed practice.")
+        elif score_value < 70:
+            plan.append("Redo all wrong and skipped concepts, then take one short timed retest.")
+        else:
+            plan.append("Maintain momentum with one advanced practice set before the next exam.")
+        if exam.get("flagged"):
+            plan.append("Teacher review required because this attempt was flagged.")
+    else:
+        health = weighted([
+            (score_value, 0.36, f["avg_score"] is not None),
+            (attendance_value, 0.18, f["attendance_pct"] is not None),
+            (topic_mastery or 0, 0.14, topic_mastery is not None),
+            (assignment_completion, 0.12, n(assignment_stats.get("total")) > 0),
+            (video_completion, 0.10, video_completion > 0),
+            (live.get("attendance_pct") or 0, 0.06, n(live.get("total")) > 0),
+            (test_participation, 0.04, f["total_tests_in_standard"] > 0),
+        ])
+        health_title, health_color = health_copy(health)
+        section("Learning Intelligence Snapshot", VIOLET)
+        panel_h = 62 * mm
+        ensure(panel_h)
+        top = y
+        c.setFillColor(colors.HexColor("#FAFAFA"))
+        c.setStrokeColor(BORDER)
+        c.roundRect(M, top - panel_h, cw, panel_h, 4 * mm, stroke=1, fill=1)
+        insight_box(M + 5 * mm, top - 5 * mm, 47 * mm, 25 * mm, "Learning Health", f"{health}/100", health_title, health_color)
+        insight_box(M + 57 * mm, top - 5 * mm, 42 * mm, 25 * mm, "Topic Mastery", fmt_pct(topic_mastery or 0), f"{len(topics)} topics tracked" if topics else "Topics pending", VIOLET)
+        assign_text = f"{int(n(assignment_stats.get('submitted')))}/{int(n(assignment_stats.get('total')))}" if n(assignment_stats.get("total")) > 0 else "-"
+        insight_box(M + 104 * mm, top - 5 * mm, 42 * mm, 25 * mm, "Assignments", assign_text, "Submitted work", AMBER)
+        xbar = M + 153 * mm
+        progress_bar(xbar, top - 8 * mm, 37 * mm, "Score", score_value, INDIGO, ca.get("avg_score"), "Class")
+        progress_bar(xbar, top - 24 * mm, 37 * mm, "Attendance", attendance_value, TEAL, ca.get("attendance_pct"), "Class")
+        progress_bar(M + 5 * mm, top - 40 * mm, 58 * mm, "Videos", video_completion, BLUE, ca.get("video_pct"), "Class")
+        progress_bar(M + 71 * mm, top - 40 * mm, 58 * mm, "Assignments", assignment_completion, AMBER)
+        progress_bar(M + 137 * mm, top - 40 * mm, 53 * mm, "Tests", test_participation, GREEN)
+        y -= panel_h + 8 * mm
+        weak_subject = None
+        tested_subjects = [s for s in f["radar"] if n(s.get("test_count")) > 0]
+        if tested_subjects:
+            weak_subject = sorted(tested_subjects, key=lambda s: n(s.get("test_avg")))[0]
+        weak_topic = None
+        if topics:
+            weak_topic = sorted(topics, key=lambda t: n(t.get("score_pct")))[0]
+        pending = max(0, int(n(assignment_stats.get("total")) - n(assignment_stats.get("submitted"))))
+        plan = []
+        if attendance_value and attendance_value < 75:
+            plan.append("Raise attendance above 80% for the next report period.")
+        if weak_subject:
+            plan.append(f"Focus subject: {weak_subject.get('subject')} at {fmt_pct(weak_subject.get('test_avg'))}.")
+        if weak_topic:
+            plan.append(f"Revise topic: {weak_topic.get('topic') or weak_topic.get('test_title') or 'lowest scoring concept'}.")
+        if pending:
+            plan.append(f"Submit {pending} pending assignment{'s' if pending != 1 else ''}.")
+        if video_completion and video_completion < 70:
+            plan.append("Complete unfinished concept videos before the next test.")
+        if not plan:
+            plan.append("Maintain the current rhythm: revision, practice test, and assignment review each week.")
+
+    section("Priority Action Plan", AMBER)
+    ensure((len(plan) * 9 + 8) * mm)
+    for idx, step in enumerate(plan[:5], start=1):
+        c.setFillColor(colors.HexColor("#FFF7ED"))
+        c.setStrokeColor(colors.HexColor("#FED7AA"))
+        c.roundRect(M, y - 7 * mm, cw, 7 * mm, 2 * mm, stroke=1, fill=1)
+        c.setFillColor(AMBER)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(M + 3 * mm, y - 4.7 * mm, str(idx))
+        c.setFillColor(INK)
+        c.setFont("Helvetica", 8.5)
+        c.drawString(M + 10 * mm, y - 4.7 * mm, cell_text(step, 96))
+        y -= 9 * mm
+    y -= 4 * mm
+
     details_rows = [
         ["Student ID", f["student_code"] or "-"],
         ["Standard", f["standard"] or "-"],
@@ -865,6 +1104,17 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
             ],
             [cw * 0.38, cw * 0.62],
         )
+        if f["test_heatmap"] or f["video_heatmap"] or f["assignment_heatmap"]:
+            section("Activity Rhythm")
+            ensure(34 * mm)
+            box_h = 30 * mm
+            c.setFillColor(colors.white)
+            c.setStrokeColor(BORDER)
+            c.roundRect(M, y - box_h, cw, box_h, 3 * mm, stroke=1, fill=1)
+            activity_squares(M + 5 * mm, y - 6 * mm, f["test_heatmap"], "count", VIOLET, "Tests")
+            activity_squares(M + 67 * mm, y - 6 * mm, f["video_heatmap"], "minutes", BLUE, "Videos")
+            activity_squares(M + 129 * mm, y - 6 * mm, f["assignment_heatmap"], "count", AMBER, "Assignments")
+            y -= box_h + 8 * mm
 
     if f["radar"]:
         table(
@@ -880,6 +1130,23 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
             [cw * 0.32, cw * 0.17, cw * 0.17, cw * 0.17, cw * 0.17],
         )
 
+    if not is_exam and f["topics"]:
+        priority_topics = sorted(
+            f["topics"],
+            key=lambda t: (n(t.get("score_pct")), 1 if t.get("video_completed") else 0)
+        )[:8]
+        table(
+            "Topic Mastery Priorities",
+            ["Topic", "Subject", "Mastery", "Video"],
+            [[
+                t.get("topic") or t.get("test_title") or "Concept",
+                t.get("subject") or "-",
+                f"{round(n(t.get('score_pct')))}%",
+                "Watched" if t.get("video_completed") else "Pending",
+            ] for t in priority_topics],
+            [cw * 0.36, cw * 0.26, cw * 0.18, cw * 0.20],
+        )
+
     if f["recent_tests"]:
         def _fmt_date(iso):
             try:
@@ -888,14 +1155,15 @@ def build_report_pdf(report: dict, lms_name: str = "", test_id: Optional[str] = 
                 return ""
         table(
             "Exam Result" if is_exam else "Recent Tests",
-            ["Date", "Test", "Score", "Rank"],
+            ["Date", "Test", "Score", "Class Avg", "Rank"],
             [[
                 _fmt_date(t.get("date")),
                 (t.get("test_title") or "Test")[:48],
                 f"{t.get('score_pct', 0)}%",
+                f"{round(n(t.get('class_avg_score_pct')))}%" if t.get("class_avg_score_pct") is not None else "-",
                 (f"{t.get('rank')} of {t.get('total_attempts')}" if t.get("rank") and t.get("total_attempts") else "-"),
             ] for t in f["recent_tests"] if t],
-            [cw * 0.16, cw * 0.48, cw * 0.16, cw * 0.20],
+            [cw * 0.14, cw * 0.42, cw * 0.14, cw * 0.14, cw * 0.16],
         )
 
     if not is_exam and f["assignments"]:
