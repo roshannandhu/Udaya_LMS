@@ -79,7 +79,7 @@ export default function ReportGraphReferencePage() {
   
   // Dummy Data Generators
   
-  const areaData = reportData?.trendData || [
+  const areaData = reportData?.trendData?.length > 0 ? reportData.trendData : [
     { name: 'Jan', studentScore: 45, classScore: 60 },
     { name: 'Feb', studentScore: 55, classScore: 62 },
     { name: 'Mar', studentScore: 82, classScore: 64 },
@@ -88,7 +88,7 @@ export default function ReportGraphReferencePage() {
     { name: 'Jun', studentScore: 88, classScore: 70 },
   ];
 
-  const radarData = reportData?.radarData || [
+  const radarData = reportData?.radarData?.length > 0 ? reportData.radarData : [
     { subject: 'Math', student: 85, classAvg: 70 },
     { subject: 'Science', student: 95, classAvg: 75 },
     { subject: 'English', student: 45, classAvg: 65 },
@@ -96,7 +96,7 @@ export default function ReportGraphReferencePage() {
     { subject: 'IT', student: 98, classAvg: 85 },
   ];
 
-  const overlapData = reportData?.overlapData || [
+  const overlapData = reportData?.overlapData?.length > 0 ? reportData.overlapData : [
     { day: 'Mon', videos: 40, tests: 20, notes: 10 },
     { day: 'Tue', videos: 30, tests: 40, notes: 15 },
     { day: 'Wed', videos: 60, tests: 10, notes: 30 },
@@ -106,19 +106,19 @@ export default function ReportGraphReferencePage() {
     { day: 'Sun', videos: 10, tests: 0, notes: 0 },
   ];
 
-  const heatmapData = reportData?.heatmapData || Array.from({length: 28}, (_, i) => ({
+  const heatmapData = reportData?.heatmapData?.length > 0 ? reportData.heatmapData : Array.from({length: 28}, (_, i) => ({
     date: `2026-07-${i+1}`,
     count: Math.floor(Math.random() * 8)
   }));
 
-  const donutData = reportData?.donutData || [
+  const donutData = reportData?.donutData?.length > 0 ? reportData.donutData : [
     { name: 'Videos', value: 400, color: '#00C2C7' },
     { name: 'Tests', value: 300, color: '#7059FF' },
     { name: 'Live Classes', value: 200, color: '#FFC436' },
     { name: 'Assignments', value: 150, color: '#FF6B6B' },
   ];
 
-  const treemapData = reportData?.treemapData || [
+  const treemapData = reportData?.treemapData?.length > 0 ? reportData.treemapData : [
     { name: 'Videos', size: 400 },
     { name: 'Tests', size: 300 },
     { name: 'Live', size: 200 },
@@ -126,7 +126,7 @@ export default function ReportGraphReferencePage() {
     { name: 'HW', size: 50 },
   ];
 
-  const scatterData = reportData?.scatterData || [
+  const scatterData = reportData?.scatterData?.length > 0 ? reportData.scatterData : [
     { name: 'Q1', dateIndex: 1, score: 85, time: 120 },
     { name: 'Q2', dateIndex: 2, score: 45, time: 200 },
     { name: 'Q3', dateIndex: 3, score: 92, time: 80 },
@@ -134,38 +134,38 @@ export default function ReportGraphReferencePage() {
     { name: 'Q5', dateIndex: 5, score: 60, time: 180 },
   ];
 
-  const rangeData = reportData?.rangeData || [
+  const rangeData = reportData?.rangeData?.length > 0 ? reportData.rangeData : [
     { name: 'Math T1', minScore: 30, maxScore: 98, studentScore: 85 },
     { name: 'Sci T1', minScore: 45, maxScore: 100, studentScore: 95 },
     { name: 'Eng T1', minScore: 20, maxScore: 80, studentScore: 45 },
     { name: 'IT T1', minScore: 60, maxScore: 100, studentScore: 98 },
   ];
 
-  const attendanceDays = reportData?.attendanceDays || Array.from({length: 31}, (_, i) => {
+  const attendanceDays = reportData?.attendanceDays?.length > 0 ? reportData.attendanceDays : Array.from({length: 31}, (_, i) => {
     const status = Math.random() > 0.8 ? 'absent' : (Math.random() > 0.9 ? 'late' : 'present');
     return { dayNumber: i+1, status: i===14 ? 'holiday' : status, info: i===14 ? 'School Holiday' : status };
   });
 
-  const bumpData = reportData?.bumpData || [
+  const bumpData = reportData?.bumpData?.length > 0 ? reportData.bumpData : [
     { week: 'W1', rank: 15 },
     { week: 'W2', rank: 12 },
     { week: 'W3', rank: 6 },
     { week: 'W4', rank: 4 },
   ];
 
-  const assignmentData = reportData?.assignmentData || [
+  const assignmentData = reportData?.assignmentData?.length > 0 ? reportData.assignmentData : [
     { name: 'Submitted', value: 24, color: '#00C2C7' },
     { name: 'Pending', value: 4, color: '#FFC436' },
     { name: 'Overdue', value: 2, color: '#FF6B6B' },
   ];
 
-  const bellData = reportData?.bellData || [
+  const bellData = reportData?.bellData?.length > 0 ? reportData.bellData : [
     { scoreBin: 20, count: 1 }, { scoreBin: 30, count: 2 }, { scoreBin: 40, count: 5 },
     { scoreBin: 50, count: 12 }, { scoreBin: 60, count: 18 }, { scoreBin: 70, count: 24 },
     { scoreBin: 80, count: 15 }, { scoreBin: 90, count: 8 }, { scoreBin: 100, count: 3 },
   ];
 
-  const quadrantData = reportData?.quadrantData || [
+  const quadrantData = reportData?.quadrantData?.length > 0 ? reportData.quadrantData : [
     { name: 'Test 1', score: 85, time: 20 },
     { name: 'Test 2', score: 45, time: 20 },
     { name: 'Test 3', score: 92, time: 55 },
@@ -173,18 +173,18 @@ export default function ReportGraphReferencePage() {
     { name: 'Test 5', score: 75, time: 30 },
   ];
 
-  const polarData = reportData?.polarData || [
+  const polarData = reportData?.polarData?.length > 0 ? reportData.polarData : [
     { topic: 'Algebra', score: 90 }, { topic: 'Geometry', score: 65 }, { topic: 'Trigonometry', score: 80 },
     { topic: 'Statistics', score: 45 }, { topic: 'Calculus', score: 85 },
   ];
 
-  const activityData = reportData?.activityData || [
+  const activityData = reportData?.activityData?.length > 0 ? reportData.activityData : [
     { time: '09:00 AM', title: 'Logged In', color: 'bg-green-400' },
     { time: '10:15 AM', title: 'Watched Algebra Video', color: 'bg-[#00C2C7]' },
     { time: '11:30 AM', title: 'Submitted Assignment', color: 'bg-[#7059FF]' },
   ];
 
-  const testDays = reportData?.testDays || Array.from({length: 31}, (_, i) => {
+  const testDays = reportData?.testDays?.length > 0 ? reportData.testDays : Array.from({length: 31}, (_, i) => {
     const hasTest = Math.random() > 0.85;
     return { dayNumber: i+1, hasTest, score: hasTest ? Math.floor(Math.random()*40 + 60) : null, testName: hasTest ? 'Unit Test' : null };
   });
