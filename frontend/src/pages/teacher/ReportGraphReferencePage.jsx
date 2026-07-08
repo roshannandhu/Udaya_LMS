@@ -18,7 +18,6 @@ import NeonProgressGauge from '../../components/shared/graphs/NeonProgressGauge'
 import QuizBubbleScatter from '../../components/shared/graphs/QuizBubbleScatter';
 import QuizRangeChart from '../../components/shared/graphs/QuizRangeChart';
 import AttendanceCalendar from '../../components/shared/graphs/AttendanceCalendar';
-import TestCalendar from '../../components/shared/graphs/TestCalendar';
 import LeaderboardBumpChart from '../../components/shared/graphs/LeaderboardBumpChart';
 import AssignmentSpeedometer from '../../components/shared/graphs/AssignmentSpeedometer';
 import TestBellCurve from '../../components/shared/graphs/TestBellCurve';
@@ -292,14 +291,11 @@ export default function ReportGraphReferencePage() {
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
-          <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Learning Calendar" subtitle="Attendance and tests">
+          <AttendanceCalendar month={new Date()} daysData={attendanceDays} testDaysData={testDays} />
         </GlassCard>
 
         {/* ROW 8 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
-          <TestCalendar month={new Date()} daysData={testDays} />
-        </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Today's Activity" subtitle="Chronological Stepper">
           <ActivityStepper data={activityData} />
         </GlassCard>

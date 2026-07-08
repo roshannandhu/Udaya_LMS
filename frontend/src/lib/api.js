@@ -7,10 +7,19 @@ const envApiUrl = import.meta.env.VITE_API_URL;
 const isBrowser = typeof window !== 'undefined';
 const isLocalhostEnv = envApiUrl && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.test(envApiUrl);
 const isLocalhostPage = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+const productionApiByHost = {
+  'udaya-learn.com': 'https://api.udaya-learn.com/api',
+  'www.udaya-learn.com': 'https://api.udaya-learn.com/api',
+};
+const productionApiUrl = isBrowser ? productionApiByHost[hostname] : null;
 const API_BASE = (
-  envApiUrl && (!isBrowser || isLocalhostPage || !isLocalhostEnv)
-    ? envApiUrl
-    : `http://${hostname}:${port}/api`
+  productionApiUrl
+    ? productionApiUrl
+    : (
+      envApiUrl && (!isBrowser || isLocalhostPage || !isLocalhostEnv)
+        ? envApiUrl
+        : `http://${hostname}:${port}/api`
+    )
 ).replace(/\/$/, '');
 const TOKEN_KEY    = 'tutoria_token';
 const REFRESH_KEY  = 'tutoria_refresh_token';
@@ -511,18 +520,13 @@ const normalizeReportV2 = (report = {}) => {
     String(a.date || '').localeCompare(String(b.date || ''))
   );
   const recentTests = timeline.slice(-12);
-  const fallbackScore = clampPct(student.avg_score);
-
   const trendData = recentTests.length
     ? recentTests.map((t, index) => ({
         name: shortLabel(t.test_title, `T${index + 1}`),
         studentScore: clampPct(t.score_pct),
-        classScore: classAvg,
+        classScore: clampPct(t.class_avg_score_pct ?? classAvg),
       }))
-    : [
-        { name: 'Start', studentScore: Math.max(0, fallbackScore - 8), classScore: classAvg },
-        { name: 'Now', studentScore: fallbackScore, classScore: classAvg },
-      ];
+    : [];
 
   const progressionByTest = {};
   recentTests.forEach((t, index) => {
@@ -542,19 +546,22 @@ const normalizeReportV2 = (report = {}) => {
     ? topicItems.slice(0, 8).map((t) => ({ topic: t.topic || t.subject || 'Topic', score: clampPct(t.score_pct) }))
     : radarData.map((r) => ({ topic: r.subject, score: r.student }));
 
-  const scatterData = recentTests.map((t, index) => ({
-    name: shortLabel(t.test_title, `T${index + 1}`),
-    dateIndex: index + 1,
-    score: clampPct(t.score_pct),
-    time: 120 + (index % 4) * 45,
-  }));
+  const scatterData = recentTests
+    .filter((t) => Number.isFinite(Number(t.time_minutes)))
+    .map((t, index) => ({
+      name: shortLabel(t.test_title, `T${index + 1}`),
+      dateIndex: index + 1,
+      score: clampPct(t.score_pct),
+      time: Number(t.time_minutes),
+    }));
 
   const rangeData = recentTests.slice(-6).map((t, index) => {
     const score = clampPct(t.score_pct);
     return {
       name: shortLabel(t.test_title, `T${index + 1}`),
-      minScore: Math.max(0, Math.min(score, classAvg) - 15),
-      maxScore: Math.min(100, Math.max(score, classAvg) + 15),
+      minScore: clampPct(t.class_min_score_pct ?? score),
+      maxScore: clampPct(t.class_max_score_pct ?? score),
+      classAvg: clampPct(t.class_avg_score_pct ?? classAvg),
       studentScore: score,
     };
   });
@@ -592,30 +599,34 @@ const normalizeReportV2 = (report = {}) => {
   const assignmentSubmitted = Number(assignmentStats.submitted || 0);
   const assignmentTotal = Number(assignmentStats.total || 0);
   const assignmentData = [
-    { name: 'Submitted', value: assignmentSubmitted, color: '#67E8F9' },
-    { name: 'Pending', value: Math.max(0, assignmentTotal - assignmentSubmitted), color: '#FDE047' },
-    { name: 'Overdue', value: 0, color: '#FCA5A5' },
+    { name: 'Submitted', value: assignmentSubmitted, color: '#2563EB' },
+    { name: 'Pending', value: Math.max(0, assignmentTotal - assignmentSubmitted), color: '#D97706' },
+    { name: 'Overdue', value: Number(assignmentStats.overdue || 0), color: '#E11D48' },
   ];
 
   const totalVideoMinutes = Math.round((report.video_heatmap || []).reduce((sum, r) => sum + (r.minutes || 0), 0));
   const totalTests = timeline.length;
   const liveAttended = report.live_classes_stats?.attended || 0;
+  const timeItems = [
+    { name: 'Videos', value: totalVideoMinutes, color: '#2563EB' },
+    { name: 'Tests', value: totalTests, color: '#7C3AED' },
+    { name: 'Live Classes', value: liveAttended, color: '#059669' },
+    { name: 'Assignments', value: assignmentSubmitted, color: '#D97706' },
+  ];
   const donutData = [
-    { name: 'Videos', value: Math.max(totalVideoMinutes, 1), color: '#67E8F9' },
-    { name: 'Tests', value: Math.max(totalTests, 1), color: '#A78BFA' },
-    { name: 'Live Classes', value: Math.max(liveAttended, 1), color: '#FDE047' },
-    { name: 'Assignments', value: Math.max(assignmentSubmitted, 1), color: '#FCA5A5' },
+    ...timeItems.filter((item) => item.value > 0),
   ];
 
   const attendanceDays = (report.attendance_heatmap || []).slice(-31).map((r, index) => {
     const status = (r.absent || 0) > (r.present || 0) + (r.late || 0)
       ? 'absent'
       : (r.late || 0) > 0 ? 'late' : 'present';
-    return { dayNumber: dayNumber(r.date, index + 1), status, info: status };
+    return { date: r.date, dayNumber: dayNumber(r.date, null), status, info: status };
   });
 
   const testDays = timeline.slice(-31).map((t, index) => ({
-    dayNumber: dayNumber(t.date, index + 1),
+    date: t.date,
+    dayNumber: dayNumber(t.date, null),
     hasTest: true,
     score: clampPct(t.score_pct),
     testName: t.test_title || 'Test',
@@ -639,7 +650,7 @@ const normalizeReportV2 = (report = {}) => {
     heatmapData,
     overlapData,
     donutData,
-    treemapData: donutData.map((d) => ({ name: d.name, size: d.value })),
+    treemapData: timeItems.filter((item) => item.value > 0).map((d) => ({ name: d.name, size: d.value })),
     attendanceDays,
     testDays,
     bumpData: [{ week: report.period || 'Overall', rank: report.rank || 0 }],
@@ -649,7 +660,7 @@ const normalizeReportV2 = (report = {}) => {
     activityData: recentTests.slice(-5).reverse().map((t) => ({
       time: String(t.date || '').slice(11, 16) || '--',
       title: `${t.test_title || 'Test'} - ${clampPct(t.score_pct)}%`,
-      color: clampPct(t.score_pct) >= 70 ? 'bg-[#67E8F9]' : 'bg-[#FDE047]',
+      color: clampPct(t.score_pct) >= 70 ? 'bg-blue-600' : 'bg-amber-500',
     })),
   };
 };

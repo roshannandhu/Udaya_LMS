@@ -3636,6 +3636,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
             "date": a.get("submitted_at") or a.get("created_at"),
             "test_title": t.get("title", "Test"),
             "test_id": t.get("id"),
+            "total_marks": total,
             "subject_id": class_id,
             "subject": sub.get("name", ""),
             "emoji": sub.get("emoji", "book"),
@@ -3662,6 +3663,16 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                     (i + 1 for i, r in enumerate(rows) if r.get("student_id") == student_id),
                     None,
                 )
+                total_marks = entry.get("total_marks") or 100
+                class_pcts = [
+                    round((r.get("score") or 0) / total_marks * 100, 1)
+                    for r in rows
+                    if total_marks > 0
+                ]
+                if class_pcts:
+                    entry["class_min_score_pct"] = round(min(class_pcts), 1)
+                    entry["class_max_score_pct"] = round(max(class_pcts), 1)
+                    entry["class_avg_score_pct"] = round(sum(class_pcts) / len(class_pcts), 1)
         except Exception:
             pass  # rank is decorative — never fail the report over it
 

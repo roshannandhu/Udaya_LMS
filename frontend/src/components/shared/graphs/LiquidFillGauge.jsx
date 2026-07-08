@@ -18,13 +18,13 @@ export default function LiquidFillGauge({ percentage, size = 160 }) {
             <circle cx={cx} cy={cy} r={r} />
           </clipPath>
           <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00E5FF"/>
-            <stop offset="100%" stopColor="#0083B0"/>
+            <stop offset="0%" stopColor="#34D399"/>
+            <stop offset="100%" stopColor="#059669"/>
           </linearGradient>
         </defs>
         
         {/* Background track */}
-        <circle cx={cx} cy={cy} r={r} fill="#F4F7F6" stroke="#E5E7EB" strokeWidth="2" />
+        <circle cx={cx} cy={cy} r={r} fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="2" />
         
         {/* Animated Water */}
         <g clipPath={`url(#circle-clip-${size})`}>
@@ -43,11 +43,11 @@ export default function LiquidFillGauge({ percentage, size = 160 }) {
         </g>
         
         {/* Outer glowing ring */}
-        <circle cx={cx} cy={cy} r={r+6} fill="none" stroke="#67E8F9" strokeWidth="4" strokeOpacity="0.2" />
+        <circle cx={cx} cy={cy} r={r+6} fill="none" stroke="#059669" strokeWidth="4" strokeOpacity="0.18" />
       </svg>
       
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none drop-shadow-md">
-        <span className="text-4xl font-serif font-black text-[#112B3C] mix-blend-overlay">{Math.round(percentage)}%</span>
+        <span className="text-4xl font-black text-slate-950 drop-shadow-sm tabular-nums">{Math.round(percentage)}%</span>
       </div>
       
       <style dangerouslySetInnerHTML={{__html: `

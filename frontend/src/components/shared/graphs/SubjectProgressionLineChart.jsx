@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 
 export default function SubjectProgressionLineChart({ data }) {
   // data: [ { testName: 'T1', Math: 85, Science: 90, English: 70 }, ... ]
-  const COLORS = ['#67E8F9', '#A78BFA', '#FDE047', '#FCA5A5', '#2DD4BF'];
+  const COLORS = ['#2563EB', '#7C3AED', '#D97706', '#059669', '#E11D48'];
   
   const [selectedSubject, setSelectedSubject] = useState('All');
   
@@ -12,10 +12,10 @@ export default function SubjectProgressionLineChart({ data }) {
   const subjectsToRender = selectedSubject === 'All' ? allSubjects : [selectedSubject];
 
   return (
-    <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4 relative">
-      <div className="absolute top-2 right-4 z-10">
+    <div className="w-full h-full min-h-[280px] pt-12 pb-2 relative">
+      <div className="absolute top-0 right-0 z-10">
         <select 
-          className="text-[10px] uppercase font-black tracking-widest text-[#112B3C] bg-white/60 border border-white/80 backdrop-blur-md rounded-lg px-3 py-1.5 shadow-sm outline-none cursor-pointer hover:bg-white transition-colors"
+          className="min-h-10 text-xs font-extrabold text-slate-800 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm outline-none cursor-pointer hover:bg-blue-50 transition-colors"
           value={selectedSubject}
           onChange={(e) => setSelectedSubject(e.target.value)}
         >
@@ -23,11 +23,11 @@ export default function SubjectProgressionLineChart({ data }) {
           {allSubjects.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-          <XAxis dataKey="testName" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-          <YAxis domain={[0, 100]} tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={data} margin={{ top: 20, right: 34, left: 4, bottom: 42 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#CBD5E1" />
+          <XAxis dataKey="testName" interval="preserveStartEnd" tick={{fontSize: 11, fill: '#475569', fontWeight: 700}} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} width={34} tick={{fontSize: 11, fill: '#475569', fontWeight: 700}} axisLine={false} tickLine={false} />
           <Tooltip 
             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
             itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
@@ -44,7 +44,7 @@ export default function SubjectProgressionLineChart({ data }) {
               activeDot={{ r: 6 }}
             />
           ))}
-          <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} iconType="circle" />
+          <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', paddingTop: 8 }} iconType="circle" />
         </LineChart>
       </ResponsiveContainer>
     </div>

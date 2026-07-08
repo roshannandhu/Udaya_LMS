@@ -23,7 +23,7 @@ export default function NeonProgressGauge({ percentage, label, color = '#FDE047'
           {/* Dark inner track */}
           <circle 
             cx={size/2} cy={size/2} r={radius} 
-            stroke="#E5E7EB" strokeWidth={strokeWidth} fill="#F9FAFB" 
+            stroke="#CBD5E1" strokeWidth={strokeWidth} fill="#F8FAFC" 
           />
           {/* Glowing bright ring */}
           <circle 
@@ -37,10 +37,10 @@ export default function NeonProgressGauge({ percentage, label, color = '#FDE047'
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-serif font-black text-[#112B3C]">{Math.round(percentage)}%</span>
+          <span className="text-2xl font-black text-slate-950 tabular-nums">{Math.round(percentage)}%</span>
         </div>
       </div>
-      <span className="mt-4 font-bold text-[10px] uppercase tracking-wider text-gray-400">{label}</span>
+      <span className="mt-4 font-bold text-xs text-slate-500">{label}</span>
     </div>
   );
 }

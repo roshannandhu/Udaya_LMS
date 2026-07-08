@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Loader2, ArrowLeft, Share2, Download } from 'lucide-react';
+import { Award, Bot, CalendarDays, Download, Loader2, Share2, Sparkles, TrendingUp } from 'lucide-react';
 import { aiApi } from '../../lib/api';
 
 // --- Premium Graph Imports ---
@@ -17,7 +17,6 @@ import NeonProgressGauge from './graphs/NeonProgressGauge';
 import QuizBubbleScatter from './graphs/QuizBubbleScatter';
 import QuizRangeChart from './graphs/QuizRangeChart';
 import AttendanceCalendar from './graphs/AttendanceCalendar';
-import TestCalendar from './graphs/TestCalendar';
 import LeaderboardBumpChart from './graphs/LeaderboardBumpChart';
 import AssignmentSpeedometer from './graphs/AssignmentSpeedometer';
 import TestBellCurve from './graphs/TestBellCurve';
@@ -25,21 +24,47 @@ import TestQuadrantChart from './graphs/TestQuadrantChart';
 import TopicPolarArea from './graphs/TopicPolarArea';
 import ActivityStepper from './graphs/ActivityStepper';
 
-// Basic Glass Card Wrapper
-const GlassCard = ({ title, subtitle, children, className = "", onClick = null }) => (
+const cardTone = {
+  blue: 'border-t-[#2563EB]',
+  amber: 'border-t-[#D97706]',
+  emerald: 'border-t-[#059669]',
+  violet: 'border-t-[#7C3AED]',
+  rose: 'border-t-[#E11D48]',
+  cyan: 'border-t-[#0891B2]',
+};
+
+const GlassCard = ({ title, subtitle, children, className = "", onClick = null, tone = "blue", tall = false }) => (
   <div 
     onClick={onClick}
-    className={`bg-white/40 backdrop-blur-xl border border-white/60 rounded-[24px] md:rounded-[32px] p-5 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full relative z-10 overflow-hidden ${className} ${onClick ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
+    className={`bg-white border border-slate-200/80 border-t-4 ${cardTone[tone] || cardTone.blue} rounded-3xl p-5 md:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.07)] flex flex-col transition-all duration-300 w-full relative z-10 overflow-hidden ${tall ? 'min-h-[360px]' : 'min-h-[300px]'} ${className} ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(15,23,42,0.12)] active:scale-[0.99]' : ''}`}
   >
-    <div className="mb-3 md:mb-4 shrink-0 pointer-events-none">
-      <h3 className="text-[#112B3C] font-black text-base md:text-lg tracking-tight leading-tight truncate">{title}</h3>
-      {subtitle && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 truncate">{subtitle}</p>}
+    <div className="mb-4 md:mb-5 shrink-0 pointer-events-none">
+      <h3 className="text-slate-950 font-extrabold text-lg md:text-xl tracking-tight leading-snug">{title}</h3>
+      {subtitle && <p className="text-xs font-semibold text-slate-500 mt-1 leading-snug">{subtitle}</p>}
     </div>
     <div className="w-full flex-1 flex flex-col justify-center relative min-w-0 pointer-events-auto">
       {children}
     </div>
   </div>
 );
+
+const MetricTile = ({ icon: Icon, label, value, accent = "blue" }) => {
+  const styles = {
+    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+  };
+  return (
+    <div className={`rounded-2xl p-4 ring-1 ${styles[accent] || styles.blue}`}>
+      <div className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500">
+        <Icon size={15} />
+        <span>{label}</span>
+      </div>
+      <div className="mt-2 text-2xl md:text-3xl font-black text-slate-950 tabular-nums leading-none">{value}</div>
+    </div>
+  );
+};
 
 export default function StudentReportCard({ data, period, onPeriodChange, onDownloadPDF, showHeader = true, autoOpenAI = false }) {
   const [aiResult, setAiResult] = useState({ key: null, report: '', error: '' });
@@ -80,6 +105,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     { id: 'monthly', label: 'Monthly' },
     { id: 'weekly',  label: 'Weekly'  },
   ];
+  const avgScore = Math.round(student.avg_score || 0);
+  const attendancePct = Math.round(student.attendance_pct || 0);
+  const firstName = student.name ? student.name.split(' ')[0] : 'Student';
 
   const handleShare = async () => {
     const text = `Udaya LMS Report for ${student.name || 'Student'} (${period}). Score: ${student.avg_score ?? 'N/A'}% | Attendance: ${student.attendance_pct ?? 'N/A'}%`;
@@ -144,142 +172,138 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   }, [autoOpenAI, handleGenerateAI, studentId]);
 
   return (
-    <div className="w-full bg-[#F4F7F6] pb-24 text-[#333333] font-sans">
+    <div className="w-full bg-[radial-gradient(circle_at_top_left,#DBEAFE_0,#F8FAFC_32%,#F1F5F9_100%)] pb-24 text-slate-900 font-sans">
       
       {showHeader && (
-        <div className="pt-6 md:pt-8 px-4 md:px-6 pb-6 flex justify-between items-center max-w-7xl mx-auto">
-          <div className="flex items-center gap-3 md:gap-4">
-            <button className="w-10 h-10 rounded-full flex items-center justify-center bg-white shadow-sm border border-gray-100"><ArrowLeft size={18} className="text-gray-700" /></button>
+        <div className="pt-6 md:pt-8 px-4 md:px-6 pb-6 flex flex-col md:flex-row justify-between md:items-center gap-4 max-w-7xl mx-auto">
+          <div className="flex items-center gap-3 md:gap-4 min-w-0">
             <div>
-              <h1 className="text-lg md:text-xl font-serif font-black text-[#112B3C] tracking-tight">{student.name ? student.name.split(' ')[0] : 'Student'}</h1>
-              <p className="text-[10px] md:text-xs text-gray-400 font-bold tracking-wider uppercase">{student.username || 'ID'}</p>
+              <h1 className="text-2xl md:text-4xl font-black text-slate-950 tracking-tight leading-tight">Report Card</h1>
+              <p className="text-sm text-slate-600 font-semibold mt-1 truncate">{student.name || 'Student'} {student.username ? `- ${student.username}` : ''}</p>
             </div>
           </div>
-          <div className="flex gap-1 md:gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
             {onPeriodChange && PERIODS.map(p => (
               <button key={p.id} onClick={() => onPeriodChange(p.id)}
-                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all ${
+                className={`min-h-11 px-4 py-2 text-xs font-extrabold rounded-full border transition-all whitespace-nowrap ${
                   period === p.id
-                    ? 'bg-[#112B3C] text-white border-[#112B3C]'
-                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300'
+                    ? 'bg-blue-700 text-white border-blue-700 shadow-lg shadow-blue-700/20'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-200'
                 }`}>
                 {p.label}
               </button>
             ))}
-            <button onClick={handleShare} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"><Share2 size={14} /></button>
-            <button onClick={handleDownload} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"><Download size={14} /></button>
+            <button onClick={handleShare} aria-label="Share report" className="w-11 h-11 rounded-full bg-white text-slate-700 flex items-center justify-center shadow-sm border border-slate-200 hover:bg-blue-50 transition-colors flex-shrink-0"><Share2 size={17} /></button>
+            <button onClick={handleDownload} aria-label="Download report PDF" className="w-11 h-11 rounded-full bg-white text-slate-700 flex items-center justify-center shadow-sm border border-slate-200 hover:bg-blue-50 transition-colors flex-shrink-0"><Download size={17} /></button>
           </div>
         </div>
       )}
 
-      {/* Ultimate Bento Grid Layout */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="px-3 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6 pb-24"
+        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-5 md:gap-6 pb-24"
       >
         
-        {/* Dedicated AI Mentor Card */}
-        <GlassCard 
-          className="col-span-2 md:col-span-4 xl:col-span-6 bg-gradient-to-r from-[#FDE047]/30 to-[#FDE047]/10 border-[#FDE047]/40" 
-          title="AI Mentor Insights" 
-          subtitle="Generate Personalized Report"
+        <GlassCard
+          className="md:col-span-6 xl:col-span-12 min-h-[unset] bg-white"
+          title={`Learning Snapshot for ${firstName}`}
+          subtitle="Key outcomes, strengths, and AI mentorship in one view"
+          tone="blue"
           onClick={handleGenerateAI}
         >
-          <div className="flex items-center gap-4 py-2">
-            <div className="w-12 h-12 rounded-full bg-[#FDE047] flex items-center justify-center text-white shadow-lg shadow-[#FDE047]/40">
-              <Bot size={24} />
+          <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1.9fr] gap-5 items-stretch">
+            <div className="rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-500 text-white p-5 md:p-6 overflow-hidden relative">
+              <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-white/15" />
+              <div className="relative">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold mb-5">
+                  <Sparkles size={15} />
+                  AI Mentor Ready
+                </div>
+                <h2 className="text-3xl md:text-4xl font-black leading-tight tracking-tight">
+                  {loadingAi ? 'Generating insights...' : aiReport ? 'Open mentor report' : aiError ? 'Retry mentor report' : 'Generate mentor insights'}
+                </h2>
+                <p className="mt-3 text-sm md:text-base text-blue-50 leading-relaxed">
+                  {aiError || `Personalized guidance based on ${firstName}'s scores, attendance, activity, and subject progress.`}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-[#112B3C]">
-                {loadingAi ? 'Generating AI Report...' : aiReport ? 'View AI Mentor Report' : aiError ? 'Retry AI Mentor Report' : 'Tap to generate AI Report'}
-              </p>
-              <p className="text-xs text-gray-500">
-                {aiError || `Deep learning analysis on ${student.name ? student.name.split(' ')[0] : 'this student'}'s performance.`}
-              </p>
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+              <MetricTile icon={TrendingUp} label="Avg Score" value={`${avgScore}%`} accent="blue" />
+              <MetricTile icon={CalendarDays} label="Attendance" value={`${attendancePct}%`} accent="emerald" />
+              <MetricTile icon={Award} label="Rank" value={data?.rank ? `#${data.rank}` : '--'} accent="amber" />
+              <MetricTile icon={Bot} label="AI Status" value={aiReport ? 'Ready' : loadingAi ? '...' : 'Tap'} accent="violet" />
             </div>
           </div>
         </GlassCard>
 
-        {/* ROW 1 */}
-        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Overall Trend" subtitle="Student vs Class Avg">
+        <GlassCard className="md:col-span-6 xl:col-span-8" title="Overall Trend" subtitle="Student score compared with class average" tone="blue" tall>
           <GradientAreaTrendChart data={trendData} classAverageLine={true} />
         </GlassCard>
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Course Progress" subtitle="Overall Completion">
+        <GlassCard className="md:col-span-3 xl:col-span-2" title="Attendance" subtitle="Present days and consistency" tone="emerald">
           <div className="flex-1 flex items-center justify-center py-4">
-            <LiquidFillGauge percentage={student.attendance_pct || 78} size={130} />
+            <LiquidFillGauge percentage={student.attendance_pct || 0} size={170} />
           </div>
         </GlassCard>
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Live Classes" subtitle="Attendance Rate">
+        <GlassCard className="md:col-span-3 xl:col-span-2" title="Score Health" subtitle="Current academic average" tone="amber">
           <div className="flex-1 flex items-center justify-center py-4">
-            <NeonProgressGauge percentage={student.avg_score || 92} label="Attended" color="#FDE047" />
+            <NeonProgressGauge percentage={student.avg_score || 0} label="Average" color="#D97706" />
           </div>
         </GlassCard>
 
-        {/* ROW 2 */}
-        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
+        <GlassCard className="md:col-span-6 xl:col-span-8" title="Subject Progression" subtitle="How scores moved across recent tests" tone="cyan" tall>
           <SubjectProgressionLineChart data={progressionData.length > 0 ? progressionData : trendData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
+        <GlassCard className="md:col-span-6 xl:col-span-4" title="Assignments" subtitle="Submitted, pending, and overdue work" tone="violet" tall>
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
 
-        {/* ROW 3 */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Subject Strengths" subtitle="Radar Analysis">
+        <GlassCard className="md:col-span-6 xl:col-span-4" title="Subject Strengths" subtitle="Performance profile across subjects" tone="violet" tall>
           <SubjectRadarChart data={radarData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Weekly Engagement" subtitle="Github-style Heatmap">
+        <GlassCard className="md:col-span-6 xl:col-span-8" title="Learning Engagement" subtitle="Daily activity intensity across the last four weeks" tone="emerald" tall>
           <EngagementHeatmap data={heatmapData} />
         </GlassCard>
         
-        {/* ROW 4 */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
+        <GlassCard className="md:col-span-3 xl:col-span-4" title="Time Allocation" subtitle="Where learning time is spent" tone="blue" tall>
           <TimeAllocationDonut data={donutData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
+        <GlassCard className="md:col-span-3 xl:col-span-4" title="Topic Mastery" subtitle="Strong and weak learning areas" tone="amber" tall>
           <TopicPolarArea data={polarData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Learning Breakdown" subtitle="Content Type (Treemap)">
+        <GlassCard className="md:col-span-6 xl:col-span-4" title="Learning Breakdown" subtitle="Content mix by activity type" tone="cyan" tall>
           <LearningTreemap data={treemapData} />
         </GlassCard>
 
-        {/* ROW 5 */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Activity Flow" subtitle="Overlapping areas">
+        <GlassCard className="md:col-span-6 xl:col-span-6" title="Activity Flow" subtitle="Videos, tests, and assignments over time" tone="emerald">
           <OverlappingAreaChart data={overlapData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Class Range" subtitle="Student standing in class">
+        <GlassCard className="md:col-span-6 xl:col-span-6" title="Class Range" subtitle="Student score position inside class spread" tone="blue">
           <QuizRangeChart data={rangeData} />
         </GlassCard>
 
-        {/* ROW 6 */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
+        <GlassCard className="md:col-span-3 xl:col-span-4" title="Test Strategy" subtitle="Time spent versus accuracy" tone="rose">
           <TestQuadrantChart data={quadrantData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
+        <GlassCard className="md:col-span-3 xl:col-span-4" title="Quiz Speed" subtitle="Score and time pattern by attempt" tone="cyan">
           <QuizBubbleScatter data={scatterData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Score distribution (Bell Curve)">
+        <GlassCard className="md:col-span-6 xl:col-span-4" title="Class Distribution" subtitle="Score distribution with student marker" tone="amber">
           <TestBellCurve data={bellData} studentScore={student.avg_score || 75} />
         </GlassCard>
 
-        {/* ROW 7 */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
+        <GlassCard className="md:col-span-6 xl:col-span-5" title="Rank Progression" subtitle="Movement on the leaderboard" tone="amber">
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
-          <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
+        <GlassCard className="md:col-span-6 xl:col-span-7" title="Learning Calendar" subtitle="Attendance and test days in one clear calendar" tone="emerald" tall>
+          <AttendanceCalendar month={new Date()} daysData={attendanceDays} testDaysData={testDays} />
         </GlassCard>
 
-        {/* ROW 8 */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
-          <TestCalendar month={new Date()} daysData={testDays} />
-        </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Today's Activity" subtitle="Chronological Stepper">
+        <GlassCard className="md:col-span-6 xl:col-span-5" title="Recent Activity" subtitle="Latest learning events" tone="blue">
           <ActivityStepper data={activityData} />
         </GlassCard>
 
-        {/* ROW 9 */}
-        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-6" title="Subject Plot" subtitle="Dumbbell (Mobile friendly)">
+        <GlassCard className="md:col-span-6 xl:col-span-7" title="Subject Gap Analysis" subtitle="Student level compared with class benchmark" tone="violet" tall>
           <DumbbellSubjectPlot data={radarData} />
         </GlassCard>
 

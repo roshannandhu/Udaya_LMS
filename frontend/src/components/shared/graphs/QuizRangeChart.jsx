@@ -12,8 +12,8 @@ const RangeBar = (props) => {
 
   return (
     <g>
-      <rect x={x + width/2 - 4} y={y} width={8} height={height} rx={4} fill="#F4F7F6" stroke="#E5E7EB" />
-      <circle cx={x + width/2} cy={dotY} r={6} fill="#A78BFA" stroke="#fff" strokeWidth={2} className="drop-shadow-sm" />
+      <rect x={x + width/2 - 5} y={y} width={10} height={height} rx={5} fill="#EEF2FF" stroke="#CBD5E1" />
+      <circle cx={x + width/2} cy={dotY} r={7} fill="#2563EB" stroke="#fff" strokeWidth={2} className="drop-shadow-sm" />
     </g>
   );
 };
@@ -26,11 +26,11 @@ export default function QuizRangeChart({ data }) {
   const chartData = data.map(d => ({ ...d, range: [d.minScore, d.maxScore] }));
 
   return (
-    <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
-          <XAxis dataKey="name" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-          <YAxis domain={[0, 100]} tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
+    <div className="w-full h-full min-h-[260px] pt-3 pb-2">
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={chartData} margin={{ top: 20, right: 34, left: 4, bottom: 42 }}>
+          <XAxis dataKey="name" interval="preserveStartEnd" tick={{fontSize: 11, fill: '#475569', fontWeight: 700}} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} width={34} tick={{fontSize: 11, fill: '#475569', fontWeight: 700}} axisLine={false} tickLine={false} />
           <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
           <Bar dataKey="range" shape={<RangeBar />} />
         </BarChart>
