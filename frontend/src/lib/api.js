@@ -513,6 +513,39 @@ const shortLabel = (value, fallback) => {
   return s.length > 12 ? `${s.slice(0, 11)}...` : s;
 };
 
+const num = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const sumBy = (items, key) => (items || []).reduce((sum, item) => sum + num(item?.[key]), 0);
+
+const pctOf = (part, total) => {
+  const t = num(total);
+  return t > 0 ? clampPct((num(part) / t) * 100) : 0;
+};
+
+const dayLabel = (dateValue) => {
+  const date = String(dateValue || '').slice(0, 10);
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date.slice(5) || '--';
+  return parsed.toLocaleDateString(undefined, { weekday: 'short' });
+};
+
+const dateDetail = (dateValue) => {
+  const date = String(dateValue || '').slice(0, 10);
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date.slice(5) || '--';
+  return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
+
+const localDateKey = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const normalizeReportV2 = (report = {}) => {
   const student = report.student || {};
   const classAvg = clampPct(report.class_averages?.avg_score ?? student.avg_score);
@@ -591,8 +624,8 @@ const normalizeReportV2 = (report = {}) => {
   ])].sort().slice(-7).map((date) => ({
     day: new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' }),
     videos: videoByDate[date] || 0,
-    tests: (testsByDate[date] || 0) * 30,
-    notes: (assignmentsByDate[date] || 0) * 30,
+    tests: testsByDate[date] || 0,
+    notes: assignmentsByDate[date] || 0,
   }));
 
   const assignmentStats = report.assignment_stats || {};
@@ -604,15 +637,99 @@ const normalizeReportV2 = (report = {}) => {
     { name: 'Overdue', value: Number(assignmentStats.overdue || 0), color: '#E11D48' },
   ];
 
-  const totalVideoMinutes = Math.round((report.video_heatmap || []).reduce((sum, r) => sum + (r.minutes || 0), 0));
+  const totalVideoMinutes = Math.round(sumBy(report.video_heatmap, 'minutes'));
+  const totalVideoSessions = sumBy(report.video_heatmap, 'count');
   const totalTests = timeline.length;
-  const liveAttended = report.live_classes_stats?.attended || 0;
-  const timeItems = [
-    { name: 'Videos', value: totalVideoMinutes, color: '#2563EB' },
-    { name: 'Tests', value: totalTests, color: '#7C3AED' },
-    { name: 'Live Classes', value: liveAttended, color: '#059669' },
-    { name: 'Assignments', value: assignmentSubmitted, color: '#D97706' },
+  const totalTestsAvailable = num(report.total_tests_in_standard);
+  const liveAttended = num(report.live_classes_stats?.attended);
+  const liveTotal = num(report.live_classes_stats?.total);
+  const rawSubjects = report.subject_radar || [];
+  const videosCompleted = sumBy(rawSubjects, 'video_done');
+  const videosAvailable = sumBy(rawSubjects, 'video_total');
+  const videoPercent = videosAvailable ? pctOf(videosCompleted, videosAvailable) : clampPct(totalVideoMinutes / 3);
+  const testPercent = totalTestsAvailable ? pctOf(totalTests, totalTestsAvailable) : (totalTests ? 100 : 0);
+  const assignmentPercent = assignmentTotal ? pctOf(assignmentSubmitted, assignmentTotal) : (assignmentSubmitted ? 100 : 0);
+  const livePercent = liveTotal ? pctOf(liveAttended, liveTotal) : (liveAttended ? 100 : 0);
+  const pendingAssignments = Math.max(0, assignmentTotal - assignmentSubmitted);
+  const learningSignalData = [
+    {
+      key: 'videos',
+      name: 'Concept videos',
+      percent: videoPercent,
+      valueText: videosAvailable ? `${videosCompleted}/${videosAvailable}` : `${totalVideoMinutes} min`,
+      unitLabel: videosAvailable ? 'completed' : 'watched',
+      caption: videosAvailable
+        ? `${totalVideoMinutes} watched minutes across ${totalVideoSessions} session${totalVideoSessions === 1 ? '' : 's'}`
+        : `${totalVideoSessions} video session${totalVideoSessions === 1 ? '' : 's'} tracked`,
+      color: '#2563EB',
+    },
+    {
+      key: 'tests',
+      name: 'Tests attempted',
+      percent: testPercent,
+      valueText: totalTestsAvailable ? `${totalTests}/${totalTestsAvailable}` : `${totalTests}`,
+      unitLabel: totalTestsAvailable ? 'attempted' : 'tests',
+      caption: totalTestsAvailable ? 'Attempt rate from available exams in this standard' : 'Completed exam attempts in this period',
+      color: '#7C3AED',
+    },
+    {
+      key: 'assignments',
+      name: 'Assignments submitted',
+      percent: assignmentPercent,
+      valueText: assignmentTotal ? `${assignmentSubmitted}/${assignmentTotal}` : `${assignmentSubmitted}`,
+      unitLabel: assignmentTotal ? 'submitted' : 'submissions',
+      caption: `${pendingAssignments} pending assignment${pendingAssignments === 1 ? '' : 's'}`,
+      color: '#D97706',
+    },
+    {
+      key: 'live',
+      name: 'Live class attendance',
+      percent: livePercent,
+      valueText: liveTotal ? `${liveAttended}/${liveTotal}` : `${liveAttended}`,
+      unitLabel: liveTotal ? 'attended' : 'classes',
+      caption: liveTotal ? 'Live sessions attended from scheduled classes' : 'No scheduled live-class baseline yet',
+      color: '#059669',
+    },
   ];
+
+  const sourceActivityDates = [...new Set([
+    ...Object.keys(videoByDate),
+    ...Object.keys(testsByDate),
+    ...Object.keys(assignmentsByDate),
+  ])].sort();
+  const endActivityDate = sourceActivityDates.length
+    ? new Date(`${sourceActivityDates[sourceActivityDates.length - 1]}T00:00:00`)
+    : null;
+  const activityDates = endActivityDate
+    ? Array.from({ length: 7 }, (_, index) => {
+        const d = new Date(endActivityDate);
+        d.setDate(d.getDate() - (6 - index));
+        return localDateKey(d);
+      })
+    : [];
+  const activityFlowData = activityDates.map((date) => {
+    const videoMinutes = num(videoByDate[date]);
+    const tests = num(testsByDate[date]);
+    const assignments = num(assignmentsByDate[date]);
+    const studyScore = Math.min(100, Math.round(
+      Math.min(videoMinutes / 45, 1) * 40 +
+      Math.min(tests / 2, 1) * 35 +
+      Math.min(assignments / 2, 1) * 25
+    ));
+    return {
+      date,
+      day: dayLabel(date),
+      dayDetail: dateDetail(date),
+      videoMinutes: Math.round(videoMinutes),
+      tests,
+      assignments,
+      studyScore,
+    };
+  });
+
+  const timeItems = totalVideoMinutes > 0
+    ? [{ name: 'Video Minutes', value: totalVideoMinutes, color: '#2563EB' }]
+    : [];
   const donutData = [
     ...timeItems.filter((item) => item.value > 0),
   ];
@@ -651,6 +768,8 @@ const normalizeReportV2 = (report = {}) => {
     overlapData,
     donutData,
     treemapData: timeItems.filter((item) => item.value > 0).map((d) => ({ name: d.name, size: d.value })),
+    learningSignalData,
+    activityFlowData,
     attendanceDays,
     testDays,
     bumpData: [{ week: report.period || 'Overall', rank: report.rank || 0 }],

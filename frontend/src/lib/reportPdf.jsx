@@ -4,7 +4,7 @@ import html2pdf from 'html2pdf.js';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar, LineChart, Line, ReferenceLine } from 'recharts';
 import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
-import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, PieChart as PieIcon, LayoutGrid, Award, Brain, ClipboardCheck, Layers, ShieldCheck, TrendingUp, ListChecks, Gauge } from 'lucide-react';
+import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, LayoutGrid, Award, Brain, ClipboardCheck, Layers, ShieldCheck, TrendingUp, ListChecks, Gauge } from 'lucide-react';
 
 // Helpers
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
@@ -90,6 +90,13 @@ const periodRange = (p) => {
   if (p === 'weekly') { const f = new Date(today); f.setDate(f.getDate() - 7); return `${fmtDate(f)} - ${fmtDate(today)}`; }
   if (p === 'monthly') { const f = new Date(today); f.setDate(f.getDate() - 30); return `${fmtDate(f)} - ${fmtDate(today)}`; }
   return 'All time';
+};
+
+const localDateKey = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 // PDF generation core
@@ -547,13 +554,80 @@ const StudentReportTemplate = ({ data, period }) => {
     actionPlan.push('Maintain the current rhythm: one revision block, one practice test, and one assignment review each week.');
   }
 
-  const mixData = [
-    { name: 'Videos', value: totalVideoMinutes, display: `${totalVideoMinutes} min`, color: '#2563eb' },
-    { name: 'Tests', value: timeline.length * 30, display: `${timeline.length} tests`, color: '#7c3aed' },
-    { name: 'Assignments', value: submittedAssignments * 25, display: totalAssignments ? `${submittedAssignments}/${totalAssignments}` : `${submittedAssignments}`, color: '#d97706' },
-    { name: 'Live', value: safeNumber(liveStats.attended) * 45, display: liveLabel, color: '#059669' },
-  ].filter(d => d.value > 0);
-  const activityMix = mixData.length ? mixData : [{ name: 'No activity', value: 1, display: '-', color: '#e5e7eb' }];
+  const videosCompleted = sumBy(radar, 'video_done');
+  const videosAvailable = sumBy(radar, 'video_total');
+  const videoSignalPct = videosAvailable ? percentOf(videosCompleted, videosAvailable) : clampPct(totalVideoMinutes / 3);
+  const testSignalPct = Number.isFinite(testParticipation) ? testParticipation : (timeline.length ? 100 : 0);
+  const assignmentSignalPct = totalAssignments ? assignmentCompletion : (submittedAssignments ? 100 : 0);
+  const liveSignalPct = safeNumber(liveStats.total) ? percentOf(liveStats.attended, liveStats.total) : (safeNumber(liveStats.attended) ? 100 : 0);
+  const signalRows = [
+    {
+      label: 'Concept videos',
+      value: videoSignalPct,
+      display: videosAvailable ? `${videosCompleted}/${videosAvailable}` : `${totalVideoMinutes} min`,
+      note: `${totalVideoMinutes} watched minutes across ${videoSessions} session${videoSessions === 1 ? '' : 's'}`,
+      color: { fill: 'bg-blue-500' },
+    },
+    {
+      label: 'Tests attempted',
+      value: testSignalPct,
+      display: data.total_tests_in_standard ? `${timeline.length}/${data.total_tests_in_standard}` : `${timeline.length}`,
+      note: data.total_tests_in_standard ? 'Attempt rate from available exams' : 'Completed exam attempts in this period',
+      color: { fill: 'bg-violet-500' },
+    },
+    {
+      label: 'Assignments',
+      value: assignmentSignalPct,
+      display: totalAssignments ? `${submittedAssignments}/${totalAssignments}` : `${submittedAssignments}`,
+      note: `${pendingAssignments} pending assignment${pendingAssignments === 1 ? '' : 's'}`,
+      color: { fill: 'bg-amber-500' },
+    },
+    {
+      label: 'Live classes',
+      value: liveSignalPct,
+      display: liveLabel,
+      note: safeNumber(liveStats.total) ? 'Scheduled live sessions attended' : 'No scheduled baseline yet',
+      color: { fill: 'bg-emerald-500' },
+    },
+  ];
+  const videoByDate = Object.fromEntries(videoHeatmap.map((r) => [String(r.date || '').slice(0, 10), safeNumber(r.minutes)]));
+  const testByDate = Object.fromEntries(testHeatmap.map((r) => [String(r.date || '').slice(0, 10), safeNumber(r.count)]));
+  const assignmentByDate = Object.fromEntries(assignmentHeatmap.map((r) => [String(r.date || '').slice(0, 10), safeNumber(r.count)]));
+  const sourceRhythmDates = [...new Set([
+    ...Object.keys(videoByDate),
+    ...Object.keys(testByDate),
+    ...Object.keys(assignmentByDate),
+  ])].sort();
+  const endRhythmDate = sourceRhythmDates.length
+    ? new Date(`${sourceRhythmDates[sourceRhythmDates.length - 1]}T00:00:00`)
+    : null;
+  const rhythmDates = endRhythmDate
+    ? Array.from({ length: 7 }, (_, index) => {
+        const d = new Date(endRhythmDate);
+        d.setDate(d.getDate() - (6 - index));
+        return localDateKey(d);
+      })
+    : [];
+  const rhythmRows = rhythmDates.map((date) => {
+    const videoMinutes = safeNumber(videoByDate[date]);
+    const tests = safeNumber(testByDate[date]);
+    const assignments = safeNumber(assignmentByDate[date]);
+    const score = Math.min(100, Math.round(
+      Math.min(videoMinutes / 45, 1) * 40 +
+      Math.min(tests / 2, 1) * 35 +
+      Math.min(assignments / 2, 1) * 25
+    ));
+    const parsed = new Date(`${date}T00:00:00`);
+    return {
+      date,
+      day: Number.isNaN(parsed.getTime()) ? date.slice(5) : parsed.toLocaleDateString('en-IN', { weekday: 'short' }),
+      detail: Number.isNaN(parsed.getTime()) ? date.slice(5) : parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      videoMinutes: Math.round(videoMinutes),
+      tests,
+      assignments,
+      score,
+    };
+  });
 
   return (
     <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px] box-border">
@@ -685,34 +759,64 @@ const StudentReportTemplate = ({ data, period }) => {
         </Section>
       )}
 
-      <Section title="Learning Activity Mix" icon={PieIcon} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }}>
+      <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }}>
         <div className="grid grid-cols-2 gap-6">
           <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-5">
-              <PieChart width={180} height={180}>
-                <Pie data={activityMix} innerRadius={58} outerRadius={82} paddingAngle={3} dataKey="value" stroke="none" isAnimationActive={false}>
-                  {activityMix.map((entry, index) => <Cell key={`mix-${index}`} fill={entry.color} />)}
-                </Pie>
-              </PieChart>
-              <div className="space-y-3">
-                {activityMix.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: d.color }} />
-                    <span className="w-24 text-sm font-semibold text-gray-600">{d.name}</span>
-                    <span className="text-sm font-black text-gray-900">{d.display}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="mb-4">
+              <h3 className="text-sm font-black text-gray-900">Evidence Balance</h3>
+              <p className="mt-1 text-xs leading-5 text-gray-500">Progress is shown by its own unit, not by mixing minutes with counts.</p>
+            </div>
+            <div className="space-y-4">
+              {signalRows.map((row) => (
+                <div key={row.label}>
+                  <ProgressBar label={row.label} value={row.value} color={row.color} valueText={row.display} />
+                  <p className="ml-36 mt-1 text-[11px] leading-4 text-gray-500">{row.note}</p>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="space-y-4">
-            {testHeatmap.length > 0 && <ActivitySquares rows={testHeatmap} valueKey="count" color="bg-violet-500" label="Test activity, last 28 days" />}
-            {videoHeatmap.length > 0 && <ActivitySquares rows={videoHeatmap} valueKey="minutes" color="bg-blue-500" label="Video minutes, last 28 days" />}
-            {assignmentHeatmap.length > 0 && <ActivitySquares rows={assignmentHeatmap} valueKey="count" color="bg-amber-500" label="Assignments, last 28 days" />}
-            {!testHeatmap.length && !videoHeatmap.length && !assignmentHeatmap.length && (
-              <EmptyState title="Activity rhythm not available" body="Once videos, tests, and assignments are recorded, this area becomes a habit map." />
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="mb-5">
+              <h3 className="text-sm font-black text-gray-900">7-Day Study Rhythm</h3>
+              <p className="mt-1 text-xs leading-5 text-gray-500">Activity score combines video, test, and assignment evidence as a consistency indicator.</p>
+            </div>
+            {rhythmRows.length > 0 ? (
+              <div>
+                <div className="flex items-end gap-2">
+                  {rhythmRows.map((row) => (
+                    <div key={row.date} className="flex-1 text-center">
+                      <div className="flex h-28 items-end justify-center rounded-lg bg-gray-50 px-1 py-2">
+                        <div
+                          className="w-full rounded-t-md bg-gradient-to-t from-blue-600 to-cyan-400"
+                          style={{ height: `${Math.max(8, row.score)}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-[11px] font-black text-gray-800">{row.day}</p>
+                      <p className="text-[10px] font-bold text-gray-400">{row.score}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] font-semibold text-gray-600">
+                  {rhythmRows.slice(-2).map((row) => (
+                    <div key={`rhythm-${row.date}`} className="rounded-lg bg-gray-50 p-2">
+                      <p className="font-black text-gray-800">{row.detail}</p>
+                      <p>{row.videoMinutes}m video - {row.tests} tests - {row.assignments} assignments</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <EmptyState title="Study rhythm not available" body="Once videos, tests, and assignments are recorded, this area becomes a consistency map." />
             )}
           </div>
+        </div>
+        <div className="mt-5 grid grid-cols-3 gap-4">
+          {testHeatmap.length > 0 && <ActivitySquares rows={testHeatmap} valueKey="count" color="bg-violet-500" label="Test activity, last 28 days" />}
+          {videoHeatmap.length > 0 && <ActivitySquares rows={videoHeatmap} valueKey="minutes" color="bg-blue-500" label="Video minutes, last 28 days" />}
+          {assignmentHeatmap.length > 0 && <ActivitySquares rows={assignmentHeatmap} valueKey="count" color="bg-amber-500" label="Assignments, last 28 days" />}
+          {!testHeatmap.length && !videoHeatmap.length && !assignmentHeatmap.length && (
+            <EmptyState title="Activity rhythm not available" body="Once videos, tests, and assignments are recorded, this area becomes a habit map." />
+          )}
         </div>
       </Section>
 

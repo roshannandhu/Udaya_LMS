@@ -15303,30 +15303,56 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
                 "studentScore": score
             })
 
-    # -- 4. Heatmap & Overlap --
-    # Generating 28 days of dummy matrix based on real averages
+    # -- 4. Heatmap & rhythm signals --
+    # Demo-only activity data keeps raw units separate; the frontend turns this
+    # into an activity score instead of pretending counts are minutes.
     heatmapData = []
     overlapData = []
+    activityFlowData = []
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     for i in range(28):
         date_str = (now - datetime.timedelta(days=28-i)).strftime("%Y-%m-%d")
         heatmapData.append({"date": date_str, "count": random.randint(0, 7)})
         if i >= 21: # Last 7 days
+            video_minutes = random.randint(0, 60)
+            tests_count = random.randint(0, 2)
+            assignment_count = random.randint(0, 2)
+            study_score = min(100, round(
+                min(video_minutes / 45, 1) * 40 +
+                min(tests_count / 2, 1) * 35 +
+                min(assignment_count / 2, 1) * 25
+            ))
             overlapData.append({
                 "day": days[i%7],
-                "videos": random.randint(10, 60),
-                "tests": random.randint(0, 40),
-                "notes": random.randint(0, 30)
+                "videos": video_minutes,
+                "tests": tests_count,
+                "notes": assignment_count
+            })
+            activityFlowData.append({
+                "date": date_str,
+                "day": days[i%7],
+                "dayDetail": (now - datetime.timedelta(days=28-i)).strftime("%d %b"),
+                "videoMinutes": video_minutes,
+                "tests": tests_count,
+                "assignments": assignment_count,
+                "studyScore": study_score
             })
 
-    # -- 5. Donut & Treemap --
-    donutData = [
-        {"name": "Videos", "value": random.randint(100, 300), "color": "#67E8F9"},
-        {"name": "Tests", "value": random.randint(50, 150), "color": "#A78BFA"},
-        {"name": "Live Classes", "value": random.randint(100, 200), "color": "#FDE047"},
-        {"name": "Assignments", "value": random.randint(30, 100), "color": "#FCA5A5"},
+    # -- 5. Learning signals --
+    learningSignalData = [
+        {"key": "videos", "name": "Concept videos", "percent": random.randint(55, 92), "valueText": "18/25", "unitLabel": "completed", "caption": "Demo completion rate from video progress", "color": "#2563EB"},
+        {"key": "tests", "name": "Tests attempted", "percent": random.randint(45, 90), "valueText": "7/10", "unitLabel": "attempted", "caption": "Demo attempt rate from available exams", "color": "#7C3AED"},
+        {"key": "assignments", "name": "Assignments submitted", "percent": random.randint(50, 95), "valueText": "11/14", "unitLabel": "submitted", "caption": "Demo assignment submission rate", "color": "#D97706"},
+        {"key": "live", "name": "Live class attendance", "percent": random.randint(50, 90), "valueText": "6/9", "unitLabel": "attended", "caption": "Demo live session attendance", "color": "#059669"},
     ]
-    treemapData = [{"name": d["name"], "size": d["value"]} for d in donutData]
+
+    # -- 5b. Legacy fields kept for old callers without mixing units --
+    total_demo_video_minutes = sum(row["videoMinutes"] for row in activityFlowData)
+    donutData = (
+        [{"name": "Video Minutes", "value": total_demo_video_minutes, "color": "#2563EB"}]
+        if total_demo_video_minutes > 0 else []
+    )
+    treemapData = [{"name": d["name"], "size": d["percent"]} for d in learningSignalData]
 
     # -- 6. Calendars --
     attendanceDays = []
@@ -15379,6 +15405,8 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
         "overlapData": overlapData,
         "donutData": donutData,
         "treemapData": treemapData,
+        "learningSignalData": learningSignalData,
+        "activityFlowData": activityFlowData,
         "attendanceDays": attendanceDays,
         "testDays": testDays,
         "bumpData": bumpData,

@@ -10,9 +10,8 @@ import GradientAreaTrendChart from '../../components/shared/graphs/GradientAreaT
 import SubjectRadarChart from '../../components/shared/graphs/SubjectRadarChart';
 import DumbbellSubjectPlot from '../../components/shared/graphs/DumbbellSubjectPlot';
 import EngagementHeatmap from '../../components/shared/graphs/EngagementHeatmap';
-import OverlappingAreaChart from '../../components/shared/graphs/OverlappingAreaChart';
-import TimeAllocationDonut from '../../components/shared/graphs/TimeAllocationDonut';
-import LearningTreemap from '../../components/shared/graphs/LearningTreemap';
+import LearningSignalBars from '../../components/shared/graphs/LearningSignalBars';
+import StudyRhythmTimeline from '../../components/shared/graphs/StudyRhythmTimeline';
 import LiquidFillGauge from '../../components/shared/graphs/LiquidFillGauge';
 import NeonProgressGauge from '../../components/shared/graphs/NeonProgressGauge';
 import QuizBubbleScatter from '../../components/shared/graphs/QuizBubbleScatter';
@@ -103,34 +102,26 @@ export default function ReportGraphReferencePage() {
     { subject: 'IT', student: 98, classAvg: 85 },
   ];
 
-  const overlapData = reportData?.overlapData?.length > 0 ? reportData.overlapData : [
-    { day: 'Mon', videos: 40, tests: 20, notes: 10 },
-    { day: 'Tue', videos: 30, tests: 40, notes: 15 },
-    { day: 'Wed', videos: 60, tests: 10, notes: 30 },
-    { day: 'Thu', videos: 20, tests: 50, notes: 5 },
-    { day: 'Fri', videos: 80, tests: 30, notes: 40 },
-    { day: 'Sat', videos: 100, tests: 80, notes: 20 },
-    { day: 'Sun', videos: 10, tests: 0, notes: 0 },
-  ];
-
   const heatmapData = reportData?.heatmapData?.length > 0 ? reportData.heatmapData : Array.from({length: 28}, (_, i) => ({
     date: `2026-07-${i+1}`,
     count: Math.floor(Math.random() * 8)
   }));
 
-  const donutData = reportData?.donutData?.length > 0 ? reportData.donutData : [
-    { name: 'Videos', value: 400, color: '#00C2C7' },
-    { name: 'Tests', value: 300, color: '#7059FF' },
-    { name: 'Live Classes', value: 200, color: '#FFC436' },
-    { name: 'Assignments', value: 150, color: '#FF6B6B' },
+  const learningSignalData = reportData?.learningSignalData?.length > 0 ? reportData.learningSignalData : [
+    { key: 'videos', name: 'Concept videos', percent: 72, valueText: '18/25', unitLabel: 'completed', caption: '220 watched minutes across 14 sessions', color: '#2563EB' },
+    { key: 'tests', name: 'Tests attempted', percent: 80, valueText: '8/10', unitLabel: 'attempted', caption: 'Attempt rate from available exams', color: '#7C3AED' },
+    { key: 'assignments', name: 'Assignments submitted', percent: 86, valueText: '12/14', unitLabel: 'submitted', caption: '2 pending assignments', color: '#D97706' },
+    { key: 'live', name: 'Live class attendance', percent: 67, valueText: '6/9', unitLabel: 'attended', caption: 'Live sessions attended from scheduled classes', color: '#059669' },
   ];
 
-  const treemapData = reportData?.treemapData?.length > 0 ? reportData.treemapData : [
-    { name: 'Videos', size: 400 },
-    { name: 'Tests', size: 300 },
-    { name: 'Live', size: 200 },
-    { name: 'Notes', size: 100 },
-    { name: 'HW', size: 50 },
+  const activityFlowData = reportData?.activityFlowData?.length > 0 ? reportData.activityFlowData : [
+    { day: 'Mon', dayDetail: '1 Jul', videoMinutes: 35, tests: 1, assignments: 0, studyScore: 66 },
+    { day: 'Tue', dayDetail: '2 Jul', videoMinutes: 10, tests: 0, assignments: 1, studyScore: 34 },
+    { day: 'Wed', dayDetail: '3 Jul', videoMinutes: 45, tests: 2, assignments: 1, studyScore: 88 },
+    { day: 'Thu', dayDetail: '4 Jul', videoMinutes: 18, tests: 0, assignments: 0, studyScore: 16 },
+    { day: 'Fri', dayDetail: '5 Jul', videoMinutes: 52, tests: 1, assignments: 2, studyScore: 82 },
+    { day: 'Sat', dayDetail: '6 Jul', videoMinutes: 24, tests: 1, assignments: 1, studyScore: 58 },
+    { day: 'Sun', dayDetail: '7 Jul', videoMinutes: 0, tests: 0, assignments: 0, studyScore: 0 },
   ];
 
   const scatterData = reportData?.scatterData?.length > 0 ? reportData.scatterData : [
@@ -258,19 +249,16 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
         
         {/* ROW 4 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
-          <TimeAllocationDonut data={donutData} />
+        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Engagement Balance" subtitle="Completion by evidence type">
+          <LearningSignalBars data={learningSignalData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
           <TopicPolarArea data={polarData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Learning Breakdown" subtitle="Content Type (Treemap)">
-          <LearningTreemap data={treemapData} />
-        </GlassCard>
 
         {/* ROW 5 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Activity Flow" subtitle="Overlapping areas">
-          <OverlappingAreaChart data={overlapData} />
+        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-3" title="Study Rhythm" subtitle="Daily activity score">
+          <StudyRhythmTimeline data={activityFlowData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Class Range" subtitle="Student standing in class">
           <QuizRangeChart data={rangeData} />

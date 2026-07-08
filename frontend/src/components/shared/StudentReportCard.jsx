@@ -9,9 +9,8 @@ import GradientAreaTrendChart from './graphs/GradientAreaTrendChart';
 import SubjectRadarChart from './graphs/SubjectRadarChart';
 import DumbbellSubjectPlot from './graphs/DumbbellSubjectPlot';
 import EngagementHeatmap from './graphs/EngagementHeatmap';
-import OverlappingAreaChart from './graphs/OverlappingAreaChart';
-import TimeAllocationDonut from './graphs/TimeAllocationDonut';
-import LearningTreemap from './graphs/LearningTreemap';
+import LearningSignalBars from './graphs/LearningSignalBars';
+import StudyRhythmTimeline from './graphs/StudyRhythmTimeline';
 import LiquidFillGauge from './graphs/LiquidFillGauge';
 import NeonProgressGauge from './graphs/NeonProgressGauge';
 import QuizBubbleScatter from './graphs/QuizBubbleScatter';
@@ -121,9 +120,8 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     scatterData = [], 
     rangeData = [], 
     heatmapData = [], 
-    overlapData = [], 
-    donutData = [], 
-    treemapData = [], 
+    learningSignalData = [],
+    activityFlowData = [],
     attendanceDays = [], 
     testDays = [], 
     bumpData = [], 
@@ -323,10 +321,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
 
-        <SectionTitle eyebrow="Learning Mix" title="Time, topics, assignments, and content balance" />
+        <SectionTitle eyebrow="Learning Signals" title="Engagement balance, topics, and work completion" />
 
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Time Allocation" subtitle="Where learning time is spent" tone="blue" tall>
-          <TimeAllocationDonut data={donutData} />
+        <GlassCard className="md:col-span-6 xl:col-span-8" title="Engagement Balance" subtitle="Completion and participation by evidence type" tone="cyan" tall>
+          <LearningSignalBars data={learningSignalData} />
         </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Topic Mastery" subtitle="Strong and weak learning areas" tone="amber" tall>
           <TopicPolarArea data={polarData} />
@@ -334,11 +332,8 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Assignments" subtitle="Submitted, pending, and overdue work" tone="violet" tall>
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-6" title="Learning Breakdown" subtitle="Content mix by activity type" tone="cyan" tall>
-          <LearningTreemap data={treemapData} />
-        </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-6" title="Activity Flow" subtitle="Videos, tests, and assignments over time" tone="emerald">
-          <OverlappingAreaChart data={overlapData} />
+        <GlassCard className="md:col-span-6 xl:col-span-8" title="Study Rhythm" subtitle="Daily activity score with raw video, test, and assignment counts" tone="emerald" tall>
+          <StudyRhythmTimeline data={activityFlowData} />
         </GlassCard>
 
       </motion.div>
