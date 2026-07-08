@@ -1,7 +1,8 @@
 import React from 'react';
 
-export default function ActivityStepper({ data }) {
+export default function ActivityStepper({ data = [] }) {
   // data: [{ time: '10:00 AM', title: 'Watched Math Video', color: 'bg-cyan-500' }]
+  if (!data || data.length === 0) return <div className="text-xs text-gray-400 p-4 text-center">No activity today</div>;
   return (
     <div className="w-full flex flex-col gap-4 py-4 px-2 max-h-[300px] overflow-y-auto custom-scrollbar">
       {data.map((item, i) => (

@@ -9,7 +9,8 @@ const DumbbellShape = (props) => {
   return null; 
 };
 
-export default function DumbbellSubjectPlot({ data }) {
+export default function DumbbellSubjectPlot({ data = [] }) {
+  if (!data || data.length === 0) return <div className="text-xs text-gray-400 p-4 text-center">No subject data</div>;
   // Alternative custom implementation for mobile
   return (
     <div className="flex flex-col w-full h-full gap-4 pt-4">

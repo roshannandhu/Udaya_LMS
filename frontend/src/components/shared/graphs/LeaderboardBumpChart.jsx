@@ -1,7 +1,8 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-export default function LeaderboardBumpChart({ data }) {
+export default function LeaderboardBumpChart({ data = [] }) {
+  if (!data || data.length === 0) return <div className="text-xs text-gray-400 p-4 text-center">No rank data</div>;
   // data: [{ week: 'W1', rank: 15 }, { week: 'W2', rank: 8 }, ...]
   return (
     <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">

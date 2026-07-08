@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Loader2, ArrowLeft, Share2, Download, Edit2, MoreHorizontal } from 'lucide-react';
+import { Bot, Loader2, ArrowLeft, Share2, Download } from 'lucide-react';
 import { aiApi } from '../../lib/api';
 
 // --- Premium Graph Imports ---
