@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2, RotateCcw } from 'lucide-react';
+import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2, RotateCcw, Download } from 'lucide-react';
 import { Sheet, Avatar, Tag, Btn, Skeleton, Input } from '../ui';
 import { testApi, apiClient, whatsappApi } from '../../lib/api';
 import { examResultsPayload } from './whatsapp/reportDefaults';
@@ -18,6 +18,7 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
   const [notify, setNotify] = useState('idle'); // idle | sending | sent | later
   const [reattempts, setReattempts] = useState([]); // pending re-attempt requests
   const [reattemptBusy, setReattemptBusy] = useState(null); // request id being processed
+  const [pdfBusy, setPdfBusy] = useState(null); // attempt id currently generating PDF
 
   useEffect(() => {
     if (open && test?.id) {
@@ -80,13 +81,61 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
     }
   };
 
+  const handleDownloadExamPdf = async (attempt) => {
+    const student = attempt.students || {};
+    if (pdfBusy === attempt.id) return;
+    setPdfBusy(attempt.id);
+    try {
+      // Fetch the question+answer review data for this student's attempt
+      const reviewData = await testApi.getAttemptReview(test.id, attempt.student_id).catch(() => null);
+      const { buildExamResultPdf } = await import('../../lib/reportPdf');
+      await buildExamResultPdf({
+        reviewData,
+        result: {
+          score:         attempt.score,
+          total_marks:   test.total_marks || test.totalMarks,
+          percentage:    test.total_marks ? (attempt.score / test.total_marks) * 100 : null,
+          correct_count: attempt.correct_count,
+          wrong_count:   attempt.wrong_count,
+          marks_deducted: attempt.marks_deducted,
+          total:         (attempt.correct_count || 0) + (attempt.wrong_count || 0),
+          flagged:       attempt.flagged,
+          cancelled:     attempt.terminated,
+          points_earned: attempt.points_earned,
+          rank:          attempt.rank,
+          total_attempts: results?.attempts?.length,
+          started_at:    attempt.started_at,
+          submitted_at:  attempt.submitted_at,
+        },
+        student: {
+          name:         student.name,
+          student_code: student.student_code,
+          standard_name: student.standard_name,
+          avatar_url:   student.avatar_url,
+          username:     student.username,
+        },
+        testMeta: {
+          title:        test.title,
+          subject_name: test.subject_name || test.subject || '',
+          duration_mins: test.duration_mins || test.duration,
+          total_marks:  test.total_marks || test.totalMarks,
+          scheduled_for: test.scheduled_for,
+        },
+      });
+    } catch (e) {
+      console.error('Exam PDF failed', e);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setPdfBusy(null);
+    }
+  };
+
   const handleReattempt = async (reqId, action) => {
     setReattemptBusy(reqId);
     try {
       if (action === 'approve') await testApi.approveReattempt(reqId);
       else await testApi.rejectReattempt(reqId);
       setReattempts(prev => prev.filter(r => r.id !== reqId));
-      // The student's attempt was reset (approve) — refresh the results list.
       if (action === 'approve') fetchResults();
     } catch (err) {
       alert(err?.message || 'Action failed. Please try again.');
@@ -265,7 +314,7 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                         <Bell size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
                         <div>
                           <p className="text-sm font-semibold text-emerald-900">Results are in — notify parents?</p>
-                          <p className="text-xs text-emerald-700 mt-0.5">Each parent gets their child’s score, a short note, and a PDF report.</p>
+                          <p className="text-xs text-emerald-700 mt-0.5">Each parent gets their child's score, a short note, and a PDF report.</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -353,11 +402,23 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                               {a.marks_deducted > 0 && ` (−${a.marks_deducted.toFixed(2)} deducted)`}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <Tag color={scorePct >= 80 ? 'green' : scorePct >= 60 ? 'blue' : scorePct >= 40 ? 'amber' : 'red'}>
-                              {scorePct}%
-                            </Tag>
-                            <p className="text-[10px] text-neutral-400 mt-0.5">{a.points_earned} pts</p>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right">
+                              <Tag color={scorePct >= 80 ? 'green' : scorePct >= 60 ? 'blue' : scorePct >= 40 ? 'amber' : 'red'}>
+                                {scorePct}%
+                              </Tag>
+                              <p className="text-[10px] text-neutral-400 mt-0.5">{a.points_earned} pts</p>
+                            </div>
+                            <button
+                              onClick={() => handleDownloadExamPdf(a)}
+                              disabled={pdfBusy === a.id}
+                              title="Download exam result PDF"
+                              className="p-1.5 rounded-lg text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40"
+                            >
+                              {pdfBusy === a.id
+                                ? <Loader2 size={13} className="animate-spin" />
+                                : <Download size={13} />}
+                            </button>
                           </div>
                         </div>
                       );
@@ -367,43 +428,43 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
               )}
 
               {activeTab === 'stats' && (() => {
-                  const totalM = test.total_marks || test.totalMarks || 100;
-                  const toP = v => v != null ? ((v / totalM) * 100).toFixed(1) : '—';
-                  return (
-                    <div className="space-y-4">
-                      <div className="p-4 rounded-md bg-white/30 border border-white/60">
-                        <h4 className="text-sm font-medium mb-3">Score Distribution</h4>
-                        <div className="space-y-2">
-                          {[
-                            { label: 'Highest', value: toP(results.stats.highest_score), color: 'text-green-600' },
-                            { label: 'Average', value: toP(results.stats.avg_score), color: 'text-blue-600' },
-                            { label: 'Lowest', value: toP(results.stats.lowest_score), color: 'text-red-600' },
-                          ].map(s => (
-                            <div key={s.label} className="flex justify-between items-center">
-                              <span className="text-xs text-neutral-500">{s.label}</span>
-                              <span className={`text-sm font-semibold ${s.color}`}>{s.value}%</span>
-                            </div>
-                          ))}
-                        </div>
+                const totalM = test.total_marks || test.totalMarks || 100;
+                const toP = v => v != null ? ((v / totalM) * 100).toFixed(1) : '—';
+                return (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-md bg-white/30 border border-white/60">
+                      <h4 className="text-sm font-medium mb-3">Score Distribution</h4>
+                      <div className="space-y-2">
+                        {[
+                          { label: 'Highest', value: toP(results.stats.highest_score), color: 'text-green-600' },
+                          { label: 'Average', value: toP(results.stats.avg_score), color: 'text-blue-600' },
+                          { label: 'Lowest', value: toP(results.stats.lowest_score), color: 'text-red-600' },
+                        ].map(s => (
+                          <div key={s.label} className="flex justify-between items-center">
+                            <span className="text-xs text-neutral-500">{s.label}</span>
+                            <span className={`text-sm font-semibold ${s.color}`}>{s.value}%</span>
+                          </div>
+                        ))}
                       </div>
-                      <div className="p-4 rounded-md bg-white/30 border border-white/60">
-                        <h4 className="text-sm font-medium mb-3">Performance Stats</h4>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-neutral-500">Total Attempts</span>
-                            <span className="text-sm font-semibold">{results.stats.total_attempts}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-neutral-500">Flagged for Cheating</span>
-                            <span className={`text-sm font-semibold ${results.stats.flagged_count > 0 ? 'text-red-600' : ''}`}>
-                              {results.stats.flagged_count}
-                            </span>
-                          </div>
+                    </div>
+                    <div className="p-4 rounded-md bg-white/30 border border-white/60">
+                      <h4 className="text-sm font-medium mb-3">Performance Stats</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-neutral-500">Total Attempts</span>
+                          <span className="text-sm font-semibold">{results.stats.total_attempts}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-neutral-500">Flagged for Cheating</span>
+                          <span className={`text-sm font-semibold ${results.stats.flagged_count > 0 ? 'text-red-600' : ''}`}>
+                            {results.stats.flagged_count}
+                          </span>
                         </div>
                       </div>
                     </div>
-                  );
-                })()}
+                  </div>
+                );
+              })()}
 
               {activeTab === 'reattempts' && (
                 reattempts.length === 0 ? (
@@ -430,7 +491,7 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                           </div>
                           {r.reason && (
                             <p className="text-xs text-neutral-700 bg-neutral-50 border border-neutral-100 rounded-md px-3 py-2 mb-2.5 whitespace-pre-wrap">
-                              “{r.reason}”
+                              "{r.reason}"
                             </p>
                           )}
                           <div className="flex gap-2">

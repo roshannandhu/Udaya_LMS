@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Loader2, Download } from 'lucide-react';
 import { testApi } from '../../lib/api';
 import { Reveal } from '../../components/bits';
 
@@ -13,6 +13,33 @@ export default function StudentTestReviewPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!data || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const { buildExamResultPdf } = await import('../../lib/reportPdf');
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      await buildExamResultPdf({
+        reviewData: data,
+        result,
+        student: {
+          name:         user.name,
+          student_code: user.student_code,
+          standard_name:user.standard_name,
+          avatar_url:   user.avatar_url,
+          username:     user.username,
+        },
+        testMeta: { title: result?.testTitle },
+      });
+    } catch (e) {
+      console.error('PDF error', e);
+      alert('Failed to generate PDF');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!test_id) { setLoading(false); return; }
@@ -62,15 +89,27 @@ export default function StudentTestReviewPage() {
               <p className="text-[11px] text-neutral-400">{qs.length} questions</p>
             )}
           </div>
-          {scorePct !== null && (
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-              scorePct >= 75 ? 'bg-green-100 text-green-700' :
-              scorePct >= 50 ? 'bg-amber-100 text-amber-700' :
-              'bg-red-100 text-red-600'
-            }`}>
-              {Math.round(scorePct)}%
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {scorePct !== null && (
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                scorePct >= 75 ? 'bg-green-100 text-green-700' :
+                scorePct >= 50 ? 'bg-amber-100 text-amber-700' :
+                'bg-red-100 text-red-600'
+              }`}>
+                {Math.round(scorePct)}%
+              </span>
+            )}
+            {data && (
+              <button
+                onClick={handleDownloadPdf}
+                disabled={pdfBusy}
+                title="Download PDF result"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40"
+              >
+                {pdfBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
