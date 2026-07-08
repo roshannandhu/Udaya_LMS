@@ -50,26 +50,45 @@ async function generatePdf(element, filename) {
 
 function mountAndPrint(Component, props, filename) {
   const container = document.createElement('div');
+  // Fixed width to match A4 proportions (96 DPI)
   container.style.width = '794px';
-  container.style.position = 'absolute';
+  container.style.position = 'fixed'; // Fixed keeps it in viewport logic
+  container.style.top = '100%'; // Pushes it just below the visible screen!
   container.style.left = '0';
-  container.style.top = '0';
-  container.style.zIndex = '-9999';
-  container.style.backgroundColor = '#ffffff'; // Force white background so it's not transparent
+  container.style.zIndex = '-1000';
+  container.style.backgroundColor = '#ffffff';
   
   document.body.appendChild(container);
 
   const root = createRoot(container);
   root.render(<Component {...props} />);
   
+  // Give React 1.5 seconds to fully mount the DOM tree
   setTimeout(async () => {
     try {
-      await generatePdf(container, filename);
+      const opt = {
+        margin:       [10, 10, 15, 10],
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 1.0 },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, // Allow external resources if headers permit
+          letterRendering: true, 
+          logging: true, // Turn on logging so we can see what's happening
+          scrollY: 0,
+          windowWidth: 794 // Force html2canvas to understand the width
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css'] }
+      };
+      await html2pdf().set(opt).from(container).save();
+    } catch (err) {
+      console.error("PDF Generation Error:", err);
     } finally {
       root.unmount();
       document.body.removeChild(container);
     }
-  }, 1200); 
+  }, 1500); 
 }
 
 // ── Ultra-Premium Pure CSS Components (100% Bug-Free in PDF) ───────────────
@@ -82,18 +101,15 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
     <div className="relative z-10 flex items-start justify-between">
       <div className="flex gap-6">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-white/10 shadow-inner p-1 border border-white/5">
-          {student?.avatar_url ? (
-            <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-[14px] object-cover" crossOrigin="anonymous" />
-          ) : (
-            <span className="text-5xl font-extrabold text-white">
-              {(student?.name || 'S').charAt(0).toUpperCase()}
-            </span>
-          )}
+          {/* REMOVED AVATAR IMG TO PREVENT CORS CRASH IN HTML2CANVAS */}
+          <span className="text-5xl font-extrabold text-white">
+            {(student?.name || 'S').charAt(0).toUpperCase()}
+          </span>
         </div>
 
         <div>
           <div className="mb-2 flex items-center gap-2">
-            {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-5 w-5 rounded bg-white p-0.5" crossOrigin="anonymous" />}
+            {/* REMOVED LOGO IMG TO PREVENT CORS CRASH IN HTML2CANVAS */}
             <span className="text-[10px] font-bold tracking-widest text-indigo-300 uppercase">{brand.name}</span>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-white mb-2">{student?.name || 'Student'}</h1>
