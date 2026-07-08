@@ -1,8 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import html2pdf from 'html2pdf.js';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
-import { AlertTriangle, Award, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap } from 'lucide-react';
+import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity } from 'lucide-react';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -36,10 +37,10 @@ const periodRange = (p) => {
 // ── PDF Generation Core ─────────────────────────────────────────────────────
 async function generatePdf(element, filename) {
   const opt = {
-    margin:       10,
+    margin:       [10, 10, 15, 10], // top, left, bottom, right
     filename:     filename,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+    html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak:    { mode: ['css', 'legacy'] }
   };
@@ -57,9 +58,9 @@ function mountAndPrint(Component, props, filename) {
 
   const root = createRoot(container);
   
-  // Render and wait for images
   root.render(<Component {...props} />);
   
+  // 1.5s delay to let fonts, images, and un-animated charts render
   setTimeout(async () => {
     try {
       await generatePdf(container, filename);
@@ -67,20 +68,18 @@ function mountAndPrint(Component, props, filename) {
       root.unmount();
       document.body.removeChild(container);
     }
-  }, 1500); // 1.5s delay to let fonts and images load
+  }, 1500); 
 }
 
 
 // ── Shared UI Components ────────────────────────────────────────────────────
 const Header = ({ title, subtitle, student, brand, rightStats }) => (
-  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-violet-700 to-fuchsia-700 p-8 text-white shadow-xl">
-    {/* Decorative blur circles */}
+  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-violet-700 to-fuchsia-700 p-8 text-white shadow-xl" style={{ pageBreakInside: 'avoid' }}>
     <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
     <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
     
     <div className="relative z-10 flex items-start justify-between">
       <div className="flex gap-6">
-        {/* Photo / Initial */}
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm p-1">
           {student?.avatar_url ? (
             <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
@@ -92,19 +91,16 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
         </div>
 
         <div>
-          {/* Brand Row */}
           <div className="mb-3 flex items-center gap-2">
             {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-6 w-6 rounded bg-white p-0.5" crossOrigin="anonymous" />}
             <span className="text-xs font-semibold tracking-wider text-indigo-100 uppercase">{brand.name}</span>
           </div>
-
           <h1 className="text-3xl font-bold tracking-tight text-white">{student?.name || 'Student'}</h1>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-indigo-100/90">
             {student?.student_code && <span>{student.student_code}</span>}
             {student?.standard_name && <span>• {student.standard_name}</span>}
             {student?.username && <span>• @{student.username}</span>}
           </div>
-
           <div className="mt-4 flex items-center gap-3">
             <div className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md">
               {title}
@@ -141,7 +137,7 @@ const Section = ({ title, icon: Icon, color, children, className = '' }) => (
 );
 
 const KpiCard = ({ icon: Icon, label, value, color }) => (
-  <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow">
+  <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
     <div className="mb-3 flex items-center gap-3">
       <div className={`rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-4 w-4 ${color.text}`} strokeWidth={2.5} />
@@ -155,7 +151,7 @@ const KpiCard = ({ icon: Icon, label, value, color }) => (
 const ProgressBar = ({ label, value, max = 100, color, valueText }) => {
   const pct = Math.max(0, Math.min(100, (value / max) * 100)) || 0;
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4" style={{ pageBreakInside: 'avoid' }}>
       <span className="w-32 text-sm font-semibold text-gray-700 truncate">{label}</span>
       <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
         <div className={`h-full ${color.fill} rounded-full`} style={{ width: `${pct}%` }} />
@@ -164,6 +160,69 @@ const ProgressBar = ({ label, value, max = 100, color, valueText }) => {
     </div>
   );
 };
+
+// ── Realistic GitHub-Style Calendar Heatmap ────────────────────────────────
+const CalendarHeatmap = ({ heatmapData }) => {
+  if (!heatmapData || heatmapData.length === 0) return null;
+  
+  // Sort data and slice last 12 weeks (84 days) for a neat 12-column grid
+  const sorted = [...heatmapData].sort((a,b) => new Date(a.date) - new Date(b.date)).slice(-84);
+  
+  // Pad the beginning so it aligns with the correct day of week (0=Sun, 6=Sat)
+  const firstDate = new Date(sorted[0].date);
+  const startDayOfWeek = firstDate.getDay(); 
+  
+  const paddedGrid = Array(startDayOfWeek).fill(null).concat(sorted);
+  
+  // Create columns of 7 days
+  const columns = [];
+  for (let i = 0; i < paddedGrid.length; i += 7) {
+    columns.push(paddedGrid.slice(i, i + 7));
+  }
+
+  const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2">
+        {/* Y-Axis Labels */}
+        <div className="flex flex-col gap-1 pr-2 pt-5">
+          {daysOfWeek.map((d, i) => (
+            <div key={i} className="h-4 text-[10px] font-medium text-gray-400 flex items-center justify-end">{i % 2 === 1 ? d : ''}</div>
+          ))}
+        </div>
+        
+        {/* Grid */}
+        <div className="flex gap-1 overflow-hidden">
+          {columns.map((col, colIdx) => (
+            <div key={colIdx} className="flex flex-col gap-1">
+              {/* Month label approximation above the column */}
+              <div className="h-4 text-[10px] font-medium text-gray-500">
+                {col[0] && new Date(col[0].date).getDate() <= 7 
+                  ? new Date(col[0].date).toLocaleString('default', { month: 'short' }) 
+                  : ''}
+              </div>
+              {col.map((d, rowIdx) => {
+                if (!d) return <div key={rowIdx} className="h-4 w-4 rounded-sm bg-transparent" />;
+                const bg = (d.present > 0) ? 'bg-emerald-500' : (d.late > 0) ? 'bg-amber-400' : (d.total > 0) ? 'bg-red-400' : 'bg-gray-100';
+                return <div key={rowIdx} className={`h-4 w-4 rounded-sm ${bg} shadow-sm border border-black/5`} />;
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Legend */}
+      <div className="mt-2 flex gap-4 text-xs font-medium text-gray-500">
+        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-gray-100 border border-black/5" /> No Class</span>
+        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-emerald-500 border border-black/5" /> Present</span>
+        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-amber-400 border border-black/5" /> Late</span>
+        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-red-400 border border-black/5" /> Absent</span>
+      </div>
+    </div>
+  );
+};
+
 
 // ── Report 1: Student Overall Report ──────────────────────────────────────────
 const StudentReportTemplate = ({ data, period }) => {
@@ -178,8 +237,13 @@ const StudentReportTemplate = ({ data, period }) => {
   const topicMap = data.topic_map || [];
   const heatmap = data.attendance_heatmap || [];
 
+  // Prepare chart data
+  const chartData = [...timeline]
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .map(t => ({ name: t.test_title.substring(0, 10), score: Math.round(t.score_pct) }));
+
   return (
-    <div className="bg-white p-8 font-sans text-gray-900">
+    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px]">
       <Header 
         title={periodTitle(period)}
         subtitle={periodRange(period)}
@@ -197,6 +261,33 @@ const StudentReportTemplate = ({ data, period }) => {
         <KpiCard icon={Trophy} label="Points" value={s.points ?? 0} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
         <KpiCard icon={Video} label="Tests Taken" value={timeline.length} color={{ bg: 'bg-rose-100', text: 'text-rose-600' }} />
       </div>
+
+      {chartData.length >= 2 && (
+        <Section title="Score Trend" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }}>
+          <div className="h-56 w-full rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6">
+            <AreaChart width={710} height={180} data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
+              <Area type="monotone" dataKey="score" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" isAnimationActive={false} />
+            </AreaChart>
+          </div>
+        </Section>
+      )}
+
+      {heatmap.length > 0 && (
+        <Section title="Attendance Calendar" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }}>
+          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm flex justify-center">
+            <CalendarHeatmap heatmapData={heatmap} />
+          </div>
+        </Section>
+      )}
 
       {radar.length > 0 && (
         <Section title="Subject Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
@@ -225,7 +316,7 @@ const StudentReportTemplate = ({ data, period }) => {
                   const mastery = t.score_pct || 0;
                   const mColor = mastery >= 75 ? 'text-emerald-600 bg-emerald-50' : mastery >= 50 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
                   return (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
                       <td className="px-4 py-3 font-medium">{t.topic || 'Concept'}</td>
                       <td className="px-4 py-3 text-gray-500">{t.subject}</td>
                       <td className="px-4 py-3 text-center">
@@ -248,26 +339,6 @@ const StudentReportTemplate = ({ data, period }) => {
         </Section>
       )}
 
-      {heatmap.length > 0 && (
-        <Section title="Attendance Overview" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }}>
-          <div className="flex gap-2 flex-wrap">
-            {heatmap.slice(-30).map((d, i) => {
-              const bg = (d.present > 0) ? 'bg-emerald-500' : (d.late > 0) ? 'bg-amber-500' : (d.total > 0) ? 'bg-red-500' : 'bg-gray-200';
-              return (
-                <div key={i} className={`h-8 w-8 rounded-md ${bg} flex items-center justify-center text-[9px] text-white font-bold shadow-sm`}>
-                  {new Date(d.date).getDate()}
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-4 flex gap-4 text-xs font-medium text-gray-500">
-            <span className="flex items-center gap-1"><div className="h-3 w-3 rounded bg-emerald-500" /> Present</span>
-            <span className="flex items-center gap-1"><div className="h-3 w-3 rounded bg-amber-500" /> Late</span>
-            <span className="flex items-center gap-1"><div className="h-3 w-3 rounded bg-red-500" /> Absent</span>
-          </div>
-        </Section>
-      )}
-
       {timeline.length > 0 && (
         <Section title="Exam History" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
           <div className="overflow-hidden rounded-xl border border-gray-200">
@@ -282,7 +353,7 @@ const StudentReportTemplate = ({ data, period }) => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {[...timeline].sort((a,b) => new Date(b.date) - new Date(a.date)).map((t, i) => (
-                  <tr key={i} className="bg-white">
+                  <tr key={i} className="bg-white" style={{ pageBreakInside: 'avoid' }}>
                     <td className="px-4 py-3 text-gray-500">{fmtDate(t.date)}</td>
                     <td className="px-4 py-3 font-medium">{t.test_title}</td>
                     <td className="px-4 py-3 text-center font-bold text-gray-900">{Math.round(t.score_pct)}%</td>
@@ -312,7 +383,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
   const ans = reviewData?.answers || {};
 
   return (
-    <div className="bg-white p-8 font-sans text-gray-900">
+    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px]">
       <Header 
         title={testMeta?.title || result.testTitle || 'Exam'}
         subtitle={testMeta?.subject_name || 'Subject'}
@@ -325,7 +396,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
       />
 
       {(result.flagged || result.cancelled) && (
-        <div className="mt-8 flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-5">
+        <div className="mt-8 flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-5" style={{ pageBreakInside: 'avoid' }}>
           <AlertTriangle className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
           <div>
             <h3 className="font-bold text-red-900">{result.cancelled ? 'Exam Terminated' : 'Integrity Alert'}</h3>
@@ -363,7 +434,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
                 const isCorrect = answered && sAns === q.correct_idx;
                 const isSkipped = !answered;
                 return (
-                  <tr key={i} className={!isCorrect && !isSkipped ? 'bg-red-50/50' : 'bg-white'}>
+                  <tr key={i} className={!isCorrect && !isSkipped ? 'bg-red-50/50' : 'bg-white'} style={{ pageBreakInside: 'avoid' }}>
                     <td className="px-4 py-3 text-center text-gray-500 font-medium">{i + 1}</td>
                     <td className="px-4 py-3 font-medium text-gray-800 line-clamp-2">{q.question}</td>
                     <td className="px-4 py-3 text-gray-600">
@@ -408,6 +479,6 @@ export function buildExamResultPdf({ reviewData, result, student, testMeta }) {
 }
 
 export function buildClassAnalyticsPdf({ analytics, standardName }) {
-  // Can be fully implemented using similar Tailwind structure. For now, graceful fallback or basic template.
   console.log("Class analytics PDF triggered");
 }
+
