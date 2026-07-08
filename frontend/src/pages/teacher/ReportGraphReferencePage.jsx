@@ -5,6 +5,7 @@ import { reportApi, teacherApi, studentApi } from '../../lib/api';
 import { motion } from 'framer-motion';
 
 // Import all premium graphs
+import SubjectProgressionLineChart from '../../components/shared/graphs/SubjectProgressionLineChart';
 import GradientAreaTrendChart from '../../components/shared/graphs/GradientAreaTrendChart';
 import SubjectRadarChart from '../../components/shared/graphs/SubjectRadarChart';
 import DumbbellSubjectPlot from '../../components/shared/graphs/DumbbellSubjectPlot';
@@ -79,6 +80,13 @@ export default function ReportGraphReferencePage() {
   
   // Dummy Data Generators
   
+  const progressionData = reportData?.progressionData?.length > 0 ? reportData.progressionData : [
+    { testName: 'Unit 1', Math: 80, Science: 85, English: 70 },
+    { testName: 'Midterm', Math: 85, Science: 90, English: 75 },
+    { testName: 'Unit 2', Math: 75, Science: 95, English: 80 },
+    { testName: 'Finals', Math: 90, Science: 92, English: 85 },
+  ];
+
   const areaData = reportData?.trendData?.length > 0 ? reportData.trendData : [
     { name: 'Jan', studentScore: 45, classScore: 60 },
     { name: 'Feb', studentScore: 55, classScore: 62 },
@@ -240,6 +248,11 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
 
         {/* ROW 2: Performance */}
+
+        <GlassCard title="Subject Progression" subtitle="Test scores over time">
+          <SubjectProgressionLineChart data={progressionData} />
+        </GlassCard>
+
         <GlassCard title="Overall Trend" subtitle="Student vs Class Avg">
           <GradientAreaTrendChart data={areaData} classAverageLine={true} />
         </GlassCard>
