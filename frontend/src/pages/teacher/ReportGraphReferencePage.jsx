@@ -25,12 +25,12 @@ import ActivityStepper from '../../components/shared/graphs/ActivityStepper';
 
 // Basic Glass Card Wrapper
 const GlassCard = ({ title, subtitle, children }) => (
-  <div className="break-inside-avoid bg-white/40 backdrop-blur-xl border border-white/60 rounded-[32px] p-6 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full overflow-hidden">
+  <div className="break-inside-avoid bg-white/40 backdrop-blur-xl border border-white/60 rounded-[32px] p-6 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full mb-6 relative z-10">
     <div className="mb-4">
       <h3 className="text-[#112B3C] font-black text-lg tracking-tight">{title}</h3>
       {subtitle && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">{subtitle}</p>}
     </div>
-    <div className="w-full flex-1 flex flex-col justify-center relative min-h-[220px]">
+    <div className="w-full flex-1 flex flex-col justify-center relative">
       {children}
     </div>
   </div>
@@ -182,7 +182,7 @@ export default function ReportGraphReferencePage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 md:auto-rows-[160px] grid-flow-dense"
+        className="px-4 md:px-6 max-w-7xl mx-auto columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-6 space-y-6 pb-24"
       >
         {/* ROW 1: KPIs & Calendars */}
         <GlassCard title="Attendance" subtitle="Monthly Status">
