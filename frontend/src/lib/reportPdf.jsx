@@ -1,9 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import html2pdf from 'html2pdf.js';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
-import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity } from 'lucide-react';
+import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, PieChart as PieIcon, LayoutGrid } from 'lucide-react';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -382,6 +382,14 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
   const qs = reviewData?.questions || [];
   const ans = reviewData?.answers || {};
 
+  const skippedCount = (result.total || qs.length || 0) - (result.correct_count || 0) - (result.wrong_count || 0);
+
+  const pieData = [
+    { name: 'Correct', value: result.correct_count || 0, color: '#10b981' },
+    { name: 'Wrong', value: result.wrong_count || 0, color: '#ef4444' },
+    { name: 'Skipped', value: skippedCount > 0 ? skippedCount : 0, color: '#9ca3af' }
+  ].filter(d => d.value > 0);
+
   return (
     <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px]">
       <Header 
@@ -409,11 +417,51 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-4 gap-4">
-        <KpiCard icon={CheckCircle} label="Correct" value={result.correct_count || 0} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
-        <KpiCard icon={XCircle} label="Wrong" value={result.wrong_count || 0} color={{ bg: 'bg-rose-100', text: 'text-rose-600' }} />
-        <KpiCard icon={Clock} label="Questions" value={result.total || qs.length || 0} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} />
-        <KpiCard icon={Trophy} label="Points" value={result.points_earned || 0} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
+      {/* Visual Analytics Row */}
+      <div className="mt-8 grid grid-cols-2 gap-6" style={{ pageBreakInside: 'avoid' }}>
+        {/* Accuracy Donut Chart */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm flex items-center justify-between">
+          <div className="relative flex items-center justify-center h-[160px] w-[160px]">
+            <PieChart width={160} height={160}>
+              <Pie data={pieData} innerRadius={55} outerRadius={75} paddingAngle={3} dataKey="value" stroke="none" isAnimationActive={false}>
+                {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+              </Pie>
+            </PieChart>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-bold text-gray-900">{Math.round(score_pct)}%</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3">
+            {pieData.map((d, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: d.color }} />
+                <span className="text-sm font-medium text-gray-600 w-16">{d.name}</span>
+                <span className="text-sm font-bold text-gray-900">{d.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bubble Sheet Matrix */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm overflow-hidden flex flex-col">
+          <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4 text-indigo-500" /> Answer Matrix
+          </h3>
+          <div className="flex flex-wrap gap-1.5 content-start h-full">
+            {qs.map((q, i) => {
+              const sAns = ans[String(q.id)];
+              const answered = sAns !== undefined && sAns !== null;
+              const isCorrect = answered && sAns === q.correct_idx;
+              const isSkipped = !answered;
+              const bg = isCorrect ? 'bg-emerald-500' : isSkipped ? 'bg-gray-300' : 'bg-red-500';
+              return (
+                <div key={i} className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ${bg}`}>
+                  {i + 1}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <Section title="Detailed Question Review" icon={FileText} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }}>
@@ -481,4 +529,5 @@ export function buildExamResultPdf({ reviewData, result, student, testMeta }) {
 export function buildClassAnalyticsPdf({ analytics, standardName }) {
   console.log("Class analytics PDF triggered");
 }
+
 
