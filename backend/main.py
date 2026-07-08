@@ -1041,18 +1041,7 @@ async def zoom_create_meeting(topic: str, start_time: str, duration_mins: int) -
     if resp.status_code not in (200, 201):
         raise HTTPException(status_code=502, detail=f"Zoom meeting creation failed: {resp.text}")
     data = resp.json()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "meeting_id": str(data["id"]),
         "join_url": data["join_url"],
         "start_url": data["start_url"],
@@ -1470,18 +1459,7 @@ def _load_trusted_devices() -> dict:
             return json.loads(TRUSTED_DEVICES_FILE.read_text(encoding="utf-8"))
     except Exception:
         pass
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+    return {}
 
 
 def _save_trusted_devices(data: dict):
@@ -1893,35 +1871,13 @@ def _login_impl(request: LoginRequest):
                     "refresh_token": response.session.refresh_token,
                     "user_info": user_info,
                 }
-                
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+                return {
                     "requires_otp": True,
                     "pending_id": pending_id,
                     "email_masked": _mask_email(user.email),
                 }
 
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "token": response.session.access_token,
             "refresh_token": response.session.refresh_token,
             "user": user_info,
@@ -1947,18 +1903,7 @@ def verify_otp(request: VerifyOtpRequest):
     # Success — release the held session and trust this device for 30 days.
     _otp_pending.pop(request.pending_id, None)
     _trust_device(entry["user_id"], request.device_fingerprint or "")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "token": entry["token"],
         "refresh_token": entry["refresh_token"],
         "user": entry["user_info"],
@@ -1984,18 +1929,7 @@ def resend_otp(request: ResendOtpRequest):
     entry["last_sent"] = time_module.time()
     entry["expires"] = time_module.time() + OTP_TTL_SECS
     entry["attempts"] = 0
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Code re-sent", "email_masked": _mask_email(entry["email"])}
+    return {"message": "Code re-sent", "email_masked": _mask_email(entry["email"])}
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
@@ -2008,18 +1942,7 @@ def refresh_access_token(request: RefreshTokenRequest):
         response = supabase.auth.refresh_session(request.refresh_token)
         if not response.session:
             raise HTTPException(status_code=401, detail="Refresh failed")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "token": response.session.access_token,
             "refresh_token": response.session.refresh_token,
         }
@@ -2030,18 +1953,7 @@ def refresh_access_token(request: RefreshTokenRequest):
 
 @app.post("/api/auth/logout")
 def logout():
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Logged out"}
+    return {"message": "Logged out"}
 
 class VerifyDeviceRequest(BaseModel):
     device_fingerprint: str
@@ -2049,71 +1961,16 @@ class VerifyDeviceRequest(BaseModel):
 @app.post("/api/auth/verify-device")
 def verify_device(request: VerifyDeviceRequest, user = Depends(verify_token)):
     if user.get("role") != "student":
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"allowed": True}
+        return {"allowed": True}
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"allowed": True}
+        return {"allowed": True}
     try:
         session = service_supabase.table("student_sessions").select("device_fingerprint").eq("student_id", user["id"]).single().execute()
         if not session.data:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"allowed": True}
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"allowed": session.data["device_fingerprint"] == request.device_fingerprint}
+            return {"allowed": True}
+        return {"allowed": session.data["device_fingerprint"] == request.device_fingerprint}
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"allowed": True}
+        return {"allowed": True}
 
 @app.get("/api/auth/me")
 def get_current_user(user = Depends(verify_token)):
@@ -2162,30 +2019,8 @@ def update_profile(request: UpdateProfileRequest, user = Depends(verify_token)):
             service_supabase.table("sub_teachers").update({"email": new_email}).eq("id", user["user_id"]).execute()
         except Exception:
             pass
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Profile updated", "email": new_email}
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Profile updated"}
+        return {"message": "Profile updated", "email": new_email}
+    return {"message": "Profile updated"}
 
 @app.post("/api/auth/change-password")
 def change_password(request: ChangePasswordRequest, user = Depends(verify_token)):
@@ -2207,18 +2042,7 @@ def change_password(request: ChangePasswordRequest, user = Depends(verify_token)
         # so the immediate /auth/me re-check sees the cleared flag (otherwise the
         # frontend guard bounces the student back to the change-password page).
         _invalidate_auth_cache_for_user(user["user_id"])
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Password changed successfully"}
+        return {"message": "Password changed successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2236,18 +2060,7 @@ async def get_dashboard_stats(user = Depends(verify_token)):
     standard_ids = [s["id"] for s in standards.data] if standards.data else []
 
     if not standard_ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "students_count": 0,
             "subjects_count": 0,
             "scheduled_tests_count": 0,
@@ -2274,18 +2087,7 @@ async def get_dashboard_stats(user = Depends(verify_token)):
         tests_res = await asyncio.to_thread(lambda: service_supabase.table("tests").select("id", count="exact").in_("class_id", class_ids).eq("status", "scheduled").execute())
         scheduled_tests_count = tests_res.count or 0
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "students_count": students_res.count or 0,
         "subjects_count": subjects_res.count or 0,
         "scheduled_tests_count": scheduled_tests_count,
@@ -2308,18 +2110,7 @@ def get_dashboard_activity(user = Depends(verify_token)):
     standard_ids = [s["id"] for s in standards.data] if standards.data else []
 
     if not standard_ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"activities": []}
+        return {"activities": []}
 
     # Get students in teacher's standards
     students_result = service_supabase.table("students").select("id, name").in_("standard_id", standard_ids).execute()
@@ -2358,18 +2149,7 @@ def get_dashboard_activity(user = Depends(verify_token)):
     # Sort by timestamp
     activities.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"activities": activities[:20]}
+    return {"activities": activities[:20]}
 
 @app.get("/api/dashboard/overview")
 async def get_dashboard_overview(user = Depends(verify_token)):
@@ -2562,18 +2342,7 @@ async def get_dashboard_overview(user = Depends(verify_token)):
         for s in low[:6]
     ]
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "counts": counts,
         "performance": performance,
         "top_students": top_students,
@@ -2591,18 +2360,7 @@ def _parse_answers(raw):
         try:
             raw = json.loads(raw)
         except Exception:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+            return {}
     return raw if isinstance(raw, dict) else {}
 
 def _detect_copy_suspects(tests, questions_by_test, attempts_by_test, student_name_map,
@@ -2966,18 +2724,7 @@ async def get_dashboard_insights(user = Depends(verify_token)):
                    if vp.get("completed") and (vp.get("last_watched_at") or "") >= start_iso
                    and vp.get("student_id") in roster_ids)
         subs = sum(1 for r in (sub30_res.data or []) if (r.get("submitted_at") or "") >= start_iso)
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "avg_score": round(sum(scores) / len(scores)) if scores else 0,
             "attempts": len(scores),
             "attendance_pct": round(att_ok / len(att_rows) * 100) if att_rows else 0,
@@ -2985,18 +2732,7 @@ async def get_dashboard_insights(user = Depends(verify_token)):
             "assignments_submitted": subs,
         }
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "copy_suspects": {"count": len(copy_suspects), "items": copy_suspects},
         "video_laggards": {"count": laggard_count, "items": video_laggards},
         "cold_videos": {"count": len(cold_videos), "items": cold_videos},
@@ -3096,18 +2832,7 @@ def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(ve
     if update_data:
         service_supabase.table("standards").update(update_data).eq("id", standard_id).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Standard updated"}
+    return {"message": "Standard updated"}
 
 @app.delete("/api/standards/{standard_id}")
 async def delete_standard(standard_id: str, pin: Optional[str] = None, user = Depends(verify_token)):
@@ -3230,18 +2955,7 @@ async def delete_standard(standard_id: str, pin: Optional[str] = None, user = De
     #     subject_classes, videos (DB), video_progress, tests, questions,
     #     attendance_records, broadcasts, invite_links, student_sessions
     service_supabase.table("standards").delete().eq("id", standard_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Standard terminated"}
+    return {"message": "Standard terminated"}
 
 # Subjects CRUD
 @app.get("/api/subjects")
@@ -3307,18 +3021,7 @@ def update_subject(subject_id: str, updates: SubjectUpdate, user = Depends(verif
     if update_data:
         service_supabase.table("subject_classes").update(update_data).eq("id", subject_id).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Subject updated"}
+    return {"message": "Subject updated"}
 
 @app.delete("/api/subjects/{subject_id}")
 def delete_subject(subject_id: str, user = Depends(verify_token)):
@@ -3335,18 +3038,7 @@ def delete_subject(subject_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     service_supabase.table("subject_classes").delete().eq("id", subject_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Subject deleted"}
+    return {"message": "Subject deleted"}
 
 # Students
 @app.get("/api/students")
@@ -3534,18 +3226,7 @@ def get_standard_analytics(standard_id: str, user = Depends(verify_token)):
     scored = [s["avg_score"] for s in students if s["has_tests"]]
     attended = [s["attendance_pct"] for s in students if s["has_attendance"]]
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "overview": {
             "total_students": total_students,
             # Averages over students who actually have data — a class where only
@@ -3634,18 +3315,7 @@ async def get_period_performance(standard_id: str, class_id: Optional[str] = Non
     empty_summary = {"avg_score": 0, "avg_attendance": 0, "tests_count": 0,
                      "video_completion_pct": 0, "assignment_completion_pct": 0, "active_students": 0}
     if not roster or not subject_ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"period": period, "standard_id": standard_id, "class_id": class_id,
+        return {"period": period, "standard_id": standard_id, "class_id": class_id,
                 "summary": empty_summary, "trend": [], "students": []}
 
     roster_ids = {s["id"] for s in roster}
@@ -3808,18 +3478,7 @@ async def get_period_performance(standard_id: str, class_id: Optional[str] = Non
             "attendance_pct": round(att_n / att_d * 100) if att_d else None,
         })
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "period": period,
         "standard_id": standard_id,
         "class_id": class_id,
@@ -3887,18 +3546,7 @@ def get_student_report(student_id: str, user = Depends(verify_token)):
             "last_watched_at": r.get("last_watched_at"),
         })
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "student": student_res.data,
         "history": history,
         "video_history": video_history,
@@ -4096,18 +3744,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
     # ── Topic map (video ↔ test matching by word overlap) ────────────
     STOPWORDS = {"the","a","an","of","in","on","for","to","and","with","chapter","test","weekly","unit","lesson","class","intro","introduction","part","section","basic","basics","advanced"}
     def keywords(title: str):
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-w for w in title.lower().split() if w not in STOPWORDS and len(w) > 2}
+        return {w for w in title.lower().split() if w not in STOPWORDS and len(w) > 2}
 
     topic_map = []
     vp_by_vid = {vp["video_id"]: vp for vp in vp_rows}
@@ -4485,18 +4122,7 @@ w for w in title.lower().split() if w not in STOPWORDS and len(w) > 2}
             print(f"Class averages error (non-fatal): {exc}")
             class_averages = None
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "student": student,
         "period": period,
         "subject_radar": subject_radar,
@@ -4678,18 +4304,7 @@ def create_student_admin(request: CreateStudentRequest, background_tasks: Backgr
         # Fire auto-welcome (credentials) if enabled — guarded, never blocks creation.
         background_tasks.add_task(_wa_auto_welcome, response.user.id)
 
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "id": response.user.id,
             "email": auth_email,
             "username": username,
@@ -4722,18 +4337,7 @@ def backfill_student_codes(force: bool = False, user = Depends(verify_token)):
     standards = service_supabase.table("standards").select("id").eq("teacher_id", user["teacher_id"]).execute()
     standard_ids = [s["id"] for s in (standards.data or [])]
     if not standard_ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"updated": 0, "skipped": 0}
+        return {"updated": 0, "skipped": 0}
 
     rows = service_supabase.table("students").select(
         "id, standard_id, student_code, created_at"
@@ -4764,18 +4368,7 @@ def backfill_student_codes(force: bool = False, user = Depends(verify_token)):
             updated += 1
         else:
             skipped += 1
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"updated": updated, "skipped": skipped}
+    return {"updated": updated, "skipped": skipped}
 
 
 @app.post("/api/admin/backup-now")
@@ -4790,18 +4383,7 @@ async def backup_now(user = Depends(verify_token)):
         await asyncio.to_thread(_set_backup_state, {"last_run_at": time_module.time()})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backup failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "ok", "result": produced}
+    return {"status": "ok", "result": produced}
 
 
 @app.get("/api/admin/backups")
@@ -4810,18 +4392,7 @@ async def list_backups(user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not filestore.is_r2_enabled():
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"backups": []}
+        return {"backups": []}
     bucket = os.environ.get("R2_PRIVATE_BUCKET", "")
     items = []
     for folder, label in (("backups/db/", "Database"), ("backups/students/", "Students CSV")):
@@ -4840,18 +4411,7 @@ async def list_backups(user = Depends(verify_token)):
                 "download_url": url,
             })
     items.sort(key=lambda x: x["filename"], reverse=True)  # newest first (timestamped names)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"backups": items}
+    return {"backups": items}
 
 @app.patch("/api/students/me")
 def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_token)):
@@ -4873,18 +4433,7 @@ def update_student_profile(request: StudentProfileUpdate, user = Depends(verify_
         allowed.pop("avatar_url", None)
     if allowed:
         service_supabase.table("students").update(allowed).eq("id", user["user_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Profile updated", "avatar_url": (f"preset:{preset}" if preset in ("male", "female") else None) if preset is not None else None}
+    return {"message": "Profile updated", "avatar_url": (f"preset:{preset}" if preset in ("male", "female") else None) if preset is not None else None}
 
 @app.get("/api/students/me/videos")
 def get_my_videos(user = Depends(verify_token)):
@@ -5047,33 +4596,11 @@ def get_student_whats_new(user = Depends(verify_token)):
 
     empty = {"count": 0, "items": []}
     if not standard_id:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"seen": seen, "videos": dict(empty), "tests": dict(empty), "live": dict(empty)}
+        return {"seen": seen, "videos": dict(empty), "tests": dict(empty), "live": dict(empty)}
 
     subjects = service_supabase.table("subject_classes").select("id, name").eq("standard_id", standard_id).execute()
     if not subjects.data:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"seen": seen, "videos": dict(empty), "tests": dict(empty), "live": dict(empty)}
+        return {"seen": seen, "videos": dict(empty), "tests": dict(empty), "live": dict(empty)}
     class_ids = [s["id"] for s in subjects.data]
     class_names = {s["id"]: s["name"] for s in subjects.data}
 
@@ -5087,31 +4614,9 @@ def get_student_whats_new(user = Depends(verify_token)):
             items = []
         for it in items:
             it["subject_name"] = class_names.get(it.get("class_id"), "Unknown")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
+        return {"count": len(items), "items": items}
 
     return {
-        "progressionData": progressionData,
-"count": len(items), "items": items}
-
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
         "seen": seen,
         "videos": fetch_new("videos", "id, title, class_id, thumbnail_url, source_type, duration_secs, created_at", seen["videos"]),
         "tests": fetch_new("tests", "id, title, class_id, scheduled_for, expires_at, status, created_at", seen["tests"],
@@ -5140,18 +4645,7 @@ def mark_student_seen(request: MarkSeenRequest, user = Depends(verify_token)):
     except Exception as e:
         # Table may not be migrated yet — the badge just won't clear until it is.
         print(f"student_seen upsert failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "ok"}
+    return {"message": "ok"}
 
 # ── Upload validation (size + extension + lazy MIME sniff) ──
 # `magic` is imported lazily so local dev without libmagic still runs (degrades
@@ -5357,18 +4851,7 @@ async def upload_student_avatar(file: UploadFile = File(...), user = Depends(ver
         await asyncio.to_thread(
             lambda: service_supabase.table("students").update({"avatar_url": versioned_url}).eq("id", user["user_id"]).execute()
         )
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"avatar_url": versioned_url}
+        return {"avatar_url": versioned_url}
     except Exception as e:
         print("Avatar upload error:", repr(e))
         # Surface the reason (e.g. storage backend not configured) instead of a
@@ -5386,36 +4869,14 @@ async def get_teacher_thumbnail(user=Depends(verify_token)):
             .select("thumbnail_url, thumbnail_text_side, profile_photo_url") \
             .eq("teacher_id", user["teacher_id"]).single().execute()
         if row.data:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+            return {
                 "thumbnail_url": row.data.get("thumbnail_url"),
                 "thumbnail_text_side": row.data.get("thumbnail_text_side") or "right",
                 "profile_photo_url": row.data.get("profile_photo_url"),
             }
     except Exception:
         pass
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"thumbnail_url": None, "thumbnail_text_side": "right", "profile_photo_url": None}
+    return {"thumbnail_url": None, "thumbnail_text_side": "right", "profile_photo_url": None}
 
 
 @app.post("/api/teacher/thumbnail")
@@ -5525,18 +4986,7 @@ def block_student(student_id: str, blocked: bool, user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     service_supabase.table("students").update({"blocked": blocked}).eq("id", student_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": f"Student {'blocked' if blocked else 'unblocked'} successfully"}
+    return {"message": f"Student {'blocked' if blocked else 'unblocked'} successfully"}
 
 def _resolved_reset_password(explicit: Optional[str]) -> str:
     """Password to assign on a reset. Priority:
@@ -5574,18 +5024,7 @@ def reset_student_password(student_id: str, body: ResetPasswordRequest = None, u
         # Drop the student's cached auth entries so the forced password change
         # takes effect on their next request, not after the cache TTL.
         _invalidate_auth_cache_for_user(student_id)
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"new_password": new_password}
+        return {"new_password": new_password}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -5604,43 +5043,10 @@ def get_student_password(student_id: str, user = Depends(verify_token)):
         # null + must_change_pwd=True  → password never stored (old student, pre-migration)
         # null + must_change_pwd=False → student changed their own password
         if plain_password is None and must_change_pwd:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"plain_password": None, "status": "never_stored"}
+            return {"plain_password": None, "status": "never_stored"}
         if plain_password is None:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"plain_password": None, "status": "changed"}
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"plain_password": plain_password, "status": "ok"}
+            return {"plain_password": None, "status": "changed"}
+        return {"plain_password": plain_password, "status": "ok"}
     except HTTPException:
         raise
     except Exception as e:
@@ -5661,18 +5067,7 @@ def update_student(student_id: str, request: StudentProfileUpdate, user = Depend
     allowed = {k: v for k, v in request.model_dump().items() if v is not None}
     if allowed:
         service_supabase.table("students").update(allowed).eq("id", student_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Student updated"}
+    return {"message": "Student updated"}
 
 @app.delete("/api/students/{student_id}")
 def delete_student(student_id: str, user = Depends(verify_token)):
@@ -5691,18 +5086,7 @@ def delete_student(student_id: str, user = Depends(verify_token)):
         service_supabase.auth.admin.delete_user(student_id)
     except Exception as e:
         print(f"Auth delete failed for student {student_id}: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Student deleted"}
+    return {"message": "Student deleted"}
 
 @app.patch("/api/students/{student_id}/unenroll")
 def unenroll_student(student_id: str, user = Depends(verify_token)):
@@ -5716,18 +5100,7 @@ def unenroll_student(student_id: str, user = Depends(verify_token)):
         service_supabase.table("student_sessions").delete().eq("student_id", student_id).execute()
     except Exception as e:
         print(f"Session clear failed for student {student_id}: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Student unenrolled"}
+    return {"message": "Student unenrolled"}
 
 
 # ─── Bulk student management (teacher-only) ──────────────────────────────────
@@ -5758,18 +5131,7 @@ def bulk_delete_students(req: BulkIdsRequest, user = Depends(verify_token)):
 
     ids = _teacher_owned_student_ids(user, req.ids)
     if not ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"deleted": 0, "failed": 0}
+        return {"deleted": 0, "failed": 0}
 
     # Tables with no FK/CASCADE to students — clear first (one query each).
     for tbl in ("test_attempts", "whatsapp_messages", "whatsapp_inbox", "student_sessions"):
@@ -5787,18 +5149,7 @@ def bulk_delete_students(req: BulkIdsRequest, user = Depends(verify_token)):
             failed += 1
             print(f"Auth delete failed for student {sid}: {e}")
         _invalidate_auth_cache_for_user(sid)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"deleted": len(ids), "failed": failed}
+    return {"deleted": len(ids), "failed": failed}
 
 
 @app.post("/api/students/bulk-move")
@@ -5815,18 +5166,7 @@ def bulk_move_students(req: BulkMoveRequest, user = Depends(verify_token)):
 
     ids = _teacher_owned_student_ids(user, req.ids)
     if not ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"moved": 0}
+        return {"moved": 0}
 
     service_supabase.table("students").update({"standard_id": req.standard_id}).in_("id", ids).execute()
     # Drop device sessions + cached tokens so the new standard's content is
@@ -5837,18 +5177,7 @@ def bulk_move_students(req: BulkMoveRequest, user = Depends(verify_token)):
         print(f"Bulk move session clear failed: {e}")
     for sid in ids:
         _invalidate_auth_cache_for_user(sid)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"moved": len(ids)}
+    return {"moved": len(ids)}
 
 
 @app.post("/api/students/bulk-block")
@@ -5860,34 +5189,12 @@ def bulk_block_students(req: BulkBlockRequest, user = Depends(verify_token)):
 
     ids = _teacher_owned_student_ids(user, req.ids)
     if not ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"updated": 0}
+        return {"updated": 0}
 
     service_supabase.table("students").update({"blocked": req.blocked}).in_("id", ids).execute()
     for sid in ids:
         _invalidate_auth_cache_for_user(sid)  # block is enforced at login/verify
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"updated": len(ids)}
+    return {"updated": len(ids)}
 
 
 @app.post("/api/students/bulk-reset-password")
@@ -5900,18 +5207,7 @@ def bulk_reset_passwords(req: BulkResetRequest, user = Depends(verify_token)):
 
     ids = _teacher_owned_student_ids(user, req.ids)
     if not ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"results": [], "updated": 0, "failed": 0}
+        return {"results": [], "updated": 0, "failed": 0}
 
     # Shared password for the whole batch: the teacher's typed value, else the
     # configured default student password. Only when NEITHER exists do we fall
@@ -5940,18 +5236,7 @@ def bulk_reset_passwords(req: BulkResetRequest, user = Depends(verify_token)):
         except Exception as e:
             failed += 1
             print(f"Bulk reset failed for student {sid}: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"results": results, "updated": len(results), "failed": failed}
+    return {"results": results, "updated": len(results), "failed": failed}
 
 # Videos
 @app.get("/api/videos")
@@ -6398,18 +5683,7 @@ def create_video(video: Video, user = Depends(verify_token)):
         raise HTTPException(status_code=400, detail=str(e))
     _notify_students_of_content(video.class_id, "new_video",
                                 f"New video: {video.title}", "", {"content_id": response.data[0]["id"]})
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"id": response.data[0]["id"], "message": "Video created"}
+    return {"id": response.data[0]["id"], "message": "Video created"}
 
 @app.post("/api/videos/upload")
 async def upload_video(
@@ -6543,18 +5817,7 @@ def update_video(video_id: str, updates: VideoUpdate, user = Depends(verify_toke
     if update_data:
         service_supabase.table("videos").update(update_data).eq("id", video_id).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Video updated"}
+    return {"message": "Video updated"}
 
 @app.delete("/api/videos/{video_id}")
 async def delete_video(video_id: str, user=Depends(verify_token)):
@@ -6610,18 +5873,7 @@ async def delete_video(video_id: str, user=Depends(verify_token)):
                 print(f"Cloudflare Stream delete failed: {e}")
 
     service_supabase.table("videos").delete().eq("id", video_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Video deleted"}
+    return {"message": "Video deleted"}
 
 @app.get("/api/videos/{video_id}/stats")
 def get_video_stats(video_id: str, user = Depends(verify_token)):
@@ -6636,18 +5888,7 @@ def get_video_stats(video_id: str, user = Depends(verify_token)):
     # Count students who completed
     completed_count = service_supabase.table("video_progress").select("student_id", count="exact").eq("video_id", video_id).eq("completed", True).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "watch_count": watch_count.count or 0,
         "completed_count": completed_count.count or 0
     }
@@ -6695,18 +5936,7 @@ async def get_video_token(video_id: str, user=Depends(verify_token)):
         if not student_check.data or student_check.data.get("blocked"):
             raise HTTPException(status_code=403, detail="Account blocked")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "token": yt_id,
         "source_type": "youtube",
         "title": video["title"],
@@ -6728,33 +5958,11 @@ async def get_video_thumbnail(video_id: str, user=Depends(verify_token)):
     if not cf.startswith("yt:"):
         # Cloudflare Stream UID → CDN thumbnail; Supabase fallback (https URL) has none
         if cf and not cf.startswith("https://"):
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+            return {
                 "thumbnail_url": f"https://videodelivery.net/{cf}/thumbnails/thumbnail.jpg?time=1s&height=360",
                 "source_type": "upload",
             }
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"thumbnail_url": None, "source_type": "upload"}
+        return {"thumbnail_url": None, "source_type": "upload"}
 
     yt_id = cf[3:]
 
@@ -6765,18 +5973,7 @@ async def get_video_thumbnail(video_id: str, user=Depends(verify_token)):
         if user.get("standard_id") != class_result.data["standard_id"]:
             raise HTTPException(status_code=403, detail="Not enrolled in this class")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "thumbnail_url": f"https://img.youtube.com/vi/{yt_id}/mqdefault.jpg",
         "source_type": "youtube",
     }
@@ -6851,18 +6048,7 @@ def create_test(test: Test, user = Depends(verify_token)):
     if test.status != "draft":
         _notify_students_of_content(test.class_id, "new_test",
                                     f"New test: {test.title}", "", {"content_id": response.data[0]["id"]})
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"id": response.data[0]["id"], "message": "Test created"}
+    return {"id": response.data[0]["id"], "message": "Test created"}
 
 @app.patch("/api/tests/{test_id}")
 def update_test(test_id: str, updates: TestUpdate, user = Depends(verify_token)):
@@ -6888,18 +6074,7 @@ def update_test(test_id: str, updates: TestUpdate, user = Depends(verify_token))
     if update_data:
         service_supabase.table("tests").update(update_data).eq("id", test_id).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Test updated"}
+    return {"message": "Test updated"}
 
 @app.delete("/api/tests/{test_id}")
 def delete_test(test_id: str, user = Depends(verify_token)):
@@ -6915,18 +6090,7 @@ def delete_test(test_id: str, user = Depends(verify_token)):
     # Delete attempts first (no ON DELETE CASCADE on this FK); questions cascade automatically
     service_supabase.table("test_attempts").delete().eq("test_id", test_id).execute()
     service_supabase.table("tests").delete().eq("id", test_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Test deleted"}
+    return {"message": "Test deleted"}
 
 # Questions
 @app.get("/api/tests/{test_id}/questions")
@@ -6952,18 +6116,7 @@ def create_question(question: Question, user = Depends(verify_token)):
         "order_num": question.order_num
     }
     response = service_supabase.table("questions").insert(data).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"id": response.data[0]["id"], "message": "Question created"}
+    return {"id": response.data[0]["id"], "message": "Question created"}
 
 # Invite Links
 @app.post("/api/invite-links")
@@ -6985,18 +6138,7 @@ def create_invite_link(data: InviteLinkCreate, user = Depends(verify_token)):
         "expires_at": data.expires_at
     }
     response = service_supabase.table("invite_links").insert(link_data).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"id": response.data[0]["id"], "code": code, "message": "Invite link created"}
+    return {"id": response.data[0]["id"], "code": code, "message": "Invite link created"}
 
 @app.get("/api/invite-links")
 def get_invite_links(standard_id: Optional[str] = None, user = Depends(verify_token)):
@@ -7022,18 +6164,7 @@ def delete_invite_link(link_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     service_supabase.table("invite_links").delete().eq("id", link_id).eq("created_by", user["user_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Invite link deleted"}
+    return {"message": "Invite link deleted"}
 
 # Join requests
 @app.get("/api/join-requests")
@@ -7111,18 +6242,7 @@ def approve_join_request(request_id: str, background_tasks: BackgroundTasks, use
                 # Fire auto-welcome (credentials) if enabled — guarded, never blocks approval.
                 background_tasks.add_task(_wa_auto_welcome, new_user.user.id)
 
-                
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+                return {
                     "message": "Student approved",
                     "username": username,
                     "student_code": student_code,
@@ -7131,18 +6251,7 @@ def approve_join_request(request_id: str, background_tasks: BackgroundTasks, use
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Request approved"}
+    return {"message": "Request approved"}
 
 @app.patch("/api/join-requests/{request_id}/reject")
 def reject_join_request(request_id: str, user = Depends(verify_token)):
@@ -7153,18 +6262,7 @@ def reject_join_request(request_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     service_supabase.table("invite_requests").update({"status": "rejected"}).eq("id", request_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Request rejected"}
+    return {"message": "Request rejected"}
 
 # Public join endpoint
 @app.post("/api/join/{code}")
@@ -7199,18 +6297,7 @@ def join_with_code(code: str, name: str, email: Optional[str] = None):
     # Increment use count
     service_supabase.table("invite_links").update({"use_count": link.data.get("use_count", 0) + 1}).eq("id", link.data["id"]).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Request submitted. Waiting for teacher approval."}
+    return {"message": "Request submitted. Waiting for teacher approval."}
 
 # Health
 # Bumped on backend changes so /api/health reveals whether the EC2 autodeploy
@@ -7220,18 +6307,7 @@ BUILD_MARKER = "2026-07-05-storage-health"
 @app.get("/api/health")
 def health_check():
     db_status = "connected" if supabase else "disconnected"
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "ok", "database": db_status, "build": BUILD_MARKER}
+    return {"status": "ok", "database": db_status, "build": BUILD_MARKER}
 
 
 @app.get("/api/health/storage")
@@ -7318,18 +6394,7 @@ def create_sub_teacher(req: SubTeacherRequest, user = Depends(verify_token)):
             pass
         raise HTTPException(status_code=500, detail="Failed to save teacher record")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"id": new_auth.user.id, "name": req.name, "email": req.email, "phone": req.phone}
+    return {"id": new_auth.user.id, "name": req.name, "email": req.email, "phone": req.phone}
 
 
 @app.get("/api/teachers")
@@ -7363,18 +6428,7 @@ def remove_sub_teacher(teacher_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=400, detail=f"Failed to delete account: {str(e)}")
 
     service_supabase.table("sub_teachers").delete().eq("id", teacher_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Teacher removed"}
+    return {"message": "Teacher removed"}
 
 
 # Demo accounts — teacher-only, for seeding demo data
@@ -7435,32 +6489,10 @@ def create_demo_accounts(user = Depends(verify_token)):
                     "name": student["name"]
                 })
 
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Demo accounts created", "accounts": results}
+        return {"message": "Demo accounts created", "accounts": results}
 
     except Exception as e:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Some accounts may already exist", "error": str(e), "accounts": results}
+        return {"message": "Some accounts may already exist", "error": str(e), "accounts": results}
 
 # Attendance
 @app.get("/api/subjects/{subject_id}/attendance")
@@ -7508,18 +6540,7 @@ def mark_subject_attendance(subject_id: str, req: MarkAttendanceRequest, user = 
         raise HTTPException(status_code=503, detail="Database not available")
 
     if not req.records:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": 0, "date": req.date}
+        return {"marked": 0, "date": req.date}
 
     # ── Batch upsert all records in a single call ─────────────────
     upsert_data = [
@@ -7559,18 +6580,7 @@ def mark_subject_attendance(subject_id: str, req: MarkAttendanceRequest, user = 
         pct = round((present_or_late / total) * 100, 1) if total > 0 else 0.0
         service_supabase.table("students").update({"attendance_pct": pct}).eq("id", sid).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": len(req.records), "date": req.date}
+    return {"marked": len(req.records), "date": req.date}
 
 @app.delete("/api/subjects/{subject_id}/attendance/{student_id}/{date}")
 def clear_attendance_record(subject_id: str, student_id: str, date: str, user = Depends(verify_token)):
@@ -7579,18 +6589,7 @@ def clear_attendance_record(subject_id: str, student_id: str, date: str, user = 
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
     service_supabase.table("attendance_records").delete().eq("subject_class_id", subject_id).eq("student_id", student_id).eq("date", date).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Record cleared"}
+    return {"message": "Record cleared"}
 
 @app.get("/api/subjects/{subject_id}/attendance/week")
 def get_subject_attendance_week(subject_id: str, start: str, user = Depends(verify_token)):
@@ -7677,18 +6676,7 @@ def get_student_attendance(student_id: str, user = Depends(verify_token)):
             pct = round((stats["present_late"] / stats["total"]) * 100, 1)
             by_week.append({"week": label, "pct": pct})
             
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "overall_pct": overall_pct,
         "absent_days": absent_days,
         "late_days": late_days,
@@ -7708,18 +6696,7 @@ def get_low_attendance(standard_id: str, below_pct: float = None, user = Depends
     if standard_id == "all":
         standards = service_supabase.table("standards").select("id, name, attendance_threshold").eq("teacher_id", user["teacher_id"]).execute()
         if not standards.data:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"students": [], "count": 0}
+            return {"students": [], "count": 0}
             
         all_students = []
         for std in standards.data:
@@ -7735,18 +6712,7 @@ def get_low_attendance(standard_id: str, below_pct: float = None, user = Depends
                             "attendance_pct": s["attendance_pct"],
                             "standard_name": std["name"]
                         })
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"students": sorted(all_students, key=lambda x: x["attendance_pct"]), "count": len(all_students)}
+        return {"students": sorted(all_students, key=lambda x: x["attendance_pct"]), "count": len(all_students)}
     else:
         standard = service_supabase.table("standards").select("name, attendance_threshold").eq("id", standard_id).single().execute()
         if not standard.data:
@@ -7771,18 +6737,7 @@ def get_low_attendance(standard_id: str, below_pct: float = None, user = Depends
                         "standard_name": standard.data["name"]
                     })
                     
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "threshold": t,
             "standard_name": standard.data["name"],
             "flagged_count": len(flagged),
@@ -8259,18 +7214,7 @@ CONTENT:
         session_id = uuid.uuid4().hex
         _pdf_session_cache[session_id] = {"text": text, "expires": time_module.time() + _PDF_SESSION_TTL}
 
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "session_id":              session_id,
             "questions":               final,
             "page_count":              page_count,
@@ -8316,18 +7260,7 @@ async def regenerate_flagged_questions(
     hint  = req.subject_hint.strip() or "general"
     n     = len(req.flagged)
     if n == 0:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"questions": [], "quality_out_of_10": 0.0}
+        return {"questions": [], "quality_out_of_10": 0.0}
 
     def _normalise_q(q_list):
         out = []
@@ -8402,18 +7335,7 @@ CONTENT:
         verified = sum(1 for q in final if q.get("_self_score") == 5)
         quality_10 = round((verified / len(final)) * 10, 1) if final else 0.0
 
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "questions":         [{k: v for k, v in q.items() if not k.startswith("_")} for q in final],
             "quality_out_of_10": quality_10,
         }
@@ -8462,18 +7384,7 @@ def create_test_with_questions(data: TestWithQuestions, user = Depends(verify_to
     if data.status != "draft":
         _notify_students_of_content(data.class_id, "new_test",
                                     f"New test: {data.title}", "", {"content_id": test_id})
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"id": test_id, "message": f"Test created with {len(data.questions)} questions"}
+    return {"id": test_id, "message": f"Test created with {len(data.questions)} questions"}
 
 # Get full test for editing
 @app.get("/api/tests/{test_id}/edit")
@@ -8497,18 +7408,7 @@ def get_test_for_edit(test_id: str, user = Depends(verify_token)):
     # Get questions WITH correct answers
     questions = service_supabase.table("questions").select("*").eq("test_id", test_id).order("order_num").execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "test": test.data,
         "questions": questions.data
     }
@@ -8628,18 +7528,7 @@ def update_test_full(test_id: str, data: TestUpdateFull, background_tasks: Backg
             service_supabase.table("questions").delete().eq("id", qid).execute()
 
     background_tasks.add_task(recalculate_test_attempts, test_id)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Test fully updated"}
+    return {"message": "Test fully updated"}
 
 # Get test with questions (for students taking test)
 @app.get("/api/tests/{test_id}/take")
@@ -8673,18 +7562,7 @@ def get_test_for_taking(test_id: str, user = Depends(verify_token)):
     # Get questions (without correct answers for students)
     questions = service_supabase.table("questions").select("id, question, options, order_num").eq("test_id", test_id).order("order_num").execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "test": {
             "id": test.data["id"],
             "title": test.data["title"],
@@ -8709,18 +7587,7 @@ def get_attempt_status(test_id: str, user = Depends(verify_token)):
 
     attempt = service_supabase.table("test_attempts").select("*").eq("test_id", test_id).eq("student_id", user["student_id"]).single().execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "attempted": attempt.data is not None,
         "attempt": attempt.data
     }
@@ -8870,18 +7737,7 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
             avg_pct = sum(pcts) / len(pcts)
             service_supabase.table("students").update({"avg_score": round(avg_pct, 1)}).eq("id", user["student_id"]).execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "attempt_id": result.data[0]["id"],
         "score": round(total_obtained, 2),
         "total_marks": test.data["total_marks"],
@@ -8923,18 +7779,7 @@ def get_test_results(test_id: str, user = Depends(verify_token)):
     avg_score = sum(scores) / len(scores) if scores else 0
     flagged_count = sum(1 for a in attempts_list if a.get("flagged"))
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "test": test.data,
         "attempts": attempts_list,
         "stats": {
@@ -9007,18 +7852,7 @@ def get_attempt_review(test_id: str, user = Depends(verify_token)):
 
     questions = service_supabase.table("questions").select("id, question, options, correct_idx, order_num").eq("test_id", test_id).order("order_num").execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "questions": questions.data or [],
         "answers": raw_answers
     }
@@ -9077,18 +7911,7 @@ def request_reattempt(test_id: str, req: ReattemptRequest, user = Depends(verify
     except Exception as e:
         print(f"Re-attempt teacher notification failed: {e}")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "pending"}
+    return {"status": "pending"}
 
 
 # Teacher lists pending re-attempt requests (optionally for one test).
@@ -9140,18 +7963,7 @@ def approve_reattempt(request_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Re-attempt student notification failed: {e}")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "approved"}
+    return {"status": "approved"}
 
 
 # Teacher rejects a re-attempt request.
@@ -9182,18 +7994,7 @@ def reject_reattempt(request_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Re-attempt reject notification failed: {e}")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "rejected"}
+    return {"status": "rejected"}
 
 
 # Student's own re-attempt request status per test ({test_id: status}).
@@ -9202,31 +8003,9 @@ def my_reattempt_requests(user = Depends(verify_token)):
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Student only")
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     if not user.get("student_id"):
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         rows = service_supabase.table("test_reattempt_requests").select("test_id, status, created_at") \
             .eq("student_id", user["student_id"]).order("created_at", desc=True).execute()
@@ -9236,18 +8015,7 @@ def my_reattempt_requests(user = Depends(verify_token)):
             out.setdefault(row["test_id"], row["status"])
         return out
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
 
 
 # ── Assignment re-attempt requests (graded → request → approve clears grade) ────
@@ -9310,18 +8078,7 @@ def request_assignment_reattempt(assignment_id: str, req: ReattemptRequest, user
     except Exception as e:
         print(f"Assignment re-attempt teacher notification failed: {e}")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "pending"}
+    return {"status": "pending"}
 
 
 # Teacher lists pending assignment re-attempt requests (optionally for one assignment).
@@ -9386,18 +8143,7 @@ def approve_assignment_reattempt(request_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Assignment re-attempt student notification failed: {e}")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "approved"}
+    return {"status": "approved"}
 
 
 # Teacher rejects an assignment re-attempt request.
@@ -9428,18 +8174,7 @@ def reject_assignment_reattempt(request_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Assignment re-attempt reject notification failed: {e}")
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "rejected"}
+    return {"status": "rejected"}
 
 
 # Student's own assignment re-attempt status per assignment ({assignment_id: status}).
@@ -9448,18 +8183,7 @@ def my_assignment_reattempt_requests(user = Depends(verify_token)):
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Student only")
     if not service_supabase or not user.get("student_id") or not _assignment_reattempt_enabled():
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         rows = service_supabase.table("assignment_reattempt_requests").select("assignment_id, status, created_at") \
             .eq("student_id", user["student_id"]).order("created_at", desc=True).execute()
@@ -9468,18 +8192,7 @@ def my_assignment_reattempt_requests(user = Depends(verify_token)):
             out.setdefault(row["assignment_id"], row["status"])
         return out
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
 
 
 # Get leaderboard for a standard.
@@ -9500,18 +8213,7 @@ def get_leaderboard(standard_id: Optional[str] = None, period: str = "overall", 
             students = service_supabase.table("students").select("id, name, username, points, avatar_url").eq("standard_id", standard_id).order("points", desc=True).execute()
         else:
             students = service_supabase.table("students").select("id, name, username, points, avatar_url").order("points", desc=True).limit(50).execute()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "leaderboard": [
                 {"rank": i + 1, **s}
                 for i, s in enumerate(students.data or [])
@@ -9555,18 +8257,7 @@ def get_leaderboard(standard_id: Optional[str] = None, period: str = "overall", 
     ranked = sorted(roster, key=lambda s: window_points.get(s["id"], 0), reverse=True)
     if not standard_id:
         ranked = ranked[:50]
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "leaderboard": [
             {"rank": i + 1, **s, "points": window_points.get(s["id"], 0)}
             for i, s in enumerate(ranked)
@@ -9608,18 +8299,7 @@ def mark_video_complete(video_id: str, user = Depends(verify_token)):
             service_supabase.table("students").update({"points": new_points}).eq("id", user["student_id"]).execute()
             points_earned = POINTS_PER_VIDEO
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"points_earned": points_earned, "total_points": new_points}
+    return {"points_earned": points_earned, "total_points": new_points}
 
 @app.post("/api/video-progress")
 def update_video_progress(data: dict, user = Depends(verify_token)):
@@ -9648,18 +8328,7 @@ def update_video_progress(data: dict, user = Depends(verify_token)):
         "last_watched_at": datetime.now(timezone.utc).isoformat()
     }, on_conflict="video_id,student_id").execute()
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "ok"}
+    return {"status": "ok"}
 
 
 # ── Private per-student video comments (student asks → teacher replies) ──────────
@@ -9788,18 +8457,7 @@ def delete_video_comment(comment_id: str, user = Depends(verify_token)):
     else:
         raise HTTPException(status_code=403, detail="Not allowed")
     service_supabase.table("video_comments").delete().eq("id", comment_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 # ── Video likes (student likes a lesson; teacher sees the count) ─────────────────
@@ -9827,18 +8485,7 @@ def like_video(video_id: str, user = Depends(verify_token)):
         ).execute()
     except Exception:
         pass
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"liked": True, "like_count": _video_like_count(video_id)}
+    return {"liked": True, "like_count": _video_like_count(video_id)}
 
 
 @app.delete("/api/videos/{video_id}/like")
@@ -9848,32 +8495,10 @@ def unlike_video(video_id: str, user = Depends(verify_token)):
     if not service_supabase or not user.get("student_id"):
         raise HTTPException(status_code=503, detail="Not available")
     if not _video_likes_enabled():
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"liked": False, "like_count": 0}
+        return {"liked": False, "like_count": 0}
     service_supabase.table("video_likes").delete() \
         .eq("video_id", video_id).eq("student_id", user["student_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"liked": False, "like_count": _video_like_count(video_id)}
+    return {"liked": False, "like_count": _video_like_count(video_id)}
 
 
 # --- Reminders ---
@@ -9921,18 +8546,7 @@ def update_reminder(reminder_id: str, updates: ReminderUpdate, user = Depends(ve
         raise HTTPException(status_code=503, detail="Database not available")
     update_data = updates.model_dump(exclude_none=True)
     if not update_data:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     response = service_supabase.table("reminders").update(update_data).eq("id", reminder_id).eq("teacher_id", user["teacher_id"]).execute()
     return response.data[0] if response.data else {}
 
@@ -9943,18 +8557,7 @@ def delete_reminder(reminder_id: str, user = Depends(verify_token)):
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
     service_supabase.table("reminders").delete().eq("id", reminder_id).eq("teacher_id", user["teacher_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Deleted"}
+    return {"message": "Deleted"}
 
 # --- Notifications ---
 @app.get("/api/notifications")
@@ -9981,18 +8584,7 @@ def mark_notification_read(notification_id: str, user = Depends(verify_token)):
             .eq("id", notification_id)\
             .eq("recipient_id", user["user_id"])\
             .execute()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+        return {"ok": True}
     except Exception as e:
         print(f"[notifications] mark read failed: {e}")
         raise HTTPException(status_code=503, detail="Could not update notification")
@@ -10006,18 +8598,7 @@ def mark_all_notifications_read(user = Depends(verify_token)):
             .eq("recipient_id", user["user_id"])\
             .eq("read", False)\
             .execute()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+        return {"ok": True}
     except Exception as e:
         print(f"[notifications] mark all read failed: {e}")
         raise HTTPException(status_code=503, detail="Could not update notifications")
@@ -10050,18 +8631,7 @@ def register_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
     except Exception as e:
         print(f"[devices] register failed: {e}")
         raise HTTPException(status_code=503, detail="Could not register this device for notifications")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 @app.delete("/api/devices/register")
@@ -10072,35 +8642,13 @@ def unregister_device_token(req: DeviceTokenReq, user = Depends(verify_token)):
         raise HTTPException(status_code=503, detail="Device registration database unavailable")
     token = (req.token or "").strip()
     if not token:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+        return {"ok": True}
     try:
         service_supabase.table("device_tokens").delete().eq("token", token).execute()
     except Exception as e:
         print(f"[devices] unregister failed: {e}")
         raise HTTPException(status_code=503, detail="Could not unregister this device")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 @app.get("/api/admin/push-debug")
@@ -10346,18 +8894,7 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
         # Trigger WhatsApp broadcast to parents in the background
         asyncio.create_task(_send_whatsapp_broadcast(user["teacher_id"], req.standard_id, req.message, req.attachment_url, req.attachment_type))
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "success", "data": payload}
+    return {"status": "success", "data": payload}
 
 @app.get("/api/broadcasts")
 def get_broadcasts(standard_id: Optional[str] = None, user = Depends(verify_token)):
@@ -10393,49 +8930,16 @@ async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Student only")
     if not service_supabase or not req.broadcast_ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": 0}
+        return {"marked": 0}
         
     # students.id = auth.users.id by schema design
     student_id = user["user_id"]
     try:
         s_res = service_supabase.table("students").select("id").eq("id", student_id).limit(1).execute()
         if not s_res.data:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": 0}
+            return {"marked": 0}
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": 0}
+        return {"marked": 0}
 
     try:
         now = datetime.now(timezone.utc).isoformat()
@@ -10470,50 +8974,17 @@ async def mark_broadcasts_read(req: BroadcastReadRequest, user = Depends(verify_
                 for d in disconnected:
                     manager.disconnect(d, std_id)
         
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": len(rows)}
+        return {"marked": len(rows)}
     except Exception as e:
         print(f"Error marking broadcasts read: {e}")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"marked": 0}
+        return {"marked": 0}
 
 @app.get("/api/broadcasts/reads")
 def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         broadcast_ids = [b["id"] for b in manager.broadcast_history
                          if b.get("standard_id") == standard_id and not b.get("deleted")]
@@ -10525,18 +8996,7 @@ def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
             except Exception:
                 pass
         if not broadcast_ids:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+            return {}
         # Only count reads from students CURRENTLY in this standard, so the count
         # stays consistent with the read-details modal and the "all read" blue tick.
         students_res = service_supabase.table("students").select("id").eq("standard_id", standard_id).execute()
@@ -10550,52 +9010,19 @@ def get_broadcast_read_counts(standard_id: str, user = Depends(verify_token)):
             counts[bid] = counts.get(bid, 0) + 1
         return counts
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
 
 @app.get("/api/broadcasts/{broadcast_id}/reads/details")
 def get_broadcast_read_details(broadcast_id: str, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"read_by": [], "not_read_by": []}
+        return {"read_by": [], "not_read_by": []}
     try:
         # Get standard_id
         b_res = service_supabase.table("broadcasts").select("standard_id").eq("id", broadcast_id).limit(1).execute()
         if not b_res.data:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"read_by": [], "not_read_by": []}
+            return {"read_by": [], "not_read_by": []}
         standard_id = b_res.data[0]["standard_id"]
 
         # Get all students in standard
@@ -10626,32 +9053,10 @@ def get_broadcast_read_details(broadcast_id: str, user = Depends(verify_token)):
         read_by.sort(key=lambda x: x["name"].lower())
         not_read_by.sort(key=lambda x: x["name"].lower())
 
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"read_by": read_by, "not_read_by": not_read_by}
+        return {"read_by": read_by, "not_read_by": not_read_by}
     except Exception as e:
         print(f"Error fetching read details: {e}")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"read_by": [], "not_read_by": []}
+        return {"read_by": [], "not_read_by": []}
 
 
 @app.delete("/api/broadcasts/{broadcast_id}")
@@ -10690,18 +9095,7 @@ async def delete_broadcast(broadcast_id: str, user = Depends(verify_token)):
                 dead.append(conn)
         for d in dead:
             manager.disconnect(d, std_id)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "deleted"}
+    return {"status": "deleted"}
 
 class EditBroadcastRequest(BaseModel):
     message: str
@@ -10765,18 +9159,7 @@ async def edit_broadcast(broadcast_id: str, req: EditBroadcastRequest, user = De
                 dead.append(conn)
         for d in dead:
             manager.disconnect(d, std_id)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "updated"}
+    return {"status": "updated"}
 
 # ── Broadcast TTL (auto-delete) settings ─────────────────────────────────────
 
@@ -10785,45 +9168,12 @@ def get_broadcast_ttl(standard_id: str, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ttl_hours": None}
+        return {"ttl_hours": None}
     try:
         row = service_supabase.table("standards").select("broadcast_ttl_hours").eq("id", standard_id).single().execute()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ttl_hours": row.data.get("broadcast_ttl_hours") if row.data else None}
+        return {"ttl_hours": row.data.get("broadcast_ttl_hours") if row.data else None}
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ttl_hours": None}
+        return {"ttl_hours": None}
 
 @app.patch("/api/standards/{standard_id}/broadcast-ttl")
 def set_broadcast_ttl(standard_id: str, req: BroadcastTTLRequest, user = Depends(verify_token)):
@@ -10832,18 +9182,7 @@ def set_broadcast_ttl(standard_id: str, req: BroadcastTTLRequest, user = Depends
     if not service_supabase:
         raise HTTPException(status_code=503, detail="DB not configured")
     service_supabase.table("standards").update({"broadcast_ttl_hours": req.ttl_hours}).eq("id", standard_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ttl_hours": req.ttl_hours}
+    return {"ttl_hours": req.ttl_hours}
 
 
 # ── Broadcast reactions ────────────────────────────────────────────────────────
@@ -10851,33 +9190,11 @@ def set_broadcast_ttl(standard_id: str, req: BroadcastTTLRequest, user = Depends
 @app.get("/api/broadcasts/reactions")
 def get_broadcast_reactions(standard_id: str, user = Depends(verify_token)):
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         broadcast_ids = [b["id"] for b in manager.broadcast_history if b.get("standard_id") == standard_id and not b.get("deleted")]
         if not broadcast_ids:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+            return {}
         rows = service_supabase.table("broadcast_reactions").select("broadcast_id, user_id, emoji").in_("broadcast_id", broadcast_ids).execute()
         result: Dict[str, Dict[str, int]] = {}
         my_reactions: Dict[str, List[str]] = {}
@@ -10887,31 +9204,9 @@ def get_broadcast_reactions(standard_id: str, user = Depends(verify_token)):
             result[bid][emoji] = result[bid].get(emoji, 0) + 1
             if r["user_id"] == user["user_id"]:
                 my_reactions.setdefault(bid, []).append(emoji)
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"counts": result, "mine": my_reactions}
+        return {"counts": result, "mine": my_reactions}
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"counts": {}, "mine": {}}
+        return {"counts": {}, "mine": {}}
 
 @app.post("/api/broadcasts/{broadcast_id}/reactions")
 async def add_reaction(broadcast_id: str, req: BroadcastReactionRequest, user = Depends(verify_token)):
@@ -10935,18 +9230,7 @@ async def add_reaction(broadcast_id: str, req: BroadcastReactionRequest, user = 
                 dead.append(conn)
         for d in dead:
             manager.disconnect(d, std_id)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "ok"}
+    return {"status": "ok"}
 
 @app.delete("/api/broadcasts/{broadcast_id}/reactions/{emoji}")
 async def remove_reaction(broadcast_id: str, emoji: str, user = Depends(verify_token)):
@@ -10965,18 +9249,7 @@ async def remove_reaction(broadcast_id: str, emoji: str, user = Depends(verify_t
                 dead.append(conn)
         for d in dead:
             manager.disconnect(d, std_id)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "ok"}
+    return {"status": "ok"}
 
 
 # ── Notes CRUD ────────────────────────────────────────────────────────────────
@@ -11047,18 +9320,7 @@ async def delete_note(note_id: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"Note file delete failed (ignored): {e}")
     await asyncio.to_thread(lambda: service_supabase.table("notes").delete().eq("id", note_id).execute())
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "deleted"}
+    return {"status": "deleted"}
 
 @app.post("/api/notes/upload")
 async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(...), user = Depends(verify_token)):
@@ -11076,18 +9338,7 @@ async def upload_note_file(file: UploadFile = File(...), class_id: str = Form(..
     # through the authed streaming endpoint GET /api/notes/{id}/file (no URL, no
     # download). We return the storage key, not a public URL.
     await asyncio.to_thread(lambda: filestore.upload_private(service_supabase, "notes", path, contents, ct))
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"url": None, "path": path, "type": ct}
+    return {"url": None, "path": path, "type": ct}
 
 
 # ── Secure file viewing: authed byte-streaming so students never get a file URL ──
@@ -11289,36 +9540,14 @@ async def upload_file(file: UploadFile = File(...), user = Depends(verify_token)
             public_url = await asyncio.to_thread(
                 lambda: filestore.upload_public(service_supabase, "broadcasts", file_name, file_bytes, ct)
             )
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"url": public_url, "type": ct, "filename": upload_name, "secure": False}
+            return {"url": public_url, "type": ct, "filename": upload_name, "secure": False}
 
         # Document → private bucket; store the KEY (not a URL) in attachment_url.
         # `type` reflects any office→PDF conversion so the viewer classifies correctly.
         await asyncio.to_thread(
             lambda: filestore.upload_private(service_supabase, "broadcasts", file_name, file_bytes, ct)
         )
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"url": file_name, "type": ct, "filename": upload_name, "secure": True}
+        return {"url": file_name, "type": ct, "filename": upload_name, "secure": True}
     except Exception as e:
         # Never embed the file as a base64 data: URL — that would store a large
         # binary inside the broadcasts table. Fail loudly so the file genuinely
@@ -11546,18 +9775,7 @@ def bulk_import_students(req: BulkImportRequest, user = Depends(verify_token)):
     except Exception as e:
         print("Failed to insert audit log (table might not exist):", e)
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "success", "created": success_count, "skipped": skipped_count, "errors": error_count, "students": created}
+    return {"status": "success", "created": success_count, "skipped": skipped_count, "errors": error_count, "students": created}
 
 
 # ─── Question Bank ───────────────────────────────────────────────────────────
@@ -11605,18 +9823,7 @@ def delete_question_bank_item(question_id: str, user=Depends(verify_token)):
     if existing.data["teacher_id"] != user["teacher_id"]:
         raise HTTPException(status_code=403, detail="Not your question")
     service_supabase.table("question_bank").delete().eq("id", question_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "deleted"}
+    return {"status": "deleted"}
 
 @app.post("/api/question-bank/import")
 def import_from_question_bank(req: QuestionBankImport, user=Depends(verify_token)):
@@ -11644,18 +9851,7 @@ def import_from_question_bank(req: QuestionBankImport, user=Depends(verify_token
             "order_num": next_order + i,
         })
     service_supabase.table("questions").insert(rows).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "imported", "count": len(rows)}
+    return {"status": "imported", "count": len(rows)}
 
 
 # --- Live Classes ---
@@ -12119,18 +10315,7 @@ async def get_join_token(live_class_id: str, user=Depends(verify_token)):
     asyncio.create_task(_ensure_joinable_bg())
 
     signature = zoom_generate_sdk_signature(lc["zoom_meeting_id"], role_num)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "meeting_id": lc["zoom_meeting_id"],
         "signature": signature,
         "sdk_key": ZOOM_SDK_KEY,
@@ -12171,18 +10356,7 @@ async def get_host_link(live_class_id: str, user=Depends(verify_token)):
     # BLANK page and the teacher never becomes host. Re-fetch a fresh one from
     # Zoom at click time; fall back to the stored URL only if the fetch fails.
     fresh = await zoom_get_fresh_start_url(lc.get("zoom_meeting_id"))
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"start_url": fresh or lc.get("zoom_start_url")}
+    return {"start_url": fresh or lc.get("zoom_start_url")}
 
 
 async def _finalize_live_class_attendance(lc: dict) -> dict:
@@ -12197,18 +10371,7 @@ async def _finalize_live_class_attendance(lc: dict) -> dict:
     class_result = await asyncio.to_thread(lambda: service_supabase.table("subject_classes") \
         .select("standard_id").eq("id", lc["class_id"]).single().execute())
     if not class_result.data:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"attended": 0, "absent": 0, "total": 0}
+        return {"attended": 0, "absent": 0, "total": 0}
 
     students_result = await asyncio.to_thread(lambda: service_supabase.table("students") \
         .select("id, name, email") \
@@ -12260,18 +10423,7 @@ async def _finalize_live_class_attendance(lc: dict) -> dict:
         await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance") \
             .upsert(rows, on_conflict="live_class_id,student_id").execute())
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"attended": attended_count, "absent": absent_count, "total": len(all_students)}
+    return {"attended": attended_count, "absent": absent_count, "total": len(all_students)}
 
 
 @app.post("/api/live-classes/{live_class_id}/end")
@@ -12289,18 +10441,7 @@ async def end_live_class(live_class_id: str, user=Depends(verify_token)):
         .update({"status": "ended"}).eq("id", live_class_id).execute())
 
     summary = await _finalize_live_class_attendance(lc)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "Class ended", **summary}
+    return {"message": "Class ended", **summary}
 
 
 @app.post("/api/live-classes/{live_class_id}/cancel")
@@ -12317,18 +10458,7 @@ def cancel_live_class(live_class_id: str, user=Depends(verify_token)):
     service_supabase.table("live_classes") \
         .update({"status": "cancelled"}) \
         .eq("id", live_class_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "cancelled"}
+    return {"message": "cancelled"}
 
 
 @app.delete("/api/live-classes/{live_class_id}")
@@ -12357,18 +10487,7 @@ async def delete_live_class(live_class_id: str, user=Depends(verify_token)):
     # Remove attendance rows first (FK), then the class itself
     await asyncio.to_thread(lambda: service_supabase.table("live_class_attendance").delete().eq("live_class_id", live_class_id).execute())
     await asyncio.to_thread(lambda: service_supabase.table("live_classes").delete().eq("id", live_class_id).execute())
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"message": "deleted"}
+    return {"message": "deleted"}
 
 
 @app.get("/api/live-classes/{live_class_id}/attendance")
@@ -12438,18 +10557,7 @@ async def zoom_webhook(request: Request):
             ZOOM_WEBHOOK_SECRET_TOKEN.encode() if ZOOM_WEBHOOK_SECRET_TOKEN else b"",
             plain.encode(), hashlib.sha256
         ).hexdigest()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"plainToken": plain, "encryptedToken": hashed}
+        return {"plainToken": plain, "encryptedToken": hashed}
 
     meeting_id = str(data.get("payload", {}).get("object", {}).get("id", ""))
 
@@ -12489,18 +10597,7 @@ async def zoom_webhook(request: Request):
             # Webhook just marks it ended. Attendance pull requires Zoom report API
             # which may not be ready immediately after meeting ends.
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": "ok"}
+    return {"status": "ok"}
 
 
 @app.websocket("/api/ws/live-classes/{standard_id}")
@@ -12674,18 +10771,7 @@ async def list_assignments(class_id: str, user = Depends(verify_token)):
             else:
                 a["my_submission"] = None
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"assignments": assignments}
+    return {"assignments": assignments}
 
 
 @app.patch("/api/assignments/{assignment_id}")
@@ -12754,18 +10840,7 @@ async def add_assignment_attachments(
         }).execute()
         if att_row.data:
             attachments.append(att_row.data[0])
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"attachments": attachments}
+    return {"attachments": attachments}
 
 
 @app.delete("/api/assignments/{assignment_id}/attachments/{attachment_id}")
@@ -12790,18 +10865,7 @@ async def delete_assignment_attachment(assignment_id: str, attachment_id: str, u
         except Exception:
             pass
     service_supabase.table("assignment_attachments").delete().eq("id", attachment_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 @app.delete("/api/assignments/{assignment_id}")
@@ -12841,18 +10905,7 @@ async def delete_assignment(assignment_id: str, user = Depends(verify_token)):
             pass
 
     service_supabase.table("assignments").delete().eq("id", assignment_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 @app.post("/api/assignments/{assignment_id}/submit")
@@ -12939,18 +10992,7 @@ async def get_assignment_submissions(assignment_id: str, user = Depends(verify_t
             except Exception:
                 pass
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"submissions": subs.data or [], "assignment": a_res.data}
+    return {"submissions": subs.data or [], "assignment": a_res.data}
 
 
 @app.post("/api/assignments/{assignment_id}/submissions/{submission_id}/grade")
@@ -13044,18 +11086,7 @@ async def teacher_delete_submission(
             pass
 
     service_supabase.table("assignment_submissions").delete().eq("id", submission_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 @app.delete("/api/assignments/{assignment_id}/my-submission")
@@ -13091,18 +11122,7 @@ async def student_delete_own_submission(
             pass
 
     service_supabase.table("assignment_submissions").delete().eq("id", sub["id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 @app.get("/api/student/assignments")
@@ -13116,35 +11136,13 @@ async def get_all_student_assignments(user = Depends(verify_token)):
     student_id = user.get("student_id")
     std_id     = user.get("standard_id")
     if not student_id or not std_id:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"assignments": []}
+        return {"assignments": []}
 
     # All subjects in the student's standard
     subs_res = service_supabase.table("subject_classes").select("id, name, emoji").eq("standard_id", std_id).execute()
     subjects  = subs_res.data or []
     if not subjects:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"assignments": []}
+        return {"assignments": []}
 
     class_ids = [s["id"] for s in subjects]
     sub_map   = {s["id"]: s for s in subjects}
@@ -13155,18 +11153,7 @@ async def get_all_student_assignments(user = Depends(verify_token)):
     ).in_("class_id", class_ids).order("created_at", desc=True).execute()
     assignments = res.data or []
     if not assignments:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"assignments": []}
+        return {"assignments": []}
 
     # Teacher-uploaded files: NO downloadable URL for students — they view only
     # through the authed, app-only endpoint /assignment-attachments/{id}/file.
@@ -13196,18 +11183,7 @@ async def get_all_student_assignments(user = Depends(verify_token)):
         a["subject_emoji"] = cls_info.get("emoji", "book")
         a["my_submission"] = sub_by_assign.get(a["id"])
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"assignments": assignments}
+    return {"assignments": assignments}
 
 # ─── TEACHER SETTINGS (AI API KEYS) ────────────────────────────────────────
 
@@ -13242,18 +11218,7 @@ def get_teacher_settings():
         except Exception:
             pass
         return db
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+    return {}
 
 def save_teacher_settings(data: dict):
     # Write-through: the DB is the durable source of truth; the file is the cache.
@@ -13288,34 +11253,12 @@ def _get_backup_frequency() -> str:
 
 def _get_backup_state() -> dict:
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         row = service_supabase.table("app_settings").select("data").eq("id", "backup_state").limit(1).execute()
         return (row.data[0].get("data") if row.data else {}) or {}
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
 
 
 def _set_backup_state(d: dict):
@@ -13459,18 +11402,7 @@ def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current
         if stored:
             settings["lms_logo"] = stored
     save_teacher_settings(settings)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"success": True}
+    return {"success": True}
 
 @app.get("/api/branding")
 def get_branding():
@@ -13478,18 +11410,7 @@ def get_branding():
     before the user has authenticated. Falls back to the default institute name so
     the brand shows correctly everywhere even before it's set in Settings."""
     settings = get_teacher_settings()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "lms_name": (settings.get("lms_name") or "").strip() or _DEFAULT_INSTITUTE_NAME,
         "lms_logo": settings.get("lms_logo") or "",
     }
@@ -13513,18 +11434,7 @@ async def get_app_version():
         return _APP_VERSION_CACHE["data"]
     base = (os.getenv("R2_PUBLIC_BASE_URL") or "").rstrip("/")
     if not base:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         # Cache-bust + no-cache so Cloudflare's edge can't serve a stale 404 it cached
         # before version.json existed (the reason the page stuck on "Preparing…").
@@ -13575,53 +11485,20 @@ def _resolve_ai_config() -> dict:
     """
     provider = (os.getenv("AI_PROVIDER") or "gemini").strip().lower()
     if provider == "gemini":
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "kind": "gemini",
             "api_key": os.getenv("GEMINI_API_KEY"),
             "models": [os.getenv("GEMINI_MODEL") or "gemini-2.5-flash", "gemini-flash-latest"],
         }
     if provider == "groq":  # Groq is OpenAI-compatible → reuse the openai branch
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-
+        return {
             "kind": "openai_compatible",
             "api_key": os.getenv("GROQ_API_KEY"),
             "base_url": os.getenv("GROQ_BASE_URL") or "https://api.groq.com/openai/v1",
             "model": os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile",
         }
     # openai (or any other OpenAI-compatible endpoint)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "kind": "openai_compatible",
         "api_key": os.getenv("OPENAI_API_KEY"),
         "base_url": os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1",
@@ -13988,18 +11865,7 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
         f"Video completion is {round(vid_done / vid_total * 100) if vid_total else 0}% ({vid_done}/{vid_total} videos)"
     )
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "student_name": s.get("name") or "Student",
         "standard_name": s.get("standard_name") or "N/A",
         "period": period,
@@ -14064,30 +11930,8 @@ def _load_insights_cache() -> dict:
         try:
             return json.loads(INSIGHTS_CACHE_FILE.read_text(encoding="utf-8"))
         except Exception:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+            return {}
+    return {}
 
 _insights_cache: dict = _load_insights_cache()
 
@@ -14140,33 +11984,11 @@ AI_BUSY_MSG = "The AI is busy right now — please try again in a minute."
 async def get_insight_tokens(user: dict = Depends(get_current_user)):
     """Return remaining AI insight calls for today. Teachers always get unlimited."""
     if user.get("role") != "student":
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"remaining": 999, "limit": 999, "unlimited": True}
+        return {"remaining": 999, "limit": 999, "unlimited": True}
     sid = user.get("student_id") or user.get("id", "")
     used = _tokens_used_today(sid)
     remaining = max(0, STUDENT_DAILY_LIMIT - used)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"remaining": remaining, "limit": STUDENT_DAILY_LIMIT, "unlimited": False}
+    return {"remaining": remaining, "limit": STUDENT_DAILY_LIMIT, "unlimited": False}
 
 
 @app.get("/api/insights/cached/{student_id}")
@@ -14176,18 +11998,7 @@ async def get_cached_insights(student_id: str, period: str = "overall", user: di
     if period not in ("weekly", "monthly", "overall"):
         period = "overall"
     entry = _insights_cache.get(f"{student_id}:{period}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "insights": entry.get("text") if entry else None,
         "generated_at": entry.get("generated_at") if entry else None,
     }
@@ -14252,18 +12063,7 @@ async def generate_ai_insights(req: InsightsRequest, user: dict = Depends(get_cu
                 _store_insights(cache_key, text)
                 if user.get("role") == "student":
                     _consume_student_token(user.get("student_id") or user.get("id", ""))
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"insights": text}
+            return {"insights": text}
     except Exception as e:
         print(f"[!] AI Generation Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -14781,36 +12581,14 @@ def _wa_fetch_credentials(student_ids: List[str]) -> dict:
     """Map student_id → {student_code, plain_password, must_change_pwd}. Sensitive —
     only used by the credentials/welcome send path. Graceful-degrades."""
     if not student_ids:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-}
+        return {}
     try:
         rows = service_supabase.table("students").select(
             "id, student_code, plain_password, must_change_pwd").in_(
             "id", student_ids).execute().data or []
     except Exception:
         rows = []
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-r["id"]: r for r in rows}
+    return {r["id"]: r for r in rows}
 
 
 def _wa_credentials_body(name: str, student_code: str, password: str, lms: str) -> str:
@@ -15097,18 +12875,7 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
     normal message."""
     to = (recipient.get("phone") or "").strip()
     if not to:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"student_id": recipient.get("id"), "name": recipient.get("name"),
+        return {"student_id": recipient.get("id"), "name": recipient.get("name"),
                 "status": "failed", "error": "No phone number", "cost": 0}
 
     # Resolve the named-tag body to render. Callers may pass body_text directly
@@ -15167,18 +12934,7 @@ async def _wa_send_and_log(provider, teacher_id, recipient, *, mode, template_na
         row_id = (ins.data or [{}])[0].get("id")
     except Exception as e:
         print(f"[wa] message log insert failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"student_id": recipient.get("id"), "name": recipient.get("name"),
+    return {"student_id": recipient.get("id"), "name": recipient.get("name"),
             "status": status, "error": res.get("error"), "cost": cost,
             "message_id": row_id}
 
@@ -15232,18 +12988,7 @@ def _wa_is_configured(cfg: dict) -> bool:
 def wa_get_config(user = Depends(verify_token)):
     _wa_require_teacher(user)
     cfg = wa.get_wa_config()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "configured": _wa_is_configured(cfg),
         "provider": cfg.get("provider", ""),
         "sender": cfg.get("sender", ""),
@@ -15274,18 +13019,7 @@ def wa_set_config(data: WhatsAppConfigInput, user = Depends(verify_token)):
     for k, v in patch.items():
         cfg[k] = v
     wa.save_wa_config(cfg)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"success": True, "configured": _wa_is_configured(cfg)}
+    return {"success": True, "configured": _wa_is_configured(cfg)}
 
 
 # ── Connection / QR pairing (WhatsApp-Web-style setup) ─────────────────────────
@@ -15301,77 +13035,22 @@ async def wa_connection(user = Depends(verify_token)):
         try:
             svc = await client.status()
             connected = bool(svc.get("connected"))
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"provider": provider, "connected": connected,
+            return {"provider": provider, "connected": connected,
                     "state": "open" if connected else "close",
                     "number": svc.get("number") or "", "qr": svc.get("qr")}
         except client.ServiceDownError:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"provider": provider, "connected": False, "state": "service_down",
+            return {"provider": provider, "connected": False, "state": "service_down",
                     "number": "", "error": "The WhatsApp service is unreachable. Messages are buffered until it returns."}
         except Exception as e:
             print(f"[wa] connection status failed: {e}")
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"provider": provider, "connected": False, "state": "close", "number": ""}
+            return {"provider": provider, "connected": False, "state": "close", "number": ""}
     # WANotifier sending is paused until its adapter is verified (safety gate).
     if provider == "wanotifier" and (cfg.get("api_key") or "").strip() and not cfg.get("wanotifier_verified"):
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"provider": provider, "connected": False, "state": "setup_incomplete", "number": "",
+        return {"provider": provider, "connected": False, "state": "setup_incomplete", "number": "",
                 "error": "WhatsApp sending is paused while setup is being finished."}
     # Meta / WANotifier don't QR-pair — "connected" just means credentials are present.
     configured = _wa_is_configured(cfg)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"provider": provider, "connected": configured,
+    return {"provider": provider, "connected": configured,
             "state": "open" if configured else "close", "number": ""}
 
 
@@ -15391,18 +13070,7 @@ async def wa_disconnect(user = Depends(verify_token)):
                 await http_client.post(f"{client.WHATSAPP_SERVICE_URL}/disconnect", headers=headers)
         except Exception as e:
             print(f"[wa] baileys disconnect failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"success": True}
+    return {"success": True}
 
 
 # ── Recipients (grouped by class) ─────────────────────────────────────────────
@@ -15416,18 +13084,7 @@ def wa_recipients(standard_ids: Optional[str] = None, user = Depends(verify_toke
         g = groups.setdefault(r["standard_id"], {
             "standard_id": r["standard_id"], "standard_name": r["standard_name"], "students": []})
         g["students"].append(r)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "groups": list(groups.values()),
         "total": len([r for r in recips if not r["opted_out"]]),
         "with_phone": len([r for r in recips if r["phone"] and not r["opted_out"]]),
@@ -15438,18 +13095,7 @@ def wa_recipients(standard_ids: Optional[str] = None, user = Depends(verify_toke
 @app.get("/api/teacher/whatsapp/variables")
 def wa_variables(user = Depends(verify_token)):
     _wa_require_teacher(user)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"variables": [{**v, "token": "{" + v["name"] + "}"} for v in WA_VARIABLES]}
+    return {"variables": [{**v, "token": "{" + v["name"] + "}"} for v in WA_VARIABLES]}
 
 
 # ── Media upload ──────────────────────────────────────────────────────────────
@@ -15469,33 +13115,11 @@ async def wa_upload_media(file: UploadFile = File(...), user = Depends(verify_to
         ctype = _EXT_TO_MIME.get(ext.lstrip(".").lower(), ctype)
     try:
         url = await _wa_upload_bytes(data, ext, ctype)
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"url": url, "type": ctype, "filename": file.filename}
+        return {"url": url, "type": ctype, "filename": file.filename}
     except Exception as e:
         print(f"[wa] media upload error: {e}")
         b64 = base64.b64encode(data).decode("utf-8")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"url": f"data:{ctype};base64,{b64}", "type": ctype, "filename": file.filename}
+        return {"url": f"data:{ctype};base64,{b64}", "type": ctype, "filename": file.filename}
 
 
 # ── Cost estimate ─────────────────────────────────────────────────────────────
@@ -15630,18 +13254,7 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
                                    media_url=data.media_url,
                                    media_type=data.media_type, category=data.category,
                                    language=data.language)
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"results": [r], "sent": 1 if r["status"] not in ("failed", "not_configured") else 0,
+        return {"results": [r], "sent": 1 if r["status"] not in ("failed", "not_configured") else 0,
                 "total_cost": r["cost"], "configured": provider.configured}
 
     # SAFETY: never let a manual send resolve to "everyone" by accident. Require an
@@ -15670,34 +13283,12 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     if len(recips) > WA_BATCH_THRESHOLD:
         batch_id = _wa_new_batch(len(recips), "send")
         asyncio.create_task(_wa_run_batch(run, batch_id))
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"queued": True, "batch_id": batch_id, "total": len(recips),
+        return {"queued": True, "batch_id": batch_id, "total": len(recips),
                 "configured": provider.configured}
 
     results = await run()
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"results": results, "sent": sent, "total_cost": round(sum(x["cost"] for x in results), 2),
+    return {"results": results, "sent": sent, "total_cost": round(sum(x["cost"] for x in results), 2),
             "configured": provider.configured}
 
 
@@ -15744,30 +13335,8 @@ def wa_messages(limit: int = 100, status: Optional[str] = None, user = Depends(v
             "teacher_id", user["teacher_id"]).execute().data or []
         total = round(sum(float(r.get("cost_amount") or 0) for r in spend), 2)
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"messages": [], "spend_total": 0, "count": 0}
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"messages": rows, "spend_total": total, "count": len(rows)}
+        return {"messages": [], "spend_total": 0, "count": 0}
+    return {"messages": rows, "spend_total": total, "count": len(rows)}
 
 
 # ── Dashboard stats (KPIs + donut + month spend + recent + scheduled) ──────────
@@ -15819,18 +13388,7 @@ def wa_stats(user = Depends(verify_token)):
     except Exception:
         jobs = []
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "counts": counts,
         "totals": {
             "total": total,
@@ -15915,18 +13473,7 @@ def _wa_template_row_existing(full_row: dict) -> dict:
     """Drop keys for columns that don't exist on this DB, so an insert/update with a
     pre-migration table never fails on a missing column."""
     core = {"teacher_id", "name", "body_text", "id"}
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-k: v for k, v in full_row.items()
+    return {k: v for k, v in full_row.items()
             if k in core or k not in _WA_TEMPLATE_OPTIONAL_COLS or _wa_templates_have_col(k)}
 
 
@@ -15944,18 +13491,7 @@ def wa_list_templates(user = Depends(verify_token)):
             "teacher_id", user["teacher_id"]).order("created_at", desc=True).execute().data or []
     except Exception:
         rows = []
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"templates": [_wa_template_out(r) for r in rows]}
+    return {"templates": [_wa_template_out(r) for r in rows]}
 
 
 @app.post("/api/teacher/whatsapp/templates")
@@ -15987,18 +13523,7 @@ async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_
     safe_row = _wa_template_row_existing(row)
     try:
         ins = service_supabase.table("whatsapp_templates").insert(safe_row).execute()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"template": (ins.data or [safe_row])[0], "error": submit_error}
+        return {"template": (ins.data or [safe_row])[0], "error": submit_error}
     except Exception as e:
         # Last-resort retry with only the always-present core columns, so a missing
         # optional column on an un-migrated table can never block creating a template.
@@ -16007,18 +13532,7 @@ async def wa_create_template(data: WhatsAppTemplateInput, user = Depends(verify_
                 "body_text": body, "status": "draft"}
         try:
             ins = service_supabase.table("whatsapp_templates").insert(core).execute()
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"template": (ins.data or [core])[0],
+            return {"template": (ins.data or [core])[0],
                     "error": submit_error or "Saved (run migrations/whatsapp_templates_fix.sql to enable all fields)."}
         except Exception as e2:
             raise HTTPException(status_code=500, detail=f"Could not save template: {e2}")
@@ -16057,18 +13571,7 @@ async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user
             "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
         if not upd.data:
             raise HTTPException(status_code=404, detail="Template not found")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"template": _wa_template_out(upd.data[0]), "error": submit_error}
+        return {"template": _wa_template_out(upd.data[0]), "error": submit_error}
     except HTTPException:
         raise
     except Exception as e:
@@ -16080,18 +13583,7 @@ async def wa_update_template(template_id: str, data: WhatsAppTemplateInput, user
                 "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
             if not upd.data:
                 raise HTTPException(status_code=404, detail="Template not found")
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"template": _wa_template_out(upd.data[0]),
+            return {"template": _wa_template_out(upd.data[0]),
                     "error": submit_error or "Saved (run migrations/whatsapp_templates_fix.sql to enable all fields)."}
         except HTTPException:
             raise
@@ -16114,18 +13606,7 @@ async def wa_submit_template(template_id: str, user = Depends(verify_token)):
     update = {"provider_template_id": r.get("provider_template_id"),
               "status": r.get("status", "pending") if r.get("status") != "not_configured" else "draft"}
     service_supabase.table("whatsapp_templates").update(update).eq("id", template_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": update["status"], "error": r.get("error")}
+    return {"status": update["status"], "error": r.get("error")}
 
 
 @app.get("/api/teacher/whatsapp/templates/{template_id}/status")
@@ -16137,34 +13618,12 @@ async def wa_template_status(template_id: str, user = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Template not found")
     pid = res.data.get("provider_template_id")
     if not pid:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": res.data.get("status", "draft")}
+        return {"status": res.data.get("status", "draft")}
     r = await wa.get_provider().get_template_status(pid)
     new_status = r.get("status")
     if new_status and new_status != res.data.get("status"):
         service_supabase.table("whatsapp_templates").update({"status": new_status}).eq("id", template_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"status": new_status or res.data.get("status")}
+    return {"status": new_status or res.data.get("status")}
 
 
 @app.delete("/api/teacher/whatsapp/templates/{template_id}")
@@ -16172,18 +13631,7 @@ def wa_delete_template(template_id: str, user = Depends(verify_token)):
     _wa_require_teacher(user)
     service_supabase.table("whatsapp_templates").delete().eq(
         "id", template_id).eq("teacher_id", user["teacher_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"success": True}
+    return {"success": True}
 
 
 # ── Reports + criteria ────────────────────────────────────────────────────────
@@ -16250,18 +13698,7 @@ def wa_preview_criteria(data: WhatsAppReportSendInput, user = Depends(verify_tok
             "has_phone": bool(r["phone"]),
         })
     count = len([p for p in preview if p["has_phone"] and (not data.criteria or p["band"])])
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"preview": preview, "skipped_no_band": skipped, "skipped_no_exam": skipped_no_exam,
+    return {"preview": preview, "skipped_no_band": skipped, "skipped_no_exam": skipped_no_exam,
             "estimate": wa.estimate_cost(count, data.category)}
 
 
@@ -16338,34 +13775,12 @@ async def wa_send_reports(data: WhatsAppReportSendInput, user = Depends(verify_t
     if len(sendable) > WA_BATCH_THRESHOLD:
         batch_id = _wa_new_batch(len(sendable), "reports")
         asyncio.create_task(_wa_run_batch(run, batch_id))
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"queued": True, "batch_id": batch_id, "total": len(sendable),
+        return {"queued": True, "batch_id": batch_id, "total": len(sendable),
                 "configured": provider.configured}
 
     results = await run()
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"results": results, "sent": sent,
+    return {"results": results, "sent": sent,
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
 
 
@@ -16500,18 +13915,7 @@ def wa_pending(user = Depends(verify_token)):
             "last_attempt_at": last_attempt.get(t_id),
         })
     exams.sort(key=lambda e: e.get("last_attempt_at") or "", reverse=True)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"exam_results": {"total_parents": total, "exams": exams}}
+    return {"exam_results": {"total_parents": total, "exams": exams}}
 
 
 class WhatsAppPendingDismissInput(BaseModel):
@@ -16539,18 +13943,7 @@ def wa_pending_dismiss(data: WhatsAppPendingDismissInput, user = Depends(verify_
             {"results_notify_dismissed": True}).eq("id", data.test_id).execute()
     except Exception as e:
         print(f"[wa] pending dismiss skipped (missing column?): {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 # ── Welcome / credentials (onboarding) ────────────────────────────────────────
@@ -16610,34 +14003,12 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     if len(recips) > WA_BATCH_THRESHOLD:
         batch_id = _wa_new_batch(len(recips), "welcome")
         asyncio.create_task(_wa_run_batch(run, batch_id))
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"queued": True, "batch_id": batch_id, "total": len(recips),
+        return {"queued": True, "batch_id": batch_id, "total": len(recips),
                 "configured": provider.configured}
 
     results = await run()
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"results": results, "sent": sent,
+    return {"results": results, "sent": sent,
             "total_cost": round(sum(x["cost"] for x in results), 2), "configured": provider.configured}
 
 
@@ -16761,18 +14132,7 @@ def _wa_match_inbound(from_phone: str):
             std = None
     if not std or not std.get("teacher_id"):
         return None
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "teacher_id": std.get("teacher_id"),
         "student_id": s["id"],
         "student_name": s.get("name"),
@@ -17006,64 +14366,20 @@ async def wa_webhook(request: Request):
     try:
         body = await request.json()
     except Exception:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+        return {"ok": True}
     if not service_supabase:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+        return {"ok": True}
 
     # Baileys chat events carry an explicit direction + our shared service token.
     if body.get("direction") in ("inbound", "outbound-device") and body.get("phone"):
         import whatsapp_client as _wac
         if _wac.SHARED_TOKEN and request.headers.get("x-service-token") != _wac.SHARED_TOKEN:
-            
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}  # silently drop unauthenticated chat posts
+            return {"ok": True}  # silently drop unauthenticated chat posts
         try:
             await _wa_handle_baileys_event(body)
         except Exception as e:
             print(f"[wa] baileys event failed: {e}")
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+        return {"ok": True}
 
     pid = body.get("id") or body.get("message_id")
     status = body.get("status")
@@ -17122,18 +14438,7 @@ async def wa_webhook(request: Request):
                 }).execute()
             except Exception as e:
                 print(f"[wa] inbox insert failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 # ── Chats (two-way parent threads: inbound replies + everything we sent) ───────
@@ -17225,18 +14530,7 @@ def wa_inbox(limit: int = 300, user = Depends(verify_token)):
         t["last_at"] = t["messages"][-1]["at"] if t["messages"] else None
         t["last_body"] = t["messages"][-1].get("body") if t["messages"] else None
     ordered = sorted(threads.values(), key=lambda t: t.get("last_at") or "", reverse=True)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"threads": ordered, "unread": unread, "count": len(in_rows)}
+    return {"threads": ordered, "unread": unread, "count": len(in_rows)}
 
 
 class WhatsAppReplyInput(BaseModel):
@@ -17251,31 +14545,9 @@ class WhatsAppReplyInput(BaseModel):
 def dev_debug_messages():
     try:
         rows = service_supabase.table("whatsapp_messages").select("id, status, error, media_url").order("created_at", desc=True).limit(5).execute().data
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"messages": rows}
+        return {"messages": rows}
     except Exception as e:
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"error": str(e)}
+        return {"error": str(e)}
 
 
 @app.post("/api/teacher/whatsapp/inbox/reply")
@@ -17312,18 +14584,7 @@ async def wa_inbox_reply(data: WhatsAppReplyInput, user = Depends(verify_token))
         "student_id": match.get("student_id"), "student_name": match.get("student_name"),
         "standard_name": match.get("standard_name"), "message": msg,
     })
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True, "message": msg}
+    return {"ok": True, "message": msg}
 
 
 @app.post("/api/teacher/whatsapp/inbox/mark-read")
@@ -17339,18 +14600,7 @@ def wa_inbox_mark_read(data: WhatsAppInboxReadInput, user = Depends(verify_token
         q.execute()
     except Exception as e:
         print(f"[wa] inbox mark-read failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 @app.delete("/api/teacher/whatsapp/inbox/message/{message_id}")
 def wa_inbox_delete_message(message_id: str, user = Depends(verify_token)):
@@ -17361,18 +14611,7 @@ def wa_inbox_delete_message(message_id: str, user = Depends(verify_token)):
         service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("id", message_id).execute()
     except Exception as e:
         print(f"[wa] inbox delete message failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 @app.delete("/api/teacher/whatsapp/inbox/chat/{phone}")
 def wa_inbox_delete_chat(phone: str, user = Depends(verify_token)):
@@ -17383,18 +14622,7 @@ def wa_inbox_delete_chat(phone: str, user = Depends(verify_token)):
         service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("to_phone", phone).execute()
     except Exception as e:
         print(f"[wa] inbox delete chat failed: {e}")
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"ok": True}
+    return {"ok": True}
 
 
 # ── Scheduled / automatic jobs ────────────────────────────────────────────────
@@ -17473,18 +14701,7 @@ async def _wa_execute_job(job: dict, force: bool = False):
     teacher_id = job["teacher_id"]
     quiet = job.get("quiet_hours") or wa.get_wa_config().get("quiet_hours") or {}
     if not force and _wa_quiet_now(quiet):
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"deferred": True}  # leave next_run_at; retry next poll
+        return {"deferred": True}  # leave next_run_at; retry next poll
 
     provider = wa.get_provider()
     target_type = job.get("target_type", "all")
@@ -17568,18 +14785,7 @@ async def _wa_execute_job(job: dict, force: bool = False):
     except Exception as e:
         print(f"[wa job] schedule update failed: {e}")
     sent = sum(1 for x in results if x["status"] not in ("failed", "not_configured"))
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"sent": sent, "results": results}
+    return {"sent": sent, "results": results}
 
 
 async def _whatsapp_run_due_jobs():
@@ -17620,18 +14826,7 @@ def wa_list_jobs(user = Depends(verify_token)):
     for row in rows:
         if row.get("mode") == "report" or row.get("report_format") != "none":
             row["report_period"] = _wa_job_report_period(row)
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"jobs": rows}
+    return {"jobs": rows}
 
 
 @app.post("/api/teacher/whatsapp/jobs")
@@ -17662,18 +14857,7 @@ def wa_create_job(data: WhatsAppJobInput, user = Depends(verify_token)):
     }
     try:
         ins = service_supabase.table("whatsapp_scheduled_jobs").insert(row).execute()
-        
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"job": (ins.data or [row])[0]}
+        return {"job": (ins.data or [row])[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not create job: {e}")
 
@@ -17705,18 +14889,7 @@ def wa_update_job(job_id: str, data: WhatsAppJobInput, user = Depends(verify_tok
     }
     service_supabase.table("whatsapp_scheduled_jobs").update(update).eq(
         "id", job_id).eq("teacher_id", user["teacher_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"success": True}
+    return {"success": True}
 
 
 @app.delete("/api/teacher/whatsapp/jobs/{job_id}")
@@ -17724,18 +14897,7 @@ def wa_delete_job(job_id: str, user = Depends(verify_token)):
     _wa_require_teacher(user)
     service_supabase.table("whatsapp_scheduled_jobs").delete().eq(
         "id", job_id).eq("teacher_id", user["teacher_id"]).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"success": True}
+    return {"success": True}
 
 
 @app.post("/api/teacher/whatsapp/jobs/{job_id}/toggle")
@@ -17748,18 +14910,7 @@ def wa_toggle_job(job_id: str, user = Depends(verify_token)):
     new_active = not res.data.get("active")
     service_supabase.table("whatsapp_scheduled_jobs").update(
         {"active": new_active}).eq("id", job_id).execute()
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
-    return {
-        "progressionData": progressionData,
-"active": new_active}
+    return {"active": new_active}
 
 
 @app.post("/api/teacher/whatsapp/jobs/{job_id}/run-now")
@@ -17918,18 +15069,7 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
         for i in range(11)
     ]
 
-    
-    # Generate mock progression data
-    progressionData = [
-        {"testName": "Unit 1", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Midterm", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Unit 2", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-        {"testName": "Finals", "Math": random.randint(60, 100), "Science": random.randint(60, 100), "English": random.randint(60, 100)},
-    ]
-
     return {
-        "progressionData": progressionData,
-
         "student": student_data,
         "trendData": trendData,
         "radarData": radarData,
