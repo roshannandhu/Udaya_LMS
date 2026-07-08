@@ -19,10 +19,10 @@ export default function TestQuadrantChart({ data }) {
           <Scatter name="Tests" data={data}>
             {data.map((entry, index) => {
               // Color based on quadrant
-              let color = '#FF6B6B'; // Slow & Low (bottom left)
-              if (entry.score >= 50 && entry.time <= 45) color = '#00C2C7'; // Fast & High
-              else if (entry.score >= 50 && entry.time > 45) color = '#7059FF'; // Slow & High
-              else if (entry.score < 50 && entry.time <= 45) color = '#FFC436'; // Fast & Low
+              let color = '#1E40AF'; // Slow & Low (bottom left)
+              if (entry.score >= 50 && entry.time <= 45) color = '#3B82F6'; // Fast & High
+              else if (entry.score >= 50 && entry.time > 45) color = '#4F46E5'; // Slow & High
+              else if (entry.score < 50 && entry.time <= 45) color = '#93C5FD'; // Fast & Low
               return <Cell key={`cell-${index}`} fill={color} />;
             })}
           </Scatter>
@@ -30,10 +30,10 @@ export default function TestQuadrantChart({ data }) {
       </ResponsiveContainer>
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
         <div className="w-full h-full relative opacity-20 text-[9px] font-bold uppercase tracking-wider">
-          <span className="absolute top-4 left-6 text-[#7059FF]">Methodical</span>
-          <span className="absolute top-4 right-6 text-[#00C2C7]">Mastered</span>
-          <span className="absolute bottom-6 left-6 text-[#FF6B6B]">Struggling</span>
-          <span className="absolute bottom-6 right-6 text-[#FFC436]">Rushing</span>
+          <span className="absolute top-4 left-6 text-[#4F46E5]">Methodical</span>
+          <span className="absolute top-4 right-6 text-[#3B82F6]">Mastered</span>
+          <span className="absolute bottom-6 left-6 text-[#1E40AF]">Struggling</span>
+          <span className="absolute bottom-6 right-6 text-[#93C5FD]">Rushing</span>
         </div>
       </div>
     </div>

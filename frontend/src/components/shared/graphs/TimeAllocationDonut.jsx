@@ -2,7 +2,7 @@ import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 export default function TimeAllocationDonut({ data }) {
-  // data: [{ name: 'Videos', value: 400, color: '#00C2C7' }]
+  // data: [{ name: 'Videos', value: 400, color: '#3B82F6' }]
   return (
     <div className="w-full h-full min-h-[280px] flex flex-col relative">
       <div className="flex-1 min-h-[280px]">

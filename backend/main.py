@@ -15032,10 +15032,10 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
 
     # -- 5. Donut & Treemap --
     donutData = [
-        {"name": "Videos", "value": random.randint(100, 300), "color": "#00C2C7"},
-        {"name": "Tests", "value": random.randint(50, 150), "color": "#7059FF"},
-        {"name": "Live Classes", "value": random.randint(100, 200), "color": "#FFC436"},
-        {"name": "Assignments", "value": random.randint(30, 100), "color": "#FF6B6B"},
+        {"name": "Videos", "value": random.randint(100, 300), "color": "#112B3C"},
+        {"name": "Tests", "value": random.randint(50, 150), "color": "#1E40AF"},
+        {"name": "Live Classes", "value": random.randint(100, 200), "color": "#3B82F6"},
+        {"name": "Assignments", "value": random.randint(30, 100), "color": "#93C5FD"},
     ]
     treemapData = [{"name": d["name"], "size": d["value"]} for d in donutData]
 
@@ -15061,9 +15061,9 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
         {"week": "W4", "rank": random.randint(1, 5)},
     ]
     assignmentData = [
-        {"name": "Submitted", "value": random.randint(15, 25), "color": "#00C2C7"},
-        {"name": "Pending", "value": random.randint(1, 5), "color": "#FFC436"},
-        {"name": "Overdue", "value": random.randint(0, 2), "color": "#FF6B6B"},
+        {"name": "Submitted", "value": random.randint(15, 25), "color": "#10B981"},
+        {"name": "Pending", "value": random.randint(1, 5), "color": "#FBBF24"},
+        {"name": "Overdue", "value": random.randint(0, 2), "color": "#F87171"},
     ]
     
     # -- 8. Quadrant & Bell --

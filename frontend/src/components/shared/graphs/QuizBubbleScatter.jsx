@@ -14,7 +14,7 @@ export default function QuizBubbleScatter({ data }) {
           <Tooltip cursor={{strokeDasharray: '3 3'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
           <Scatter name="Quizzes" data={data}>
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.score >= 80 ? '#00C2C7' : entry.score >= 50 ? '#FFC436' : '#FF6B6B'} opacity={0.8} />
+              <Cell key={`cell-${index}`} fill={entry.score >= 80 ? '#3B82F6' : entry.score >= 50 ? '#93C5FD' : '#1E40AF'} opacity={0.8} />
             ))}
           </Scatter>
         </ScatterChart>

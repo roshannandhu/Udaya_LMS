@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 
 export default function SubjectProgressionLineChart({ data }) {
   // data: [ { testName: 'T1', Math: 85, Science: 90, English: 70 }, ... ]
-  const COLORS = ['#00C2C7', '#7059FF', '#FFC436', '#FF6B6B', '#2DD4BF'];
+  const COLORS = ['#3B82F6', '#4F46E5', '#93C5FD', '#1E40AF', '#2DD4BF'];
   
   const [selectedSubject, setSelectedSubject] = useState('All');
   

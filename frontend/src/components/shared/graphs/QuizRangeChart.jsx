@@ -13,7 +13,7 @@ const RangeBar = (props) => {
   return (
     <g>
       <rect x={x + width/2 - 4} y={y} width={8} height={height} rx={4} fill="#F4F7F6" stroke="#E5E7EB" />
-      <circle cx={x + width/2} cy={dotY} r={6} fill="#7059FF" stroke="#fff" strokeWidth={2} className="drop-shadow-sm" />
+      <circle cx={x + width/2} cy={dotY} r={6} fill="#4F46E5" stroke="#fff" strokeWidth={2} className="drop-shadow-sm" />
     </g>
   );
 };
