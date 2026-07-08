@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderToString } from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
 import html2pdf from 'html2pdf.js';
 import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
