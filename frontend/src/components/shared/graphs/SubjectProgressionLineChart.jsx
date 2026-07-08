@@ -12,7 +12,7 @@ export default function SubjectProgressionLineChart({ data }) {
   const subjectsToRender = selectedSubject === 'All' ? allSubjects : [selectedSubject];
 
   return (
-    <div className="w-full h-full min-h-[260px] pt-4 pb-2 pr-4 relative">
+    <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4 relative">
       <div className="absolute top-2 right-4 z-10">
         <select 
           className="text-[10px] uppercase font-black tracking-widest text-[#112B3C] bg-white/60 border border-white/80 backdrop-blur-md rounded-lg px-3 py-1.5 shadow-sm outline-none cursor-pointer hover:bg-white transition-colors"
@@ -23,7 +23,7 @@ export default function SubjectProgressionLineChart({ data }) {
           {allSubjects.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
           <XAxis dataKey="testName" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />

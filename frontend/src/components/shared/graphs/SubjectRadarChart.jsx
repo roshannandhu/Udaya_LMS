@@ -4,8 +4,8 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Responsi
 export default function SubjectRadarChart({ data }) {
   // data format: [{ subject: 'Math', student: 90, classAvg: 75 }, ...]
   return (
-    <div className="w-full h-full min-h-[260px] pt-2">
-      <ResponsiveContainer width="100%" height={260}>
+    <div className="w-full h-full min-h-[220px] pt-2">
+      <ResponsiveContainer width="100%" height={220}>
         <RadarChart cx="50%" cy="50%" outerRadius="65%" data={data}>
           <PolarGrid stroke="#E5E7EB" />
           <PolarAngleAxis dataKey="subject" tick={{ fill: '#112B3C', fontSize: 11, fontWeight: 'bold' }} />

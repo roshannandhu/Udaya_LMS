@@ -4,9 +4,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 export default function AssignmentSpeedometer({ data }) {
   // data: [{ name: 'Submitted', value: 40, color: '#00C2C7' }, { name: 'Pending', value: 10, color: '#FFC436' }, { name: 'Overdue', value: 5, color: '#FF6B6B' }]
   return (
-    <div className="w-full h-full min-h-[260px] flex flex-col relative pt-4">
-      <div className="flex-1 min-h-[260px]">
-        <ResponsiveContainer width="100%" height={260}>
+    <div className="w-full h-full min-h-[220px] flex flex-col relative pt-4">
+      <div className="flex-1 min-h-[220px]">
+        <ResponsiveContainer width="100%" height={220}>
           <PieChart>
             <Pie
               data={data}

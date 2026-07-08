@@ -29,7 +29,7 @@ import ActivityStepper from '../../components/shared/graphs/ActivityStepper';
 
 // Basic Glass Card Wrapper
 const GlassCard = ({ title, subtitle, children, className = "" }) => (
-  <div className={`bg-white/40 backdrop-blur-xl border border-white/60 rounded-[32px] p-6 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full relative z-10 overflow-hidden ${className}`}>
+  <div className={`bg-white/40 backdrop-blur-xl border border-white/60 rounded-[32px] p-5 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full relative z-10 overflow-hidden ${className}`}>
     <div className="mb-4">
       <h3 className="text-[#112B3C] font-black text-lg tracking-tight">{title}</h3>
       {subtitle && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">{subtitle}</p>}
@@ -226,88 +226,89 @@ export default function ReportGraphReferencePage() {
         animate={{ opacity: 1, y: 0 }}
         className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 xl:grid-cols-6 gap-6 pb-24"
       >
-        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
-                  <SubjectProgressionLineChart data={progressionData} />
-                </GlassCard>
-        
+
+        {/* ROW 1: Hero Macro Stats (6 cols) */}
+        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-4" title="Overall Trend" subtitle="Student vs Class Avg">
+          <GradientAreaTrendChart data={areaData} classAverageLine={true} />
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Course Progress" subtitle="Overall Completion">
-                  <div className="flex-1 flex items-center justify-center py-8">
-                    <LiquidFillGauge percentage={reportData?.student?.attendance_pct || 78} size={240} />
-                  </div>
-                </GlassCard>
-        
+          <div className="flex-1 flex items-center justify-center py-4">
+            <LiquidFillGauge percentage={reportData?.student?.attendance_pct || 78} size={200} />
+          </div>
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Live Classes" subtitle="Attendance Rate">
-                  <div className="flex-1 flex items-center justify-center py-4">
-                    <NeonProgressGauge percentage={reportData?.student?.avg_score || 92} label="Attended" color="#FFC436" />
-                  </div>
-                </GlassCard>
-        
-        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-3" title="Overall Trend" subtitle="Student vs Class Avg">
-                  <GradientAreaTrendChart data={areaData} classAverageLine={true} />
-                </GlassCard>
-        
-        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-3" title="Weekly Engagement" subtitle="Github-style Heatmap">
-                  <EngagementHeatmap data={heatmapData} />
-                </GlassCard>
-        
+          <div className="flex-1 flex items-center justify-center py-4">
+            <NeonProgressGauge percentage={reportData?.student?.avg_score || 92} label="Attended" color="#FFC436" />
+          </div>
+        </GlassCard>
+
+        {/* ROW 2: Subject Progression (6 cols) */}
+        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
+          <SubjectProgressionLineChart data={progressionData} />
+        </GlassCard>
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
+          <AssignmentSpeedometer data={assignmentData} />
+        </GlassCard>
+
+        {/* ROW 3 & 4: Deep Dive Asymmetric Block (6 cols) */}
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2 xl:row-span-2" title="Subject Strengths" subtitle="Radar Analysis">
-                  <SubjectRadarChart data={radarData} />
-                </GlassCard>
+          <SubjectRadarChart data={radarData} />
+        </GlassCard>
+        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-4" title="Weekly Engagement" subtitle="Github-style Heatmap">
+          <EngagementHeatmap data={heatmapData} />
+        </GlassCard>
         
-        <GlassCard className="col-span-1 md:col-span-4 xl:col-span-4" title="Time Allocation" subtitle="Donut Breakdown">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
-                    <TimeAllocationDonut data={donutData} />
-                    <LearningTreemap data={treemapData} />
-                  </div>
-                </GlassCard>
-        
+        {/* Remaining 4 cols of Row 4 alongside the radar */}
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
+          <TimeAllocationDonut data={donutData} />
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
-                  <TopicPolarArea data={polarData} />
-                </GlassCard>
-        
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Assignments" subtitle="Health (Speedometer)">
-                  <AssignmentSpeedometer data={assignmentData} />
-                </GlassCard>
-        
+          <TopicPolarArea data={polarData} />
+        </GlassCard>
+
+        {/* ROW 5: Analysis (6 cols) */}
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Learning Breakdown" subtitle="Content Type (Treemap)">
+          <LearningTreemap data={treemapData} />
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Activity Flow" subtitle="Overlapping areas">
-                  <OverlappingAreaChart data={overlapData} />
-                </GlassCard>
-        
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Class Distribution" subtitle="Science Test (Bell Curve)">
-                  <TestBellCurve data={bellData} studentScore={85} />
-                </GlassCard>
-        
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
-                  <TestQuadrantChart data={quadrantData} />
-                </GlassCard>
-        
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
-                  <QuizBubbleScatter data={scatterData} />
-                </GlassCard>
-        
+          <OverlappingAreaChart data={overlapData} />
+        </GlassCard>
+
+        {/* ROW 6: Performance Matrix (6 cols) */}
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
+          <TestQuadrantChart data={quadrantData} />
+        </GlassCard>
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
+          <QuizBubbleScatter data={scatterData} />
+        </GlassCard>
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Science Test (Bell Curve)">
+          <TestBellCurve data={bellData} studentScore={85} />
+        </GlassCard>
+
+        {/* ROW 7: Standings (6 cols) */}
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Class Range" subtitle="Student standing in class">
-                  <QuizRangeChart data={rangeData} />
-                </GlassCard>
-        
+          <QuizRangeChart data={rangeData} />
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
-                  <LeaderboardBumpChart data={bumpData} />
-                </GlassCard>
-        
+          <LeaderboardBumpChart data={bumpData} />
+        </GlassCard>
+
+        {/* ROW 8: Schedule (6 cols) */}
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
-                  <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
-                </GlassCard>
-        
+          <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
-                  <TestCalendar month={new Date()} daysData={testDays} />
-                </GlassCard>
-        
+          <TestCalendar month={new Date()} daysData={testDays} />
+        </GlassCard>
+
+        {/* ROW 9: Daily (6 cols) */}
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Today's Activity" subtitle="Chronological Stepper">
-                  <ActivityStepper data={activityData} />
-                </GlassCard>
-        
+          <ActivityStepper data={activityData} />
+        </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Subject Plot" subtitle="Dumbbell (Mobile friendly)">
-                  <DumbbellSubjectPlot data={radarData} />
-                </GlassCard>
+          <DumbbellSubjectPlot data={radarData} />
+        </GlassCard>
+
       </motion.div>
     </div>
   );

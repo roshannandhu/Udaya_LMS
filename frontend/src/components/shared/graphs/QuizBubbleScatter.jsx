@@ -4,8 +4,8 @@ import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContaine
 export default function QuizBubbleScatter({ data }) {
   // data: [{ name: 'Test 1', dateIndex: 1, score: 85, time: 20 }, ...]
   return (
-    <div className="w-full h-full min-h-[260px] pt-4 pb-2 pr-4">
-      <ResponsiveContainer width="100%" height={260}>
+    <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">
+      <ResponsiveContainer width="100%" height={220}>
         <ScatterChart margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
           <XAxis type="number" dataKey="dateIndex" name="Quiz" tick={false} axisLine={false} tickLine={false} />
