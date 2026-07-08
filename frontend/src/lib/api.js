@@ -488,15 +488,181 @@ export const reminderApi = {
   remove: (id)    => apiClient(`/reminders/${id}`, { method: 'DELETE' }),
 };
 
+const clampPct = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+};
+
+const dayNumber = (dateValue, fallback) => {
+  const n = Number(String(dateValue || '').slice(8, 10));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const shortLabel = (value, fallback) => {
+  const s = String(value || fallback || '').trim();
+  return s.length > 12 ? `${s.slice(0, 11)}...` : s;
+};
+
+const normalizeReportV2 = (report = {}) => {
+  const student = report.student || {};
+  const classAvg = clampPct(report.class_averages?.avg_score ?? student.avg_score);
+  const timeline = [...(report.test_timeline || [])].sort((a, b) =>
+    String(a.date || '').localeCompare(String(b.date || ''))
+  );
+  const recentTests = timeline.slice(-12);
+  const fallbackScore = clampPct(student.avg_score);
+
+  const trendData = recentTests.length
+    ? recentTests.map((t, index) => ({
+        name: shortLabel(t.test_title, `T${index + 1}`),
+        studentScore: clampPct(t.score_pct),
+        classScore: classAvg,
+      }))
+    : [
+        { name: 'Start', studentScore: Math.max(0, fallbackScore - 8), classScore: classAvg },
+        { name: 'Now', studentScore: fallbackScore, classScore: classAvg },
+      ];
+
+  const progressionByTest = {};
+  recentTests.forEach((t, index) => {
+    const key = `${t.date || index}:${t.test_title || index}`;
+    progressionByTest[key] ||= { testName: shortLabel(t.test_title, `T${index + 1}`) };
+    progressionByTest[key][t.subject || 'General'] = clampPct(t.score_pct);
+  });
+
+  const radarData = (report.subject_radar || []).map((r) => ({
+    subject: r.subject || 'Subject',
+    student: clampPct(r.test_count ? r.test_avg : (r.attendance_pct || r.video_pct || 0)),
+    classAvg,
+  }));
+
+  const topicItems = report.topic_map || [];
+  const polarData = topicItems.length
+    ? topicItems.slice(0, 8).map((t) => ({ topic: t.topic || t.subject || 'Topic', score: clampPct(t.score_pct) }))
+    : radarData.map((r) => ({ topic: r.subject, score: r.student }));
+
+  const scatterData = recentTests.map((t, index) => ({
+    name: shortLabel(t.test_title, `T${index + 1}`),
+    dateIndex: index + 1,
+    score: clampPct(t.score_pct),
+    time: 120 + (index % 4) * 45,
+  }));
+
+  const rangeData = recentTests.slice(-6).map((t, index) => {
+    const score = clampPct(t.score_pct);
+    return {
+      name: shortLabel(t.test_title, `T${index + 1}`),
+      minScore: Math.max(0, Math.min(score, classAvg) - 15),
+      maxScore: Math.min(100, Math.max(score, classAvg) + 15),
+      studentScore: score,
+    };
+  });
+
+  const activityByDate = {};
+  const bump = (date, count = 1) => {
+    if (!date) return;
+    const key = String(date).slice(0, 10);
+    activityByDate[key] = (activityByDate[key] || 0) + count;
+  };
+  (report.attendance_heatmap || []).forEach((r) => bump(r.date, (r.present || 0) + (r.late || 0)));
+  (report.video_heatmap || []).forEach((r) => bump(r.date, Math.ceil((r.minutes || 0) / 15)));
+  (report.test_heatmap || []).forEach((r) => bump(r.date, r.count || 0));
+  (report.assignment_heatmap || []).forEach((r) => bump(r.date, r.count || 0));
+  const heatmapData = Object.entries(activityByDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-28)
+    .map(([date, count]) => ({ date, count }));
+
+  const videoByDate = Object.fromEntries((report.video_heatmap || []).map((r) => [String(r.date).slice(0, 10), r.minutes || 0]));
+  const testsByDate = Object.fromEntries((report.test_heatmap || []).map((r) => [String(r.date).slice(0, 10), r.count || 0]));
+  const assignmentsByDate = Object.fromEntries((report.assignment_heatmap || []).map((r) => [String(r.date).slice(0, 10), r.count || 0]));
+  const overlapData = [...new Set([
+    ...Object.keys(videoByDate),
+    ...Object.keys(testsByDate),
+    ...Object.keys(assignmentsByDate),
+  ])].sort().slice(-7).map((date) => ({
+    day: new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' }),
+    videos: videoByDate[date] || 0,
+    tests: (testsByDate[date] || 0) * 30,
+    notes: (assignmentsByDate[date] || 0) * 30,
+  }));
+
+  const assignmentStats = report.assignment_stats || {};
+  const assignmentSubmitted = Number(assignmentStats.submitted || 0);
+  const assignmentTotal = Number(assignmentStats.total || 0);
+  const assignmentData = [
+    { name: 'Submitted', value: assignmentSubmitted, color: '#67E8F9' },
+    { name: 'Pending', value: Math.max(0, assignmentTotal - assignmentSubmitted), color: '#FDE047' },
+    { name: 'Overdue', value: 0, color: '#FCA5A5' },
+  ];
+
+  const totalVideoMinutes = Math.round((report.video_heatmap || []).reduce((sum, r) => sum + (r.minutes || 0), 0));
+  const totalTests = timeline.length;
+  const liveAttended = report.live_classes_stats?.attended || 0;
+  const donutData = [
+    { name: 'Videos', value: Math.max(totalVideoMinutes, 1), color: '#67E8F9' },
+    { name: 'Tests', value: Math.max(totalTests, 1), color: '#A78BFA' },
+    { name: 'Live Classes', value: Math.max(liveAttended, 1), color: '#FDE047' },
+    { name: 'Assignments', value: Math.max(assignmentSubmitted, 1), color: '#FCA5A5' },
+  ];
+
+  const attendanceDays = (report.attendance_heatmap || []).slice(-31).map((r, index) => {
+    const status = (r.absent || 0) > (r.present || 0) + (r.late || 0)
+      ? 'absent'
+      : (r.late || 0) > 0 ? 'late' : 'present';
+    return { dayNumber: dayNumber(r.date, index + 1), status, info: status };
+  });
+
+  const testDays = timeline.slice(-31).map((t, index) => ({
+    dayNumber: dayNumber(t.date, index + 1),
+    hasTest: true,
+    score: clampPct(t.score_pct),
+    testName: t.test_title || 'Test',
+  }));
+
+  const bellBins = Array.from({ length: 11 }, (_, i) => ({ scoreBin: i * 10, count: 0 }));
+  timeline.forEach((t) => {
+    const bin = Math.max(0, Math.min(10, Math.floor(clampPct(t.score_pct) / 10)));
+    bellBins[bin].count += 1;
+  });
+
+  return {
+    ...report,
+    student,
+    trendData,
+    progressionData: Object.values(progressionByTest),
+    radarData,
+    polarData,
+    scatterData,
+    rangeData,
+    heatmapData,
+    overlapData,
+    donutData,
+    treemapData: donutData.map((d) => ({ name: d.name, size: d.value })),
+    attendanceDays,
+    testDays,
+    bumpData: [{ week: report.period || 'Overall', rank: report.rank || 0 }],
+    assignmentData,
+    bellData: bellBins,
+    quadrantData: scatterData,
+    activityData: recentTests.slice(-5).reverse().map((t) => ({
+      time: String(t.date || '').slice(11, 16) || '--',
+      title: `${t.test_title || 'Test'} - ${clampPct(t.score_pct)}%`,
+      color: clampPct(t.score_pct) >= 70 ? 'bg-[#67E8F9]' : 'bg-[#FDE047]',
+    })),
+  };
+};
+
 export const reportApi = {
-  getSmartReport: (studentId, period = 'overall') =>
-    apiClient(`/reports/student/${studentId}/smart-report?period=${period}`),
+  getSmartReport: async (studentId, period = 'overall') =>
+    normalizeReportV2(await apiClient(`/students/${studentId}/report/v2?period=${period}`)),
   // Teacher fetches a specific student's report
-  getV2: (studentId, period = 'overall') =>
-    apiClient(`/reports/student/${studentId}/smart-report?period=${period}`),
+  getV2: async (studentId, period = 'overall') =>
+    normalizeReportV2(await apiClient(`/students/${studentId}/report/v2?period=${period}`)),
   // Student fetches their own report (uses 'me' alias resolved server-side)
-  getMy: (period = 'overall') =>
-    apiClient(`/reports/student/me/smart-report?period=${period}`),
+  getMy: async (period = 'overall') =>
+    normalizeReportV2(await apiClient(`/students/me/report/v2?period=${period}`)),
   // Teacher: per-student performance for a standard (or one subject within it)
   performance: ({ standardId, classId, period = 'overall' }) =>
     apiClient(`/reports/performance?standard_id=${standardId}${classId ? `&class_id=${classId}` : ''}&period=${period}`),

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Loader2, ArrowLeft, Share2, Download } from 'lucide-react';
 import { aiApi } from '../../lib/api';
@@ -42,9 +42,11 @@ const GlassCard = ({ title, subtitle, children, className = "", onClick = null }
 );
 
 export default function StudentReportCard({ data, period, onPeriodChange, onDownloadPDF, showHeader = true, autoOpenAI = false }) {
-  const [aiReport, setAiReport] = useState('');
-  const [loadingAi, setLoadingAi] = useState(false);
+  const [aiResult, setAiResult] = useState({ key: null, report: '', error: '' });
+  const [loadingAiKey, setLoadingAiKey] = useState(null);
   const [showAiModal, setShowAiModal] = useState(autoOpenAI);
+  const aiRequestRef = useRef(0);
+  const autoOpenTriggeredRef = useRef(false);
 
   const { 
     student = {}, 
@@ -66,6 +68,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     quadrantData = [],
     activityData = [] 
   } = data || {};
+  const studentId = student?.id;
+  const reportPeriod = period || 'overall';
+  const aiKey = studentId ? `${studentId}:${reportPeriod}` : '';
+  const aiReport = aiResult.key === aiKey ? aiResult.report : '';
+  const aiError = aiResult.key === aiKey ? aiResult.error : '';
+  const loadingAi = loadingAiKey === aiKey;
 
   const PERIODS = [
     { id: 'overall', label: 'Overall' },
@@ -89,19 +97,51 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     } catch (e) { alert('Failed to generate PDF.'); }
   };
 
-  const handleGenerateAI = async () => {
+  const handleGenerateAI = useCallback(async () => {
     setShowAiModal(true);
-    if (aiReport) return;
-    setLoadingAi(true);
-    try {
-      const res = await aiApi.generateStudentReport(data, period);
-      setAiReport(res.report || 'Generated insights.');
-    } catch (err) {
-      setAiReport('Failed to generate insights.');
-    } finally {
-      setLoadingAi(false);
+    if (!studentId) {
+      setAiResult({
+        key: aiKey,
+        report: '',
+        error: 'Report data is still loading. Please try again in a moment.',
+      });
+      return;
     }
-  };
+    if (loadingAi || aiReport) return;
+
+    const requestId = aiRequestRef.current + 1;
+    aiRequestRef.current = requestId;
+    setLoadingAiKey(aiKey);
+    setAiResult({ key: aiKey, report: '', error: '' });
+
+    try {
+      const res = await aiApi.generateStudentReport(data, reportPeriod);
+      if (aiRequestRef.current !== requestId) return;
+      setAiResult({
+        key: aiKey,
+        report: res.report || 'Generated insights.',
+        error: '',
+      });
+    } catch (err) {
+      if (aiRequestRef.current !== requestId) return;
+      setAiResult({
+        key: aiKey,
+        report: '',
+        error: err?.message || 'Failed to generate insights.',
+      });
+    } finally {
+      if (aiRequestRef.current === requestId) {
+        setLoadingAiKey(null);
+      }
+    }
+  }, [aiKey, aiReport, data, loadingAi, reportPeriod, studentId]);
+
+  useEffect(() => {
+    if (!autoOpenAI || !studentId || autoOpenTriggeredRef.current) return;
+    autoOpenTriggeredRef.current = true;
+    setShowAiModal(true);
+    handleGenerateAI();
+  }, [autoOpenAI, handleGenerateAI, studentId]);
 
   return (
     <div className="w-full bg-[#F4F7F6] pb-24 text-[#333333] font-sans">
@@ -151,8 +191,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
               <Bot size={24} />
             </div>
             <div>
-              <p className="text-sm font-bold text-[#112B3C]">Tap to generate AI Report</p>
-              <p className="text-xs text-gray-500">Deep learning analysis on {student.name ? student.name.split(' ')[0] : 'this student'}'s performance.</p>
+              <p className="text-sm font-bold text-[#112B3C]">
+                {loadingAi ? 'Generating AI Report...' : aiReport ? 'View AI Mentor Report' : aiError ? 'Retry AI Mentor Report' : 'Tap to generate AI Report'}
+              </p>
+              <p className="text-xs text-gray-500">
+                {aiError || `Deep learning analysis on ${student.name ? student.name.split(' ')[0] : 'this student'}'s performance.`}
+              </p>
             </div>
           </div>
         </GlassCard>
@@ -267,6 +311,14 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
                   <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-4">
                     <Loader2 size={32} className="animate-spin text-[#FDE047]" />
                     <p className="font-bold text-xs uppercase tracking-widest">Analyzing algorithms...</p>
+                  </div>
+                ) : aiError ? (
+                  <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-700">
+                    <p className="font-bold text-sm">Could not generate insights.</p>
+                    <p>{aiError}</p>
+                    <button onClick={handleGenerateAI} className="mt-1 px-4 py-2 bg-white hover:bg-red-100 text-red-700 font-black rounded-xl transition-colors text-xs uppercase tracking-widest border border-red-200">
+                      Try Again
+                    </button>
                   </div>
                 ) : (
                   <div className="whitespace-pre-wrap">{aiReport}</div>
