@@ -218,6 +218,89 @@ function drawKpiCards(doc, kpis, y) {
   return y + rows * cardH + (rows - 1) * gap + 10;
 }
 
+// ── Vector mini-charts (mirror the on-screen reference design) ────────────────
+const CHART_BLUE = '#2383E2';
+const CHART_GREEN = '#0F7B6C';
+const CHART_RED = '#DC2626';
+const CHART_TRACK = '#E5E3DF';
+
+function drawRingGauge(doc, cx, cy, r, pct, color) {
+  const frac = Math.max(0, Math.min(1, (Number(pct) || 0) / 100));
+  doc.setDrawColor(CHART_TRACK);
+  doc.setLineWidth(1.2);
+  doc.circle(cx, cy, r, 'S');
+  if (frac > 0) {
+    doc.setDrawColor(color);
+    doc.setLineWidth(1.5);
+    const steps = Math.max(2, Math.round(frac * 48));
+    const start = -Math.PI / 2;
+    let prev = null;
+    for (let i = 0; i <= steps; i += 1) {
+      const a = start + frac * 2 * Math.PI * (i / steps);
+      const px = cx + r * Math.cos(a);
+      const py = cy + r * Math.sin(a);
+      if (prev) doc.line(prev[0], prev[1], px, py);
+      prev = [px, py];
+    }
+  }
+  doc.setTextColor(INK);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text(`${Math.round(Number(pct) || 0)}%`, cx, cy + 1.2, { align: 'center' });
+}
+
+function drawSparkline(doc, x, y, w, h, values, color) {
+  const vals = (values || []).filter((v) => Number.isFinite(v));
+  if (vals.length < 2) return;
+  const max = Math.max(...vals);
+  const min = Math.min(...vals);
+  const range = max - min || 1;
+  const stepX = w / (vals.length - 1);
+  const pts = vals.map((v, i) => [x + i * stepX, y + h - ((v - min) / range) * h]);
+  doc.setDrawColor(color);
+  doc.setLineWidth(0.7);
+  for (let i = 1; i < pts.length; i += 1) doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+  const last = pts[pts.length - 1];
+  doc.setFillColor(color);
+  doc.circle(last[0], last[1], 0.9, 'F');
+}
+
+// Horizontal You-vs-Class bars diverging from a centre axis. Returns the new y.
+function drawDivergingBars(doc, x, y, w, rows) {
+  const rowH = 7.2;
+  const labelW = 30;
+  const valW = 12;
+  const barW = w - labelW - valW;
+  const cx = x + labelW + barW / 2;
+  const half = barW / 2;
+  rows.forEach((r, i) => {
+    const ry = y + i * rowH;
+    doc.setTextColor('#333333');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.text(r.label, x, ry + 3.4);
+    doc.setDrawColor(CHART_TRACK);
+    doc.setLineWidth(0.3);
+    doc.line(x + labelW, ry + 2, x + labelW + barW, ry + 2);
+    doc.setDrawColor('#C9C7C2');
+    doc.setLineWidth(0.3);
+    doc.line(cx, ry - 0.4, cx, ry + 4.4);
+    const diff = (Number(r.you) || 0) - (Number(r.cls) || 0);
+    const bw = Math.min(half, (Math.abs(diff) / 50) * half);
+    const color = diff >= 0 ? CHART_GREEN : CHART_RED;
+    doc.setFillColor(color);
+    if (bw > 0.3) {
+      if (diff >= 0) doc.roundedRect(cx, ry + 0.7, bw, 2.6, 0.8, 0.8, 'F');
+      else doc.roundedRect(cx - bw, ry + 0.7, bw, 2.6, 0.8, 0.8, 'F');
+    }
+    doc.setTextColor(INK);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.text(`${Math.round(Number(r.you) || 0)}%`, x + labelW + barW + 1.5, ry + 3.4);
+  });
+  return y + rows.length * rowH;
+}
+
 const tableDefaults = {
   theme: 'striped',
   headStyles: { fillColor: INDIGO, fontStyle: 'bold' },
@@ -361,6 +444,30 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
     { label: 'Study Streak', value: `${streak} day${streak === 1 ? '' : 's'}` },
   ], y);
 
+  // Score-trend strip: ring gauge (period avg) + sparkline of test scores
+  const trendScores = timeline
+    .slice()
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    .map((t) => Math.round(Number(t.score_pct) || 0))
+    .filter((n) => Number.isFinite(n));
+  if (trendScores.length >= 2) {
+    y = ensurePageSpace(doc, y, 30);
+    const cardH = 24;
+    doc.setFillColor(LIGHT);
+    doc.roundedRect(MARGIN, y, W - 2 * MARGIN, cardH, 3, 3, 'F');
+    drawRingGauge(doc, MARGIN + 15, y + cardH / 2, 8, avgForPeriod ?? s.avg_score, CHART_BLUE);
+    doc.setTextColor(INK);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('Score Trend', MARGIN + 30, y + 7.5);
+    doc.setTextColor(GRAY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(`${trendScores.length} tests`, MARGIN + 30, y + 12);
+    drawSparkline(doc, MARGIN + 30, y + 13.5, W - 2 * MARGIN - 44, 7, trendScores, CHART_BLUE);
+    y += cardH + 10;
+  }
+
   y = sectionTitle(doc, 'Student Details', y);
   autoTable(doc, {
     ...tableDefaults,
@@ -456,6 +563,23 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
   if (data.class_averages) {
     const ca = data.class_averages;
     y = sectionTitle(doc, 'Performance vs Class Average', y);
+
+    // diverging You-vs-Class mini-bars above the detail table
+    const divRows = [
+      { label: 'Score', you: avgForPeriod ?? s.avg_score, cls: ca.avg_score },
+      { label: 'Attend', you: attendanceForPeriod ?? s.attendance_pct, cls: ca.attendance_pct },
+      { label: 'Videos', you: videoPct, cls: ca.video_pct },
+      { label: 'Mastery', you: data.topic_mastery_pct, cls: ca.mastery },
+    ].filter((r) => Number.isFinite(Number(r.you)) && Number.isFinite(Number(r.cls)));
+    if (divRows.length > 0) {
+      y = ensurePageSpace(doc, y, divRows.length * 7.2 + 12);
+      doc.setTextColor(GRAY);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.text('Green = above class average · Red = below', MARGIN, y + 1);
+      y = drawDivergingBars(doc, MARGIN, y + 4, W - 2 * MARGIN, divRows) + 4;
+    }
+
     autoTable(doc, {
       ...tableDefaults,
       startY: y,

@@ -146,206 +146,252 @@ function GrowBar({ value, color, track = 'bg-neutral-100', height = 'h-1.5' }) {
   );
 }
 
-// ── Skill radar (interactive showpiece) ───────────────────────────────────────
+// ── Mini sparkline (reference "big number + wave" motif) ──────────────────────
 
-function radarPath(data, cx, cy, r, valueKey) {
-  const n = data.length || 1;
-  return data.map((d, i) => {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
-    const p = Math.max(0, Math.min((d[valueKey] || 0) / 100, 1));
-    return [cx + r * p * Math.cos(angle), cy + r * p * Math.sin(angle)];
-  });
-}
-
-function pointsToPath(pts) {
-  if (!pts || pts.length === 0) return '';
-  return pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ') + ' Z';
-}
-
-function SkillRadar({ data, hasClass, classCount }) {
-  const dark = useTheme(s => s.dark);
+function Sparkline({ values, color, width = 60, height = 22 }) {
   const reduce = useReducedMotion();
-  const [selected, setSelected] = useState(0);
-  const cx = 135, cy = 135, r = 85, n = data.length || 1, levels = [0.2, 0.4, 0.6, 0.8, 1.0];
-  const axisPoints = data.map((_, i) => {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
-    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
-  });
-  const studentPts = radarPath(data, cx, cy, r, 'value');
-  const avgPts = hasClass ? radarPath(data, cx, cy, r, 'classAvg') : [];
+  if (!values || values.length < 2) return null;
+  const max = Math.max(...values), min = Math.min(...values), range = max - min || 1;
+  const stepX = width / (values.length - 1);
+  const pts = values.map((v, i) => [i * stepX, height - ((v - min) / range) * (height - 4) - 2]);
+  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+  const last = pts[pts.length - 1];
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      {reduce ? (
+        <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <motion.path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }}
+          transition={{ duration: 0.9, ease: 'easeOut' }} />
+      )}
+      <circle cx={last[0]} cy={last[1]} r={2.4} fill={color} />
+    </svg>
+  );
+}
+
+// ── Segmented stacked progress bar with legend (reference "Delenit augue") ────
+
+function SegmentedBar({ segments }) {
+  const reduce = useReducedMotion();
+  const total = segments.reduce((a, s) => a + (s.value || 0), 0) || 1;
+  return (
+    <div>
+      <div className="flex h-3 rounded-full overflow-hidden bg-neutral-100">
+        {segments.map((s, i) => (s.value > 0) && (
+          reduce ? (
+            <div key={i} className="h-full" style={{ width: `${(s.value / total) * 100}%`, background: s.color }} />
+          ) : (
+            <motion.div key={i} className="h-full" style={{ background: s.color }}
+              initial={{ width: 0 }} whileInView={{ width: `${(s.value / total) * 100}%` }} viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: i * 0.12 }} />
+          )
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5">
+        {segments.map((s, i) => (
+          <span key={i} className="inline-flex items-center gap-1.5 text-[10px] font-extrabold text-neutral-500">
+            <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+            {s.label} <strong className="text-neutral-900">{s.value}</strong>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Subject comparison: grouped multi-series bars (reference "Adipiscing") ─────
+
+const SUBJECT_SERIES = [
+  { k: 'Tests', c: '#1A56DB', cDark: '#93c5fd' },
+  { k: 'Videos', c: '#6940A5', cDark: '#c4b5fd' },
+  { k: 'Attendance', c: '#0F7B6C', cDark: '#6ee7b7' },
+];
+
+function SubjectGroupedBars({ subjectRadar, dark }) {
+  const reduce = useReducedMotion();
+  const rows = useMemo(() => subjectRadar.map(r => ({
+    name: r.subject,
+    Tests: r.test_count > 0 ? Math.round(r.test_avg || 0) : 0,
+    Videos: r.video_total > 0 ? Math.round(((r.video_done || 0) / r.video_total) * 100) : 0,
+    Attendance: r.att_total > 0 ? Math.round(r.attendance_pct || 0) : 0,
+  })), [subjectRadar]);
+  if (rows.length === 0) return null;
+  return (
+    <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6 mb-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+        <div>
+          <h4 className="text-[16px] font-black text-neutral-900">Subject Comparison</h4>
+          <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Tests · Videos · Attendance %</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {SUBJECT_SERIES.map(s => (
+            <span key={s.k} className="inline-flex items-center gap-1.5 text-[10px] font-extrabold text-neutral-500">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: dark ? s.cDark : s.c }} />{s.k}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="h-[200px] md:h-[220px] w-full min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 6, right: 4, left: -24, bottom: 0 }} barGap={2} barCategoryGap="22%">
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? 'rgba(255,255,255,0.08)' : '#f3f4f6'} />
+            <XAxis dataKey="name" tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} tickFormatter={t => (t || '').length > 7 ? t.slice(0, 7) + '…' : t} axisLine={false} tickLine={false} interval={0} />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold', backgroundColor: dark ? '#1a1b33' : '#fff', color: dark ? '#e5e7eb' : undefined }} cursor={{ fill: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6' }} />
+            {SUBJECT_SERIES.map((s, si) => (
+              <Bar key={s.k} dataKey={s.k} fill={dark ? s.cDark : s.c} radius={[4, 4, 0, 0]} maxBarSize={13}
+                animationDuration={reduce ? 0 : 1000} animationBegin={si * 120} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ── Test timeline rail: horizontal node chips (reference "Delenit" timeline) ──
+
+function TestTimelineRail({ testTimeline, dark }) {
+  const reduce = useReducedMotion();
+  const items = useMemo(
+    () => testTimeline.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).slice(-10),
+    [testTimeline]
+  );
+  if (items.length === 0) return null;
+  return (
+    <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6">
+      <div className="mb-3">
+        <h4 className="text-[16px] font-black text-neutral-900">Test Timeline</h4>
+        <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Recent tests, in order</p>
+      </div>
+      <div className="overflow-x-auto scrollbar-hide pb-1">
+        <div className="min-w-max">
+          {/* dots + connecting line */}
+          <div className="relative flex items-center">
+            <div className="absolute left-0 right-0 h-[2px] rounded-full" style={{ top: '50%', background: dark ? 'rgba(255,255,255,0.10)' : '#EFEDEA' }} />
+            {items.map((t, i) => {
+              const p = pastelTokens(pastelFor(t.subject || ''), dark);
+              const dot = (
+                <span className="w-3.5 h-3.5 rounded-full border-2 z-10"
+                  style={{ background: t.flagged ? DOWN_RED : p.fgHex, borderColor: dark ? '#12132b' : '#fff', boxShadow: `0 0 0 3px ${p.hex}` }} />
+              );
+              return (
+                <div key={i} className="w-[132px] flex-shrink-0 flex justify-center">
+                  {reduce ? dot : (
+                    <motion.span initial={{ scale: 0 }} whileInView={{ scale: 1 }} viewport={{ once: true }}
+                      transition={{ delay: i * 0.06, type: 'spring', stiffness: 300, damping: 18 }} className="inline-flex">
+                      {dot}
+                    </motion.span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* chips */}
+          <div className="flex mt-3">
+            {items.map((t, i) => {
+              const p = pastelTokens(pastelFor(t.subject || ''), dark);
+              const score = Math.round(t.score_pct || 0);
+              const chip = (
+                <div className="rounded-2xl px-3 py-2.5 w-full text-center shadow-sm" style={{ background: p.hex }}>
+                  <div className="flex items-center justify-center gap-1.5 mb-1">
+                    <SubjectIcon value={t.emoji} size={13} className="flex-shrink-0" />
+                    <span className="text-[15px] font-black leading-none" style={{ color: t.flagged ? DOWN_RED : p.fgHex }}>{score}%</span>
+                  </div>
+                  <p className="text-[10px] font-black text-neutral-700 leading-tight truncate">{t.test_title || 'Test'}</p>
+                  <p className="text-[9px] font-bold text-neutral-400 mt-0.5">{t.date ? fmtDate(t.date).replace(/, \d{4}$/, '') : ''}</p>
+                </div>
+              );
+              return (
+                <div key={i} className="w-[132px] flex-shrink-0 px-1.5">
+                  {reduce ? chip : (
+                    <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+                      transition={{ delay: 0.1 + i * 0.06, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+                      {chip}
+                    </motion.div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Skill comparison: diverging You-vs-Class bars (replaces the radar) ─────────
+// Bars grow outward from a centre axis — right (green) above class average,
+// left (red) below. Grade-B radar swapped for precise, colour-blind-safe reading.
+
+function DivergingSkillBars({ data, hasClass, classCount }) {
+  const reduce = useReducedMotion();
+  const n = data.length || 1;
   const composite = Math.round(data.reduce((a, d) => a + (d.value || 0), 0) / n);
-  const sel = data[selected];
-  const selDiff = hasClass && sel ? Math.round((sel.value || 0) - (sel.classAvg || 0)) : null;
+  const classComposite = hasClass ? Math.round(data.reduce((a, d) => a + (d.classAvg || 0), 0) / n) : null;
 
   return (
-    <div className="w-full flex flex-col items-center min-w-0">
-      <div className="w-full flex justify-center py-1 min-w-0 overflow-hidden">
-        <svg width="100%" height="100%" viewBox="-50 -30 370 330" style={{ maxWidth: '350px' }} className="mx-auto select-none">
-          <defs>
-            <radialGradient id="youGlowSvg" cx="50%" cy="50%" r="80%">
-              <stop offset="0%" stopColor="#1A56DB" stopOpacity={0.45} />
-              <stop offset="100%" stopColor="#1A56DB" stopOpacity={0.06} />
-            </radialGradient>
-          </defs>
-
-          {/* grid rings: staggered pop-in */}
-          {levels.map((l, li) => {
-            const pts = data.map((_, i) => {
-              const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
-              return [cx + r * l * Math.cos(angle), cy + r * l * Math.sin(angle)];
-            });
-            const poly = <polygon points={pts.map(p => p.join(',')).join(' ')} fill="none" stroke={dark ? 'rgba(255,255,255,0.10)' : '#f0efed'} strokeWidth="1.5" />;
-            if (reduce) return <g key={l}>{poly}</g>;
-            return (
-              <motion.g key={l}
-                initial={{ opacity: 0, scale: 0.4 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: li * 0.06, type: 'spring', stiffness: 200, damping: 20 }}
-                style={{ transformOrigin: `${cx}px ${cy}px` }}>
-                {poly}
-              </motion.g>
-            );
-          })}
-
-          {/* spokes: draw out from center; selected spoke highlighted */}
-          {axisPoints.map((pt, i) => (
-            <motion.line key={i} x1={cx} y1={cy} x2={pt.x} y2={pt.y}
-              stroke={i === selected ? '#1A56DB' : (dark ? 'rgba(255,255,255,0.10)' : '#f0efed')}
-              strokeWidth={i === selected ? 2 : 1.5}
-              strokeOpacity={i === selected ? 0.45 : 1}
-              initial={reduce ? false : { pathLength: 0 }}
-              whileInView={{ pathLength: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.25 + i * 0.05, duration: 0.4, ease: 'easeOut' }}
-            />
-          ))}
-
-          {data.length > 2 && (
-            <>
-              {/* class average overlay (only when real data exists) */}
-              {hasClass && (
-                <motion.path
-                  d={pointsToPath(avgPts)} fill="rgba(156, 163, 175, 0.06)" stroke="#9ca3af"
-                  strokeWidth="1.5" strokeDasharray="4 4"
-                  initial={reduce ? false : { opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.5, duration: 0.5 }}
-                />
-              )}
-              {/* ambient glow fill — static opacity (a looping opacity pulse here
-                  reads as a flicker on the report card, esp. on mobile GPUs) */}
-              <motion.path
-                d={pointsToPath(studentPts)} fill="url(#youGlowSvg)" stroke="none"
-                initial={reduce ? { opacity: 0.7 } : { scale: 0.5, opacity: 0 }}
-                whileInView={{ scale: 1, opacity: 0.7 }}
-                viewport={{ once: true }}
-                transition={reduce ? undefined : { type: 'spring', stiffness: 150, damping: 18, delay: 0.45 }}
-                style={{ transformOrigin: `${cx}px ${cy}px` }}
-              />
-              {/* student outline */}
-              <motion.path
-                d={pointsToPath(studentPts)} fill="none" stroke="#1A56DB" strokeWidth="3" strokeLinejoin="round"
-                initial={reduce ? false : { scale: 0.5, opacity: 0 }}
-                whileInView={{ scale: 1, opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ type: 'spring', stiffness: 150, damping: 18, delay: 0.45 }}
-                style={{ transformOrigin: `${cx}px ${cy}px` }}
-              />
-            </>
-          )}
-
-          {/* vertices: sequential pop, tappable */}
-          {studentPts.map((pt, i) => (
-            <motion.circle
-              key={i} cx={pt[0]} cy={pt[1]} r={i === selected ? 6.5 : 5}
-              fill={i === selected ? '#fff' : '#1A56DB'} stroke={i === selected ? '#1A56DB' : '#fff'} strokeWidth={i === selected ? 3 : 2}
-              className="cursor-pointer"
-              onClick={() => setSelected(i)}
-              initial={reduce ? false : { opacity: 0, scale: 0 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              whileHover={reduce ? undefined : { scale: 1.4 }}
-              transition={{ delay: 0.65 + i * 0.07, type: 'spring', stiffness: 260, damping: 16 }}
-              style={{ transformOrigin: `${pt[0]}px ${pt[1]}px` }}
-            />
-          ))}
-
-          {/* center hub: composite score */}
-          <motion.circle cx={cx} cy={cy} r="27" fill={dark ? '#11122a' : '#ffffff'} stroke={dark ? 'rgba(255,255,255,0.12)' : '#EBEAE7'} strokeWidth="1.5"
-            initial={reduce ? false : { scale: 0 }}
-            whileInView={{ scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.9, type: 'spring', stiffness: 240, damping: 15 }}
-            style={{ transformOrigin: `${cx}px ${cy}px` }}
-          />
-          <foreignObject x={cx - 26} y={cy - 20} width="52" height="40">
-            <div className="w-full h-full flex flex-col items-center justify-center leading-none">
-              <span className="text-[15px] font-black text-neutral-900"><CountUp value={composite} /></span>
-              <span className="text-[6.5px] font-black text-neutral-400 uppercase tracking-widest mt-0.5">Overall</span>
-            </div>
-          </foreignObject>
-
-          {/* axis labels: tappable, ▲/▼ vs class */}
-          {data.map((d, i) => {
-            const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
-            const lx = cx + (r + 18) * Math.cos(angle), ly = cy + (r + 18) * Math.sin(angle);
-            const anchor = Math.abs(Math.cos(angle)) < 0.1 ? 'middle' : Math.cos(angle) < 0 ? 'end' : 'start';
-            let dy = 4; if (Math.sin(angle) < -0.9) dy = -5; else if (Math.sin(angle) > 0.9) dy = 10;
-            const diff = hasClass ? (d.value || 0) - (d.classAvg || 0) : null;
-            return (
-              <g key={i} onClick={() => setSelected(i)} className="cursor-pointer">
-                <text x={lx} y={ly + dy} textAnchor={anchor} fontSize={i === selected ? 11 : 10}
-                  className={i === selected ? 'fill-[#1A56DB] font-black' : 'fill-neutral-600 font-extrabold'}>
-                  {d.metric}
-                </text>
-                {diff != null && diff !== 0 && (
-                  <text x={lx} y={ly + dy + 11} textAnchor={anchor} fontSize="8"
-                    className="font-black" fill={diff > 0 ? UP_GREEN : DOWN_RED}>
-                    {diff > 0 ? '▲' : '▼'} {Math.abs(Math.round(diff))}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+    <div className="w-full">
+      {/* overall composite header */}
+      <div className="flex items-center justify-center gap-2.5 mb-4">
+        <span className="text-[30px] font-black text-[#1A56DB] leading-none"><CountUp value={composite} /></span>
+        <div className="text-left leading-none">
+          <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Overall</p>
+          {classComposite != null && <p className="text-[10px] font-extrabold text-neutral-400 mt-1">Class avg {classComposite}</p>}
+        </div>
       </div>
 
-      {/* selected metric detail chip */}
-      {sel && (
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={selected}
-            initial={reduce ? false : { opacity: 0, y: 8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduce ? undefined : { opacity: 0, y: -6, scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            className="flex items-center gap-2.5 bg-neutral-50 rounded-full px-4 py-2 mb-1"
-          >
-            <span className="text-[11px] font-black text-neutral-900">{sel.metric}</span>
-            <span className="text-[11px] font-extrabold text-[#1A56DB]">You {Math.round(sel.value || 0)}%</span>
-            {hasClass && (
-              <>
-                <span className="text-[11px] font-extrabold text-neutral-400">Class {Math.round(sel.classAvg || 0)}%</span>
-                {selDiff !== 0 && (
-                  <span className="text-[11px] font-black" style={{ color: selDiff > 0 ? UP_GREEN : DOWN_RED }}>
-                    {selDiff > 0 ? '▲' : '▼'} {Math.abs(selDiff)}
-                  </span>
-                )}
-              </>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      )}
+      <div className="space-y-3">
+        {data.map((d, i) => {
+          const you = Math.round(d.value || 0);
+          const cls = Math.round(d.classAvg || 0);
+          const diff = you - cls;
+          const up = diff >= 0;
+          const barColor = up ? UP_GREEN : DOWN_RED;
+          const w = hasClass ? Math.min(50, Math.abs(diff) * 1.3) : you;
+          return (
+            <div key={i}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-black text-neutral-700">{d.metric}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-black text-[#1A56DB]">{you}%</span>
+                  {hasClass && <span className="text-[10px] font-extrabold text-neutral-400">/ {cls}%</span>}
+                  {hasClass && diff !== 0 && (
+                    <span className="text-[10px] font-black inline-flex items-center gap-0.5" style={{ color: barColor }}>
+                      {up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}{Math.abs(diff)}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {hasClass ? (
+                <div className="relative h-3 rounded-full bg-neutral-100 overflow-hidden">
+                  <div className="absolute top-0 bottom-0 left-1/2 w-px bg-neutral-300" />
+                  {reduce ? (
+                    <div className="absolute top-0 bottom-0 rounded-full" style={{ background: barColor, [up ? 'left' : 'right']: '50%', width: `${w}%` }} />
+                  ) : (
+                    <motion.div className="absolute top-0 bottom-0 rounded-full" style={{ background: barColor, [up ? 'left' : 'right']: '50%' }}
+                      initial={{ width: 0 }} whileInView={{ width: `${w}%` }} viewport={{ once: true }}
+                      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.1 + i * 0.05 }} />
+                  )}
+                </div>
+              ) : (
+                <GrowBar value={you} color="#1A56DB" height="h-3" />
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {/* legend */}
-      <div className="flex items-center gap-4 text-[10px] font-extrabold text-neutral-400">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#1A56DB]" /> You</span>
-        {hasClass && (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full border-2 border-dashed border-neutral-400" /> Class avg{classCount ? ` (${classCount} students)` : ''}
-          </span>
+      <div className="flex items-center justify-center gap-4 text-[10px] font-extrabold text-neutral-400 mt-4">
+        {hasClass ? (
+          <>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: UP_GREEN }} /> Above class</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DOWN_RED }} /> Below class{classCount ? ` (${classCount})` : ''}</span>
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#1A56DB]" /> Your score</span>
         )}
       </div>
     </div>
@@ -372,8 +418,13 @@ function TrendTooltip({ active, payload }) {
   );
 }
 
-function StockTrend({ testTimeline, subjects }) {
+// Reference-styled hero: smooth spline of test scores, a floating badge on the
+// latest point, and a dashed class-average line (colour-blind-safe vs the solid You line).
+const HERO_LINE = '#2383E2';
+
+function StockTrend({ testTimeline, subjects, classAvg }) {
   const dark = useTheme(s => s.dark);
+  const reduce = useReducedMotion();
   const [selSubject, setSelSubject] = useState('all');
 
   const { points, stats } = useMemo(() => {
@@ -404,12 +455,15 @@ function StockTrend({ testTimeline, subjects }) {
         high: Math.max(...scores),
         low: Math.min(...scores),
         count: pts.length,
+        latest: scores[scores.length - 1],
         up: delta >= 0,
       },
     };
   }, [testTimeline, selSubject, subjects]);
 
-  const color = stats?.up ? UP_GREEN : DOWN_RED;
+  const deltaColor = stats?.up ? UP_GREEN : DOWN_RED;
+  const classAvgRounded = Number.isFinite(classAvg) ? Math.round(classAvg) : null;
+  const lastIndex = points.length - 1;
 
   return (
     <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6">
@@ -426,7 +480,7 @@ function StockTrend({ testTimeline, subjects }) {
             </div>
             <motion.span
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[12px] font-black mb-0.5"
-              style={{ color, background: tint(color, 0.12) }}
+              style={{ color: deltaColor, background: tint(deltaColor, 0.12) }}
               initial={{ scale: 0 }} whileInView={{ scale: 1 }} viewport={{ once: true }}
               transition={{ type: 'spring', stiffness: 260, damping: 16, delay: 0.3 }}
             >
@@ -454,28 +508,33 @@ function StockTrend({ testTimeline, subjects }) {
       </div>
 
       {points.length === 0 ? (
-        <div className="flex items-center justify-center h-[220px] text-xs font-bold text-neutral-400">No test data for this selection</div>
+        <div className="flex flex-col items-center justify-center h-[220px] text-center">
+          <BarChart3 size={30} className="text-neutral-300 mb-2" />
+          <p className="text-xs font-bold text-neutral-400">No test data for this selection yet</p>
+        </div>
       ) : (
         <>
-          <div className="h-[220px] md:h-[260px] w-full min-w-0 mt-1">
+          <div className="h-[230px] md:h-[270px] w-full min-w-0 mt-1">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={points} margin={{ top: 10, right: 6, left: -22, bottom: 0 }}>
+              <AreaChart data={points} margin={{ top: 26, right: 24, left: -22, bottom: 0 }}>
                 <defs>
                   <linearGradient id="stockFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.22} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0} />
+                    <stop offset="0%" stopColor={HERO_LINE} stopOpacity={0.20} />
+                    <stop offset="100%" stopColor={HERO_LINE} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? 'rgba(255,255,255,0.08)' : '#f3f4f6'} />
                 <XAxis dataKey="name" tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dy={8} minTickGap={24} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} dx={-6} />
                 <Tooltip content={<TrendTooltip />} cursor={{ stroke: dark ? 'rgba(255,255,255,0.25)' : '#d4d4d4', strokeDasharray: '3 3' }} />
-                <ReferenceLine y={stats.avg} stroke="#a3a3a3" strokeDasharray="4 4" strokeWidth={1}
-                  label={{ value: 'AVG', position: 'insideTopRight', fontSize: 8, fontWeight: 900, fill: '#a3a3a3' }} />
+                {classAvgRounded != null && (
+                  <ReferenceLine y={classAvgRounded} stroke="#9ca3af" strokeDasharray="5 4" strokeWidth={1.5}
+                    label={{ value: `Class ${classAvgRounded}%`, position: 'insideTopLeft', fontSize: 8.5, fontWeight: 900, fill: '#9ca3af' }} />
+                )}
                 <ReferenceLine y={60} stroke="#fca5a5" strokeDasharray="2 4" strokeWidth={1} />
                 <Area
-                  type="monotone" dataKey="score" stroke={color} strokeWidth={2.5}
-                  fill="url(#stockFill)" animationDuration={1200}
+                  type="monotone" dataKey="score" stroke={HERO_LINE} strokeWidth={3}
+                  fill="url(#stockFill)" animationDuration={reduce ? 0 : 1200}
                   dot={(props) => {
                     const { cx, cy, payload, index } = props;
                     if (payload.flagged) {
@@ -486,9 +545,23 @@ function StockTrend({ testTimeline, subjects }) {
                         </svg>
                       );
                     }
-                    return <circle key={`dot-${index}`} cx={cx} cy={cy} r={2.5} fill="#fff" stroke={color} strokeWidth={2} />;
+                    if (index === lastIndex) {
+                      // floating value badge on the most recent score (reference "120" pill)
+                      const by = Math.max(14, cy - 22);
+                      return (
+                        <g key={`dot-${index}`}>
+                          <line x1={cx} y1={cy} x2={cx} y2={by + 9} stroke={HERO_LINE} strokeWidth={1.5} strokeDasharray="2 2" />
+                          <circle cx={cx} cy={cy} r={4.5} fill="#fff" stroke={HERO_LINE} strokeWidth={2.5} />
+                          <g transform={`translate(${cx}, ${by})`}>
+                            <rect x={-19} y={-11} width={38} height={20} rx={10} fill={HERO_LINE} />
+                            <text x={0} y={4} textAnchor="middle" fontSize={11} fontWeight={900} fill="#fff">{payload.score}%</text>
+                          </g>
+                        </g>
+                      );
+                    }
+                    return <circle key={`dot-${index}`} cx={cx} cy={cy} r={2.5} fill="#fff" stroke={HERO_LINE} strokeWidth={2} />;
                   }}
-                  activeDot={{ r: 5, strokeWidth: 0, fill: color }}
+                  activeDot={{ r: 5, strokeWidth: 0, fill: HERO_LINE }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -499,7 +572,7 @@ function StockTrend({ testTimeline, subjects }) {
               { label: 'High', value: `${stats.high}%`, c: UP_GREEN },
               { label: 'Low', value: `${stats.low}%`, c: DOWN_RED },
               { label: 'Tests', value: stats.count, c: '#171717' },
-              { label: 'Change', value: `${stats.delta > 0 ? '+' : ''}${stats.delta}%`, c: color },
+              { label: 'Change', value: `${stats.delta > 0 ? '+' : ''}${stats.delta}%`, c: deltaColor },
             ].map((s, i) => (
               <div key={i} className="text-center">
                 <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">{s.label}</p>
@@ -523,12 +596,18 @@ const CAL_TYPES = [
   { id: 'assignments', label: 'Assignments', icon: ClipboardList, hex: '#C2410C' },
 ];
 
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Month-grid activity calendar with ringed dates (reference-styled).
+    Each active day shows a coloured ring by activity type; tap a day for detail. */
 function ActivityCalendar({ attData, testData, vidData, assignData, subjects, heatmapSubject, setHeatmapSubject, streak }) {
   const dark = useTheme(s => s.dark);
   const reduce = useReducedMotion();
   const [type, setType] = useState('all');
   const [periodIdx, setPeriodIdx] = useState(0); // index into HEATMAP_PERIODS (0 = this month)
+  const [selectedDay, setSelectedDay] = useState(null);
   const periodId = HEATMAP_PERIODS[periodIdx].id;
+  const todayId = localDayId(new Date());
 
   const maps = useMemo(() => {
     const mk = (arr) => {
@@ -541,25 +620,20 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
 
   const weeks = useMemo(() => buildHeatmapWeeksForMonth(periodId), [periodId]);
 
-  // 0..1 intensity for a day under the active filter
-  const intensity = useCallback((day) => {
+  // Active activity types on a day (each with 0..1 intensity), respecting the type filter.
+  const dayTypes = useCallback((day) => {
     const att = maps.att[day], test = maps.test[day], vid = maps.vid[day], assign = maps.assign[day];
-    const attV = att && att.total > 0 ? (att.present + (att.late || 0) * 0.5) / att.total : 0;
+    const attV = att && att.total > 0 ? Math.max(0.25, (att.present + (att.late || 0) * 0.5) / att.total) : 0;
     const testV = test ? Math.min(1, (test.count || 0) / 2) : 0;
     const vidV = vid ? Math.min(1, (vid.minutes || 0) / 45) : 0;
     const assignV = assign ? Math.min(1, (assign.count || 0) / 2) : 0;
-    switch (type) {
-      case 'attendance': return att ? Math.max(0.25, attV) : 0;
-      case 'tests': return testV;
-      case 'videos': return vidV;
-      case 'assignments': return assignV;
-      default: {
-        const parts = [att ? attV : 0, testV, vidV, assignV];
-        const active = parts.filter(p => p > 0).length;
-        if (active === 0) return 0;
-        return Math.min(1, (parts.reduce((a, b) => a + b, 0) / active) * (0.55 + active * 0.15));
-      }
-    }
+    const all = [
+      { id: 'attendance', hex: CAL_TYPES[1].hex, v: attV },
+      { id: 'tests', hex: CAL_TYPES[2].hex, v: testV },
+      { id: 'videos', hex: CAL_TYPES[3].hex, v: vidV },
+      { id: 'assignments', hex: CAL_TYPES[4].hex, v: assignV },
+    ].filter(t => t.v > 0);
+    return type === 'all' ? all : all.filter(t => t.id === type);
   }, [maps, type]);
 
   const dayLabel = useCallback((day) => {
@@ -592,8 +666,7 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
     };
   }, [attData, testData, vidData, assignData, periodId]);
 
-  const activeType = CAL_TYPES.find(t => t.id === type) || CAL_TYPES[0];
-  const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const idleCellBg = dark ? '#15162e' : '#F5F4F2';
 
   return (
     <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6 space-y-4">
@@ -611,13 +684,13 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
             </select>
           )}
           <div className="flex items-center gap-1 bg-neutral-100 rounded-full px-1 py-1">
-            <button onClick={() => setPeriodIdx(i => Math.min(HEATMAP_PERIODS.length - 1, i + 1))}
+            <button aria-label="Previous month" onClick={() => { setSelectedDay(null); setPeriodIdx(i => Math.min(HEATMAP_PERIODS.length - 1, i + 1)); }}
               disabled={periodIdx >= HEATMAP_PERIODS.length - 1}
               className="w-6 h-6 rounded-full flex items-center justify-center text-neutral-500 hover:bg-white disabled:opacity-30 transition-colors">
               <ChevronLeft size={13} strokeWidth={3} />
             </button>
             <span className="text-[11px] font-extrabold text-neutral-700 w-[72px] text-center">{HEATMAP_PERIODS[periodIdx].label}</span>
-            <button onClick={() => setPeriodIdx(i => Math.max(0, i - 1))}
+            <button aria-label="Next month" onClick={() => { setSelectedDay(null); setPeriodIdx(i => Math.max(0, i - 1)); }}
               disabled={periodIdx <= 0}
               className="w-6 h-6 rounded-full flex items-center justify-center text-neutral-500 hover:bg-white disabled:opacity-30 transition-colors">
               <ChevronRight size={13} strokeWidth={3} />
@@ -641,46 +714,84 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
         })}
       </div>
 
-      {/* grid */}
-      <div className="overflow-x-auto pb-1 scrollbar-hide">
-        <div key={`${periodId}-${type}-${heatmapSubject}`} className="flex gap-1.5 min-w-max">
-          <div className="flex flex-col gap-1.5 mr-1 text-center">
-            {DAY_LABELS.map((d, i) => (
-              <div key={i} className="h-6 w-3 flex items-center justify-center text-[9px] text-neutral-400 font-extrabold">{i % 2 === 1 ? d : ''}</div>
-            ))}
-          </div>
-          {weeks.map((week, wi) => (
-            <div key={wi} className="flex flex-col gap-1.5">
-              {week.map((day, di) => {
-                const inRange = day.startsWith(periodId);
-                if (!inRange) return <div key={di} className="w-6 h-6" />;
-                const v = intensity(day);
-                const idx = wi * 7 + di;
-                const cell = (
-                  <div
-                    title={dayLabel(day)}
-                    className="w-6 h-6 rounded-[6px] cursor-default"
-                    style={{ background: v > 0 ? tint(activeType.hex, 0.15 + v * 0.85) : (dark ? '#1a1b33' : '#F3F2F0') }}
-                  />
-                );
-                if (reduce) return <div key={di}>{cell}</div>;
-                return (
-                  <motion.div
-                    key={di}
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true }}
-                    whileHover={{ scale: 1.25 }}
-                    transition={{ delay: Math.min(0.5, idx * 0.008), type: 'spring', stiffness: 300, damping: 20 }}
-                  >
-                    {cell}
-                  </motion.div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+      {/* weekday header */}
+      <div className="grid grid-cols-7 gap-1 md:gap-1.5">
+        {WEEKDAY_LABELS.map((d, i) => (
+          <div key={i} className="text-center text-[10px] font-black text-neutral-400 uppercase tracking-wider py-1">{d}</div>
+        ))}
       </div>
+
+      {/* month grid */}
+      <motion.div
+        key={`${periodId}-${type}-${heatmapSubject}`}
+        className="grid grid-cols-7 gap-1 md:gap-1.5"
+        variants={reduce ? undefined : staggerChildren}
+        initial={reduce ? false : 'hidden'}
+        whileInView={reduce ? undefined : 'show'}
+        viewport={{ once: true }}
+      >
+        {weeks.flat().map((day, idx) => {
+          const inRange = day.startsWith(periodId);
+          if (!inRange) return <div key={idx} className="aspect-square" />;
+          const dayNum = Number(day.slice(8, 10));
+          const types = dayTypes(day);
+          const dominant = types.length ? types.reduce((a, b) => (a.v >= b.v ? a : b)) : null;
+          const isToday = day === todayId;
+          const isSel = day === selectedDay;
+          const ringColor = dominant ? dominant.hex : null;
+          const cell = (
+            <button
+              type="button"
+              title={dayLabel(day)}
+              aria-label={dayLabel(day)}
+              onClick={() => setSelectedDay(isSel ? null : day)}
+              className="relative w-full aspect-square min-h-[34px] rounded-full flex flex-col items-center justify-center transition-transform"
+              style={{
+                background: dominant ? tint(ringColor, dark ? 0.22 : 0.12) : idleCellBg,
+                border: isSel ? `2px solid ${ringColor || (dark ? '#6b7280' : '#9ca3af')}`
+                  : ringColor ? `2px solid ${tint(ringColor, 0.55)}`
+                  : isToday ? `1.5px solid ${dark ? '#3b3d63' : '#D6D4D0'}` : '1.5px solid transparent',
+              }}
+            >
+              <span className="text-[12px] md:text-[13px] font-black leading-none"
+                style={{ color: dominant ? ringColor : (isToday ? (dark ? '#e5e7eb' : '#111827') : (dark ? '#8b8ca8' : '#9ca3af')) }}>
+                {dayNum}
+              </span>
+              {types.length > 0 && (
+                <span className="absolute bottom-[3px] flex gap-[2px]">
+                  {types.slice(0, 4).map(t => (
+                    <span key={t.id} className="w-[3px] h-[3px] rounded-full" style={{ background: t.hex }} />
+                  ))}
+                </span>
+              )}
+              {isToday && <span className="absolute -top-[1px] w-1 h-1 rounded-full" style={{ background: '#EA580C' }} />}
+            </button>
+          );
+          if (reduce) return <div key={idx}>{cell}</div>;
+          return (
+            <motion.div key={idx} variants={fadeUp} whileHover={{ scale: 1.08 }} transition={springCard}>
+              {cell}
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      {/* tapped-day detail */}
+      <AnimatePresence mode="wait">
+        {selectedDay && (
+          <motion.div
+            key={selectedDay}
+            initial={reduce ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduce ? undefined : { opacity: 0, y: -4 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+            className="flex items-center gap-2 bg-neutral-50 rounded-2xl px-4 py-2.5 text-[12px] font-bold text-neutral-700"
+          >
+            <Calendar size={13} className="text-neutral-400 flex-shrink-0" />
+            {dayLabel(selectedDay)}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* legend + summary */}
       <div className="flex items-center justify-between flex-wrap gap-3 pt-3 border-t border-black/5">
@@ -697,12 +808,12 @@ function ActivityCalendar({ attData, testData, vidData, assignData, subjects, he
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[9px] font-extrabold text-neutral-400 mr-0.5">Less</span>
-          {[0, 0.25, 0.5, 0.75, 1].map(v => (
-            <span key={v} className="w-3 h-3 rounded-[3px]" style={{ background: v > 0 ? tint(activeType.hex, 0.15 + v * 0.85) : (dark ? '#1a1b33' : '#F3F2F0') }} />
+        <div className="flex items-center gap-2.5">
+          {CAL_TYPES.slice(1).map(t => (
+            <span key={t.id} className="inline-flex items-center gap-1 text-[9px] font-extrabold text-neutral-400">
+              <span className="w-2 h-2 rounded-full" style={{ background: t.hex }} />{t.label}
+            </span>
           ))}
-          <span className="text-[9px] font-extrabold text-neutral-400 ml-0.5">More</span>
         </div>
       </div>
     </div>
@@ -1358,7 +1469,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     { label: 'Videos', value: videoPct, suffix: '%', pastel: 'cream', icon: Video, ring: videoPct },
     { label: 'Assignments', value: assignStats.total > 0 ? Math.round((assignStats.submitted / assignStats.total) * 100) : 0, suffix: '%', pastel: 'peach', icon: ClipboardList, ring: assignStats.total > 0 ? Math.round((assignStats.submitted / assignStats.total) * 100) : 0 },
     { label: 'Live Classes', value: Math.round(liveStats.attendance_pct || 0), suffix: '%', pastel: 'lavender', icon: Radio, ring: Math.round(liveStats.attendance_pct || 0) },
-    { label: 'Points', value: student.points || 0, suffix: '', pastel: 'pink', icon: Trophy, ring: null },
+    { label: 'Points', value: student.points || 0, suffix: '', pastel: 'pink', icon: Trophy, ring: null, spark: testTimeline.slice(-8).map(t => Math.round(t.score_pct || 0)) },
   ];
 
   const insightChips = [
@@ -1479,6 +1590,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                           <CountUp value={t.value} />{t.suffix}
                         </p>
                         <p className="text-[9px] font-black uppercase tracking-widest mt-1.5 truncate" style={{ color: p.fgHex, opacity: 0.65 }}>{t.label}</p>
+                        {t.spark && t.spark.length >= 2 && (
+                          <div className="mt-1.5 -mb-0.5"><Sparkline values={t.spark} color={p.fgHex} /></div>
+                        )}
                       </div>
                     </motion.div>
                   );
@@ -1544,7 +1658,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
             {/* ── 3. MAIN GRID ── */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-8">
               <div className="xl:col-span-8 space-y-5 md:space-y-8 min-w-0">
-                <Section><StockTrend testTimeline={testTimeline} subjects={subjects} /></Section>
+                <Section><StockTrend testTimeline={testTimeline} subjects={subjects} classAvg={classAvgs?.avg_score} /></Section>
                 <Section>
                   <ActivityCalendar
                     attData={attData} testData={testData} vidData={vidData} assignData={assignHeatmapRaw}
@@ -1552,17 +1666,22 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                     streak={insights.streak}
                   />
                 </Section>
+                {testTimeline.length > 0 && (
+                  <Section><TestTimelineRail testTimeline={testTimeline} dark={dark} /></Section>
+                )}
               </div>
 
               {/* SIDEBAR */}
               <div className="xl:col-span-4 space-y-5 md:space-y-8 min-w-0">
                 <Section>
-                  <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6 flex flex-col items-center text-center">
-                    <h4 className="text-[16px] font-black text-neutral-900 mb-0.5">Skill Radar</h4>
-                    <p className="text-[10px] font-bold text-neutral-400 mb-2 uppercase tracking-widest">
-                      {classAvgs ? 'You vs Class Avg · tap a skill' : 'Your skill profile · tap a skill'}
-                    </p>
-                    <SkillRadar data={radarData} hasClass={!!classAvgs} classCount={classAvgs?.students_counted} />
+                  <div className="bg-white rounded-[2rem] shadow-card p-5 md:p-6">
+                    <div className="text-center mb-1">
+                      <h4 className="text-[16px] font-black text-neutral-900 mb-0.5">Skill Profile</h4>
+                      <p className="text-[10px] font-bold text-neutral-400 mb-2 uppercase tracking-widest">
+                        {classAvgs ? 'You vs Class Average' : 'Your skill breakdown'}
+                      </p>
+                    </div>
+                    <DivergingSkillBars data={radarData} hasClass={!!classAvgs} classCount={classAvgs?.students_counted} />
                   </div>
                 </Section>
 
@@ -1633,16 +1752,23 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                         </div>
                       </div>
 
+                      <SegmentedBar segments={[
+                        { label: 'Graded', value: assignStats.graded || 0, color: '#0F7B6C' },
+                        { label: 'Submitted', value: Math.max(0, (assignStats.submitted || 0) - (assignStats.graded || 0)), color: '#2383E2' },
+                        { label: 'Pending', value: Math.max(0, (assignStats.total || 0) - (assignStats.submitted || 0)), color: '#E5E3DF' },
+                      ]} />
+
                       {gradedAssignments.length > 0 && (
                         <div className="pt-3 border-t border-black/5">
                           <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-3">Scores</p>
-                          <ResponsiveContainer width="100%" height={120}>
-                            <BarChart data={gradedAssignments} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                              <XAxis dataKey="assignment_title" tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} tickFormatter={t => t.length > 8 ? t.slice(0, 8) + '…' : t} axisLine={false} tickLine={false} />
+                          <ResponsiveContainer width="100%" height={160}>
+                            <BarChart data={gradedAssignments} margin={{ top: 4, right: 0, left: -25, bottom: 0 }} barCategoryGap="28%">
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? 'rgba(255,255,255,0.08)' : '#f3f4f6'} />
+                              <XAxis dataKey="assignment_title" tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} tickFormatter={t => t.length > 8 ? t.slice(0, 8) + '…' : t} axisLine={false} tickLine={false} interval={0} />
                               <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold', backgroundColor: dark ? '#1a1b33' : '#fff', color: dark ? '#e5e7eb' : undefined }} cursor={{ fill: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6' }} />
-                              <Bar dataKey="marks_obtained" radius={[3, 3, 0, 0]} animationDuration={1100}>
-                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? (dark ? '#93c5fd' : '#1A56DB') : '#ef4444'} />)}
+                              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold', backgroundColor: dark ? '#1a1b33' : '#fff', color: dark ? '#e5e7eb' : undefined }} cursor={{ fill: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6' }} />
+                              <Bar dataKey="marks_obtained" radius={[6, 6, 0, 0]} maxBarSize={26} animationDuration={reduce ? 0 : 1100}>
+                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? (dark ? '#6ee7b7' : '#0F7B6C') : (dark ? '#fca5a5' : '#ef4444')} />)}
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
@@ -1678,6 +1804,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                   <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600"><BookOpen size={14} strokeWidth={2.5} /></div>
                   <h3 className="text-[17px] font-black text-neutral-900 tracking-tight">Subject Breakdown</h3>
                 </div>
+                <SubjectGroupedBars subjectRadar={subjectRadar} dark={dark} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {subjectRadar.map((r, i) => {
                     const p = pastelTokens(pastelFor(r.subject), dark);
