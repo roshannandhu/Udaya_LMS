@@ -6,8 +6,8 @@ import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
 import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, PieChart as PieIcon, LayoutGrid } from 'lucide-react';
 
-// GöÇGöÇ Helpers GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
-const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'GÇö';
+// Helpers
+const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
 const gradeFor = (score) => {
   const s = Math.round(score || 0);
   if (s >= 90) return { grade: 'A+', color: 'text-emerald-500', bg: 'bg-emerald-500/10' };
@@ -31,58 +31,99 @@ const getBranding = () => {
 const periodTitle = (p) => p === 'weekly' ? 'Weekly Report' : p === 'monthly' ? 'Monthly Report' : 'Overall Report';
 const periodRange = (p) => {
   const today = new Date();
-  if (p === 'weekly') { const f = new Date(today); f.setDate(f.getDate() - 7); return `${fmtDate(f)} GÇô ${fmtDate(today)}`; }
-  if (p === 'monthly') { const f = new Date(today); f.setDate(f.getDate() - 30); return `${fmtDate(f)} GÇô ${fmtDate(today)}`; }
+  if (p === 'weekly') { const f = new Date(today); f.setDate(f.getDate() - 7); return `${fmtDate(f)} - ${fmtDate(today)}`; }
+  if (p === 'monthly') { const f = new Date(today); f.setDate(f.getDate() - 30); return `${fmtDate(f)} - ${fmtDate(today)}`; }
   return 'All time';
 };
 
-// GöÇGöÇ PDF Generation Core GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+// PDF generation core
 async function generatePdf(element, filename) {
   const opt = {
     margin:       [10, 10, 15, 10], // top, left, bottom, right
     filename:     filename,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false },
+    html2canvas:  {
+      scale: 2,
+      useCORS: true,
+      letterRendering: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: 794,
+    },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak:    { mode: ['css', ] }
+    pagebreak:    { mode: ['css', 'legacy'] }
   };
   await html2pdf().set(opt).from(element).save();
 }
 
-function mountAndPrint(Component, props, filename) {
+const waitForFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
+
+async function waitForAssets(container) {
+  if (document.fonts?.ready) {
+    await document.fonts.ready.catch(() => {});
+  }
+
+  const images = Array.from(container.querySelectorAll('img'));
+  await Promise.all(images.map(async (img) => {
+    if (img.complete && img.naturalWidth > 0) return;
+    if (img.decode) {
+      await img.decode().catch(() => {});
+      return;
+    }
+    await new Promise(resolve => {
+      img.onload = resolve;
+      img.onerror = resolve;
+    });
+  }));
+}
+
+async function mountAndPrint(Component, props, filename) {
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  Object.assign(host.style, {
+    position: 'fixed',
+    left: '0',
+    top: '0',
+    width: '794px',
+    minHeight: '1123px',
+    background: '#ffffff',
+    zIndex: '2147483647',
+    pointerEvents: 'none',
+  });
+
   const container = document.createElement('div');
   container.style.width = '794px';
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '0';
-  document.body.appendChild(container);
+  container.style.background = '#ffffff';
+  host.appendChild(container);
+  document.body.appendChild(host);
 
   const root = createRoot(container);
-  
-  root.render(<Component {...props} />);
-  
-  setTimeout(async () => {
-    try {
-      await generatePdf(container, filename);
-    } finally {
-      root.unmount();
-      document.body.removeChild(container);
-    }
-  }, 1500); 
+
+  try {
+    root.render(<Component {...props} />);
+    await waitForFrame();
+    await waitForFrame();
+    await waitForAssets(container);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await generatePdf(container, filename);
+  } finally {
+    root.unmount();
+    document.body.removeChild(host);
+  }
 }
 
 
-// GöÇGöÇ Shared UI Components GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+// Shared UI components
 const Header = ({ title, subtitle, student, brand, rightStats }) => (
   <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-violet-700 to-fuchsia-700 p-8 text-white shadow-xl" style={{ pageBreakInside: 'avoid' }}>
-    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 " />
-    <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-indigo-400/20 " />
+    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+    <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
     
     <div className="relative z-10 flex items-start justify-between">
       <div className="flex gap-6">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner  p-1">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm p-1">
           {student?.avatar_url ? (
-            
+            <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
           ) : (
             <span className="text-4xl font-bold text-white shadow-sm">
               {(student?.name || 'S').charAt(0).toUpperCase()}
@@ -92,14 +133,14 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
 
         <div>
           <div className="mb-3 flex items-center gap-2">
-            {brand.logoUrl && }
+            {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-6 w-6 rounded bg-white p-0.5" crossOrigin="anonymous" />}
             <span className="text-xs font-semibold tracking-wider text-indigo-100 uppercase">{brand.name}</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white">{student?.name || 'Student'}</h1>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-indigo-100/90">
             {student?.student_code && <span>{student.student_code}</span>}
-            {student?.standard_name && <span>GÇó {student.standard_name}</span>}
-            {student?.username && <span>GÇó @{student.username}</span>}
+            {student?.standard_name && <span>- {student.standard_name}</span>}
+            {student?.username && <span>- @{student.username}</span>}
           </div>
           <div className="mt-4 flex items-center gap-3">
             <div className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md">
@@ -161,7 +202,7 @@ const ProgressBar = ({ label, value, max = 100, color, valueText }) => {
   );
 };
 
-// GöÇGöÇ Realistic GitHub-Style Calendar Heatmap GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+// Realistic GitHub-style calendar heatmap
 const CalendarHeatmap = ({ heatmapData }) => {
   if (!heatmapData || heatmapData.length === 0) return null;
   
@@ -224,7 +265,7 @@ const CalendarHeatmap = ({ heatmapData }) => {
 };
 
 
-// GöÇGöÇ Report 1: Student Overall Report GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+// Report 1: student overall report
 const StudentReportTemplate = ({ data, period }) => {
   const s = data.student || {};
   const brand = getBranding();
@@ -368,7 +409,7 @@ const StudentReportTemplate = ({ data, period }) => {
                     <td className="px-4 py-3 text-gray-500">{fmtDate(t.date)}</td>
                     <td className="px-4 py-3 font-medium">{t.test_title}</td>
                     <td className="px-4 py-3 text-center font-bold text-gray-900">{Math.round(t.score_pct)}%</td>
-                    <td className="px-4 py-3 text-center text-gray-500">{t.rank ? `${t.rank}/${t.total_attempts}` : 'GÇö'}</td>
+                    <td className="px-4 py-3 text-center text-gray-500">{t.rank ? `${t.rank}/${t.total_attempts}` : '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -397,7 +438,7 @@ const StudentReportTemplate = ({ data, period }) => {
   );
 };
 
-// GöÇGöÇ Report 2: Exam Result Sheet GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+// Report 2: exam result sheet
 const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
   const brand = getBranding();
   const score_pct = result.percentage ?? (result.total_marks ? (result.score/result.total_marks)*100 : 0);
@@ -548,21 +589,106 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
   );
 };
 
-// GöÇGöÇ Exporters GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+// Exporters
 export function buildStudentReportPdf({ data, period = 'overall' }) {
   if (!data) return;
   const name = (data.student?.name || 'Student').replace(/\s+/g, '_');
-  mountAndPrint(StudentReportTemplate, { data, period }, `${name}_Report.pdf`);
+  return mountAndPrint(StudentReportTemplate, { data, period }, `${name}_Report.pdf`);
 }
 
 export function buildExamResultPdf({ reviewData, result, student, testMeta }) {
   if (!result) return;
   const name = (student?.name || 'Student').replace(/\s+/g, '_');
-  mountAndPrint(ExamResultTemplate, { reviewData, result, student, testMeta }, `${name}_Exam_Result.pdf`);
+  return mountAndPrint(ExamResultTemplate, { reviewData, result, student, testMeta }, `${name}_Exam_Result.pdf`);
 }
+
+const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
+  const brand = getBranding();
+  const overview = analytics?.overview || {};
+  const students = analytics?.students || [];
+  const subjectPerf = analytics?.subject_performance || [];
+  const recentTests = analytics?.recent_tests || [];
+  const atRisk = students.filter(s =>
+    (s.has_attendance && (s.attendance_pct || 0) < 75) ||
+    (s.has_tests && (s.avg_score || 0) < 40)
+  );
+
+  return (
+    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px]">
+      <div className="rounded-2xl bg-neutral-900 p-8 text-white" style={{ pageBreakInside: 'avoid' }}>
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-7 w-7 rounded bg-white p-0.5" crossOrigin="anonymous" />}
+              <span className="text-xs font-semibold tracking-wider text-neutral-300 uppercase">{brand.name}</span>
+            </div>
+            <h1 className="text-3xl font-bold">{standardName || 'Standard'} Analytics</h1>
+            <p className="mt-2 text-sm text-neutral-300">Generated on {fmtDate(new Date().toISOString())}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs uppercase tracking-widest text-neutral-400">Students</p>
+            <p className="text-4xl font-bold">{overview.total_students || students.length || 0}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 grid grid-cols-4 gap-4">
+        <KpiCard icon={Trophy} label="Avg Score" value={`${Math.round(overview.avg_score || 0)}%`} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
+        <KpiCard icon={CheckCircle} label="Attendance" value={`${Math.round(overview.avg_attendance || 0)}%`} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} />
+        <KpiCard icon={Target} label="At Risk" value={atRisk.length} color={{ bg: 'bg-red-100', text: 'text-red-600' }} />
+        <KpiCard icon={FileText} label="Recent Tests" value={recentTests.length} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
+      </div>
+
+      {subjectPerf.length > 0 && (
+        <Section title="Subject Performance" icon={Book} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }}>
+          <div className="space-y-4 rounded-xl border border-gray-100 bg-gray-50/40 p-6">
+            {subjectPerf.map((s, i) => (
+              <div key={s.subject_id || s.subject_name || i} className="space-y-2" style={{ pageBreakInside: 'avoid' }}>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span>{s.subject_name || 'Subject'}</span>
+                  <span>{Math.round(s.avg_score || 0)}% score / {Math.round(s.avg_attendance || 0)}% attendance</span>
+                </div>
+                <div className="h-3 overflow-hidden rounded-full bg-white">
+                  <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.max(0, Math.min(100, s.avg_score || 0))}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {students.length > 0 && (
+        <Section title="Student Roster" icon={Trophy} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Student</th>
+                  <th className="px-4 py-3 text-center">Avg Score</th>
+                  <th className="px-4 py-3 text-center">Attendance</th>
+                  <th className="px-4 py-3 text-right">Points</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...students].sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0)).map((s, i) => (
+                  <tr key={s.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
+                    <td className="px-4 py-3 font-medium">{s.name || 'Student'}</td>
+                    <td className="px-4 py-3 text-center font-bold">{s.has_tests ? `${Math.round(s.avg_score || 0)}%` : '-'}</td>
+                    <td className="px-4 py-3 text-center font-bold">{s.has_attendance ? `${Math.round(s.attendance_pct || 0)}%` : '-'}</td>
+                    <td className="px-4 py-3 text-right">{s.points || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+};
 
 export function buildClassAnalyticsPdf({ analytics, standardName }) {
-  console.log("Class analytics PDF triggered");
+  if (!analytics) return;
+  const name = (standardName || 'Standard').replace(/\s+/g, '_');
+  return mountAndPrint(ClassAnalyticsTemplate, { analytics, standardName }, `${name}_Analytics.pdf`);
 }
-
-
