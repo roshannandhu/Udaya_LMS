@@ -4,9 +4,9 @@ import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, Res
 export default function TestQuadrantChart({ data }) {
   // data: [{ name: 'Test 1', score: 85, time: 20 }, ...]
   return (
-    <div className="w-full h-full h-[260px] pt-4 pb-2 pr-4">
+    <div className="w-full h-full min-h-[260px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height={260}>
-        <ScatterChart margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+        <ScatterChart margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
           {/* Reversed XAxis so Fast is on the right */}
           <XAxis type="number" dataKey="time" name="Time (mins)" reversed tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />

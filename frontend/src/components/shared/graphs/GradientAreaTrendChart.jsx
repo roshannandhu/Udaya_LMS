@@ -5,9 +5,9 @@ export default function GradientAreaTrendChart({ data, classAverageLine = false 
   // data format: [{ name: 'Test 1', studentScore: 85, classScore: 72 }, ...]
   
   return (
-    <div className="w-full h-full h-[260px] pt-4 pb-2">
+    <div className="w-full h-full min-h-[260px] pt-4 pb-2">
       <ResponsiveContainer width="100%" height={260}>
-        <AreaChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+        <AreaChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
           <defs>
             <linearGradient id="colorStudent" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#00C2C7" stopOpacity={0.6}/>
