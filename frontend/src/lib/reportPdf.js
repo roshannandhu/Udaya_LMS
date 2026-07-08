@@ -3,41 +3,34 @@
 //
 //  • buildStudentReportPdf({ data, period })    → Overall / Weekly / Monthly report
 //  • buildExamResultPdf({ reviewData, result, student, testMeta }) → Per-exam sheet
-//
-// Both PDFs share the same gradient header, colour system, and helper kit.
+//  • buildClassAnalyticsPdf({ analytics, standardName }) → Teacher overview
 // ─────────────────────────────────────────────────────────────────────────────
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const P = {
-  // Header gradient (indigo → violet), simulated via step-rects
   hdrFrom:  [63,  58, 199],   // indigo-700
   hdrTo:    [109, 40, 217],   // violet-700
   hdrH:     54,               // mm — header height
 
-  // Semantic
   good:     '#10b981',  // emerald-500
   mid:      '#f59e0b',  // amber-500
   bad:      '#ef4444',  // red-500
   na:       '#9ca3af',  // neutral-400
   white:    '#ffffff',
 
-  // Attendance cells
   present:  '#10b981',
   late:     '#f59e0b',
   absent:   '#ef4444',
   noClass:  '#e2e8f0',
 
-  // Text
   ink:      '#111827',
   gray:     '#6b7280',
   lightGray:'#9ca3af',
 
-  // Backgrounds
   light:    '#F8F7F5',
   border:   '#E5E7EB',
 
-  // Chart accent arrays [r,g,b]
   indigo:   [99, 102, 241],
   teal:     [20, 184, 166],
   amber:    [245, 158, 11],
@@ -46,10 +39,9 @@ const P = {
   emerald:  [16, 185, 129],
 };
 
-const MARGIN = 13;  // mm
+const MARGIN = 13;
 const NO_DATA = '—';
 
-// ── Branding ─────────────────────────────────────────────────────────────────
 export function getBranding() {
   const s = useSettingsStore.getState();
   return {
@@ -58,27 +50,48 @@ export function getBranding() {
   };
 }
 
-// ── Image helpers ─────────────────────────────────────────────────────────────
-export async function fetchImageDataURL(url) {
+// ── Image helpers (Optimized for PDF size) ───────────────────────────────────
+export async function fetchImageDataURL(url, isPhoto = false) {
   if (!url || typeof url !== 'string' || url.startsWith('preset:')) return null;
   try {
-    const res    = await fetch(url);
+    const res = await fetch(url);
     if (!res.ok) return null;
-    const blob   = await res.blob();
+    const blob = await res.blob();
     const bitmap = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
-    canvas.width  = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext('2d').drawImage(bitmap, 0, 0);
-    return { dataUrl: canvas.toDataURL('image/png'), width: bitmap.width, height: bitmap.height };
+    
+    // Scale down to prevent massive PDF files
+    const MAX_DIM = isPhoto ? 150 : 250;
+    let w = bitmap.width, h = bitmap.height;
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM/w, MAX_DIM/h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
+    }
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    
+    if (isPhoto) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return { 
+      dataUrl: canvas.toDataURL(isPhoto ? 'image/jpeg' : 'image/png', 0.8), 
+      width: w, 
+      height: h 
+    };
   } catch { return null; }
 }
 
 function fitImage(doc, image, x, y, boxW, boxH) {
+  if (!image) return;
   const r = Math.min(boxW / image.width, boxH / image.height);
   const w = image.width  * r;
   const h = image.height * r;
-  doc.addImage(image.dataUrl, 'PNG', x + (boxW - w) / 2, y + (boxH - h) / 2, w, h);
+  const format = image.dataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+  doc.addImage(image.dataUrl, format, x + (boxW - w) / 2, y + (boxH - h) / 2, w, h);
 }
 
 // ── Text / number helpers ─────────────────────────────────────────────────────
@@ -150,21 +163,14 @@ function ensurePageSpace(doc, y, needed = 28) {
 }
 
 // ── GRADIENT HEADER (shared by both PDFs) ─────────────────────────────────────
-// Returns the y-position immediately below the header band.
 function drawGradientHeader(doc, {
-  brandName, logo,
-  leftTitle,          // e.g. "Overall Report Card"
-  leftSubtitle,       // e.g. "All time · Class 10-A"
-  student,            // { name, student_code, standard_name, username }
-  photo,              // image data URL object or null
-  gradeLabel,         // e.g. "A+ · Outstanding"  (optional)
-  rightChip,          // e.g. "Rank 3 / 28"      (optional)
+  brandName, logo, leftTitle, leftSubtitle, student, photo, gradeLabel, rightChip
 }) {
   const W  = pageW(doc);
   const H  = P.hdrH;
   const steps = 20;
 
-  // ── Gradient band
+  // Gradient band
   for (let i = 0; i < steps; i++) {
     const t = i / steps;
     const r = Math.round(P.hdrFrom[0] + (P.hdrTo[0] - P.hdrFrom[0]) * t);
@@ -174,19 +180,18 @@ function drawGradientHeader(doc, {
     doc.rect((W / steps) * i, 0, W / steps + 0.5, H, 'F');
   }
 
-  // ── Decorative circle accents (subtle)
+  // Decorative circles
   doc.setFillColor(255, 255, 255);
   doc.setGState && doc.setGState(doc.GState({ opacity: 0.05 }));
   doc.circle(W - 18, -8, 22, 'F');
   doc.circle(W - 40, H + 5, 16, 'F');
   doc.setGState && doc.setGState(doc.GState({ opacity: 1.0 }));
 
-  // ── Photo box (right side)
   const photoW = 28, photoH = 34;
   const px = W - MARGIN - photoW;
   const py = (H - photoH) / 2;
 
-  // White rounded frame
+  // Photo box
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(255, 255, 255);
   doc.roundedRect(px - 1.5, py - 1.5, photoW + 3, photoH + 3, 2, 2, 'F');
@@ -194,7 +199,6 @@ function drawGradientHeader(doc, {
   if (photo) {
     fitImage(doc, photo, px, py, photoW, photoH);
   } else {
-    // Coloured initial circle
     doc.setFillColor(P.hdrTo[0], P.hdrTo[1], P.hdrTo[2]);
     doc.roundedRect(px, py, photoW, photoH, 1.5, 1.5, 'F');
     doc.setTextColor(255, 255, 255);
@@ -203,11 +207,10 @@ function drawGradientHeader(doc, {
     doc.text(initials(student?.name), px + photoW / 2, py + photoH / 2 + 2, { align: 'center' });
   }
 
-  // ── Left text column
+  // Text column
   let tx = MARGIN;
   let ty = 8;
 
-  // Logo + LMS name row
   if (logo) {
     const chipSz = 12;
     doc.setFillColor(255, 255, 255);
@@ -222,7 +225,6 @@ function drawGradientHeader(doc, {
   tx = MARGIN;
   ty += 16;
 
-  // Student name (large)
   const maxNameW = W - MARGIN * 2 - photoW - 6;
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
@@ -231,7 +233,6 @@ function drawGradientHeader(doc, {
   doc.text(nameLine, tx, ty);
   ty += 7;
 
-  // Student ID / standard
   const idBits = [];
   if (student?.student_code)  idBits.push(student.student_code);
   if (student?.standard_name) idBits.push(student.standard_name);
@@ -244,13 +245,11 @@ function drawGradientHeader(doc, {
     ty += 5.5;
   }
 
-  // Report type + range
   doc.setFontSize(7.5);
   doc.setTextColor(180, 170, 240);
   doc.text(`${leftTitle}  ·  ${leftSubtitle || fmtDate(new Date().toISOString())}`, tx, ty);
   ty += 5;
 
-  // Grade label pill (if present)
   if (gradeLabel) {
     doc.setFillColor(255, 255, 255);
     const pillW = doc.getTextWidth(gradeLabel) + 8;
@@ -262,9 +261,7 @@ function drawGradientHeader(doc, {
     ty += 7.5;
   }
 
-  // Right chip (rank, etc.)
   if (rightChip) {
-    doc.setFillColor(255, 255, 255);
     doc.setFillColor(255, 255, 255);
     const cw = doc.getTextWidth(rightChip) + 10;
     doc.roundedRect(W - MARGIN - photoW - cw - 4, H - 13, cw, 7, 2, 2, 'F');
@@ -274,13 +271,11 @@ function drawGradientHeader(doc, {
     doc.text(rightChip, W - MARGIN - photoW - cw/2 - 4, H - 8.5, { align: 'center' });
   }
 
-  // ── Generated date stamp (bottom right of header)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(170, 160, 230);
   doc.text(`Generated ${fmtDate(new Date().toISOString())}`, W - MARGIN - photoW - 4, H - 4, { align: 'right' });
 
-  // ── Thin separator line below header
   doc.setDrawColor(P.border);
   doc.setLineWidth(0.2);
   doc.line(0, H, W, H);
@@ -295,11 +290,8 @@ function drawFooters(doc, brandName) {
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
-
-    // Left gradient accent bar
     doc.setFillColor(P.hdrFrom[0], P.hdrFrom[1], P.hdrFrom[2]);
     doc.rect(0, H - 10, W, 10, 'F');
-
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(200, 190, 255);
@@ -313,7 +305,6 @@ function sectionHeading(doc, text, y, iconColor = null) {
   y = ensurePageSpace(doc, y, 20);
   const W = pageW(doc);
 
-  // Left accent bar
   doc.setFillColor(iconColor ? iconColor[0] : P.indigo[0], iconColor ? iconColor[1] : P.indigo[1], iconColor ? iconColor[2] : P.indigo[2]);
   doc.roundedRect(MARGIN, y - 2, 2.5, 8, 0.8, 0.8, 'F');
 
@@ -322,7 +313,6 @@ function sectionHeading(doc, text, y, iconColor = null) {
   doc.setFontSize(10.5);
   doc.text(text, MARGIN + 5, y + 4.5);
 
-  // Separator line
   doc.setDrawColor(P.border);
   doc.setLineWidth(0.3);
   doc.line(MARGIN + 5 + doc.getTextWidth(text) + 3, y + 2, W - MARGIN, y + 2);
@@ -331,7 +321,6 @@ function sectionHeading(doc, text, y, iconColor = null) {
 }
 
 // ── KPI Card Strip ────────────────────────────────────────────────────────────
-// Each card: coloured left-border + big value + small label
 function drawKpiStrip(doc, kpis, y) {
   if (!kpis.length) return y;
   const W   = pageW(doc);
@@ -350,21 +339,20 @@ function drawKpiStrip(doc, kpis, y) {
     const cy  = y + row * (cardH + gap);
     const color = k.color || P.indigo;
 
-    // Card background
     doc.setFillColor(P.light);
     doc.roundedRect(cx, cy, cardW, cardH, 2, 2, 'F');
 
-    // Coloured left accent bar
     doc.setFillColor(color[0], color[1], color[2]);
     doc.roundedRect(cx, cy, 2.5, cardH, 1, 1, 'F');
 
-    // Value
     doc.setTextColor(P.ink);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13.5);
-    doc.text(String(k.value ?? NO_DATA), cx + 6, cy + 11.5);
+    const valText = String(k.value ?? NO_DATA);
+    // Prevent overflow in small cards
+    if (doc.getTextWidth(valText) > cardW - 10) doc.setFontSize(10);
+    doc.text(valText, cx + 6, cy + 11.5);
 
-    // Label
     doc.setTextColor(P.gray);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6);
@@ -374,33 +362,36 @@ function drawKpiStrip(doc, kpis, y) {
   return y + rows * (cardH + gap) + 8;
 }
 
-// ── Ring Gauge ────────────────────────────────────────────────────────────────
+// ── Smooth Ring Gauge ─────────────────────────────────────────────────────────
 function drawRingGauge(doc, cx, cy, r, pct, colorHex, label = null) {
   const frac  = Math.max(0, Math.min(1, (Number(pct) || 0) / 100));
-  const track = '#E5E7EB';
-
-  // Track circle
-  doc.setDrawColor(track);
+  
+  doc.setDrawColor(P.border);
   doc.setLineWidth(1.8);
   doc.circle(cx, cy, r, 'S');
 
-  // Filled arc
   if (frac > 0.005) {
     doc.setDrawColor(colorHex);
     doc.setLineWidth(2.2);
-    const steps = Math.max(3, Math.round(frac * 60));
+    // Build continuous polygon for the arc to ensure smooth miter joints
+    const steps = Math.max(12, Math.round(frac * 40));
     const start = -Math.PI / 2;
-    let prev = null;
-    for (let i = 0; i <= steps; i++) {
+    const deltas = [];
+    let startX = cx + r * Math.cos(start);
+    let startY = cy + r * Math.sin(start);
+    let prevX = startX, prevY = startY;
+    
+    for (let i = 1; i <= steps; i++) {
       const a  = start + frac * 2 * Math.PI * (i / steps);
       const px = cx + r * Math.cos(a);
       const py = cy + r * Math.sin(a);
-      if (prev) doc.line(prev[0], prev[1], px, py);
-      prev = [px, py];
+      deltas.push([px - prevX, py - prevY]);
+      prevX = px; prevY = py;
     }
+    // 'S' = stroke only, false = not closed
+    doc.lines(deltas, startX, startY, [1,1], 'S', false);
   }
 
-  // Centre text
   doc.setTextColor(P.ink);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
@@ -414,7 +405,7 @@ function drawRingGauge(doc, cx, cy, r, pct, colorHex, label = null) {
   }
 }
 
-// ── Filled Area (score trend) ─────────────────────────────────────────────────
+// ── Smooth Area Chart (Polygon) ───────────────────────────────────────────────
 function drawAreaChart(doc, x, y, w, h, values, colorHex) {
   const vals = (values || []).filter(v => Number.isFinite(Number(v)));
   if (vals.length < 2) return;
@@ -422,42 +413,52 @@ function drawAreaChart(doc, x, y, w, h, values, colorHex) {
   const stepX = w / (vals.length - 1);
   const pts   = vals.map((v, i) => [x + i * stepX, y + h - (Number(v) / max) * h]);
 
-  // Filled area (light tint)
   const hex2rgb = (hex) => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
   const [cr, cg, cb] = hex2rgb(colorHex);
-  doc.setFillColor(cr, cg, cb);
 
-  // Build fill polygon: points → bottom-right → bottom-left
-  const fillPoints = [...pts, [pts[pts.length-1][0], y+h], [pts[0][0], y+h]];
-  // jsPDF polygon
   doc.saveGraphicsState && doc.saveGraphicsState();
   try { doc.setGState(doc.GState({ opacity: 0.12 })); } catch {}
   doc.setFillColor(cr, cg, cb);
-  // Simple rects stacking for fill effect (portable across jsPDF versions)
-  for (let i = 0; i < pts.length - 1; i++) {
-    const x1 = pts[i][0], y1 = pts[i][1];
-    const x2 = pts[i+1][0], y2 = pts[i+1][1];
-    const top = Math.min(y1, y2);
-    const bot = y + h;
-    doc.rect(x1, top, x2 - x1, bot - top, 'F');
+
+  // Construct closed polygon via deltas for smooth area fill
+  const deltas = [];
+  const startX = pts[0][0], startY = pts[0][1];
+  let prevX = startX, prevY = startY;
+  
+  // path across the top
+  for (let i = 1; i < pts.length; i++) {
+    deltas.push([pts[i][0] - prevX, pts[i][1] - prevY]);
+    prevX = pts[i][0]; prevY = pts[i][1];
   }
+  // path down to bottom right
+  deltas.push([0, (y + h) - prevY]);
+  prevY = y + h;
+  // path left to bottom left
+  deltas.push([startX - prevX, 0]);
+  
+  doc.lines(deltas, startX, startY, [1,1], 'F', true);
+
   try { doc.setGState(doc.GState({ opacity: 1.0 })); } catch {}
   doc.restoreGraphicsState && doc.restoreGraphicsState();
 
-  // Line
+  // Top line stroke
   doc.setDrawColor(colorHex);
   doc.setLineWidth(0.85);
-  for (let i = 1; i < pts.length; i++) doc.line(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
+  const lineDeltas = [];
+  prevX = pts[0][0]; prevY = pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    lineDeltas.push([pts[i][0] - prevX, pts[i][1] - prevY]);
+    prevX = pts[i][0]; prevY = pts[i][1];
+  }
+  doc.lines(lineDeltas, pts[0][0], pts[0][1], [1,1], 'S', false);
 
-  // Dots + value labels
+  // Dots + labels
   pts.forEach((p, i) => {
-    // dot
     doc.setFillColor(colorHex);
     doc.circle(p[0], p[1], 1.1, 'F');
     doc.setFillColor(255, 255, 255);
     doc.circle(p[0], p[1], 0.5, 'F');
-    // label above dot
-    if (vals.length <= 12) {
+    if (vals.length <= 15) {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(5.5);
       doc.setTextColor(P.ink);
@@ -467,49 +468,45 @@ function drawAreaChart(doc, x, y, w, h, values, colorHex) {
 }
 
 // ── Attendance Heatmap ────────────────────────────────────────────────────────
-// heatmap: array of { date, present, late, total }
 function drawAttendanceHeatmap(doc, x, y, w, heatmap) {
   if (!heatmap || !heatmap.length) return y;
-
   const cellSz = 3.4, gap = 0.7, colW = cellSz + gap;
   const daysOfWeek = ['M','T','W','T','F','S','S'];
-  const weeks = Math.min(14, Math.ceil(heatmap.length / 7));
-  const totalW = 7 * colW;
+  const weeks = Math.min(16, Math.ceil(heatmap.length / 7));
+  const totalW = weeks * colW;
   const startX = x + (w - totalW) / 2;
 
   // Day labels
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(5.5);
   doc.setTextColor(P.gray);
-  daysOfWeek.forEach((d, i) => {
-    doc.text(d, startX + i * colW + cellSz / 2, y, { align: 'center' });
-  });
-  y += 3;
+  for (let r = 0; r < 7; r++) {
+    doc.text(daysOfWeek[r], startX - 3, y + r * colW + cellSz/2 + 1, { align: 'right' });
+  }
 
-  // Cells
+  // Cells (Rendered top-to-bottom, left-to-right)
   heatmap.slice(0, weeks * 7).forEach((day, i) => {
-    const col = i % 7;
-    const row = Math.floor(i / 7);
+    const col = Math.floor(i / 7);
+    const row = i % 7;
     const cx  = startX + col * colW;
     const cy  = y + row * colW;
 
     if ((day.present || 0) > 0)      doc.setFillColor(P.present);
     else if ((day.late || 0) > 0)    doc.setFillColor(P.late);
     else if ((day.total || 0) > 0)   doc.setFillColor(P.absent);
-    else                              doc.setFillColor(P.noClass);
+    else                             doc.setFillColor(P.noClass);
 
     doc.roundedRect(cx, cy, cellSz, cellSz, 0.6, 0.6, 'F');
   });
 
-  // Legend
-  const legendY = y + weeks * colW + 3;
+  const legendY = y + 7 * colW + 3;
   const legendItems = [
     { color: P.present, label: 'Present' },
     { color: P.late,    label: 'Late'    },
     { color: P.absent,  label: 'Absent'  },
     { color: P.noClass, label: 'No class'},
   ];
-  let lx = x;
+  let lx = startX;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(5.5);
   legendItems.forEach(li => {
@@ -533,27 +530,21 @@ function drawSubjectBars(doc, x, y, w, radar) {
     const ry = y + i * (barH + gap);
     const pct = Math.max(0, Math.min(100, r.test_avg || 0));
 
-    // Label
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(P.ink);
     doc.text((r.subject || '').slice(0, 18), x, ry + barH - 0.5);
 
-    // Track
     doc.setFillColor(P.border);
     doc.roundedRect(x + labelW, ry, barW, barH, 1, 1, 'F');
 
-    // Score bar
     if (pct > 0) {
       scoreFillColor(doc, pct);
       doc.roundedRect(x + labelW, ry, barW * (pct / 100), barH, 1, 1, 'F');
     }
 
-    // Sub-bar for attendance (teal, offset)
     const attPct = Math.max(0, Math.min(100, r.attendance_pct || 0));
     if (attPct > 0) {
-      doc.setFillColor(P.teal[0], P.teal[1], P.teal[2]);
-      doc.setFillColor(20, 184, 166);
       const attBarY = ry + barH + 0.5;
       doc.setFillColor(P.noClass);
       doc.roundedRect(x + labelW, attBarY, barW, 2.5, 0.5, 0.5, 'F');
@@ -561,14 +552,12 @@ function drawSubjectBars(doc, x, y, w, radar) {
       doc.roundedRect(x + labelW, attBarY, barW * (attPct / 100), 2.5, 0.5, 0.5, 'F');
     }
 
-    // Value
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     scoreTextColor(doc, pct);
     doc.text(`${Math.round(pct)}%`, x + labelW + barW + 2, ry + barH - 0.5);
   });
 
-  // Legend
   const legendY = y + radar.length * (barH + gap) + 2;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(5.5);
@@ -592,15 +581,14 @@ function drawProgressPill(doc, x, y, w, pct, colorHex, label, value) {
   doc.text(label, x, y + barH - 0.5);
 
   const labelWidth = 36;
-  const valWidth   = 14;
+  const valWidth   = 18;
   const bw = w - labelWidth - valWidth;
 
   doc.setFillColor(P.border);
   doc.roundedRect(x + labelWidth, y, bw, barH, 1, 1, 'F');
   const p = Math.max(0, Math.min(100, Number(pct) || 0));
   if (p > 0) {
-    const [r2,g2,b2] = colorHex;
-    doc.setFillColor(r2, g2, b2);
+    doc.setFillColor(colorHex[0], colorHex[1], colorHex[2]);
     doc.roundedRect(x + labelWidth, y, bw * (p / 100), barH, 1, 1, 'F');
   }
 
@@ -612,7 +600,7 @@ function drawProgressPill(doc, x, y, w, pct, colorHex, label, value) {
   return y + barH + 4;
 }
 
-// ── Score-trend strip (ring + area chart) ─────────────────────────────────────
+// ── Score-trend strip ─────────────────────────────────────────────────────────
 function drawScoreTrendStrip(doc, y, trendScores, avgPct) {
   if (trendScores.length < 2) return y;
   const W     = pageW(doc);
@@ -622,10 +610,8 @@ function drawScoreTrendStrip(doc, y, trendScores, avgPct) {
   doc.setFillColor(P.light);
   doc.roundedRect(MARGIN, y, W - 2 * MARGIN, cardH, 3, 3, 'F');
 
-  // Ring gauge left
   drawRingGauge(doc, MARGIN + 14, y + cardH / 2, 11, avgPct, P.good, 'Score');
 
-  // Chart right
   const chartX = MARGIN + 34;
   const chartW = W - 2 * MARGIN - 38;
   const chartH = cardH - 10;
@@ -639,7 +625,6 @@ function drawScoreTrendStrip(doc, y, trendScores, avgPct) {
   doc.setTextColor(P.gray);
   doc.text(`${trendScores.length} exam${trendScores.length !== 1 ? 's' : ''}`, chartX, y + 10.5);
 
-  // Baseline
   doc.setDrawColor(P.border);
   doc.setLineWidth(0.3);
   doc.line(chartX, y + cardH - 5, chartX + chartW, y + cardH - 5);
@@ -694,7 +679,7 @@ function periodAttendance(data, student, period) {
 }
 
 // ── Guidance text ─────────────────────────────────────────────────────────────
-function reportGuidanceText(avgScore, atRisk, improvement) {
+function reportGuidanceText(avgScore, atRisk, improvement, topicMap) {
   const s = Math.round(avgScore || 0);
   const lines = [];
   if (s >= 90) {
@@ -702,10 +687,10 @@ function reportGuidanceText(avgScore, atRisk, improvement) {
     lines.push('Challenge yourself further by exploring advanced topics and helping your peers.');
   } else if (s >= 70) {
     lines.push(`Great work maintaining an average of ${s}%! You are performing well above expectations.`);
-    lines.push('Focus on your weaker subjects (highlighted above) to push into the top tier.');
+    lines.push('Focus on your weaker topics to push into the top tier.');
   } else if (s >= 50) {
     lines.push(`You have a solid foundation with a ${s}% average. Consistency is key to improvement.`);
-    lines.push('Review subject-level breakdowns above and prioritise re-watching videos for low-scoring topics.');
+    lines.push('Review subject breakdowns and ensure all assigned videos are fully watched.');
   } else if (s >= 35) {
     lines.push(`Your current average is ${s}%. There is significant room for growth — and you can absolutely get there.`);
     lines.push('Attend all live classes, submit assignments on time, and retake tests to rebuild confidence.');
@@ -713,15 +698,25 @@ function reportGuidanceText(avgScore, atRisk, improvement) {
     lines.push(`Your average of ${s}% tells us you need extra support right now. That is completely okay.`);
     lines.push('Please speak with your teacher and set a daily study routine. Small consistent steps lead to big results.');
   }
+
+  // Look for unwatched videos in weak topics
+  if (topicMap && topicMap.length) {
+    const weakUnwatched = topicMap.find(t => t.score_pct < 60 && !t.video_completed);
+    if (weakUnwatched) {
+      lines.push('');
+      lines.push(`💡 We noticed you struggled with "${weakUnwatched.topic}". Try re-watching the related video to improve!`);
+    }
+  }
+
   if (atRisk) {
     lines.push('');
     lines.push('⚠️  Attendance below 75% is flagged. Low attendance directly impacts learning and exam readiness.');
   }
   if (improvement != null) {
     lines.push('');
-    if (improvement >= 5)       lines.push(`📈  Excellent progress! Your score improved by +${improvement}% compared to earlier exams.`);
+    if (improvement >= 5)       lines.push(`📈  Excellent progress! Your score improved by +${improvement}% recently.`);
     else if (improvement >= 0)  lines.push(`📊  Your score is stable. Keep pushing for consistent improvement each exam.`);
-    else                        lines.push(`📉  Your score dipped by ${Math.abs(improvement)}% recently. Revisit missed concepts and seek teacher feedback.`);
+    else                        lines.push(`📉  Your score dipped by ${Math.abs(improvement)}% recently. Revisit missed concepts.`);
   }
   return lines;
 }
@@ -735,21 +730,21 @@ function examGuidanceText({ score_pct, flagged, terminated, correct_count, wrong
   }
   const s = Math.round(score_pct || 0);
   if (s >= 90) {
-    lines.push(`🌟 Outstanding! You answered ${correct_count || 0} out of ${total_questions || '?'} questions correctly — an incredible result.`);
+    lines.push(`🌟 Outstanding! You answered ${correct_count || 0} out of ${total_questions || '?'} questions correctly.`);
     if (s === 100) lines.push('🎉 Perfect score! You have completely mastered this topic. Well done!');
     else lines.push('Keep up this standard and challenge yourself with even harder material.');
   } else if (s >= 70) {
     lines.push(`✅ Great performance with a score of ${s}%. You answered ${correct_count || 0} questions correctly.`);
     lines.push(`Review the ${wrong_count || 0} incorrect answers highlighted in red above to reach excellence.`);
   } else if (s >= 50) {
-    lines.push(`📈 Decent effort — ${s}%. You have the foundation, but the ${wrong_count || 0} wrong answers show gaps in some areas.`);
+    lines.push(`📈 Decent effort — ${s}%. You have the foundation, but there are gaps.`);
     lines.push('Revisit lesson videos and notes for the questions you got wrong before the next test.');
   } else if (s >= 35) {
     lines.push(`📚 You scored ${s}% — there is clear room to grow. Study the correct answers shown above carefully.`);
     lines.push('Consider requesting a reattempt from your teacher after revising the relevant topics.');
   } else {
-    lines.push(`💪 Don't be discouraged by a ${s}% score. Every exam is a learning opportunity, not a final verdict.`);
-    lines.push(`You answered ${correct_count || 0} correctly. Focus on those topics and ask your teacher for help with the rest.`);
+    lines.push(`💪 Don't be discouraged by a ${s}% score. Every exam is a learning opportunity.`);
+    lines.push(`Focus on the topics you missed and ask your teacher for help with the rest.`);
   }
   if (flagged && !terminated) {
     lines.push('');
@@ -769,8 +764,8 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
   const s     = data.student || {};
 
   const [logo, photo] = await Promise.all([
-    fetchImageDataURL(brand.logoUrl),
-    fetchImageDataURL(s.avatar_url),
+    fetchImageDataURL(brand.logoUrl, false),
+    fetchImageDataURL(s.avatar_url, true),
   ]);
 
   const doc  = new JsPDF({ compress: true });
@@ -785,6 +780,7 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
   const assignments   = data.assignment_scores || [];
   const liveStats     = data.live_classes_stats || {};
   const assignStats   = data.assignment_stats || {};
+  const topicMap      = data.topic_map || [];
   const displayPoints = data.period_points ?? s.points ?? 0;
 
   const totalVids = radar.reduce((a,r) => a+(r.video_total||0), 0);
@@ -806,7 +802,7 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
 
   // ── KPI Strip
   y = drawKpiStrip(doc, [
-    { label: period === 'overall' ? 'Avg Score'    : 'Period Score', value: pctText(avgForPeriod ?? s.avg_score), color: P.indigo },
+    { label: period === 'overall' ? 'Avg Score' : 'Period Score', value: pctText(avgForPeriod ?? s.avg_score), color: P.indigo },
     { label: 'Attendance',  value: pctText(attForPeriod ?? s.attendance_pct), color: P.teal    },
     { label: 'Class Rank',  value: data.rank ? `${data.rank} / ${data.total_students}` : NO_DATA, color: P.amber  },
     { label: period === 'overall' ? 'Points' : 'Period Pts', value: valueText(displayPoints),    color: P.violet  },
@@ -827,36 +823,8 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
     y = drawScoreTrendStrip(doc, y, trendScores, avgForPeriod ?? s.avg_score ?? 0);
   }
 
-  // ── Attendance Heatmap
-  const heatmap = data.attendance_heatmap || [];
-  if (heatmap.length) {
-    y = sectionHeading(doc, 'Attendance Calendar', y, P.teal);
-    y = drawAttendanceHeatmap(doc, MARGIN, y, W - 2 * MARGIN, heatmap);
-  }
-
-  // ── Subject Performance Bars
-  if (radar.length) {
-    y = sectionHeading(doc, 'Subject Performance', y, P.violet);
-    y = ensurePageSpace(doc, y, radar.length * 11 + 20);
-    y = drawSubjectBars(doc, MARGIN, y, W - 2 * MARGIN, radar);
-  }
-
-  // ── Activity Progress Bars
-  y = sectionHeading(doc, 'Activity Overview', y, P.emerald);
-  y = ensurePageSpace(doc, y, 50);
-  const attTotal   = (data?.attendance_heatmap||[]).reduce((s,d)=>s+(d.total||0),0);
-  const attPresent = (data?.attendance_heatmap||[]).reduce((s,d)=>s+(d.present||0)+(d.late||0),0);
-  if (attTotal) y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, (attPresent/attTotal)*100, P.teal,    'Attendance',      `${attPresent}/${attTotal} sessions`,      );
-  if (videoPct  != null) y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, videoPct,  P.indigo,  'Videos Watched',  `${doneVids}/${totalVids} videos`              );
-  if (assignPct != null) y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, assignPct, P.emerald, 'Assignments',     `${assignStats.submitted}/${assignStats.total} submitted` );
-  if (liveStats.total) {
-    const livePct = Math.round((liveStats.attended||0)/liveStats.total*100);
-    y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, livePct, P.rose, 'Live Classes', `${liveStats.attended||0}/${liveStats.total} attended`);
-  }
-  y += 4;
-
   // ── Ring gauges row (visual summary)
-  y = ensurePageSpace(doc, y, 44);
+  y = ensurePageSpace(doc, y, 50);
   const rings = [
     { label: 'Score',        pct: avgForPeriod ?? s.avg_score ?? 0, color: P.good  },
     { label: 'Attendance',   pct: attForPeriod ?? s.attendance_pct ?? 0, color: '#14b8a6' },
@@ -871,6 +839,74 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
     drawRingGauge(doc, cx, y + 16, 13, r.pct, r.color, r.label);
   });
   y += 44;
+
+  // ── Attendance Heatmap
+  const heatmap = data.attendance_heatmap || [];
+  if (heatmap.length) {
+    y = sectionHeading(doc, 'Attendance Calendar', y, P.teal);
+    y = ensurePageSpace(doc, y, 40);
+    y = drawAttendanceHeatmap(doc, MARGIN, y, W - 2 * MARGIN, heatmap);
+  }
+
+  // ── Subject Performance Bars
+  if (radar.length) {
+    y = sectionHeading(doc, 'Subject Performance', y, P.violet);
+    y = ensurePageSpace(doc, y, radar.length * 11 + 20);
+    y = drawSubjectBars(doc, MARGIN, y, W - 2 * MARGIN, radar);
+  }
+
+  // ── Topic Mastery (Strengths & Weaknesses)
+  if (topicMap.length) {
+    y = sectionHeading(doc, 'Strengths & Weaknesses (Topics)', y, P.rose);
+    y = ensurePageSpace(doc, y, 40);
+    
+    // Sort topics by score to show Best at top, Weakest at bottom
+    const sortedTopics = [...topicMap].sort((a,b) => (b.score_pct||0) - (a.score_pct||0));
+    
+    autoTable(doc, {
+      ...TABLE_DEFAULTS,
+      startY: y,
+      head: [['Topic / Concept', 'Subject', 'Mastery', 'Video Status']],
+      body: sortedTopics.map(t => [
+        t.topic || 'Concept',
+        t.subject || NO_DATA,
+        pctText(t.score_pct),
+        t.video_completed ? 'Watched' : 'Not Finished'
+      ]),
+      columnStyles: {
+        2: { halign: 'center', fontStyle: 'bold' },
+        3: { halign: 'center' }
+      },
+      didParseCell(data2) {
+        if (data2.section === 'body') {
+          const score = sortedTopics[data2.row.index]?.score_pct || 0;
+          if (data2.column.index === 2) {
+            if (score >= 75) data2.cell.styles.textColor = [16, 185, 129];
+            else if (score >= 50) data2.cell.styles.textColor = [245, 158, 11];
+            else data2.cell.styles.textColor = [239, 68, 68];
+          }
+          if (data2.column.index === 3 && data2.cell.raw === 'Not Finished') {
+            data2.cell.styles.textColor = [156, 163, 175];
+          }
+        }
+      }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // ── Activity Progress Bars
+  y = sectionHeading(doc, 'Activity Overview', y, P.emerald);
+  y = ensurePageSpace(doc, y, 40);
+  const attTotal   = (data?.attendance_heatmap||[]).reduce((s,d)=>s+(d.total||0),0);
+  const attPresent = (data?.attendance_heatmap||[]).reduce((s,d)=>s+(d.present||0)+(d.late||0),0);
+  if (attTotal) y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, (attPresent/attTotal)*100, P.teal,    'Attendance',      `${attPresent}/${attTotal} sessions`);
+  if (videoPct != null) y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, videoPct, P.indigo, 'Videos Watched',  `${doneVids}/${totalVids} videos`);
+  if (assignPct != null) y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, assignPct, P.emerald, 'Assignments',   `${assignStats.submitted}/${assignStats.total} submitted`);
+  if (liveStats.total) {
+    const livePct = Math.round((liveStats.attended||0)/liveStats.total*100);
+    y = drawProgressPill(doc, MARGIN, y, W-2*MARGIN, livePct, P.rose, 'Live Classes', `${liveStats.attended||0}/${liveStats.total} attended`);
+  }
+  y += 4;
 
   // ── Exam History Table
   if (timeline.length) {
@@ -980,7 +1016,7 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
 
   // ── Guidance
   y = sectionHeading(doc, 'Guidance & Insights', y, P.violet);
-  y = ensurePageSpace(doc, y, 30);
+  y = ensurePageSpace(doc, y, 40);
 
   const sortedTests = [...timeline].sort((a,b) => (a.date||'').localeCompare(b.date||''));
   let improvement = null;
@@ -990,9 +1026,8 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
     improvement  = Math.round(avgOf(sortedTests.slice(mid)) - avgOf(sortedTests.slice(0,mid)));
   }
   const atRisk = (attForPeriod ?? s.attendance_pct ?? 100) < 75;
-  const lines  = reportGuidanceText(avgForPeriod ?? s.avg_score ?? 0, atRisk, improvement);
+  const lines  = reportGuidanceText(avgForPeriod ?? s.avg_score ?? 0, atRisk, improvement, topicMap);
 
-  // Guidance box
   const boxH = lines.length * 5.5 + 10;
   doc.setFillColor(240, 238, 255);
   doc.roundedRect(MARGIN, y, W - 2 * MARGIN, boxH, 3, 3, 'F');
@@ -1012,7 +1047,6 @@ export async function buildStudentReportPdf({ data, period = 'overall' }) {
   doc.save(`${(s.name || 'Student').replace(/\s+/g,'_')}_Report_${pText}.pdf`);
 }
 
-// Helper — delta label
 function delta(a, b) {
   const n1 = Number(a), n2 = Number(b);
   if (!Number.isFinite(n1) || !Number.isFinite(n2)) return NO_DATA;
@@ -1023,22 +1057,15 @@ function delta(a, b) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PDF 2 — EXAM RESULT SHEET
 // ─────────────────────────────────────────────────────────────────────────────
-// reviewData: { questions: [...], answers: { [questionId]: idx } }
-// result    : { score, total_marks, percentage, correct_count, wrong_count,
-//               marks_deducted, total, flagged, cancelled, testTitle,
-//               points_earned, started_at, submitted_at }
-// student   : { name, student_code, standard_name, avatar_url, username }
-// testMeta  : { title, subject_name, duration_mins, total_marks, scheduled_for }
 export async function buildExamResultPdf({ reviewData, result, student, testMeta }) {
   if (!result) return;
-
   const { JsPDF, autoTable } = await loadJsPdf();
   const brand = getBranding();
   const s     = student || {};
 
   const [logo, photo] = await Promise.all([
-    fetchImageDataURL(brand.logoUrl),
-    fetchImageDataURL(s.avatar_url),
+    fetchImageDataURL(brand.logoUrl, false),
+    fetchImageDataURL(s.avatar_url, true),
   ]);
 
   const doc = new JsPDF({ compress: true });
@@ -1054,10 +1081,8 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
   const terminated   = result.cancelled      || false;
   const testTitle    = testMeta?.title        || result.testTitle || 'Exam';
   const subjectName  = testMeta?.subject_name || '';
-  const durationMins = testMeta?.duration_mins || null;
   const totalMarks   = testMeta?.total_marks   || result.total_marks || null;
 
-  // Time calculation
   let timeTaken = null;
   if (result.started_at && result.submitted_at) {
     const ms = new Date(result.submitted_at) - new Date(result.started_at);
@@ -1068,7 +1093,6 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
     }
   }
 
-  // ── Header
   let y = drawGradientHeader(doc, {
     brandName:   brand.name,
     logo,
@@ -1080,10 +1104,8 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
     rightChip:   result.rank ? `Rank  ${result.rank} / ${result.total_attempts || '?'}` : null,
   });
 
-  // ── Score Hero Band
   y = ensurePageSpace(doc, y, 36);
   const heroH = 32;
-  // Background
   doc.setFillColor(P.light);
   doc.roundedRect(MARGIN, y, W - 2*MARGIN, heroH, 3, 3, 'F');
 
@@ -1097,13 +1119,11 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
 
   heroCards.forEach((c, i) => {
     const hx  = MARGIN + i * heroCardW;
-    // Divider
     if (i > 0) {
       doc.setDrawColor(P.border);
       doc.setLineWidth(0.3);
       doc.line(hx, y+4, hx, y+heroH-4);
     }
-    // Value
     const color = i === 0 ? (score_pct >= 70 ? P.good : score_pct >= 40 ? P.mid : P.bad) : P.ink;
     doc.setTextColor(color);
     doc.setFont('helvetica', 'bold');
@@ -1116,18 +1136,16 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
   });
   y += heroH + 8;
 
-  // ── Stats mini-cards row
   const statCards = [
-    { icon: '✅', label: 'Correct',  value: String(correct), color: P.good    },
-    { icon: '❌', label: 'Wrong',    value: String(wrong),   color: P.bad     },
-    { icon: '—',  label: 'Skipped',  value: String(skipped), color: P.gray    },
-    { icon: '⏱',  label: 'Time',     value: timeTaken || NO_DATA, color: '#6366f1' },
-    { icon: '📝', label: 'Questions',value: String(total_q), color: P.mid     },
-    { icon: '⭐', label: 'Points',   value: String(result.points_earned || 0), color: '#f59e0b' },
+    { label: 'Correct',  value: String(correct), color: P.emerald },
+    { label: 'Wrong',    value: String(wrong),   color: P.rose    },
+    { label: 'Skipped',  value: String(skipped), color: P.amber   },
+    { label: 'Time',     value: timeTaken || NO_DATA, color: P.indigo  },
+    { label: 'Questions',value: String(total_q), color: P.violet  },
+    { label: 'Points',   value: String(result.points_earned || 0), color: P.teal },
   ];
-  y = drawKpiStrip(doc, statCards.map(sc => ({ label: sc.label, value: sc.value, color: sc.color === P.good ? P.emerald : sc.color === P.bad ? P.rose : P.indigo })), y);
+  y = drawKpiStrip(doc, statCards, y);
 
-  // ── Integrity Alert (if flagged/terminated)
   if (flagged || terminated) {
     y = ensurePageSpace(doc, y, 22);
     const alertH = 18;
@@ -1149,7 +1167,6 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
     y += alertH + 8;
   }
 
-  // ── Question Review Table
   const qs  = reviewData?.questions || [];
   const ans = reviewData?.answers   || {};
 
@@ -1190,14 +1207,12 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
         const isCorrect  = answered && studentAns === q.correct_idx;
         const isSkipped  = !answered;
 
-        // Row tint
         if (data2.column.index === 4) {
           if      (isCorrect)  { data2.cell.styles.textColor = [16, 185, 129]; data2.cell.styles.fontStyle = 'bold'; }
           else if (isSkipped)  { data2.cell.styles.textColor = [156, 163, 175]; }
           else                 { data2.cell.styles.textColor = [220, 38,  38];  data2.cell.styles.fontStyle = 'bold'; }
         }
         if (!isCorrect && !isSkipped) {
-          // Tint entire wrong row
           data2.cell.styles.fillColor = [255, 247, 247];
         }
       },
@@ -1205,7 +1220,6 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
     y = doc.lastAutoTable.finalY + 8;
   }
 
-  // ── Guidance
   y = sectionHeading(doc, 'Teacher Guidance', y, P.violet);
   y = ensurePageSpace(doc, y, 30);
   const gLines = examGuidanceText({ score_pct, flagged, terminated, correct_count: correct, wrong_count: wrong, total_questions: total_q });
@@ -1229,13 +1243,13 @@ export async function buildExamResultPdf({ reviewData, result, student, testMeta
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Class Analytics PDF (teacher overview — unchanged signature, refreshed style)
+// Class Analytics PDF
 // ─────────────────────────────────────────────────────────────────────────────
 export async function buildClassAnalyticsPdf({ analytics, standardName }) {
   if (!analytics) return;
   const { JsPDF, autoTable } = await loadJsPdf();
   const brand = getBranding();
-  const logo  = await fetchImageDataURL(brand.logoUrl);
+  const logo  = await fetchImageDataURL(brand.logoUrl, false);
 
   const doc      = new JsPDF({ compress: true });
   const W        = pageW(doc);
