@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { reportApi, teacherApi, studentApi } from '../../../lib/api';
+import { reportApi, teacherApi, studentApi } from '../../lib/api';
 
 import { motion } from 'framer-motion';
 
