@@ -14954,7 +14954,7 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
     now = datetime.datetime.now()
 
     # -- Basic Data --
-    student_res = service_supabase.table("students").select("name, username, avatar_url, attendance_pct, avg_score").eq("id", student_id).single().execute()
+    student_res = service_supabase.table("students").select("id, name, username, avatar_url, attendance_pct, avg_score").eq("id", student_id).single().execute()
     if not student_res.data:
         raise HTTPException(status_code=404, detail="Student not found")
 
@@ -15071,6 +15071,12 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
         {"scoreBin": i*10, "count": random.randint(0, 20) if 40 < i*10 < 90 else random.randint(0, 5)}
         for i in range(11)
     ]
+    
+    activityData = [
+        {"time": "09:00 AM", "title": "Logged In", "color": "bg-green-400"},
+        {"time": "10:15 AM", "title": "Watched Video", "color": "bg-[#67E8F9]"},
+        {"time": "11:30 AM", "title": "Submitted Assignment", "color": "bg-[#A78BFA]"}
+    ]
 
     return {
         "student": student_data,
@@ -15088,7 +15094,8 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
         "bumpData": bumpData,
         "assignmentData": assignmentData,
         "bellData": bellData,
-        "quadrantData": scatterData # using same data shape
+        "quadrantData": scatterData, # using same data shape
+        "activityData": activityData
     }
 
 if __name__ == "__main__":

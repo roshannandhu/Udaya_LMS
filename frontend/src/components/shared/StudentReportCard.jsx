@@ -116,7 +116,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           onClick={handleGenerateAI}
         >
           <div className="flex items-center gap-4 py-2">
-            <div className="w-12 h-12 rounded-full bg-[#FDE047] flex items-center justify-center text-white shadow-lg shadow-[#FFC436]/40">
+            <div className="w-12 h-12 rounded-full bg-[#FDE047] flex items-center justify-center text-white shadow-lg shadow-[#FDE047]/40">
               <Bot size={24} />
             </div>
             <div>
@@ -137,7 +137,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Live Classes" subtitle="Attendance Rate">
           <div className="flex-1 flex items-center justify-center py-4">
-            <NeonProgressGauge percentage={student.avg_score || 92} label="Attended" color="#FFC436" />
+            <NeonProgressGauge percentage={student.avg_score || 92} label="Attended" color="#FDE047" />
           </div>
         </GlassCard>
 
