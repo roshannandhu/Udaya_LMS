@@ -40,10 +40,10 @@ async function generatePdf(element, filename) {
   const opt = {
     margin:       [10, 10, 15, 10],
     filename:     filename,
-    image:        { type: 'jpeg', quality: 1.0 }, // Max quality
-    html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false },
+    image:        { type: 'jpeg', quality: 1.0 },
+    html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false, scrollY: 0 },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak:    { mode: ['css', 'legacy'] }
+    pagebreak:    { mode: ['css'] } // Removed 'legacy' which often causes blank PDFs
   };
   await html2pdf().set(opt).from(element).save();
 }
@@ -54,9 +54,8 @@ function mountAndPrint(Component, props, filename) {
   container.style.position = 'absolute';
   container.style.left = '0';
   container.style.top = '0';
-  container.style.opacity = '0.01'; // Just enough to render, but practically invisible
-  container.style.pointerEvents = 'none';
   container.style.zIndex = '-9999';
+  container.style.backgroundColor = '#ffffff'; // Force white background so it's not transparent
   
   document.body.appendChild(container);
 
@@ -70,7 +69,7 @@ function mountAndPrint(Component, props, filename) {
       root.unmount();
       document.body.removeChild(container);
     }
-  }, 1000); 
+  }, 1200); 
 }
 
 // ── Ultra-Premium Pure CSS Components (100% Bug-Free in PDF) ───────────────
