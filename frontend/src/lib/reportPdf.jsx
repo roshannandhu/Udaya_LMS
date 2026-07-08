@@ -1,5 +1,5 @@
 import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import html2pdf from 'html2pdf.js';
 import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
@@ -52,18 +52,20 @@ function mountAndPrint(Component, props, filename) {
   const container = document.createElement('div');
   // Fixed width to match A4 proportions (96 DPI)
   container.style.width = '794px';
-  container.style.position = 'fixed'; // Fixed keeps it in viewport logic
-  container.style.top = '100%'; // Pushes it just below the visible screen!
+  container.style.position = 'fixed'; 
+  container.style.top = '100%'; 
   container.style.left = '0';
   container.style.zIndex = '-1000';
   container.style.backgroundColor = '#ffffff';
   
+  // Synchronously render React to raw HTML string. 
+  // This absolutely guarantees the DOM exists before html2pdf fires!
+  const htmlString = renderToString(<Component {...props} />);
+  container.innerHTML = htmlString;
+  
   document.body.appendChild(container);
 
-  const root = createRoot(container);
-  root.render(<Component {...props} />);
-  
-  // Give React 1.5 seconds to fully mount the DOM tree
+  // Give the browser 100ms to paint the raw HTML
   setTimeout(async () => {
     try {
       const opt = {
@@ -72,11 +74,11 @@ function mountAndPrint(Component, props, filename) {
         image:        { type: 'jpeg', quality: 1.0 },
         html2canvas:  { 
           scale: 2, 
-          useCORS: true, // Allow external resources if headers permit
+          useCORS: true, 
           letterRendering: true, 
-          logging: true, // Turn on logging so we can see what's happening
+          logging: true,
           scrollY: 0,
-          windowWidth: 794 // Force html2canvas to understand the width
+          windowWidth: 794 
         },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak:    { mode: ['css'] }
@@ -85,10 +87,9 @@ function mountAndPrint(Component, props, filename) {
     } catch (err) {
       console.error("PDF Generation Error:", err);
     } finally {
-      root.unmount();
       document.body.removeChild(container);
     }
-  }, 1500); 
+  }, 100); 
 }
 
 // ── Ultra-Premium Pure CSS Components (100% Bug-Free in PDF) ───────────────
