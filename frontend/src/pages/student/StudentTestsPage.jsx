@@ -476,7 +476,7 @@ export default function StudentTestsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-full text-[15px] font-extrabold transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3.5 rounded-full text-xs sm:text-[15px] font-extrabold transition-all duration-300 ${
                 activeTab === tab.id
                   ? 'bg-black shadow-md text-white scale-[1.02]'
                   : 'text-neutral-500 hover:text-black hover:bg-black/5'

@@ -39,7 +39,7 @@ export default function TopBar({ title, subtitle, action, showSearch = true, bre
               ))}
             </div>
           )}
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{title}</h1>
+          <h1 className="text-[1.25rem] sm:text-2xl md:text-3xl font-semibold tracking-tight truncate" style={{ fontFamily: '"Fraunces", Georgia, serif' }}>{title}</h1>
           {subtitle && <p className="text-sm text-neutral-500 truncate mt-1">{subtitle}</p>}
         </div>
         {/* Search + notifications live in the desktop TopNav; show here on mobile only. */}
