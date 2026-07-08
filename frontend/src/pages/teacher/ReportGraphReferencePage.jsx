@@ -224,7 +224,7 @@ export default function ReportGraphReferencePage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 xl:grid-cols-6 gap-5 md:gap-6 pb-24"
+        className="px-3 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6 pb-24"
       >
 
         {/* ROW 1 (6 cols) */}
@@ -233,7 +233,7 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Course Progress" subtitle="Overall Completion">
           <div className="flex-1 flex items-center justify-center py-4">
-            <LiquidFillGauge percentage={reportData?.student?.attendance_pct || 78} size={200} />
+            <LiquidFillGauge percentage={reportData?.student?.attendance_pct || 78} size={130} />
           </div>
         </GlassCard>
         <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Live Classes" subtitle="Attendance Rate">
@@ -246,12 +246,12 @@ export default function ReportGraphReferencePage() {
         <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
           <SubjectProgressionLineChart data={progressionData} />
         </GlassCard>
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
 
         {/* ROW 3 (6 cols) */}
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Subject Strengths" subtitle="Radar Analysis">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Subject Strengths" subtitle="Radar Analysis">
           <SubjectRadarChart data={radarData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Weekly Engagement" subtitle="Github-style Heatmap">
@@ -259,10 +259,10 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
         
         {/* ROW 4 (6 cols) */}
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
           <TimeAllocationDonut data={donutData} />
         </GlassCard>
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
           <TopicPolarArea data={polarData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Learning Breakdown" subtitle="Content Type (Treemap)">
@@ -278,10 +278,10 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
 
         {/* ROW 6 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
           <TestQuadrantChart data={quadrantData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
           <QuizBubbleScatter data={scatterData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Science Test (Bell Curve)">
@@ -292,12 +292,12 @@ export default function ReportGraphReferencePage() {
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
           <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
         </GlassCard>
 
         {/* ROW 8 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
           <TestCalendar month={new Date()} daysData={testDays} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Today's Activity" subtitle="Chronological Stepper">
