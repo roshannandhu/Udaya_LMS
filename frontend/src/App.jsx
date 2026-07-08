@@ -15,6 +15,7 @@ import { startNotificationSync, stopNotificationSync } from './lib/notifications
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
+import ReportGraphReferencePage from './pages/teacher/ReportGraphReferencePage';
 
 // Wrap React.lazy so a failed dynamic import (usually a stale chunk after a new
 // deploy/rebuild) triggers ONE automatic reload to fetch fresh assets instead of
@@ -327,6 +328,7 @@ export default function App() {
           <Route path="profile" element={<TeacherProfilePage />} />
           <Route path="tests" element={<TestsPage />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route path="report-graph-reference" element={<ReportGraphReferencePage />} />
           <Route path="reminders" element={<RemindersPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="attendance" element={<AttendancePage />} />
