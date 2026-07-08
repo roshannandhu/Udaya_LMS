@@ -110,13 +110,13 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         
         {/* Dedicated AI Mentor Card */}
         <GlassCard 
-          className="col-span-2 md:col-span-4 xl:col-span-6 bg-gradient-to-r from-[#FFC436]/20 to-[#FFC436]/5 border-[#FFC436]/30" 
+          className="col-span-2 md:col-span-4 xl:col-span-6 bg-gradient-to-r from-[#FDE047]/30 to-[#FDE047]/10 border-[#FDE047]/40" 
           title="AI Mentor Insights" 
           subtitle="Generate Personalized Report"
           onClick={handleGenerateAI}
         >
           <div className="flex items-center gap-4 py-2">
-            <div className="w-12 h-12 rounded-full bg-[#FFC436] flex items-center justify-center text-white shadow-lg shadow-[#FFC436]/40">
+            <div className="w-12 h-12 rounded-full bg-[#FDE047] flex items-center justify-center text-white shadow-lg shadow-[#FFC436]/40">
               <Bot size={24} />
             </div>
             <div>
@@ -224,7 +224,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               className="bg-white rounded-[32px] p-6 md:p-8 w-full max-w-lg shadow-2xl relative"
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-[#FFC436]"><Bot size={24} /></div>
+                <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-[#FDE047]"><Bot size={24} /></div>
                 <div>
                   <h2 className="text-xl font-black text-[#112B3C] tracking-tight">AI Mentor Report</h2>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">Personalized insights for {student.name ? student.name.split(' ')[0] : 'Student'}</p>
@@ -234,7 +234,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               <div className="min-h-[200px] max-h-[60vh] overflow-y-auto text-sm text-gray-700 leading-relaxed pr-2">
                 {loadingAi ? (
                   <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-4">
-                    <Loader2 size={32} className="animate-spin text-[#FFC436]" />
+                    <Loader2 size={32} className="animate-spin text-[#FDE047]" />
                     <p className="font-bold text-xs uppercase tracking-widest">Analyzing algorithms...</p>
                   </div>
                 ) : (

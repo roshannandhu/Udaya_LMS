@@ -6,9 +6,9 @@ export default function AttendanceCalendar({ month, daysData }) {
   
   const getStatusColor = (status) => {
     switch(status) {
-      case 'present': return 'bg-[#00C2C7] text-white shadow-sm';
-      case 'absent': return 'bg-[#FF6B6B] text-white shadow-sm';
-      case 'late': return 'bg-[#FFC436] text-white shadow-sm';
+      case 'present': return 'bg-[#67E8F9] text-white shadow-sm';
+      case 'absent': return 'bg-[#FCA5A5] text-white shadow-sm';
+      case 'late': return 'bg-[#FDE047] text-white shadow-sm';
       case 'holiday': return 'bg-gray-200 text-gray-500';
       default: return 'text-[#112B3C] hover:bg-gray-100';
     }

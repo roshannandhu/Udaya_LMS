@@ -12,11 +12,11 @@ export default function TestCalendar({ month, daysData }) {
       <div className="grid grid-cols-7 gap-y-3 gap-x-1 text-center w-full text-[11px] font-bold text-[#112B3C]">
         {daysData.map((d, i) => (
           <div key={i} className="flex justify-center items-center relative group">
-            <div className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${d.hasTest ? 'bg-purple-50 text-[#7059FF] ring-1 ring-[#7059FF]/30' : 'hover:bg-gray-100'}`}>
+            <div className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${d.hasTest ? 'bg-purple-50 text-[#A78BFA] ring-1 ring-[#A78BFA]/30' : 'hover:bg-gray-100'}`}>
               {d.dayNumber || (i % 30) + 1}
             </div>
             {d.hasTest && d.score && (
-              <span className="absolute -bottom-2 -right-1 bg-[#7059FF] text-white text-[7px] px-1 rounded-sm shadow-sm">
+              <span className="absolute -bottom-2 -right-1 bg-[#A78BFA] text-white text-[7px] px-1 rounded-sm shadow-sm">
                 {d.score}%
               </span>
             )}

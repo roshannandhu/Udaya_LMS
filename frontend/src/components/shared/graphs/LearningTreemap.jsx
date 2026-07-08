@@ -30,7 +30,7 @@ const CustomizedContent = (props) => {
 };
 
 export default function LearningTreemap({ data }) {
-  const COLORS = ['#00C2C7', '#7059FF', '#FFC436', '#FF6B6B', '#2DD4BF'];
+  const COLORS = ['#67E8F9', '#A78BFA', '#FDE047', '#FCA5A5', '#2DD4BF'];
   return (
     <div className="w-full h-full min-h-[220px] pt-2">
       <ResponsiveContainer width="100%" height={220}>

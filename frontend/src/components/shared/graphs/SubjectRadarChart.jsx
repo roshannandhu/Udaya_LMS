@@ -13,8 +13,8 @@ export default function SubjectRadarChart({ data }) {
           <Tooltip 
             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
           />
-          <Radar name="Class Avg" dataKey="classAvg" stroke="#FFC436" strokeWidth={2} strokeDasharray="4 4" fill="transparent" />
-          <Radar name="Student" dataKey="student" stroke="#7059FF" strokeWidth={3} fill="#7059FF" fillOpacity={0.4} />
+          <Radar name="Class Avg" dataKey="classAvg" stroke="#FDE047" strokeWidth={2} strokeDasharray="4 4" fill="transparent" />
+          <Radar name="Student" dataKey="student" stroke="#A78BFA" strokeWidth={3} fill="#A78BFA" fillOpacity={0.4} />
           <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
         </RadarChart>
       </ResponsiveContainer>

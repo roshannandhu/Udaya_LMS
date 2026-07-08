@@ -15,10 +15,10 @@ export default function LeaderboardBumpChart({ data }) {
           <Line 
             type="monotone" 
             dataKey="rank" 
-            stroke="#7059FF" 
+            stroke="#A78BFA" 
             strokeWidth={4} 
-            activeDot={{ r: 8, stroke: '#fff', strokeWidth: 2, fill: '#7059FF' }}
-            dot={{ r: 5, fill: '#7059FF', stroke: '#fff', strokeWidth: 2 }}
+            activeDot={{ r: 8, stroke: '#fff', strokeWidth: 2, fill: '#A78BFA' }}
+            dot={{ r: 5, fill: '#A78BFA', stroke: '#fff', strokeWidth: 2 }}
           />
         </LineChart>
       </ResponsiveContainer>

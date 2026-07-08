@@ -43,7 +43,7 @@ export default function LiquidFillGauge({ percentage, size = 160 }) {
         </g>
         
         {/* Outer glowing ring */}
-        <circle cx={cx} cy={cy} r={r+6} fill="none" stroke="#00C2C7" strokeWidth="4" strokeOpacity="0.2" />
+        <circle cx={cx} cy={cy} r={r+6} fill="none" stroke="#67E8F9" strokeWidth="4" strokeOpacity="0.2" />
       </svg>
       
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none drop-shadow-md">

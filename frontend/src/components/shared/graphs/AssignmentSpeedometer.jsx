@@ -2,7 +2,7 @@ import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 export default function AssignmentSpeedometer({ data }) {
-  // data: [{ name: 'Submitted', value: 40, color: '#00C2C7' }, { name: 'Pending', value: 10, color: '#FFC436' }, { name: 'Overdue', value: 5, color: '#FF6B6B' }]
+  // data: [{ name: 'Submitted', value: 40, color: '#67E8F9' }, { name: 'Pending', value: 10, color: '#FDE047' }, { name: 'Overdue', value: 5, color: '#FCA5A5' }]
   return (
     <div className="w-full h-full min-h-[280px] flex flex-col relative pt-4">
       <div className="flex-1 min-h-[280px]">

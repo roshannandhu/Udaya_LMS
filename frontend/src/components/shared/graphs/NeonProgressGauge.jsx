@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function NeonProgressGauge({ percentage, label, color = '#FFC436' }) {
+export default function NeonProgressGauge({ percentage, label, color = '#FDE047' }) {
   const size = 120;
   const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
