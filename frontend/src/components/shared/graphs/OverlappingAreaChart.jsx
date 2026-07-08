@@ -4,8 +4,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 export default function OverlappingAreaChart({ data }) {
   // data: [{ day: 'Mon', videos: 40, tests: 20, notes: 30 }]
   return (
-    <div className="w-full h-full min-h-[240px] pt-4 pb-2 pr-4">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full h-full h-[260px] pt-4 pb-2 pr-4">
+      <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
           <defs>
             <linearGradient id="colorVid" x1="0" y1="0" x2="0" y2="1">

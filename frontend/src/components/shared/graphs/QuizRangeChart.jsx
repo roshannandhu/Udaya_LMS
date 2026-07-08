@@ -26,8 +26,8 @@ export default function QuizRangeChart({ data }) {
   const chartData = data.map(d => ({ ...d, range: [d.minScore, d.maxScore] }));
 
   return (
-    <div className="w-full h-full min-h-[240px] pt-4 pb-2 pr-4">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full h-full h-[260px] pt-4 pb-2 pr-4">
+      <ResponsiveContainer width="100%" height={260}>
         <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
           <XAxis dataKey="name" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
           <YAxis domain={[0, 100]} tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
