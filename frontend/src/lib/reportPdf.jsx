@@ -52,10 +52,9 @@ function mountAndPrint(Component, props, filename) {
   const container = document.createElement('div');
   // Fixed width to match A4 proportions (96 DPI)
   container.style.width = '794px';
-  container.style.position = 'fixed'; 
-  container.style.top = '100%'; 
-  container.style.left = '0';
-  container.style.zIndex = '-1000';
+  container.style.position = 'absolute'; 
+  container.style.top = '0'; 
+  container.style.left = '-9999px';
   container.style.backgroundColor = '#ffffff';
   
   // Synchronously render React to raw HTML string. 
@@ -65,7 +64,7 @@ function mountAndPrint(Component, props, filename) {
   
   document.body.appendChild(container);
 
-  // Give the browser 100ms to paint the raw HTML
+  // Give the browser time to paint the raw HTML
   setTimeout(async () => {
     try {
       const opt = {
@@ -76,12 +75,9 @@ function mountAndPrint(Component, props, filename) {
           scale: 2, 
           useCORS: true, 
           letterRendering: true, 
-          logging: true,
-          scrollY: 0,
-          windowWidth: 794 
+          logging: false
         },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css'] }
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
       await html2pdf().set(opt).from(container).save();
     } catch (err) {
@@ -89,7 +85,7 @@ function mountAndPrint(Component, props, filename) {
     } finally {
       document.body.removeChild(container);
     }
-  }, 100); 
+  }, 1000); 
 }
 
 // ── Ultra-Premium Pure CSS Components (100% Bug-Free in PDF) ───────────────
