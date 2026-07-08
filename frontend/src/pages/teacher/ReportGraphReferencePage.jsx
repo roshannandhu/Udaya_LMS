@@ -278,10 +278,10 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
 
         {/* ROW 6 (6 cols) */}
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
           <TestQuadrantChart data={quadrantData} />
         </GlassCard>
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
           <QuizBubbleScatter data={scatterData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Science Test (Bell Curve)">
@@ -292,12 +292,12 @@ export default function ReportGraphReferencePage() {
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
           <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
         </GlassCard>
 
         {/* ROW 8 (6 cols) */}
-        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
           <TestCalendar month={new Date()} daysData={testDays} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Today's Activity" subtitle="Chronological Stepper">
