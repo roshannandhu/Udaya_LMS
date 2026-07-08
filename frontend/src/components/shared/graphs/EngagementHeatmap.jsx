@@ -27,13 +27,13 @@ export default function EngagementHeatmap({ data }) {
       <div className="flex justify-between text-[10px] text-gray-400 font-bold mb-2 uppercase">
         <span>Week 1</span><span>Week 2</span><span>Week 3</span><span>Week 4</span>
       </div>
-      <div className="flex gap-2">
+      <div className="flex justify-center gap-2">
         {grid.map((week, w) => (
-          <div key={w} className="flex flex-col gap-2 flex-1">
+          <div key={w} className="flex flex-col gap-2">
             {week.map((count, d) => (
               <div 
                 key={d} 
-                className={`w-full aspect-square rounded-md transition-all hover:scale-110 cursor-pointer ${getColor(count)}`}
+                className={`w-8 h-8 md:w-10 md:h-10 rounded-md transition-all hover:scale-110 cursor-pointer ${getColor(count)}`}
                 title={`Activity count: ${count}`}
               />
             ))}
