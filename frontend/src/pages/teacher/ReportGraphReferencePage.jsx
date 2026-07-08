@@ -246,12 +246,12 @@ export default function ReportGraphReferencePage() {
         <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
           <SubjectProgressionLineChart data={progressionData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
 
         {/* ROW 3 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Subject Strengths" subtitle="Radar Analysis">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Subject Strengths" subtitle="Radar Analysis">
           <SubjectRadarChart data={radarData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Weekly Engagement" subtitle="Github-style Heatmap">
@@ -259,10 +259,10 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
         
         {/* ROW 4 (6 cols) */}
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
           <TimeAllocationDonut data={donutData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
           <TopicPolarArea data={polarData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Learning Breakdown" subtitle="Content Type (Treemap)">
