@@ -1,7 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import html2pdf from 'html2pdf.js';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
+import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
 import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, PieChart as PieIcon, LayoutGrid } from 'lucide-react';
 
@@ -23,6 +24,7 @@ const getBranding = () => {
   return {
     name: (s.lmsName || '').trim() || 'Udaya',
     logoUrl: s.lmsLogo || DEFAULT_LMS_LOGO,
+    url: window.location.origin
   };
 };
 
@@ -49,7 +51,6 @@ async function generatePdf(element, filename) {
 
 function mountAndPrint(Component, props, filename) {
   const container = document.createElement('div');
-  // Fixed width for A4 (approx 794px at 96dpi) to ensure perfect rendering
   container.style.width = '794px';
   container.style.position = 'absolute';
   container.style.left = '-9999px';
@@ -60,7 +61,6 @@ function mountAndPrint(Component, props, filename) {
   
   root.render(<Component {...props} />);
   
-  // 1.5s delay to let fonts, images, and un-animated charts render
   setTimeout(async () => {
     try {
       await generatePdf(container, filename);
@@ -290,11 +290,22 @@ const StudentReportTemplate = ({ data, period }) => {
       )}
 
       {radar.length > 0 && (
-        <Section title="Subject Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
-          <div className="grid grid-cols-2 gap-x-12 gap-y-6">
-            {radar.map(r => (
-              <ProgressBar key={r.subject_id} label={r.subject} value={r.test_avg} color={{ fill: 'bg-violet-500' }} />
-            ))}
+        <Section title="Subject Mastery Profile" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
+          <div className="flex gap-8 items-center rounded-xl border border-gray-100 bg-gray-50/30 p-6">
+            <div className="flex-1 flex justify-center">
+              <RadarChart cx="50%" cy="50%" outerRadius="75%" width={300} height={250} data={radar}>
+                <PolarGrid stroke="#e5e7eb" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#4b5563', fontSize: 10, fontWeight: 600 }} />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                <Radar name="Performance" dataKey="test_avg" stroke="#8b5cf6" strokeWidth={2} fill="#8b5cf6" fillOpacity={0.4} isAnimationActive={false} />
+              </RadarChart>
+            </div>
+            <div className="flex-1 flex flex-col gap-4 pr-6">
+              <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Score Distribution</h3>
+              {radar.map(r => (
+                <ProgressBar key={r.subject_id} label={r.subject} value={r.test_avg} color={{ fill: 'bg-violet-500' }} />
+              ))}
+            </div>
           </div>
         </Section>
       )}
@@ -367,8 +378,20 @@ const StudentReportTemplate = ({ data, period }) => {
       )}
 
       {/* Footer */}
-      <div className="mt-12 border-t border-gray-100 pt-6 text-center text-xs text-gray-400 font-medium tracking-wide">
-        Report generated on {fmtDate(new Date().toISOString())} · {brand.name} LMS
+      <div className="mt-12 border-t border-gray-100 pt-8 pb-4 flex items-center justify-between" style={{ pageBreakInside: 'avoid' }}>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-bold text-gray-800">{brand.name} Learning Management System</span>
+          <span className="text-xs text-gray-400 font-medium tracking-wide">Report generated securely on {fmtDate(new Date().toISOString())}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right text-[10px] text-gray-400 uppercase tracking-widest">
+            <p>Scan to Verify</p>
+            <p>Authenticity</p>
+          </div>
+          <div className="p-1 bg-white border border-gray-200 rounded-lg shadow-sm">
+            <QRCode value={`${brand.url}/verify/${s.id || 'student'}`} size={48} level="L" />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -506,8 +529,20 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
       </Section>
       
       {/* Footer */}
-      <div className="mt-12 border-t border-gray-100 pt-6 text-center text-xs text-gray-400 font-medium tracking-wide">
-        Result generated on {fmtDate(new Date().toISOString())} · {brand.name} LMS
+      <div className="mt-12 border-t border-gray-100 pt-8 pb-4 flex items-center justify-between" style={{ pageBreakInside: 'avoid' }}>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-bold text-gray-800">{brand.name} Learning Management System</span>
+          <span className="text-xs text-gray-400 font-medium tracking-wide">Result generated securely on {fmtDate(new Date().toISOString())}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right text-[10px] text-gray-400 uppercase tracking-widest">
+            <p>Scan to Verify</p>
+            <p>Authenticity</p>
+          </div>
+          <div className="p-1 bg-white border border-gray-200 rounded-lg shadow-sm">
+            <QRCode value={`${brand.url}/verify/exam/${result.id || 'exam'}`} size={48} level="L" />
+          </div>
+        </div>
       </div>
     </div>
   );
