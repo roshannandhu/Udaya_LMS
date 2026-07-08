@@ -52,7 +52,8 @@ export default function StudentReportPage() {
   // Keep the current report on screen (dimmed) while another period loads —
   // blanking the whole page into a spinner on every period click feels broken.
   return (
-    <div className={`relative transition-opacity duration-200 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className={`relative transition-opacity duration-200 min-h-screen ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+      style={{ background: 'linear-gradient(160deg, #E6F8F8 0%, #EEF0FF 100%)' }}>
       {loading && (
         <div className="fixed top-4 inset-x-0 flex justify-center z-50">
           <span className="inline-flex items-center gap-2 bg-white shadow-card rounded-full px-3 py-1.5 text-[11px] font-bold text-neutral-500">

@@ -28,8 +28,8 @@ const CARD_COLORS = [
   { bg: 'bg-[#FFEBE5]', text: 'text-[#9A3B1C]', badge: 'bg-[#9A3B1C]/10 text-[#9A3B1C]' },
 ];
 
-const UP_GREEN = '#16A34A';
-const DOWN_RED = '#DC2626';
+const UP_GREEN = '#00C9C3';
+const DOWN_RED = '#FF5252';
 
 // ── Generic helpers ────────────────────────────────────────────────────────────
 
@@ -203,9 +203,9 @@ function SegmentedBar({ segments }) {
 // ── Subject comparison: grouped multi-series bars (reference "Adipiscing") ─────
 
 const SUBJECT_SERIES = [
-  { k: 'Tests', c: '#1A56DB', cDark: '#93c5fd' },
-  { k: 'Videos', c: '#6940A5', cDark: '#c4b5fd' },
-  { k: 'Attendance', c: '#0F7B6C', cDark: '#6ee7b7' },
+  { k: 'Tests',       c: '#6C63FF', cDark: '#a5b4fc' },
+  { k: 'Videos',      c: '#FFC107', cDark: '#fde68a' },
+  { k: 'Attendance',  c: '#00C9C3', cDark: '#67e8f9' },
 ];
 
 function SubjectGroupedBars({ subjectRadar, dark }) {
@@ -335,7 +335,7 @@ function DivergingSkillBars({ data, hasClass, classCount }) {
     <div className="w-full">
       {/* overall composite header */}
       <div className="flex items-center justify-center gap-2.5 mb-4">
-        <span className="text-[30px] font-black text-[#1A56DB] leading-none"><CountUp value={composite} /></span>
+        <span className="text-[30px] font-black text-[#6C63FF] leading-none"><CountUp value={composite} /></span>
         <div className="text-left leading-none">
           <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Overall</p>
           {classComposite != null && <p className="text-[10px] font-extrabold text-neutral-400 mt-1">Class avg {classComposite}</p>}
@@ -355,7 +355,7 @@ function DivergingSkillBars({ data, hasClass, classCount }) {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[11px] font-black text-neutral-700">{d.metric}</span>
                 <span className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-black text-[#1A56DB]">{you}%</span>
+                  <span className="text-[11px] font-black text-[#6C63FF]">{you}%</span>
                   {hasClass && <span className="text-[10px] font-extrabold text-neutral-400">/ {cls}%</span>}
                   {hasClass && diff !== 0 && (
                     <span className="text-[10px] font-black inline-flex items-center gap-0.5" style={{ color: barColor }}>
@@ -376,7 +376,7 @@ function DivergingSkillBars({ data, hasClass, classCount }) {
                   )}
                 </div>
               ) : (
-                <GrowBar value={you} color="#1A56DB" height="h-3" />
+                <GrowBar value={you} color="#6C63FF" height="h-3" />
               )}
             </div>
           );
@@ -391,7 +391,7 @@ function DivergingSkillBars({ data, hasClass, classCount }) {
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DOWN_RED }} /> Below class{classCount ? ` (${classCount})` : ''}</span>
           </>
         ) : (
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#1A56DB]" /> Your score</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#6C63FF]" /> Your score</span>
         )}
       </div>
     </div>
@@ -420,7 +420,7 @@ function TrendTooltip({ active, payload }) {
 
 // Reference-styled hero: smooth spline of test scores, a floating badge on the
 // latest point, and a dashed class-average line (colour-blind-safe vs the solid You line).
-const HERO_LINE = '#2383E2';
+const HERO_LINE = '#6C63FF';
 
 function StockTrend({ testTimeline, subjects, classAvg }) {
   const dark = useTheme(s => s.dark);
@@ -519,8 +519,8 @@ function StockTrend({ testTimeline, subjects, classAvg }) {
               <AreaChart data={points} margin={{ top: 26, right: 24, left: -22, bottom: 0 }}>
                 <defs>
                   <linearGradient id="stockFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={HERO_LINE} stopOpacity={0.20} />
-                    <stop offset="100%" stopColor={HERO_LINE} stopOpacity={0} />
+                    <stop offset="0%" stopColor={HERO_LINE} stopOpacity={0.18} />
+                    <stop offset="100%" stopColor={HERO_LINE} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={dark ? 'rgba(255,255,255,0.08)' : '#f3f4f6'} />
@@ -589,11 +589,11 @@ function StockTrend({ testTimeline, subjects, classAvg }) {
 // ── Unified activity calendar ──────────────────────────────────────────────────
 
 const CAL_TYPES = [
-  { id: 'all',         label: 'All',         icon: Zap,           hex: '#0F7B6C' },
-  { id: 'attendance',  label: 'Attendance',  icon: Calendar,      hex: '#0F7B6C' },
-  { id: 'tests',       label: 'Tests',       icon: Target,        hex: '#2383E2' },
-  { id: 'videos',      label: 'Videos',      icon: Video,         hex: '#6940A5' },
-  { id: 'assignments', label: 'Assignments', icon: ClipboardList, hex: '#C2410C' },
+  { id: 'all',         label: 'All',         icon: Zap,           hex: '#00C9C3' },
+  { id: 'attendance',  label: 'Attendance',  icon: Calendar,      hex: '#00C9C3' },
+  { id: 'tests',       label: 'Tests',       icon: Target,        hex: '#6C63FF' },
+  { id: 'videos',      label: 'Videos',      icon: Video,         hex: '#FFC107' },
+  { id: 'assignments', label: 'Assignments', icon: ClipboardList, hex: '#FF7043' },
 ];
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1753,9 +1753,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                       </div>
 
                       <SegmentedBar segments={[
-                        { label: 'Graded', value: assignStats.graded || 0, color: '#0F7B6C' },
-                        { label: 'Submitted', value: Math.max(0, (assignStats.submitted || 0) - (assignStats.graded || 0)), color: '#2383E2' },
-                        { label: 'Pending', value: Math.max(0, (assignStats.total || 0) - (assignStats.submitted || 0)), color: '#E5E3DF' },
+                        { label: 'Graded', value: assignStats.graded || 0, color: '#00C9C3' },
+                        { label: 'Submitted', value: Math.max(0, (assignStats.submitted || 0) - (assignStats.graded || 0)), color: '#6C63FF' },
+                        { label: 'Pending', value: Math.max(0, (assignStats.total || 0) - (assignStats.submitted || 0)), color: '#FFC107' },
                       ]} />
 
                       {gradedAssignments.length > 0 && (
@@ -1768,7 +1768,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                               <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: dark ? '#9aa4b2' : '#9ca3af', fontWeight: 700 }} axisLine={false} tickLine={false} />
                               <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', fontSize: 10, fontWeight: 'bold', backgroundColor: dark ? '#1a1b33' : '#fff', color: dark ? '#e5e7eb' : undefined }} cursor={{ fill: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6' }} />
                               <Bar dataKey="marks_obtained" radius={[6, 6, 0, 0]} maxBarSize={26} animationDuration={reduce ? 0 : 1100}>
-                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? (dark ? '#6ee7b7' : '#0F7B6C') : (dark ? '#fca5a5' : '#ef4444')} />)}
+                                {gradedAssignments.map((e, idx) => <Cell key={idx} fill={e.marks_obtained >= 60 ? (dark ? '#67e8f9' : '#00C9C3') : (dark ? '#fca5a5' : '#FF5252')} />)}
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
@@ -1785,7 +1785,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                                   <span className="text-neutral-700 inline-flex items-center gap-1.5"><SubjectIcon value={s.emoji} size={12} />{s.subject}</span>
                                   <span className="text-neutral-400">{s.assignment_submitted}/{s.assignment_total}</span>
                                 </div>
-                                <GrowBar value={p} color="#1A56DB" height="h-1" />
+                                <GrowBar value={p} color="#6C63FF" height="h-1" />
                               </div>
                             );
                           })}
