@@ -69,7 +69,7 @@ export default function ReportsPage() {
       await buildClassAnalyticsPdf({ analytics, standardName: currentStd.name });
     } catch (e) {
       console.error('Failed to generate PDF', e);
-      alert('Failed to generate PDF. Please ensure you have a stable connection.');
+      alert('Failed to generate PDF: ' + e.message);
     }
   };
 

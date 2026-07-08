@@ -40,7 +40,7 @@ export default function StudentDetailPage() {
       await buildStudentReportPdf({ data: reportData, period: reportPeriod });
     } catch (e) {
       console.error('Failed to generate PDF', e);
-      alert('Failed to generate PDF. Please ensure you have a stable connection.');
+      alert('Failed to generate PDF: ' + e.message);
     }
   };
 
