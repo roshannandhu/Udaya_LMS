@@ -10,8 +10,8 @@ export default function GradientAreaTrendChart({ data, classAverageLine = false 
         <AreaChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
           <defs>
             <linearGradient id="colorStudent" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.6}/>
-              <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#00C2C7" stopOpacity={0.6}/>
+              <stop offset="95%" stopColor="#00C2C7" stopOpacity={0}/>
             </linearGradient>
             <filter id="glow">
               <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
@@ -34,13 +34,13 @@ export default function GradientAreaTrendChart({ data, classAverageLine = false 
           <Area 
             type="monotone" 
             dataKey="studentScore" 
-            stroke="#3B82F6" 
+            stroke="#00C2C7" 
             strokeWidth={4} 
             fillOpacity={1} 
             fill="url(#colorStudent)" 
             name="Student" 
             filter="url(#glow)"
-            activeDot={{ r: 6, stroke: '#fff', strokeWidth: 3, fill: '#3B82F6' }}
+            activeDot={{ r: 6, stroke: '#fff', strokeWidth: 3, fill: '#00C2C7' }}
           />
         </AreaChart>
       </ResponsiveContainer>

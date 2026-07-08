@@ -19,7 +19,7 @@ export default function EngagementHeatmap({ data }) {
     if (count === 0) return 'bg-gray-100';
     if (count < 3) return 'bg-cyan-200';
     if (count < 6) return 'bg-cyan-400';
-    return 'bg-[#3B82F6] shadow-sm';
+    return 'bg-[#00C2C7] shadow-sm';
   };
 
   return (
@@ -46,7 +46,7 @@ export default function EngagementHeatmap({ data }) {
           <div className="w-3 h-3 rounded bg-gray-100"></div>
           <div className="w-3 h-3 rounded bg-cyan-200"></div>
           <div className="w-3 h-3 rounded bg-cyan-400"></div>
-          <div className="w-3 h-3 rounded bg-[#3B82F6]"></div>
+          <div className="w-3 h-3 rounded bg-[#00C2C7]"></div>
         </div>
         <span>More</span>
       </div>

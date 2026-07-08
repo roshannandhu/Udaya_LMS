@@ -29,24 +29,24 @@ export default function DumbbellSubjectPlot({ data }) {
               />
               {/* Class Avg Dot */}
               <div 
-                className="absolute w-3 h-3 bg-[#93C5FD] rounded-full top-1/2 -translate-y-1/2 shadow-sm border-2 border-white"
+                className="absolute w-3 h-3 bg-[#FFC436] rounded-full top-1/2 -translate-y-1/2 shadow-sm border-2 border-white"
                 style={{ left: `calc(${item.classAvg}% - 6px)` }}
                 title={`Class: ${item.classAvg}`}
               />
               {/* Student Dot */}
               <div 
-                className="absolute w-4 h-4 bg-[#3B82F6] rounded-full top-1/2 -translate-y-1/2 shadow-md border-2 border-white z-10"
+                className="absolute w-4 h-4 bg-[#00C2C7] rounded-full top-1/2 -translate-y-1/2 shadow-md border-2 border-white z-10"
                 style={{ left: `calc(${item.student}% - 8px)` }}
                 title={`Student: ${item.student}`}
               />
             </div>
-            <div className="w-8 text-right text-[#3B82F6]">{item.student}</div>
+            <div className="w-8 text-right text-[#00C2C7]">{item.student}</div>
           </div>
         );
       })}
       <div className="flex justify-center gap-6 mt-4 text-[9px] font-bold uppercase tracking-wider text-gray-500">
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]"></div> Student</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#93C5FD]"></div> Class Avg</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#00C2C7]"></div> Student</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#FFC436]"></div> Class Avg</div>
       </div>
     </div>
   );

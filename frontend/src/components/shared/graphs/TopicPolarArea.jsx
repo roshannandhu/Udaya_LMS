@@ -12,7 +12,7 @@ export default function TopicPolarArea({ data }) {
           <PolarAngleAxis dataKey="topic" tick={{ fill: '#112B3C', fontSize: 10, fontWeight: 'bold' }} />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
           <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
-          <Radar name="Score" dataKey="score" stroke="#3B82F6" strokeWidth={2} fill="#3B82F6" fillOpacity={0.6} />
+          <Radar name="Score" dataKey="score" stroke="#00C2C7" strokeWidth={2} fill="#00C2C7" fillOpacity={0.6} />
         </RadarChart>
       </ResponsiveContainer>
     </div>
