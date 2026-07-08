@@ -4,7 +4,7 @@ import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Responsi
 export default function TopicPolarArea({ data }) {
   // data: [{ topic: 'Algebra', score: 90 }, { topic: 'Geometry', score: 65 }, ...]
   return (
-    <div className="w-full h-full min-h-[300px] pt-2">
+    <div className="w-full h-full min-h-[240px] pt-2">
       <ResponsiveContainer width="100%" height="100%">
         {/* We use RadarChart but style it to look like a Polar Area Chart by using fill on the whole polygon */}
         <RadarChart cx="50%" cy="50%" outerRadius="75%" data={data}>

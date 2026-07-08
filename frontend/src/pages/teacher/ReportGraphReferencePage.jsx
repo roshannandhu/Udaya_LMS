@@ -24,17 +24,13 @@ import ActivityStepper from '../../components/shared/graphs/ActivityStepper';
 
 
 // Basic Glass Card Wrapper
-const GlassCard = ({ title, subtitle, children, colSpan = 1, rowSpan = 1 }) => (
-  <div 
-    className={`bg-white/80 backdrop-blur-xl border border-white/40 rounded-[32px] p-6 shadow-[0_8px_32px_rgb(0,0,0,0.04)] flex flex-col ${colSpan === 2 ? 'md:col-span-2' : 'col-span-1'} ${rowSpan === 2 ? 'md:row-span-2' : ''}`}
-  >
-    {(title || subtitle) && (
-      <div className="mb-4">
-        {title && <h3 className="font-serif font-black text-[18px] text-[#112B3C] tracking-tight">{title}</h3>}
-        {subtitle && <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">{subtitle}</p>}
-      </div>
-    )}
-    <div className="flex-1 flex flex-col justify-center relative">
+const GlassCard = ({ title, subtitle, children }) => (
+  <div className="break-inside-avoid bg-white/40 backdrop-blur-xl border border-white/60 rounded-[32px] p-6 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full overflow-hidden">
+    <div className="mb-4">
+      <h3 className="text-[#112B3C] font-black text-lg tracking-tight">{title}</h3>
+      {subtitle && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">{subtitle}</p>}
+    </div>
+    <div className="w-full flex-1 flex flex-col justify-center relative min-h-[220px]">
       {children}
     </div>
   </div>
@@ -193,7 +189,7 @@ export default function ReportGraphReferencePage() {
           <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
         </GlassCard>
 
-        <GlassCard title="Course Progress" subtitle="Overall Completion" rowSpan={2}>
+        <GlassCard title="Course Progress" subtitle="Overall Completion">
           <div className="flex-1 flex items-center justify-center py-8">
             <LiquidFillGauge percentage={78} size={240} />
           </div>
@@ -210,11 +206,11 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
 
         {/* ROW 2: Performance */}
-        <GlassCard title="Overall Trend" subtitle="Student vs Class Avg" colSpan={2}>
+        <GlassCard title="Overall Trend" subtitle="Student vs Class Avg">
           <GradientAreaTrendChart data={areaData} classAverageLine={true} />
         </GlassCard>
 
-        <GlassCard title="Subject Strengths" subtitle="Radar Analysis" rowSpan={2}>
+        <GlassCard title="Subject Strengths" subtitle="Radar Analysis">
           <SubjectRadarChart data={radarData} />
         </GlassCard>
 
@@ -228,7 +224,7 @@ export default function ReportGraphReferencePage() {
         </GlassCard>
 
         {/* ROW 4: Allocation & Range */}
-        <GlassCard title="Time Allocation" subtitle="Donut Breakdown" colSpan={2}>
+        <GlassCard title="Time Allocation" subtitle="Donut Breakdown">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
             <TimeAllocationDonut data={donutData} />
             <LearningTreemap data={treemapData} />
@@ -245,7 +241,7 @@ export default function ReportGraphReferencePage() {
 
         
         {/* ROW 5: Advanced Analytics */}
-        <GlassCard title="Rank Progression" subtitle="Leaderboard (Bump Chart)" colSpan={2}>
+        <GlassCard title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
 
@@ -253,24 +249,24 @@ export default function ReportGraphReferencePage() {
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
 
-        <GlassCard title="Topic Mastery" subtitle="Math Breakdown (Polar Area)" rowSpan={2}>
+        <GlassCard title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
           <TopicPolarArea data={polarData} />
         </GlassCard>
 
-        <GlassCard title="Class Distribution" subtitle="Science Test (Bell Curve)" colSpan={2}>
+        <GlassCard title="Class Distribution" subtitle="Science Test (Bell Curve)">
           <TestBellCurve data={bellData} studentScore={85} />
         </GlassCard>
 
-        <GlassCard title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)" colSpan={2}>
+        <GlassCard title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
           <TestQuadrantChart data={quadrantData} />
         </GlassCard>
 
-        <GlassCard title="Today's Activity" subtitle="Chronological Stepper" rowSpan={2}>
+        <GlassCard title="Today's Activity" subtitle="Chronological Stepper">
           <ActivityStepper data={activityData} />
         </GlassCard>
 
         {/* Mobile Alternative */}
-        <GlassCard title="Subject Plot" subtitle="Dumbbell (Mobile friendly)" colSpan={2}>
+        <GlassCard title="Subject Plot" subtitle="Dumbbell (Mobile friendly)">
           <DumbbellSubjectPlot data={radarData} />
         </GlassCard>
 
