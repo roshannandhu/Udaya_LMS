@@ -53,7 +53,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 const Card = ({ children, className = '', colSpan = 1 }) => (
   <motion.div 
     variants={itemVariants}
-    className={`bg-white rounded-[24px] p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 flex flex-col overflow-hidden relative ${
+    className={`bg-white rounded-[32px] p-6 shadow-[0_4px_24px_rgb(0,0,0,0.03)] border border-gray-50 flex flex-col overflow-hidden relative ${
       colSpan === 2 ? 'col-span-2' : 'col-span-1'
     } md:col-span-auto ${className}`}
   >
@@ -210,11 +210,11 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 2. Recent Quizzes */}
-        <Card>
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-[13px] text-gray-900">Recent Quizzes</h3>
+        <Card className="flex flex-col items-center justify-center text-center">
+          <div className="mb-2">
+            <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Recent<br/>Quizzes</h3>
           </div>
-          <div className="h-28 w-full mt-4 -ml-4">
+          <div className="h-28 w-full mt-4">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={quizData}>
                 <Line type="linear" dataKey="score" stroke={theme.secondary} strokeWidth={2.5} dot={{ r: 4, fill: theme.primary, strokeWidth: 0 }} />
@@ -225,20 +225,20 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 3. Calendar */}
-        <Card className="flex flex-col items-center">
-          <div className="flex justify-between items-center w-full mb-3">
-            <button className="p-1 text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
-            <span className="font-bold text-[13px]">{format(currentMonth, 'MMMM')}</span>
-            <button className="p-1 text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
+        <Card className="flex flex-col items-center py-6">
+          <div className="flex justify-center items-center gap-3 w-full mb-5">
+            <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
+            <span className="font-serif font-black text-[16px] text-[#112B3C]">{format(currentMonth, 'MMMM')}</span>
+            <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center w-full text-[9px] text-gray-400 font-bold uppercase mb-1">
+          <div className="grid grid-cols-7 gap-x-2 text-center w-full text-[9px] text-gray-400 font-bold uppercase mb-3">
             {['S','M','T','W','T','F','S'].map(d => <div key={d}>{d}</div>)}
           </div>
-          <div className="grid grid-cols-7 gap-y-1.5 gap-x-1 text-center w-full text-[11px] font-bold text-gray-700">
+          <div className="grid grid-cols-7 gap-y-3 gap-x-2 text-center w-full text-[11px] font-bold text-[#112B3C]">
             {calendarDays.map((d, i) => (
-              <div key={i} className={`flex justify-center items-center h-6 w-6 rounded-full mx-auto relative
-                ${d.hasTest ? `border-2 border-[${theme.tertiary}] text-[${theme.tertiary}]` : ''}
-                ${d.hasAtt && !d.hasTest ? `border-2 border-[${theme.primary}] text-[${theme.primary}]` : ''}
+              <div key={i} className={`flex justify-center items-center w-5 mx-auto relative
+                ${d.hasTest ? `text-[${theme.tertiary}]` : ''}
+                ${d.hasAtt && !d.hasTest ? `text-[${theme.primary}]` : ''}
               `}>
                 {d.day}
               </div>
@@ -247,56 +247,33 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 4. Quick Stats */}
-        <Card className="flex flex-col justify-between gap-4">
+        <Card className="flex flex-col justify-center items-center text-center gap-10 py-8">
           <div>
-            <h2 className="text-3xl font-black text-gray-800">{assignStats.total}</h2>
-            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Assignments Done</p>
-            <div className="h-6 mt-1 w-full opacity-60">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendData.slice(0, 10)}>
-                  <Line type="monotone" dataKey="score" stroke={theme.secondary} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <h2 className="text-[42px] font-serif font-black text-[#112B3C] leading-none">{assignStats.total}</h2>
+            <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-3 leading-tight">Assignments<br/>Done</p>
           </div>
           <div>
-            <h2 className="text-3xl font-black text-gray-800">{liveStats.attended}</h2>
-            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Live Classes</p>
-            <div className="h-6 mt-1 w-full opacity-60">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendData.slice(-10)}>
-                  <Line type="monotone" dataKey="score" stroke={theme.primary} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <h2 className="text-[42px] font-serif font-black text-[#112B3C] leading-none">{liveStats.attended}</h2>
+            <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-3 leading-tight">Live Classes</p>
           </div>
         </Card>
 
-        {/* 6. 75% Radial + Button (spans 2 rows intuitively based on layout order) */}
-        <Card className="flex flex-col items-center justify-between py-6 row-span-2">
-          <div className="text-center mb-2">
-            <h3 className="font-bold text-[13px] text-gray-900">Course Progress</h3>
-            <p className="text-[9px] font-bold text-gray-400 uppercase">Overall average</p>
+        {/* 6. Course Progress */}
+        <Card className="flex flex-col items-center justify-between py-8 row-span-2 text-center">
+          <div className="mb-4">
+            <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Course<br/>Progress</h3>
+            <p className="text-[9px] font-bold text-[#A0AAB5] uppercase tracking-widest mt-3 leading-tight">Overall<br/>Average</p>
           </div>
           
           <div className="relative w-28 h-28 md:w-36 md:h-36 flex items-center justify-center my-4">
             <svg className="w-full h-full transform -rotate-90 drop-shadow-sm">
-              <circle cx="50%" cy="50%" r="42%" stroke="#F4F7F6" strokeWidth="12%" fill="none" />
-              <circle cx="50%" cy="50%" r="42%" stroke={theme.primary} strokeWidth="12%" fill="none" strokeDasharray="264%" strokeDashoffset={`${264 - (avgScore/100)*264}%`} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
+              <circle cx="50%" cy="50%" r="42%" stroke="#F4F7F6" strokeWidth="16%" fill="none" />
+              <circle cx="50%" cy="50%" r="42%" stroke={theme.primary} strokeWidth="16%" fill="none" strokeDasharray="264%" strokeDashoffset={`${264 - (avgScore/100)*264}%`} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-3xl font-black text-gray-800">{Math.round(avgScore)}%</span>
+              <span className="text-3xl font-serif font-black text-[#112B3C]">{Math.round(avgScore)}%</span>
             </div>
           </div>
-
-          <p className="text-[10px] text-center text-gray-400 font-medium px-2 leading-relaxed">Generated from your latest academic records.</p>
-          
-          <button 
-            onClick={handleGenerateAI}
-            className="mt-4 w-full py-2.5 bg-[#FFC436] hover:bg-yellow-400 transition-colors text-white text-[12px] font-bold rounded-full shadow-lg shadow-yellow-400/40"
-          >
-            Suscipit (AI Report)
-          </button>
         </Card>
 
         {/* 5. Dual Circular Rings */}
@@ -419,12 +396,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
       <div className="fixed bottom-[80px] right-6 md:bottom-8 md:right-8 z-50">
         <button 
           onClick={handleGenerateAI}
-          className="bg-[#FFC436] text-white w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-[0_8px_30px_rgb(255,196,54,0.5)] hover:scale-105 hover:bg-yellow-400 transition-all active:scale-95 border-4 border-white/50 group relative"
+          className="bg-[#FFC436] text-white w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-[0_8px_30px_rgb(255,196,54,0.4)] hover:scale-105 hover:bg-yellow-400 transition-transform active:scale-95 group relative"
         >
            <Bot size={28} className="drop-shadow-md group-hover:rotate-12 transition-transform" />
-           <span className="absolute top-0 right-0 flex h-3 w-3">
+           <span className="absolute -top-1 -right-1 flex h-4 w-4">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500 border border-white"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-[#00C2C7] border-[2px] border-[#F4F7F6] shadow-sm"></span>
           </span>
         </button>
       </div>
