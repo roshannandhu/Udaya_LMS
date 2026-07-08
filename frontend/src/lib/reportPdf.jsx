@@ -50,21 +50,17 @@ async function generatePdf(element, filename) {
 
 function mountAndPrint(Component, props, filename) {
   const container = document.createElement('div');
-  // Fixed width to match A4 proportions (96 DPI)
   container.style.width = '794px';
   container.style.position = 'absolute'; 
   container.style.top = '0'; 
   container.style.left = '-9999px';
   container.style.backgroundColor = '#ffffff';
   
-  // Synchronously render React to raw HTML string. 
-  // This absolutely guarantees the DOM exists before html2pdf fires!
-  const htmlString = renderToString(<Component {...props} />);
-  container.innerHTML = htmlString;
-  
   document.body.appendChild(container);
 
-  // Give the browser time to paint the raw HTML
+  const root = createRoot(container);
+  root.render(<Component {...props} />);
+
   setTimeout(async () => {
     try {
       const opt = {
@@ -83,30 +79,35 @@ function mountAndPrint(Component, props, filename) {
     } catch (err) {
       console.error("PDF Generation Error:", err);
     } finally {
+      root.unmount();
       document.body.removeChild(container);
     }
-  }, 1000); 
+  }, 1500); 
 }
 
 // ── Ultra-Premium Pure CSS Components (100% Bug-Free in PDF) ───────────────
 
 const Header = ({ title, subtitle, student, brand, rightStats }) => (
-  <div className="relative overflow-hidden rounded-3xl bg-[#0f172a] p-8 text-white shadow-2xl page-break">
-    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
-    <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-violet-500/20 blur-3xl" />
+  <div className="relative overflow-hidden rounded-3xl bg-[#0f172a] p-8 text-white shadow-xl page-break">
+    {/* REMOVED blur-3xl filters because they crash html2canvas! Using solid circles instead */}
+    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10" />
+    <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-violet-500/10" />
     
     <div className="relative z-10 flex items-start justify-between">
       <div className="flex gap-6">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-white/10 shadow-inner p-1 border border-white/5">
-          {/* REMOVED AVATAR IMG TO PREVENT CORS CRASH IN HTML2CANVAS */}
-          <span className="text-5xl font-extrabold text-white">
-            {(student?.name || 'S').charAt(0).toUpperCase()}
-          </span>
+          {student?.avatar_url ? (
+            <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-[14px] object-cover" crossOrigin="anonymous" />
+          ) : (
+            <span className="text-5xl font-extrabold text-white">
+              {(student?.name || 'S').charAt(0).toUpperCase()}
+            </span>
+          )}
         </div>
 
         <div>
           <div className="mb-2 flex items-center gap-2">
-            {/* REMOVED LOGO IMG TO PREVENT CORS CRASH IN HTML2CANVAS */}
+            {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-5 w-5 rounded bg-white p-0.5" crossOrigin="anonymous" />}
             <span className="text-[10px] font-bold tracking-widest text-indigo-300 uppercase">{brand.name}</span>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-white mb-2">{student?.name || 'Student'}</h1>
