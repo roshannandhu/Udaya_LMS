@@ -1,141 +1,70 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, Cell, AreaChart, Area, ReferenceLine
-} from 'recharts';
-import { format, parseISO } from 'date-fns';
-import { Search, ChevronLeft, ChevronRight, Bot, Loader2, ArrowLeft, Share2, Download, Edit2, MoreHorizontal } from 'lucide-react';
+import { Bot, Loader2, ArrowLeft, Share2, Download, Edit2, MoreHorizontal } from 'lucide-react';
 import { aiApi } from '../../lib/api';
 
-// --- Theme Colors ---
-const theme = {
-  primary: '#00C2C7', // Cyan
-  secondary: '#FFC436', // Yellow
-  tertiary: '#7059FF', // Purple
-  bg: '#F4F7F6',
-  card: '#FFFFFF',
-  textMain: '#333333',
-  textMuted: '#888888',
-};
+// --- Premium Graph Imports ---
+import SubjectProgressionLineChart from './graphs/SubjectProgressionLineChart';
+import GradientAreaTrendChart from './graphs/GradientAreaTrendChart';
+import SubjectRadarChart from './graphs/SubjectRadarChart';
+import DumbbellSubjectPlot from './graphs/DumbbellSubjectPlot';
+import EngagementHeatmap from './graphs/EngagementHeatmap';
+import OverlappingAreaChart from './graphs/OverlappingAreaChart';
+import TimeAllocationDonut from './graphs/TimeAllocationDonut';
+import LearningTreemap from './graphs/LearningTreemap';
+import LiquidFillGauge from './graphs/LiquidFillGauge';
+import NeonProgressGauge from './graphs/NeonProgressGauge';
+import QuizBubbleScatter from './graphs/QuizBubbleScatter';
+import QuizRangeChart from './graphs/QuizRangeChart';
+import AttendanceCalendar from './graphs/AttendanceCalendar';
+import TestCalendar from './graphs/TestCalendar';
+import LeaderboardBumpChart from './graphs/LeaderboardBumpChart';
+import AssignmentSpeedometer from './graphs/AssignmentSpeedometer';
+import TestBellCurve from './graphs/TestBellCurve';
+import TestQuadrantChart from './graphs/TestQuadrantChart';
+import TopicPolarArea from './graphs/TopicPolarArea';
+import ActivityStepper from './graphs/ActivityStepper';
 
-// --- Animation Variants ---
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
-};
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
-};
-
-// --- Custom Tooltips ---
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white p-2 rounded shadow-lg border border-gray-100 text-sm z-50">
-        <p className="font-semibold text-gray-800">{label}</p>
-        {payload.map((entry, index) => (
-          <p key={`item-${index}`} style={{ color: entry.color }}>
-            {entry.name}: {entry.value?.toFixed(1) || entry.value}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
-
-// --- Reusable Card Wrapper ---
-const Card = ({ children, className = '', colSpan = 1 }) => (
-  <motion.div 
-    variants={itemVariants}
-    className={`bg-white rounded-[32px] p-6 shadow-[0_4px_24px_rgb(0,0,0,0.03)] border border-gray-50 flex flex-col overflow-hidden relative ${
-      colSpan === 2 ? 'col-span-2' : 'col-span-1'
-    } md:col-span-auto ${className}`}
+// Basic Glass Card Wrapper
+const GlassCard = ({ title, subtitle, children, className = "", onClick = null }) => (
+  <div 
+    onClick={onClick}
+    className={`bg-white/40 backdrop-blur-xl border border-white/60 rounded-[24px] md:rounded-[32px] p-5 shadow-[0_8px_32px_rgba(31,38,135,0.05)] flex flex-col hover:shadow-[0_8px_32px_rgba(31,38,135,0.1)] transition-all duration-300 w-full relative z-10 overflow-hidden ${className} ${onClick ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
   >
-    {children}
-  </motion.div>
+    <div className="mb-3 md:mb-4 shrink-0 pointer-events-none">
+      <h3 className="text-[#112B3C] font-black text-base md:text-lg tracking-tight leading-tight truncate">{title}</h3>
+      {subtitle && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 truncate">{subtitle}</p>}
+    </div>
+    <div className="w-full flex-1 flex flex-col justify-center relative min-w-0 pointer-events-auto">
+      {children}
+    </div>
+  </div>
 );
 
 export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, autoOpenAI = false }) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [aiReport, setAiReport] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
   const [showAiModal, setShowAiModal] = useState(autoOpenAI);
 
-  const student = data?.student || {};
-  const testTimeline = data?.test_timeline || [];
-  const subjectRadar = data?.subject_radar || [];
-  const assignStats = data?.assignment_stats || { total: 0, submitted: 0 };
-  const liveStats = data?.live_classes_stats || { total: 0, attended: 0, attendance_pct: 0 };
-  const classAvgs = data?.class_averages || {};
-  
-  const attHeatmap = data?.attendance_heatmap || [];
-  const testHeatmap = data?.test_heatmap || [];
-  const vidHeatmap = data?.video_heatmap || [];
-  
-  // 1. Trend Data (Overall Performance)
-  const trendData = useMemo(() => {
-    return testTimeline.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(t => ({
-      name: t.date ? format(parseISO(t.date), 'MMM dd') : 'Test',
-      score: t.score_pct || 0,
-      title: t.test_title
-    }));
-  }, [testTimeline]);
-
-  // 2. Recent Quizzes
-  const quizData = useMemo(() => {
-    return trendData.slice(-7); // Last 7 tests
-  }, [trendData]);
-
-  // 3. Subject Performance vs Class Average
-  const subjectData = useMemo(() => {
-    return subjectRadar.map(s => {
-      const classAvg = classAvgs.subject_test_averages?.[s.subject_id] || s.test_avg || 0;
-      return {
-        subject: s.subject.length > 7 ? s.subject.substring(0,6) + '..' : s.subject,
-        diff: (s.test_avg || 0) - classAvg,
-        score: s.test_avg || 0
-      };
-    });
-  }, [subjectRadar, classAvgs]);
-
-  // 4. Weekly Engagement (Aggr from heatmaps)
-  const weeklyData = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const aggr = days.map(day => ({ day, videos: 0, tests: 0, attendance: 0 }));
-    
-    vidHeatmap.forEach(v => {
-      const d = parseISO(v.date).getDay();
-      aggr[d].videos += (v.minutes || 0);
-    });
-    testHeatmap.forEach(t => {
-      const d = parseISO(t.date).getDay();
-      aggr[d].tests += (t.count || 0) * 30; // approx 30 mins per test
-    });
-    attHeatmap.forEach(a => {
-      const d = parseISO(a.date).getDay();
-      aggr[d].attendance += (a.present || 0) * 60; // approx 60 mins per class
-    });
-    return aggr;
-  }, [vidHeatmap, testHeatmap, attHeatmap]);
-
-  // Calendar logic
-  const calendarDays = useMemo(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    return Array.from({length: daysInMonth}, (_, i) => {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
-      const hasTest = testHeatmap.some(t => t.date === dateStr);
-      const hasAtt = attHeatmap.some(a => a.date === dateStr && a.present > 0);
-      return { day: i + 1, hasTest, hasAtt };
-    });
-  }, [currentMonth, testHeatmap, attHeatmap]);
+  const { 
+    student = {}, 
+    trendData = [], 
+    radarData = [], 
+    polarData = [], 
+    scatterData = [], 
+    rangeData = [], 
+    heatmapData = [], 
+    overlapData = [], 
+    donutData = [], 
+    treemapData = [], 
+    attendanceDays = [], 
+    testDays = [], 
+    bumpData = [], 
+    assignmentData = [], 
+    bellData = [], 
+    quadrantData = [],
+    activityData = [] 
+  } = data || {};
 
   const handleGenerateAI = async () => {
     setShowAiModal(true);
@@ -151,19 +80,16 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     }
   };
 
-  const avgScore = student.avg_score || 0;
-  const overallClassAvg = classAvgs?.overall?.avg_score || 0;
-
   return (
-    <div className="min-h-screen bg-[#F4F7F6] pb-24 text-[#333333] font-sans">
+    <div className="w-full bg-[#F4F7F6] pb-24 text-[#333333] font-sans">
       
       {showHeader && (
         <div className="pt-6 md:pt-8 px-4 md:px-6 pb-6 flex justify-between items-center max-w-7xl mx-auto">
           <div className="flex items-center gap-3 md:gap-4">
             <button className="w-10 h-10 rounded-full flex items-center justify-center bg-white shadow-sm border border-gray-100"><ArrowLeft size={18} className="text-gray-700" /></button>
             <div>
-              <h1 className="text-lg md:text-xl font-serif font-black text-[#112B3C] tracking-tight">{student.name ? student.name.split(' ')[0] : 'Abhinav'}</h1>
-              <p className="text-[10px] md:text-xs text-gray-400 font-bold tracking-wider uppercase">{student.student_id || '26UDAYA100006'}</p>
+              <h1 className="text-lg md:text-xl font-serif font-black text-[#112B3C] tracking-tight">{student.name ? student.name.split(' ')[0] : 'Student'}</h1>
+              <p className="text-[10px] md:text-xs text-gray-400 font-bold tracking-wider uppercase">{student.username || 'ID'}</p>
             </div>
           </div>
           <div className="flex gap-1 md:gap-2">
@@ -175,248 +101,114 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </div>
       )}
 
-      {/* Main Grid Layout - Masonry 4-col desktop matching exact mockup */}
+      {/* Ultimate Bento Grid Layout */}
       <motion.div 
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 md:auto-rows-[240px] grid-flow-dense"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="px-3 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6 pb-24"
       >
         
-        {/* 1. Overall Performance Trend (1x1) */}
-        <Card className="flex flex-col h-full order-5 md:order-1 col-span-2 md:col-span-1">
-          <div className="mb-2">
-            <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Overall Performance</h3>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Score timeline</p>
-          </div>
-          <div className="flex-1 w-full -ml-4 mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <Line type="monotone" dataKey="score" stroke={theme.tertiary} strokeWidth={3} dot={false} activeDot={{ r: 6, fill: theme.secondary, stroke: '#fff', strokeWidth: 2 }} />
-                <Tooltip content={<CustomTooltip />} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        {/* 2. Recent Quizzes (1x1) */}
-        <Card className="flex flex-col h-full order-1 md:order-2 col-span-1 md:col-span-1 aspect-square md:aspect-auto">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Recent Quizzes</h3>
-            <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">Week ▾</span>
-          </div>
-          <div className="flex-1 w-full mt-4 -ml-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={quizData}>
-                <Line type="linear" dataKey="score" stroke={theme.secondary} strokeWidth={2.5} dot={{ r: 4, fill: theme.primary, strokeWidth: 0 }} />
-                <Tooltip content={<CustomTooltip />} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        {/* 3. Calendar (1x1) */}
-        <Card className="flex flex-col items-center py-4 h-full order-2 md:order-3 col-span-1 md:col-span-1 aspect-square md:aspect-auto">
-          <div className="flex justify-center items-center gap-3 w-full mb-4">
-            <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
-            <span className="font-serif font-black text-[16px] text-[#112B3C]">{format(currentMonth, 'MMMM')}</span>
-            <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
-          </div>
-          <div className="grid grid-cols-7 gap-x-2 text-center w-full text-[9px] text-gray-400 font-bold uppercase mb-2">
-            {['S','M','T','W','T','F','S'].map(d => <div key={d}>{d}</div>)}
-          </div>
-          <div className="grid grid-cols-7 gap-y-2 gap-x-2 text-center w-full text-[11px] font-bold text-[#112B3C] flex-1 items-center">
-            {calendarDays.map((d, i) => (
-              <div key={i} className={`flex justify-center items-center w-5 mx-auto relative
-                ${d.hasTest ? 'text-[' + theme.tertiary + ']' : ''}
-                ${d.hasAtt && !d.hasTest ? 'text-[' + theme.primary + ']' : ''}
-              `}>
-                {d.day}
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* 4. Dual Rings (1x1) */}
-        <Card className="flex flex-col justify-center h-full relative order-6 md:order-4 col-span-2 md:col-span-1">
-           <div className="absolute top-4 left-4 right-4 flex bg-white shadow-sm border border-gray-100 rounded-full px-3 py-2 items-center z-10">
-             <Search size={14} className="text-gray-400" />
-             <span className="text-gray-300 text-xs ml-2">Search...</span>
-           </div>
-           <div className="flex justify-around items-center pt-8 flex-1">
-            <div className="flex flex-col items-center">
-              <div className="relative w-14 h-14 mb-2">
-                 <svg className="w-full h-full transform -rotate-90 drop-shadow-sm"><circle cx="50%" cy="50%" r="40%" stroke="#F4F7F6" strokeWidth="10%" fill="none" /><circle cx="50%" cy="50%" r="40%" stroke={theme.secondary} strokeWidth="10%" fill="none" strokeDasharray="251%" strokeDashoffset={`${251 - ((liveStats.attendance_pct || 0)/100)*251}%`} strokeLinecap="round" /></svg>
-                 <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">{Math.round(liveStats.attendance_pct || 0)}%</span>
-              </div>
-              <span className="font-bold text-[9px] uppercase tracking-wider text-gray-400">Attendance</span>
+        {/* Dedicated AI Mentor Card */}
+        <GlassCard 
+          className="col-span-2 md:col-span-4 xl:col-span-6 bg-gradient-to-r from-[#FFC436]/20 to-[#FFC436]/5 border-[#FFC436]/30" 
+          title="AI Mentor Insights" 
+          subtitle="Generate Personalized Report"
+          onClick={handleGenerateAI}
+        >
+          <div className="flex items-center gap-4 py-2">
+            <div className="w-12 h-12 rounded-full bg-[#FFC436] flex items-center justify-center text-white shadow-lg shadow-[#FFC436]/40">
+              <Bot size={24} />
             </div>
-            <div className="flex flex-col items-center">
-               <div className="relative w-14 h-14 mb-2">
-                 <svg className="w-full h-full transform -rotate-90 drop-shadow-sm"><circle cx="50%" cy="50%" r="40%" stroke="#F4F7F6" strokeWidth="10%" fill="none" /><circle cx="50%" cy="50%" r="40%" stroke={theme.tertiary} strokeWidth="10%" fill="none" strokeDasharray="251%" strokeDashoffset={`${251 - ((assignStats.total ? assignStats.submitted/assignStats.total : 0))*251}%`} strokeLinecap="round" /></svg>
-                 <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">{assignStats.total ? Math.round((assignStats.submitted/assignStats.total)*100) : 0}%</span>
-              </div>
-              <span className="font-bold text-[9px] uppercase tracking-wider text-gray-400">Submissions</span>
+            <div>
+              <p className="text-sm font-bold text-[#112B3C]">Tap to generate AI Report</p>
+              <p className="text-xs text-gray-500">Deep learning analysis on {student.name ? student.name.split(' ')[0] : 'this student'}'s performance.</p>
             </div>
           </div>
-        </Card>
+        </GlassCard>
 
-        {/* 5. Quick Stats (1x1) */}
-        <Card className="flex flex-col justify-between h-full py-5 order-3 md:order-5 col-span-1 md:col-span-1 aspect-[4/5] md:aspect-auto">
-          <div className="flex items-end justify-between px-2">
-             <div>
-               <h2 className="text-5xl md:text-3xl font-serif font-black text-[#112B3C] leading-none">{assignStats.total}</h2>
-               <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-1 leading-tight">Assignments<br/>Done</p>
-             </div>
-             <div>
-               <h2 className="text-5xl md:text-3xl font-serif font-black text-[#112B3C] leading-none">{liveStats.attended}</h2>
-               <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-1 leading-tight">Live<br/>Classes</p>
-             </div>
+        {/* ROW 1 */}
+        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Overall Trend" subtitle="Student vs Class Avg">
+          <GradientAreaTrendChart data={trendData} classAverageLine={true} />
+        </GlassCard>
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Course Progress" subtitle="Overall Completion">
+          <div className="flex-1 flex items-center justify-center py-4">
+            <LiquidFillGauge percentage={student.attendance_pct || 78} size={130} />
           </div>
-          <div className="flex gap-4 mt-4 h-10 opacity-60 w-full">
-            <div className="flex-1 h-full"><ResponsiveContainer><LineChart data={trendData.slice(0, 10)}><Line type="monotone" dataKey="score" stroke={theme.secondary} strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>
-            <div className="flex-1 h-full"><ResponsiveContainer><LineChart data={trendData.slice(-10)}><Line type="monotone" dataKey="score" stroke={theme.primary} strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>
+        </GlassCard>
+        <GlassCard className="col-span-1 md:col-span-2 xl:col-span-1" title="Live Classes" subtitle="Attendance Rate">
+          <div className="flex-1 flex items-center justify-center py-4">
+            <NeonProgressGauge percentage={student.avg_score || 92} label="Attended" color="#FFC436" />
           </div>
-        </Card>
+        </GlassCard>
 
-        {/* 6. Course Progress (1x2) */}
-        <Card className="md:row-span-2 flex flex-col items-center justify-between py-5 md:py-8 h-full text-center order-4 md:order-6 col-span-1 md:col-span-1 aspect-[4/5] md:aspect-auto">
-          <div className="mb-4">
-            <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Course Progress</h3>
-            <p className="text-[9px] font-bold text-[#A0AAB5] uppercase tracking-widest mt-2 leading-tight">Overall Average</p>
-          </div>
-          
-          <div className="relative w-32 h-32 flex items-center justify-center my-6">
-            <svg className="w-full h-full transform -rotate-90 drop-shadow-sm">
-              <circle cx="50%" cy="50%" r="42%" stroke="#F4F7F6" strokeWidth="16%" fill="none" />
-              <circle cx="50%" cy="50%" r="42%" stroke={theme.primary} strokeWidth="16%" fill="none" strokeDasharray="264%" strokeDashoffset={`${264 - (avgScore/100)*264}%`} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
-            </svg>
-            <div className="absolute flex flex-col items-center">
-              <span className="text-5xl md:text-4xl md:text-3xl font-serif font-black text-[#112B3C]">{Math.round(avgScore)}%</span>
-            </div>
-          </div>
+        {/* ROW 2 */}
+        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
+          <SubjectProgressionLineChart data={trendData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
+          <AssignmentSpeedometer data={assignmentData} />
+        </GlassCard>
 
-          <button 
-            onClick={handleGenerateAI}
-            className="mt-4 w-full py-3 bg-[#FFC436] hover:bg-yellow-400 transition-colors text-white text-[12px] font-bold rounded-full shadow-lg shadow-yellow-400/40"
-          >
-            Suscipit (AI Insights)
-          </button>
-        </Card>
+        {/* ROW 3 */}
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Subject Strengths" subtitle="Radar Analysis">
+          <SubjectRadarChart data={radarData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Weekly Engagement" subtitle="Github-style Heatmap">
+          <EngagementHeatmap data={heatmapData} />
+        </GlassCard>
+        
+        {/* ROW 4 */}
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Time Allocation" subtitle="Donut Breakdown">
+          <TimeAllocationDonut data={donutData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Topic Mastery" subtitle="Math Breakdown (Polar Area)">
+          <TopicPolarArea data={polarData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Learning Breakdown" subtitle="Content Type (Treemap)">
+          <LearningTreemap data={treemapData} />
+        </GlassCard>
 
-        {/* 7. Class Comparison (2x1) */}
-        <Card className="md:col-span-2 flex flex-col h-full order-7 md:order-7 col-span-2">
-          <div className="flex justify-between items-center mb-2">
-             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Class Comparison</h3>
-             <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">All time ▾</span>
-          </div>
-          <div className="flex-1 w-full -ml-4 mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-                <YAxis tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Line type="monotone" dataKey="score" stroke={theme.tertiary} strokeWidth={2.5} dot={{r:3, strokeWidth:0, fill:theme.tertiary}} name="Student" />
-                <Line type="monotone" dataKey="classAvg" stroke={theme.secondary} strokeWidth={2.5} dot={false} name="Class Avg" data={trendData.map(d => ({...d, classAvg: overallClassAvg}))} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-           <div className="flex justify-center gap-6 mt-3 text-[9px] font-bold uppercase tracking-wider text-gray-500">
-             <div className="flex items-center gap-1.5"><div className="w-4 h-1 rounded-full bg-[#7059FF]"></div> Student</div>
-             <div className="flex items-center gap-1.5"><div className="w-4 h-1 rounded-full bg-[#FFC436]"></div> Class Avg</div>
-           </div>
-        </Card>
+        {/* ROW 5 */}
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Activity Flow" subtitle="Overlapping areas">
+          <OverlappingAreaChart data={overlapData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Class Range" subtitle="Student standing in class">
+          <QuizRangeChart data={rangeData} />
+        </GlassCard>
 
-        {/* 8. Diverging Bar (1x1) */}
-        <Card className="flex flex-col h-full order-8 md:order-8 col-span-2 md:col-span-1">
-          <div className="flex flex-col mb-2">
-             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Subject vs Avg</h3>
-             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1">Deviation</span>
-          </div>
-          <div className="flex-1 w-full -ml-4 mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={subjectData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="subject" tick={{fontSize: 9, fontWeight: 700, fill: '#888'}} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{fill: '#f4f7f6'}} content={<CustomTooltip />} />
-                <ReferenceLine y={0} stroke="#E5E7EB" />
-                <Bar dataKey="diff" radius={[4, 4, 4, 4]} barSize={12}>
-                  {subjectData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.diff >= 0 ? theme.primary : theme.secondary} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+        {/* ROW 6 */}
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Test Strategy" subtitle="Time vs Accuracy (Quadrant)">
+          <TestQuadrantChart data={quadrantData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
+          <QuizBubbleScatter data={scatterData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Science Test (Bell Curve)">
+          <TestBellCurve data={bellData} studentScore={85} />
+        </GlassCard>
 
-        {/* 9. Grouped Bar (2x2) */}
-        <Card className="md:col-span-2 md:row-span-2 flex flex-col h-full order-9 md:order-9 col-span-2">
-           <div className="flex flex-col mb-4">
-             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Weekly Engagement</h3>
-             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1">Time spent per day (Mins)</span>
-           </div>
-           <div className="flex-1 w-full -ml-4 mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="day" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-                <YAxis tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{fill: '#f4f7f6'}} content={<CustomTooltip />} />
-                <Bar dataKey="videos" fill={theme.tertiary} radius={[2, 2, 0, 0]} name="Videos" barSize={8} />
-                <Bar dataKey="tests" fill={theme.primary} radius={[2, 2, 0, 0]} name="Tests" barSize={8} />
-                <Bar dataKey="attendance" fill={theme.secondary} radius={[2, 2, 0, 0]} name="Classes" barSize={8} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+        {/* ROW 7 */}
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Rank Progression" subtitle="Leaderboard (Bump Chart)">
+          <LeaderboardBumpChart data={bumpData} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Attendance" subtitle="Monthly Status">
+          <AttendanceCalendar month={new Date()} daysData={attendanceDays} />
+        </GlassCard>
 
-        {/* 10. Stacked Bar (1x1) */}
-        <Card className="flex flex-col justify-center h-full order-10 md:order-10 col-span-2 md:col-span-1">
-          <h3 className="font-serif font-black text-[16px] text-[#112B3C] mb-6">Time Allocation</h3>
-          <div className="w-full h-3 bg-gray-100 rounded-full flex overflow-hidden shadow-inner mb-6">
-            <div className="bg-[#7059FF]" style={{width: '45%'}}></div>
-            <div className="bg-[#00C2C7]" style={{width: '35%'}}></div>
-            <div className="bg-[#FFC436]" style={{width: '20%'}}></div>
-          </div>
-          <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider text-gray-500">
-            <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-[#7059FF]"></div> Videos</div>
-            <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-[#00C2C7]"></div> Tests</div>
-            <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-[#FFC436]"></div> Live</div>
-          </div>
-        </Card>
+        {/* ROW 8 */}
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Exam Schedule" subtitle="Tests this month">
+          <TestCalendar month={new Date()} daysData={testDays} />
+        </GlassCard>
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-3" title="Today's Activity" subtitle="Chronological Stepper">
+          <ActivityStepper data={activityData} />
+        </GlassCard>
 
-        {/* 11. Timeline (1x1) */}
-        <Card className="flex flex-col justify-center h-full order-11 md:order-11 col-span-2 md:col-span-1">
-          <h3 className="font-serif font-black text-[16px] text-[#112B3C] mb-6">Recent Activity</h3>
-          <div className="relative flex items-center justify-between w-full pb-2 px-2 mt-4">
-            <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-200 -translate-y-1/2"></div>
-            {testTimeline.slice(-3).reverse().map((t, i) => (
-              <div key={i} className="relative z-10 flex flex-col items-center">
-                <span className={`absolute ${i%2===0 ? 'bottom-5' : 'top-5'} text-[8px] font-bold text-white px-2 py-1 rounded shadow ${i%2===0 ? 'bg-[#00C2C7]' : 'bg-[#7059FF]'}`}>
-                  {t.score_pct}%
-                </span>
-                <div className={`w-3 h-3 rounded-full ring-4 ring-white ${i%2===0 ? 'bg-[#00C2C7]' : 'bg-[#7059FF]'}`}></div>
-              </div>
-            ))}
-            {testTimeline.length === 0 && <span className="text-xs text-gray-400 z-10 bg-white px-2">No recent activity</span>}
-          </div>
-        </Card>
+        {/* ROW 9 */}
+        <GlassCard className="col-span-2 md:col-span-4 xl:col-span-6" title="Subject Plot" subtitle="Dumbbell (Mobile friendly)">
+          <DumbbellSubjectPlot data={radarData} />
+        </GlassCard>
 
       </motion.div>
-
-      {/* AI Mentor Floating FAB (Alternative way to open AI Modal) */}
-      <div className="fixed bottom-[80px] right-6 md:bottom-8 md:right-8 z-50">
-        <button 
-          onClick={handleGenerateAI}
-          className="bg-[#FFC436] text-white w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-[0_8px_30px_rgb(255,196,54,0.4)] hover:scale-105 hover:bg-yellow-400 transition-transform active:scale-95 group relative"
-        >
-           <Bot size={28} className="drop-shadow-md group-hover:rotate-12 transition-transform" />
-           <span className="absolute -top-1 -right-1 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-[#00C2C7] border-[2px] border-[#F4F7F6] shadow-sm"></span>
-          </span>
-        </button>
-      </div>
 
       {/* AI Modal */}
       <AnimatePresence>
@@ -429,29 +221,29 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
             <motion.div 
               initial={{ y: 50, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 50, scale: 0.95 }}
               onClick={e => e.stopPropagation()}
-              className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-lg shadow-2xl relative"
+              className="bg-white rounded-[32px] p-6 md:p-8 w-full max-w-lg shadow-2xl relative"
             >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-[#FFC436]"><Bot size={20} /></div>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-[#FFC436]"><Bot size={24} /></div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">AI Mentor Report</h2>
-                  <p className="text-xs text-gray-500">Personalized insights for {student.name}</p>
+                  <h2 className="text-xl font-black text-[#112B3C] tracking-tight">AI Mentor Report</h2>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">Personalized insights for {student.name ? student.name.split(' ')[0] : 'Student'}</p>
                 </div>
               </div>
               
               <div className="min-h-[200px] max-h-[60vh] overflow-y-auto text-sm text-gray-700 leading-relaxed pr-2">
                 {loadingAi ? (
-                  <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-3">
-                    <Loader2 size={24} className="animate-spin text-[#00C2C7]" />
-                    <p className="font-medium text-xs">Analyzing algorithms and generating report...</p>
+                  <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-4">
+                    <Loader2 size={32} className="animate-spin text-[#FFC436]" />
+                    <p className="font-bold text-xs uppercase tracking-widest">Analyzing algorithms...</p>
                   </div>
                 ) : (
                   <div className="whitespace-pre-wrap">{aiReport}</div>
                 )}
               </div>
               
-              <button onClick={() => setShowAiModal(false)} className="mt-6 w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl transition-colors text-sm">
-                Close
+              <button onClick={() => setShowAiModal(false)} className="mt-6 w-full py-4 bg-gray-50 hover:bg-gray-100 text-[#112B3C] font-black rounded-xl transition-colors text-sm uppercase tracking-widest border border-gray-200">
+                Close Report
               </button>
             </motion.div>
           </motion.div>

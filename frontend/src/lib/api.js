@@ -493,10 +493,10 @@ export const reportApi = {
     apiClient(`/reports/student/${studentId}/smart-report?period=${period}`),
   // Teacher fetches a specific student's report
   getV2: (studentId, period = 'overall') =>
-    apiClient(`/students/${studentId}/report/v2?period=${period}`),
+    apiClient(`/reports/student/${studentId}/smart-report?period=${period}`),
   // Student fetches their own report (uses 'me' alias resolved server-side)
   getMy: (period = 'overall') =>
-    apiClient(`/students/me/report/v2?period=${period}`),
+    apiClient(`/reports/student/me/smart-report?period=${period}`),
   // Teacher: per-student performance for a standard (or one subject within it)
   performance: ({ standardId, classId, period = 'overall' }) =>
     apiClient(`/reports/performance?standard_id=${standardId}${classId ? `&class_id=${classId}` : ''}&period=${period}`),

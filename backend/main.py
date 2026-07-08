@@ -14937,6 +14937,9 @@ def get_smart_report(student_id: str, period: str = "overall", user = Depends(ve
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
+    if student_id == "me":
+        student_id = user["sub"]
+
     # 1. Security Check
     if user["role"] == "student" and user["sub"] != student_id:
         raise HTTPException(status_code=403, detail="Can only view own report")
