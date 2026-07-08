@@ -41,7 +41,7 @@ const GlassCard = ({ title, subtitle, children, className = "", onClick = null }
   </div>
 );
 
-export default function StudentReportCard({ data, period, onPeriodChange, showHeader = true, autoOpenAI = false }) {
+export default function StudentReportCard({ data, period, onPeriodChange, onDownloadPDF, showHeader = true, autoOpenAI = false }) {
   const [aiReport, setAiReport] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
   const [showAiModal, setShowAiModal] = useState(autoOpenAI);
@@ -72,6 +72,22 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     { id: 'monthly', label: 'Monthly' },
     { id: 'weekly',  label: 'Weekly'  },
   ];
+
+  const handleShare = async () => {
+    const text = `Udaya LMS Report for ${student.name || 'Student'} (${period}). Score: ${student.avg_score ?? 'N/A'}% | Attendance: ${student.attendance_pct ?? 'N/A'}%`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `${student.name || 'Student'} - Report Card`, text }); return; } catch {}
+    }
+    try { await navigator.clipboard.writeText(text); } catch {}
+  };
+
+  const handleDownload = async () => {
+    if (onDownloadPDF) { onDownloadPDF(data); return; }
+    try {
+      const { buildStudentReportPdf } = await import('../../lib/reportPdf');
+      await buildStudentReportPdf({ data, period });
+    } catch (e) { alert('Failed to generate PDF.'); }
+  };
 
   const handleGenerateAI = async () => {
     setShowAiModal(true);
@@ -110,8 +126,8 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
                 {p.label}
               </button>
             ))}
-            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Share2 size={14} /></button>
-            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Download size={14} /></button>
+            <button onClick={handleShare} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"><Share2 size={14} /></button>
+            <button onClick={handleDownload} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"><Download size={14} /></button>
           </div>
         </div>
       )}
