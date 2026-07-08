@@ -185,21 +185,21 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </div>
       )}
 
-      {/* Main Grid Layout - Masonry 2-col mobile, 4-col desktop */}
+      {/* Main Grid Layout - Masonry 4-col desktop matching exact mockup */}
       <motion.div 
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5 grid-flow-dense"
+        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 md:auto-rows-[240px] grid-flow-dense"
       >
         
-        {/* 1. Main Trend Line */}
-        <Card colSpan={2} className="md:col-span-2">
-          <div className="mb-4">
-            <h3 className="font-bold text-lg text-gray-900">Overall Performance</h3>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Score timeline</p>
+        {/* 1. Overall Performance Trend (1x1) */}
+        <Card className="flex flex-col h-full">
+          <div className="mb-2">
+            <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Overall Performance</h3>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Score timeline</p>
           </div>
-          <div className="h-40 w-full -ml-4">
+          <div className="flex-1 w-full -ml-4 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
                 <Line type="monotone" dataKey="score" stroke={theme.tertiary} strokeWidth={3} dot={false} activeDot={{ r: 6, fill: theme.secondary, stroke: '#fff', strokeWidth: 2 }} />
@@ -209,12 +209,13 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           </div>
         </Card>
 
-        {/* 2. Recent Quizzes */}
-        <Card className="flex flex-col items-center justify-center text-center">
-          <div className="mb-2">
-            <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Recent<br/>Quizzes</h3>
+        {/* 2. Recent Quizzes (1x1) */}
+        <Card className="flex flex-col h-full">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Recent Quizzes</h3>
+            <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">Week ▾</span>
           </div>
-          <div className="h-28 w-full mt-4">
+          <div className="flex-1 w-full mt-4 -ml-4">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={quizData}>
                 <Line type="linear" dataKey="score" stroke={theme.secondary} strokeWidth={2.5} dot={{ r: 4, fill: theme.primary, strokeWidth: 0 }} />
@@ -224,21 +225,21 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           </div>
         </Card>
 
-        {/* 3. Calendar */}
-        <Card className="flex flex-col items-center py-6">
-          <div className="flex justify-center items-center gap-3 w-full mb-5">
+        {/* 3. Calendar (1x1) */}
+        <Card className="flex flex-col items-center py-4 h-full">
+          <div className="flex justify-center items-center gap-3 w-full mb-4">
             <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
             <span className="font-serif font-black text-[16px] text-[#112B3C]">{format(currentMonth, 'MMMM')}</span>
             <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
           </div>
-          <div className="grid grid-cols-7 gap-x-2 text-center w-full text-[9px] text-gray-400 font-bold uppercase mb-3">
+          <div className="grid grid-cols-7 gap-x-2 text-center w-full text-[9px] text-gray-400 font-bold uppercase mb-2">
             {['S','M','T','W','T','F','S'].map(d => <div key={d}>{d}</div>)}
           </div>
-          <div className="grid grid-cols-7 gap-y-3 gap-x-2 text-center w-full text-[11px] font-bold text-[#112B3C]">
+          <div className="grid grid-cols-7 gap-y-2 gap-x-2 text-center w-full text-[11px] font-bold text-[#112B3C] flex-1 items-center">
             {calendarDays.map((d, i) => (
               <div key={i} className={`flex justify-center items-center w-5 mx-auto relative
-                ${d.hasTest ? `text-[${theme.tertiary}]` : ''}
-                ${d.hasAtt && !d.hasTest ? `text-[${theme.primary}]` : ''}
+                ${d.hasTest ? 'text-[' + theme.tertiary + ']' : ''}
+                ${d.hasAtt && !d.hasTest ? 'text-[' + theme.primary + ']' : ''}
               `}>
                 {d.day}
               </div>
@@ -246,26 +247,56 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           </div>
         </Card>
 
-        {/* 4. Quick Stats */}
-        <Card className="flex flex-col justify-center items-center text-center gap-10 py-8">
-          <div>
-            <h2 className="text-[42px] font-serif font-black text-[#112B3C] leading-none">{assignStats.total}</h2>
-            <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-3 leading-tight">Assignments<br/>Done</p>
-          </div>
-          <div>
-            <h2 className="text-[42px] font-serif font-black text-[#112B3C] leading-none">{liveStats.attended}</h2>
-            <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-3 leading-tight">Live Classes</p>
+        {/* 4. Dual Rings (1x1) */}
+        <Card className="flex flex-col justify-center h-full relative">
+           <div className="absolute top-4 left-4 right-4 flex bg-white shadow-sm border border-gray-100 rounded-full px-3 py-2 items-center z-10">
+             <Search size={14} className="text-gray-400" />
+             <span className="text-gray-300 text-xs ml-2">Search...</span>
+           </div>
+           <div className="flex justify-around items-center pt-8 flex-1">
+            <div className="flex flex-col items-center">
+              <div className="relative w-14 h-14 mb-2">
+                 <svg className="w-full h-full transform -rotate-90 drop-shadow-sm"><circle cx="50%" cy="50%" r="40%" stroke="#F4F7F6" strokeWidth="10%" fill="none" /><circle cx="50%" cy="50%" r="40%" stroke={theme.secondary} strokeWidth="10%" fill="none" strokeDasharray="251%" strokeDashoffset={`${251 - ((liveStats.attendance_pct || 0)/100)*251}%`} strokeLinecap="round" /></svg>
+                 <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">{Math.round(liveStats.attendance_pct || 0)}%</span>
+              </div>
+              <span className="font-bold text-[9px] uppercase tracking-wider text-gray-400">Attendance</span>
+            </div>
+            <div className="flex flex-col items-center">
+               <div className="relative w-14 h-14 mb-2">
+                 <svg className="w-full h-full transform -rotate-90 drop-shadow-sm"><circle cx="50%" cy="50%" r="40%" stroke="#F4F7F6" strokeWidth="10%" fill="none" /><circle cx="50%" cy="50%" r="40%" stroke={theme.tertiary} strokeWidth="10%" fill="none" strokeDasharray="251%" strokeDashoffset={`${251 - ((assignStats.total ? assignStats.submitted/assignStats.total : 0))*251}%`} strokeLinecap="round" /></svg>
+                 <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">{assignStats.total ? Math.round((assignStats.submitted/assignStats.total)*100) : 0}%</span>
+              </div>
+              <span className="font-bold text-[9px] uppercase tracking-wider text-gray-400">Submissions</span>
+            </div>
           </div>
         </Card>
 
-        {/* 6. Course Progress */}
-        <Card className="flex flex-col items-center justify-between py-8 row-span-2 text-center">
+        {/* 5. Quick Stats (1x1) */}
+        <Card className="flex flex-col justify-between h-full py-5">
+          <div className="flex items-end justify-between px-2">
+             <div>
+               <h2 className="text-3xl font-serif font-black text-[#112B3C] leading-none">{assignStats.total}</h2>
+               <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-1 leading-tight">Assignments<br/>Done</p>
+             </div>
+             <div>
+               <h2 className="text-3xl font-serif font-black text-[#112B3C] leading-none">{liveStats.attended}</h2>
+               <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-1 leading-tight">Live<br/>Classes</p>
+             </div>
+          </div>
+          <div className="flex gap-4 mt-4 h-10 opacity-60 w-full">
+            <div className="flex-1 h-full"><ResponsiveContainer><LineChart data={trendData.slice(0, 10)}><Line type="monotone" dataKey="score" stroke={theme.secondary} strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>
+            <div className="flex-1 h-full"><ResponsiveContainer><LineChart data={trendData.slice(-10)}><Line type="monotone" dataKey="score" stroke={theme.primary} strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>
+          </div>
+        </Card>
+
+        {/* 6. Course Progress (1x2) */}
+        <Card className="md:row-span-2 flex flex-col items-center justify-between py-8 h-full text-center">
           <div className="mb-4">
-            <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Course<br/>Progress</h3>
-            <p className="text-[9px] font-bold text-[#A0AAB5] uppercase tracking-widest mt-3 leading-tight">Overall<br/>Average</p>
+            <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Course Progress</h3>
+            <p className="text-[9px] font-bold text-[#A0AAB5] uppercase tracking-widest mt-2 leading-tight">Overall Average</p>
           </div>
           
-          <div className="relative w-28 h-28 md:w-36 md:h-36 flex items-center justify-center my-4">
+          <div className="relative w-32 h-32 flex items-center justify-center my-6">
             <svg className="w-full h-full transform -rotate-90 drop-shadow-sm">
               <circle cx="50%" cy="50%" r="42%" stroke="#F4F7F6" strokeWidth="16%" fill="none" />
               <circle cx="50%" cy="50%" r="42%" stroke={theme.primary} strokeWidth="16%" fill="none" strokeDasharray="264%" strokeDashoffset={`${264 - (avgScore/100)*264}%`} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
@@ -274,38 +305,52 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               <span className="text-3xl font-serif font-black text-[#112B3C]">{Math.round(avgScore)}%</span>
             </div>
           </div>
+
+          <button 
+            onClick={handleGenerateAI}
+            className="mt-4 w-full py-3 bg-[#FFC436] hover:bg-yellow-400 transition-colors text-white text-[12px] font-bold rounded-full shadow-lg shadow-yellow-400/40"
+          >
+            Suscipit (AI Insights)
+          </button>
         </Card>
 
-        {/* 5. Dual Circular Rings */}
-        <Card className="flex justify-around items-center py-6">
-          <div className="flex flex-col items-center">
-            <div className="relative w-14 h-14 md:w-16 md:h-16 mb-2">
-               <svg className="w-full h-full transform -rotate-90 drop-shadow-sm"><circle cx="50%" cy="50%" r="40%" stroke="#F4F7F6" strokeWidth="10%" fill="none" /><circle cx="50%" cy="50%" r="40%" stroke={theme.secondary} strokeWidth="10%" fill="none" strokeDasharray="251%" strokeDashoffset={`${251 - ((liveStats.attendance_pct || 0)/100)*251}%`} strokeLinecap="round" /></svg>
-               <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">{Math.round(liveStats.attendance_pct || 0)}%</span>
-            </div>
-            <span className="font-bold text-[9px] uppercase tracking-wider text-gray-400">Attendance</span>
+        {/* 7. Class Comparison (2x1) */}
+        <Card className="md:col-span-2 flex flex-col h-full">
+          <div className="flex justify-between items-center mb-2">
+             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Class Comparison</h3>
+             <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">All time ▾</span>
           </div>
-          <div className="flex flex-col items-center">
-             <div className="relative w-14 h-14 md:w-16 md:h-16 mb-2">
-               <svg className="w-full h-full transform -rotate-90 drop-shadow-sm"><circle cx="50%" cy="50%" r="40%" stroke="#F4F7F6" strokeWidth="10%" fill="none" /><circle cx="50%" cy="50%" r="40%" stroke={theme.tertiary} strokeWidth="10%" fill="none" strokeDasharray="251%" strokeDashoffset={`${251 - ((assignStats.total ? assignStats.submitted/assignStats.total : 0))*251}%`} strokeLinecap="round" /></svg>
-               <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">{assignStats.total ? Math.round((assignStats.submitted/assignStats.total)*100) : 0}%</span>
-            </div>
-            <span className="font-bold text-[9px] uppercase tracking-wider text-gray-400">Submissions</span>
+          <div className="flex-1 w-full -ml-4 mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="name" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Line type="monotone" dataKey="score" stroke={theme.tertiary} strokeWidth={2.5} dot={{r:3, strokeWidth:0, fill:theme.tertiary}} name="Student" />
+                <Line type="monotone" dataKey="classAvg" stroke={theme.secondary} strokeWidth={2.5} dot={false} name="Class Avg" data={trendData.map(d => ({...d, classAvg: overallClassAvg}))} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
+           <div className="flex justify-center gap-6 mt-3 text-[9px] font-bold uppercase tracking-wider text-gray-500">
+             <div className="flex items-center gap-1.5"><div className="w-4 h-1 rounded-full bg-[#7059FF]"></div> Student</div>
+             <div className="flex items-center gap-1.5"><div className="w-4 h-1 rounded-full bg-[#FFC436]"></div> Class Avg</div>
+           </div>
         </Card>
 
-        {/* 7. Diverging Bar Chart */}
-        <Card colSpan={2} className="md:col-span-2">
-          <div className="flex flex-col mb-4">
-             <h3 className="font-bold text-[13px] text-gray-900">Subject vs Average</h3>
-             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Deviation from class mean</span>
+        {/* 8. Diverging Bar (1x1) */}
+        <Card className="flex flex-col h-full">
+          <div className="flex flex-col mb-2">
+             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Subject vs Avg</h3>
+             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1">Deviation</span>
           </div>
-          <div className="h-32 md:h-40 w-full -ml-4">
+          <div className="flex-1 w-full -ml-4 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={subjectData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                 <XAxis dataKey="subject" tick={{fontSize: 9, fontWeight: 700, fill: '#888'}} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{fill: '#f4f7f6'}} content={<CustomTooltip />} />
-                <Bar dataKey="diff" radius={[4, 4, 4, 4]} barSize={16}>
+                <ReferenceLine y={0} stroke="#E5E7EB" />
+                <Bar dataKey="diff" radius={[4, 4, 4, 4]} barSize={12}>
                   {subjectData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.diff >= 0 ? theme.primary : theme.secondary} />
                   ))}
@@ -315,78 +360,55 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
           </div>
         </Card>
 
-        {/* 8. Multi-Line Comparison Chart */}
-        <Card colSpan={2} className="md:col-span-2">
-          <div className="flex justify-between items-center mb-2">
-             <h3 className="font-bold text-[13px] text-gray-900">Class Comparison</h3>
-          </div>
-          <div className="h-40 md:h-48 w-full -ml-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-                <YAxis tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine y={overallClassAvg} stroke={theme.secondary} strokeDasharray="4 4" strokeWidth={2} />
-                <Line type="monotone" dataKey="score" stroke={theme.tertiary} strokeWidth={3} dot={{r:3, strokeWidth:0, fill:theme.tertiary}} name="Student" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-           <div className="flex justify-center gap-6 mt-1 text-[9px] font-bold uppercase tracking-wider text-gray-500">
-             <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#7059FF]"></div> Student</div>
-             <div className="flex items-center gap-1.5"><div className="w-2.5 h-1 border-t-2 border-dashed border-[#FFC436]"></div> Class Avg</div>
-           </div>
-        </Card>
-
-        {/* 9. Horizontal Stacked Bar */}
-        <Card className="flex flex-col justify-center py-6">
-          <h3 className="font-bold text-[13px] text-gray-900 mb-4">Grade Breakdown</h3>
-          <div className="w-full h-2.5 md:h-3 bg-gray-100 rounded-full flex overflow-hidden shadow-inner">
-            <div className="bg-[#7059FF]" style={{width: '50%'}}></div>
-            <div className="bg-[#00C2C7]" style={{width: '30%'}}></div>
-            <div className="bg-[#FFC436]" style={{width: '20%'}}></div>
-          </div>
-          <div className="flex justify-between mt-4 text-[9px] font-bold uppercase tracking-wider text-gray-500">
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#7059FF]"></div> Exams</div>
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#00C2C7]"></div> HW</div>
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#FFC436]"></div> Quiz</div>
-          </div>
-        </Card>
-
-        {/* 10. Timeline (Recent Tests) */}
-        <Card className="flex flex-col justify-center">
-          <h3 className="font-bold text-[13px] text-gray-900 mb-6">Recent Activity</h3>
-          <div className="relative flex items-center justify-between w-full pb-4">
-            <div className="absolute top-1/2 left-0 w-full h-0.5 bg-gray-100 -translate-y-1/2"></div>
-            {testTimeline.slice(-4).reverse().map((t, i) => (
-              <div key={i} className="relative z-10 flex flex-col items-center">
-                <span className={`absolute ${i%2===0 ? 'bottom-4' : 'top-4'} text-[8px] font-bold text-white px-1.5 py-0.5 rounded shadow ${i%2===0 ? 'bg-[#00C2C7]' : 'bg-[#FFC436]'}`}>
-                  {t.score_pct}%
-                </span>
-                <div className={`w-2.5 h-2.5 rounded-full ring-2 ring-white ${i%2===0 ? 'bg-[#00C2C7] mt-1' : 'bg-[#FFC436] mb-1'}`}></div>
-              </div>
-            ))}
-            {testTimeline.length === 0 && <span className="text-xs text-gray-400 z-10 bg-white px-2">No recent activity</span>}
-          </div>
-        </Card>
-
-        {/* 11. Grouped Bar Chart (Weekly Engagement) */}
-        <Card colSpan={2} className="md:col-span-4">
+        {/* 9. Grouped Bar (2x2) */}
+        <Card className="md:col-span-2 md:row-span-2 flex flex-col h-full">
            <div className="flex flex-col mb-4">
-             <h3 className="font-bold text-[13px] text-gray-900">Weekly Engagement</h3>
-             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Time spent per day (Mins)</span>
+             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Weekly Engagement</h3>
+             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1">Time spent per day (Mins)</span>
            </div>
-           <div className="h-40 md:h-48 w-full -ml-4">
+           <div className="flex-1 w-full -ml-4 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                 <XAxis dataKey="day" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
                 <YAxis tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{fill: '#f4f7f6'}} content={<CustomTooltip />} />
-                <Bar dataKey="videos" fill={theme.tertiary} radius={[3, 3, 0, 0]} name="Videos" barSize={12} />
-                <Bar dataKey="tests" fill={theme.primary} radius={[3, 3, 0, 0]} name="Tests" barSize={12} />
-                <Bar dataKey="attendance" fill={theme.secondary} radius={[3, 3, 0, 0]} name="Classes" barSize={12} />
+                <Bar dataKey="videos" fill={theme.tertiary} radius={[2, 2, 0, 0]} name="Videos" barSize={8} />
+                <Bar dataKey="tests" fill={theme.primary} radius={[2, 2, 0, 0]} name="Tests" barSize={8} />
+                <Bar dataKey="attendance" fill={theme.secondary} radius={[2, 2, 0, 0]} name="Classes" barSize={8} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </Card>
+
+        {/* 10. Stacked Bar (1x1) */}
+        <Card className="flex flex-col justify-center h-full">
+          <h3 className="font-serif font-black text-[16px] text-[#112B3C] mb-6">Time Allocation</h3>
+          <div className="w-full h-3 bg-gray-100 rounded-full flex overflow-hidden shadow-inner mb-6">
+            <div className="bg-[#7059FF]" style={{width: '45%'}}></div>
+            <div className="bg-[#00C2C7]" style={{width: '35%'}}></div>
+            <div className="bg-[#FFC436]" style={{width: '20%'}}></div>
+          </div>
+          <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider text-gray-500">
+            <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-[#7059FF]"></div> Videos</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-[#00C2C7]"></div> Tests</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-[#FFC436]"></div> Live</div>
+          </div>
+        </Card>
+
+        {/* 11. Timeline (1x1) */}
+        <Card className="flex flex-col justify-center h-full">
+          <h3 className="font-serif font-black text-[16px] text-[#112B3C] mb-6">Recent Activity</h3>
+          <div className="relative flex items-center justify-between w-full pb-2 px-2 mt-4">
+            <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-200 -translate-y-1/2"></div>
+            {testTimeline.slice(-3).reverse().map((t, i) => (
+              <div key={i} className="relative z-10 flex flex-col items-center">
+                <span className={`absolute ${i%2===0 ? 'bottom-5' : 'top-5'} text-[8px] font-bold text-white px-2 py-1 rounded shadow ${i%2===0 ? 'bg-[#00C2C7]' : 'bg-[#7059FF]'}`}>
+                  {t.score_pct}%
+                </span>
+                <div className={`w-3 h-3 rounded-full ring-4 ring-white ${i%2===0 ? 'bg-[#00C2C7]' : 'bg-[#7059FF]'}`}></div>
+              </div>
+            ))}
+            {testTimeline.length === 0 && <span className="text-xs text-gray-400 z-10 bg-white px-2">No recent activity</span>}
           </div>
         </Card>
 
