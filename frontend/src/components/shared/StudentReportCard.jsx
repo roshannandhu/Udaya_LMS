@@ -5,7 +5,7 @@ import {
   BarChart, Bar, Cell, AreaChart, Area, ReferenceLine
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
-import { Search, ChevronLeft, ChevronRight, Bot, Loader2 } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Bot, Loader2, ArrowLeft, Share2, Download, Edit2, MoreHorizontal } from 'lucide-react';
 import { aiApi } from '../../lib/api';
 
 // --- Theme Colors ---
@@ -158,29 +158,19 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     <div className="min-h-screen bg-[#F4F7F6] pb-24 text-[#333333] font-sans">
       
       {showHeader && (
-        <div className="pt-8 px-6 pb-6 flex justify-between items-center max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold text-xl uppercase shadow-sm">
-              {student.name ? student.name[0] : 'U'}
-            </div>
+        <div className="pt-6 md:pt-8 px-4 md:px-6 pb-6 flex justify-between items-center max-w-7xl mx-auto">
+          <div className="flex items-center gap-3 md:gap-4">
+            <button className="w-10 h-10 rounded-full flex items-center justify-center bg-white shadow-sm border border-gray-100"><ArrowLeft size={18} className="text-gray-700" /></button>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">Hello, {student.name ? student.name.split(' ')[0] : 'User'}!</h1>
-              <p className="text-xs text-gray-500">Welcome back to your dashboard</p>
+              <h1 className="text-lg md:text-xl font-serif font-black text-[#112B3C] tracking-tight">{student.name ? student.name.split(' ')[0] : 'Abhinav'}</h1>
+              <p className="text-[10px] md:text-xs text-gray-400 font-bold tracking-wider uppercase">{student.student_id || '26UDAYA100006'}</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <select 
-              value={period} 
-              onChange={e => onPeriodChange && onPeriodChange(e.target.value)}
-              className="text-[10px] md:text-xs bg-white text-gray-600 rounded-full px-3 py-1.5 border border-gray-200 outline-none shadow-sm"
-            >
-              <option value="overall">Overall</option>
-              <option value="month">This Month</option>
-              <option value="week">This Week</option>
-            </select>
-            <button className="w-10 h-10 rounded-full bg-[#00C2C7] text-white flex items-center justify-center shadow-md shadow-[#00C2C7]/30">
-              <Search size={18} />
-            </button>
+          <div className="flex gap-1 md:gap-2">
+            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Share2 size={14} /></button>
+            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Download size={14} /></button>
+            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Edit2 size={14} /></button>
+            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><MoreHorizontal size={14} /></button>
           </div>
         </div>
       )}
@@ -190,11 +180,11 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 md:auto-rows-[240px] grid-flow-dense"
+        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 md:auto-rows-[240px] grid-flow-dense"
       >
         
         {/* 1. Overall Performance Trend (1x1) */}
-        <Card className="flex flex-col h-full">
+        <Card className="flex flex-col h-full order-5 md:order-1 col-span-2 md:col-span-1">
           <div className="mb-2">
             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Overall Performance</h3>
             <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Score timeline</p>
@@ -210,7 +200,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 2. Recent Quizzes (1x1) */}
-        <Card className="flex flex-col h-full">
+        <Card className="flex flex-col h-full order-1 md:order-2 col-span-1 md:col-span-1 aspect-square md:aspect-auto">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Recent Quizzes</h3>
             <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">Week ▾</span>
@@ -226,7 +216,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 3. Calendar (1x1) */}
-        <Card className="flex flex-col items-center py-4 h-full">
+        <Card className="flex flex-col items-center py-4 h-full order-2 md:order-3 col-span-1 md:col-span-1 aspect-square md:aspect-auto">
           <div className="flex justify-center items-center gap-3 w-full mb-4">
             <button className="text-[#00C2C7]" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
             <span className="font-serif font-black text-[16px] text-[#112B3C]">{format(currentMonth, 'MMMM')}</span>
@@ -248,7 +238,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 4. Dual Rings (1x1) */}
-        <Card className="flex flex-col justify-center h-full relative">
+        <Card className="flex flex-col justify-center h-full relative order-6 md:order-4 col-span-2 md:col-span-1">
            <div className="absolute top-4 left-4 right-4 flex bg-white shadow-sm border border-gray-100 rounded-full px-3 py-2 items-center z-10">
              <Search size={14} className="text-gray-400" />
              <span className="text-gray-300 text-xs ml-2">Search...</span>
@@ -272,14 +262,14 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 5. Quick Stats (1x1) */}
-        <Card className="flex flex-col justify-between h-full py-5">
+        <Card className="flex flex-col justify-between h-full py-5 order-3 md:order-5 col-span-1 md:col-span-1 aspect-[4/5] md:aspect-auto">
           <div className="flex items-end justify-between px-2">
              <div>
-               <h2 className="text-3xl font-serif font-black text-[#112B3C] leading-none">{assignStats.total}</h2>
+               <h2 className="text-5xl md:text-3xl font-serif font-black text-[#112B3C] leading-none">{assignStats.total}</h2>
                <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-1 leading-tight">Assignments<br/>Done</p>
              </div>
              <div>
-               <h2 className="text-3xl font-serif font-black text-[#112B3C] leading-none">{liveStats.attended}</h2>
+               <h2 className="text-5xl md:text-3xl font-serif font-black text-[#112B3C] leading-none">{liveStats.attended}</h2>
                <p className="text-[9px] text-[#A0AAB5] font-bold uppercase tracking-widest mt-1 leading-tight">Live<br/>Classes</p>
              </div>
           </div>
@@ -290,7 +280,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 6. Course Progress (1x2) */}
-        <Card className="md:row-span-2 flex flex-col items-center justify-between py-8 h-full text-center">
+        <Card className="md:row-span-2 flex flex-col items-center justify-between py-5 md:py-8 h-full text-center order-4 md:order-6 col-span-1 md:col-span-1 aspect-[4/5] md:aspect-auto">
           <div className="mb-4">
             <h3 className="font-serif font-black text-[16px] leading-tight text-[#112B3C]">Course Progress</h3>
             <p className="text-[9px] font-bold text-[#A0AAB5] uppercase tracking-widest mt-2 leading-tight">Overall Average</p>
@@ -302,7 +292,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
               <circle cx="50%" cy="50%" r="42%" stroke={theme.primary} strokeWidth="16%" fill="none" strokeDasharray="264%" strokeDashoffset={`${264 - (avgScore/100)*264}%`} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-3xl font-serif font-black text-[#112B3C]">{Math.round(avgScore)}%</span>
+              <span className="text-5xl md:text-4xl md:text-3xl font-serif font-black text-[#112B3C]">{Math.round(avgScore)}%</span>
             </div>
           </div>
 
@@ -315,7 +305,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 7. Class Comparison (2x1) */}
-        <Card className="md:col-span-2 flex flex-col h-full">
+        <Card className="md:col-span-2 flex flex-col h-full order-7 md:order-7 col-span-2">
           <div className="flex justify-between items-center mb-2">
              <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Class Comparison</h3>
              <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">All time ▾</span>
@@ -339,7 +329,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 8. Diverging Bar (1x1) */}
-        <Card className="flex flex-col h-full">
+        <Card className="flex flex-col h-full order-8 md:order-8 col-span-2 md:col-span-1">
           <div className="flex flex-col mb-2">
              <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Subject vs Avg</h3>
              <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1">Deviation</span>
@@ -361,7 +351,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 9. Grouped Bar (2x2) */}
-        <Card className="md:col-span-2 md:row-span-2 flex flex-col h-full">
+        <Card className="md:col-span-2 md:row-span-2 flex flex-col h-full order-9 md:order-9 col-span-2">
            <div className="flex flex-col mb-4">
              <h3 className="font-serif font-black text-[16px] text-[#112B3C]">Weekly Engagement</h3>
              <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1">Time spent per day (Mins)</span>
@@ -381,7 +371,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 10. Stacked Bar (1x1) */}
-        <Card className="flex flex-col justify-center h-full">
+        <Card className="flex flex-col justify-center h-full order-10 md:order-10 col-span-2 md:col-span-1">
           <h3 className="font-serif font-black text-[16px] text-[#112B3C] mb-6">Time Allocation</h3>
           <div className="w-full h-3 bg-gray-100 rounded-full flex overflow-hidden shadow-inner mb-6">
             <div className="bg-[#7059FF]" style={{width: '45%'}}></div>
@@ -396,7 +386,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         </Card>
 
         {/* 11. Timeline (1x1) */}
-        <Card className="flex flex-col justify-center h-full">
+        <Card className="flex flex-col justify-center h-full order-11 md:order-11 col-span-2 md:col-span-1">
           <h3 className="font-serif font-black text-[16px] text-[#112B3C] mb-6">Recent Activity</h3>
           <div className="relative flex items-center justify-between w-full pb-2 px-2 mt-4">
             <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-200 -translate-y-1/2"></div>
