@@ -52,18 +52,13 @@ function mountAndPrint(Component, props, filename) {
   const container = document.createElement('div');
   container.style.width = '794px';
   container.style.position = 'absolute';
-  container.style.left = '-9999px';
+  container.style.left = '0';
   container.style.top = '0';
+  container.style.opacity = '0.01'; // Just enough to render, but practically invisible
+  container.style.pointerEvents = 'none';
+  container.style.zIndex = '-9999';
+  
   document.body.appendChild(container);
-
-  // Inject Inter Font specifically for the PDF renderer
-  const style = document.createElement('style');
-  style.innerHTML = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-    .pdf-container { font-family: 'Inter', sans-serif !important; }
-    .page-break { page-break-inside: avoid; break-inside: avoid; }
-  `;
-  container.appendChild(style);
 
   const root = createRoot(container);
   root.render(<Component {...props} />);
@@ -75,7 +70,7 @@ function mountAndPrint(Component, props, filename) {
       root.unmount();
       document.body.removeChild(container);
     }
-  }, 1000); // 1s is enough since we removed heavy Recharts SVGs
+  }, 1000); 
 }
 
 // ── Ultra-Premium Pure CSS Components (100% Bug-Free in PDF) ───────────────
