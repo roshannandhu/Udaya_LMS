@@ -224,7 +224,7 @@ export default function ReportGraphReferencePage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-5 md:gap-6 pb-24"
+        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 xl:grid-cols-6 gap-5 md:gap-6 pb-24"
       >
 
         {/* ROW 1 (6 cols) */}
