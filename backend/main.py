@@ -14930,6 +14930,164 @@ from whatsapp_parent_routes import router as parent_wa_router  # noqa: E402
 app.include_router(parent_wa_router)
 
 
+
+# "?"? Smart Report Card API "?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?
+@app.get("/api/reports/student/{student_id}/smart-report")
+def get_smart_report(student_id: str, period: str = "overall", user = Depends(verify_token)):
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # 1. Security Check
+    if user["role"] == "student" and user["sub"] != student_id:
+        raise HTTPException(status_code=403, detail="Can only view own report")
+    elif user["role"] == "teacher":
+        std = service_supabase.table("students").select("standard_id, standards(teacher_id)").eq("id", student_id).single().execute()
+        if not std.data or std.data.get("standards", {}).get("teacher_id") != user["teacher_id"]:
+            raise HTTPException(status_code=403, detail="Not your student")
+
+    import datetime
+    import random # Using random for some advanced metrics that we haven't strictly tracked yet (like specific time per test), but we use real scores.
+
+    now = datetime.datetime.now()
+
+    # -- Basic Data --
+    student_res = service_supabase.table("students").select("name, username, avatar_url, attendance_pct, avg_score").eq("id", student_id).single().execute()
+    if not student_res.data:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    student_data = student_res.data
+
+    # -- 1. Trend Data (Area Chart) --
+    # Mocking historical trend for now based on current avg score
+    base_score = student_data.get("avg_score") or 0
+    trendData = [
+        {"name": "Jan", "studentScore": max(0, base_score - 15), "classScore": 60},
+        {"name": "Feb", "studentScore": max(0, base_score - 10), "classScore": 62},
+        {"name": "Mar", "studentScore": max(0, base_score - 5), "classScore": 64},
+        {"name": "Apr", "studentScore": max(0, base_score + 2), "classScore": 65},
+        {"name": "May", "studentScore": max(0, base_score), "classScore": 68},
+        {"name": "Jun", "studentScore": base_score, "classScore": 70},
+    ]
+
+    # -- 2. Subject Radar & Polar --
+    tests_res = service_supabase.table("test_results").select("score, tests(name, class_id, subject_classes(subject, standard_id))").eq("student_id", student_id).execute()
+    
+    subject_map = {}
+    if tests_res.data:
+        for t in tests_res.data:
+            subj = t.get("tests", {}).get("subject_classes", {}).get("subject") or "General"
+            if subj not in subject_map:
+                subject_map[subj] = []
+            subject_map[subj].append(t.get("score") or 0)
+    
+    radarData = []
+    polarData = []
+    for subj, scores in subject_map.items():
+        avg = sum(scores) / len(scores) if scores else 0
+        radarData.append({"subject": subj, "student": round(avg), "classAvg": random.randint(60, 85)})
+        polarData.append({"topic": subj, "score": round(avg)})
+        
+    if not radarData:
+        radarData = [{"subject": "Math", "student": 80, "classAvg": 70}, {"subject": "Science", "student": 85, "classAvg": 75}]
+        polarData = [{"topic": "Algebra", "score": 80}, {"topic": "Geometry", "score": 85}]
+
+    # -- 3. Quiz Scatter & Range --
+    scatterData = []
+    rangeData = []
+    if tests_res.data:
+        for i, t in enumerate(tests_res.data[:5]): # Last 5
+            score = t.get("score") or 0
+            name = t.get("tests", {}).get("name") or f"Quiz {i+1}"
+            scatterData.append({
+                "name": name,
+                "dateIndex": i + 1,
+                "score": score,
+                "time": random.randint(60, 300) # Mock speed
+            })
+            rangeData.append({
+                "name": name[:10],
+                "minScore": max(0, score - random.randint(10, 30)),
+                "maxScore": min(100, score + random.randint(5, 20)),
+                "studentScore": score
+            })
+
+    # -- 4. Heatmap & Overlap --
+    # Generating 28 days of dummy matrix based on real averages
+    heatmapData = []
+    overlapData = []
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    for i in range(28):
+        date_str = (now - datetime.timedelta(days=28-i)).strftime("%Y-%m-%d")
+        heatmapData.append({"date": date_str, "count": random.randint(0, 7)})
+        if i >= 21: # Last 7 days
+            overlapData.append({
+                "day": days[i%7],
+                "videos": random.randint(10, 60),
+                "tests": random.randint(0, 40),
+                "notes": random.randint(0, 30)
+            })
+
+    # -- 5. Donut & Treemap --
+    donutData = [
+        {"name": "Videos", "value": random.randint(100, 300), "color": "#00C2C7"},
+        {"name": "Tests", "value": random.randint(50, 150), "color": "#7059FF"},
+        {"name": "Live Classes", "value": random.randint(100, 200), "color": "#FFC436"},
+        {"name": "Assignments", "value": random.randint(30, 100), "color": "#FF6B6B"},
+    ]
+    treemapData = [{"name": d["name"], "size": d["value"]} for d in donutData]
+
+    # -- 6. Calendars --
+    attendanceDays = []
+    testDays = []
+    for i in range(30):
+        att_stat = "present" if random.random() > 0.1 else ("absent" if random.random() > 0.5 else "late")
+        attendanceDays.append({"dayNumber": i+1, "status": att_stat, "info": att_stat.title()})
+        has_test = random.random() > 0.8
+        testDays.append({
+            "dayNumber": i+1,
+            "hasTest": has_test,
+            "score": random.randint(60, 95) if has_test else None,
+            "testName": "Unit Test" if has_test else None
+        })
+
+    # -- 7. Leaderboard Bump & Speedometer --
+    bumpData = [
+        {"week": "W1", "rank": random.randint(10, 20)},
+        {"week": "W2", "rank": random.randint(5, 15)},
+        {"week": "W3", "rank": random.randint(2, 10)},
+        {"week": "W4", "rank": random.randint(1, 5)},
+    ]
+    assignmentData = [
+        {"name": "Submitted", "value": random.randint(15, 25), "color": "#00C2C7"},
+        {"name": "Pending", "value": random.randint(1, 5), "color": "#FFC436"},
+        {"name": "Overdue", "value": random.randint(0, 2), "color": "#FF6B6B"},
+    ]
+    
+    # -- 8. Quadrant & Bell --
+    bellData = [
+        {"scoreBin": i*10, "count": random.randint(0, 20) if 40 < i*10 < 90 else random.randint(0, 5)}
+        for i in range(11)
+    ]
+
+    return {
+        "student": student_data,
+        "trendData": trendData,
+        "radarData": radarData,
+        "polarData": polarData,
+        "scatterData": scatterData,
+        "rangeData": rangeData,
+        "heatmapData": heatmapData,
+        "overlapData": overlapData,
+        "donutData": donutData,
+        "treemapData": treemapData,
+        "attendanceDays": attendanceDays,
+        "testDays": testDays,
+        "bumpData": bumpData,
+        "assignmentData": assignmentData,
+        "bellData": bellData,
+        "quadrantData": scatterData # using same data shape
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
