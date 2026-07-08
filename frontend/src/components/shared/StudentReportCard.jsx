@@ -161,7 +161,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     try {
       const { buildStudentReportPdf } = await import('../../lib/reportPdf');
       await buildStudentReportPdf({ data, period });
-    } catch (e) { alert('Failed to generate PDF.'); }
+    } catch (e) { alert('Failed to generate PDF: ' + e.message); }
   };
 
   const handleGenerateAI = useCallback(async () => {
