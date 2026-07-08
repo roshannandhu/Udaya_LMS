@@ -44,7 +44,7 @@ async function generatePdf(element, filename) {
     image:        { type: 'jpeg', quality: 0.98 },
     html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak:    { mode: ['css', 'legacy'] }
+    pagebreak:    { mode: ['css', ] }
   };
   await html2pdf().set(opt).from(element).save();
 }
@@ -80,9 +80,9 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
     
     <div className="relative z-10 flex items-start justify-between">
       <div className="flex gap-6">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm p-1">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner  p-1">
           {student?.avatar_url ? (
-            <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
+            
           ) : (
             <span className="text-4xl font-bold text-white shadow-sm">
               {(student?.name || 'S').charAt(0).toUpperCase()}
@@ -92,7 +92,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
 
         <div>
           <div className="mb-3 flex items-center gap-2">
-            {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-6 w-6 rounded bg-white p-0.5" crossOrigin="anonymous" />}
+            {brand.logoUrl && }
             <span className="text-xs font-semibold tracking-wider text-indigo-100 uppercase">{brand.name}</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white">{student?.name || 'Student'}</h1>
