@@ -1,4 +1,7 @@
-import React from 'react';
+
+import React, { useState, useEffect } from 'react';
+import { reportApi, teacherApi, studentApi } from '../../../lib/api';
+
 import { motion } from 'framer-motion';
 
 // Import all premium graphs
@@ -37,26 +40,63 @@ const GlassCard = ({ title, subtitle, children }) => (
 );
 
 export default function ReportGraphReferencePage() {
+
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [reportData, setReportData] = useState(null);
+
+  useEffect(() => {
+    // Fetch a student to test with
+    const fetchStudents = async () => {
+      try {
+        const res = await studentApi.list();
+        if (res && res.length > 0) {
+          setStudents(res);
+          setSelectedStudent(res[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load students", err);
+      }
+    };
+    fetchStudents();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedStudent) return;
+    const fetchReport = async () => {
+      setLoading(true);
+      try {
+        const data = await reportApi.getSmartReport(selectedStudent);
+        setReportData(data);
+      } catch (err) {
+        console.error("Failed to fetch smart report", err);
+      }
+      setLoading(false);
+    };
+    fetchReport();
+  }, [selectedStudent]);
   
   // Dummy Data Generators
-  const areaData = [
-    { name: 'Jan', studentScore: 40, classScore: 50 },
-    { name: 'Feb', studentScore: 60, classScore: 55 },
-    { name: 'Mar', studentScore: 55, classScore: 60 },
-    { name: 'Apr', studentScore: 80, classScore: 65 },
-    { name: 'May', studentScore: 75, classScore: 68 },
-    { name: 'Jun', studentScore: 92, classScore: 70 },
+  
+  const areaData = reportData?.trendData || [
+    { name: 'Jan', studentScore: 45, classScore: 60 },
+    { name: 'Feb', studentScore: 55, classScore: 62 },
+    { name: 'Mar', studentScore: 82, classScore: 64 },
+    { name: 'Apr', studentScore: 78, classScore: 65 },
+    { name: 'May', studentScore: 92, classScore: 68 },
+    { name: 'Jun', studentScore: 88, classScore: 70 },
   ];
 
-  const radarData = [
-    { subject: 'Math', student: 92, classAvg: 70 },
-    { subject: 'Science', student: 85, classAvg: 75 },
-    { subject: 'English', student: 65, classAvg: 80 },
-    { subject: 'Social', student: 75, classAvg: 72 },
+  const radarData = reportData?.radarData || [
+    { subject: 'Math', student: 85, classAvg: 70 },
+    { subject: 'Science', student: 95, classAvg: 75 },
+    { subject: 'English', student: 45, classAvg: 65 },
+    { subject: 'Social', student: 75, classAvg: 80 },
     { subject: 'IT', student: 98, classAvg: 85 },
   ];
 
-  const overlapData = [
+  const overlapData = reportData?.overlapData || [
     { day: 'Mon', videos: 40, tests: 20, notes: 10 },
     { day: 'Tue', videos: 30, tests: 40, notes: 15 },
     { day: 'Wed', videos: 60, tests: 10, notes: 30 },
@@ -66,19 +106,19 @@ export default function ReportGraphReferencePage() {
     { day: 'Sun', videos: 10, tests: 0, notes: 0 },
   ];
 
-  const heatmapData = Array.from({length: 28}, (_, i) => ({
+  const heatmapData = reportData?.heatmapData || Array.from({length: 28}, (_, i) => ({
     date: `2026-07-${i+1}`,
-    count: Math.floor(Math.random() * 8) // 0-7 activities
+    count: Math.floor(Math.random() * 8)
   }));
 
-  const donutData = [
+  const donutData = reportData?.donutData || [
     { name: 'Videos', value: 400, color: '#00C2C7' },
     { name: 'Tests', value: 300, color: '#7059FF' },
     { name: 'Live Classes', value: 200, color: '#FFC436' },
     { name: 'Assignments', value: 150, color: '#FF6B6B' },
   ];
 
-  const treemapData = [
+  const treemapData = reportData?.treemapData || [
     { name: 'Videos', size: 400 },
     { name: 'Tests', size: 300 },
     { name: 'Live', size: 200 },
@@ -86,7 +126,7 @@ export default function ReportGraphReferencePage() {
     { name: 'HW', size: 50 },
   ];
 
-  const scatterData = [
+  const scatterData = reportData?.scatterData || [
     { name: 'Q1', dateIndex: 1, score: 85, time: 120 },
     { name: 'Q2', dateIndex: 2, score: 45, time: 200 },
     { name: 'Q3', dateIndex: 3, score: 92, time: 80 },
@@ -94,49 +134,38 @@ export default function ReportGraphReferencePage() {
     { name: 'Q5', dateIndex: 5, score: 60, time: 180 },
   ];
 
-  const rangeData = [
+  const rangeData = reportData?.rangeData || [
     { name: 'Math T1', minScore: 30, maxScore: 98, studentScore: 85 },
     { name: 'Sci T1', minScore: 45, maxScore: 100, studentScore: 95 },
     { name: 'Eng T1', minScore: 20, maxScore: 80, studentScore: 45 },
     { name: 'IT T1', minScore: 60, maxScore: 100, studentScore: 98 },
   ];
 
-  const attendanceDays = Array.from({length: 31}, (_, i) => {
+  const attendanceDays = reportData?.attendanceDays || Array.from({length: 31}, (_, i) => {
     const status = Math.random() > 0.8 ? 'absent' : (Math.random() > 0.9 ? 'late' : 'present');
-    return { 
-      dayNumber: i+1, 
-      status: i===14 ? 'holiday' : status,
-      info: i===14 ? 'School Holiday' : (status==='absent' ? 'Missed Science' : 'Attended all')
-    };
+    return { dayNumber: i+1, status: i===14 ? 'holiday' : status, info: i===14 ? 'School Holiday' : status };
   });
 
-  
-  const bumpData = [
+  const bumpData = reportData?.bumpData || [
     { week: 'W1', rank: 15 },
     { week: 'W2', rank: 12 },
     { week: 'W3', rank: 6 },
     { week: 'W4', rank: 4 },
   ];
 
-  const assignmentData = [
+  const assignmentData = reportData?.assignmentData || [
     { name: 'Submitted', value: 24, color: '#00C2C7' },
     { name: 'Pending', value: 4, color: '#FFC436' },
     { name: 'Overdue', value: 2, color: '#FF6B6B' },
   ];
 
-  const bellData = [
-    { scoreBin: 20, count: 1 },
-    { scoreBin: 30, count: 2 },
-    { scoreBin: 40, count: 5 },
-    { scoreBin: 50, count: 12 },
-    { scoreBin: 60, count: 18 },
-    { scoreBin: 70, count: 24 },
-    { scoreBin: 80, count: 15 },
-    { scoreBin: 90, count: 8 },
-    { scoreBin: 100, count: 3 },
+  const bellData = reportData?.bellData || [
+    { scoreBin: 20, count: 1 }, { scoreBin: 30, count: 2 }, { scoreBin: 40, count: 5 },
+    { scoreBin: 50, count: 12 }, { scoreBin: 60, count: 18 }, { scoreBin: 70, count: 24 },
+    { scoreBin: 80, count: 15 }, { scoreBin: 90, count: 8 }, { scoreBin: 100, count: 3 },
   ];
 
-  const quadrantData = [
+  const quadrantData = reportData?.quadrantData || [
     { name: 'Test 1', score: 85, time: 20 },
     { name: 'Test 2', score: 45, time: 20 },
     { name: 'Test 3', score: 92, time: 55 },
@@ -144,40 +173,45 @@ export default function ReportGraphReferencePage() {
     { name: 'Test 5', score: 75, time: 30 },
   ];
 
-  const polarData = [
-    { topic: 'Algebra', score: 90 },
-    { topic: 'Geometry', score: 65 },
-    { topic: 'Trigonometry', score: 80 },
-    { topic: 'Statistics', score: 45 },
-    { topic: 'Calculus', score: 85 },
+  const polarData = reportData?.polarData || [
+    { topic: 'Algebra', score: 90 }, { topic: 'Geometry', score: 65 }, { topic: 'Trigonometry', score: 80 },
+    { topic: 'Statistics', score: 45 }, { topic: 'Calculus', score: 85 },
   ];
 
-  const activityData = [
+  const activityData = reportData?.activityData || [
     { time: '09:00 AM', title: 'Logged In', color: 'bg-green-400' },
-    { time: '10:15 AM', title: 'Watched Algebra Video (45m)', color: 'bg-[#00C2C7]' },
+    { time: '10:15 AM', title: 'Watched Algebra Video', color: 'bg-[#00C2C7]' },
     { time: '11:30 AM', title: 'Submitted Assignment', color: 'bg-[#7059FF]' },
-    { time: '01:00 PM', title: 'Took Math Quiz (Score: 85%)', color: 'bg-[#FFC436]' },
-    { time: '02:30 PM', title: 'Read Science Notes', color: 'bg-[#FF6B6B]' },
   ];
 
-  const testDays = Array.from({length: 31}, (_, i) => {
+  const testDays = reportData?.testDays || Array.from({length: 31}, (_, i) => {
     const hasTest = Math.random() > 0.85;
-    return {
-      dayNumber: i+1,
-      hasTest,
-      score: hasTest ? Math.floor(Math.random()*40 + 60) : null,
-      testName: hasTest ? 'Unit Test' : null
-    };
+    return { dayNumber: i+1, hasTest, score: hasTest ? Math.floor(Math.random()*40 + 60) : null, testName: hasTest ? 'Unit Test' : null };
   });
 
   return (
     <div className="min-h-screen bg-[#F4F7F6] pb-24 text-[#333333] font-sans">
-      <div className="pt-8 px-6 pb-6 max-w-7xl mx-auto flex justify-between items-center">
+      
+      <div className="pt-8 px-6 pb-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif font-black text-[#112B3C] tracking-tight">Graph Reference</h1>
           <p className="text-sm text-gray-500 font-medium">Udaya Smart Report Card Component Showcase</p>
         </div>
+        <div className="flex items-center gap-4">
+          {loading && <span className="text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">Loading live data...</span>}
+          <select 
+            className="px-4 py-2 bg-white/50 border border-gray-200 rounded-xl text-sm font-bold text-[#112B3C] outline-none focus:ring-2 focus:ring-cyan-400"
+            value={selectedStudent}
+            onChange={(e) => setSelectedStudent(e.target.value)}
+          >
+            <option value="" disabled>Select Student to test API</option>
+            {students.map(s => (
+              <option key={s.id} value={s.id}>{s.name} ({s.username})</option>
+            ))}
+          </select>
+        </div>
       </div>
+
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -191,7 +225,7 @@ export default function ReportGraphReferencePage() {
 
         <GlassCard title="Course Progress" subtitle="Overall Completion">
           <div className="flex-1 flex items-center justify-center py-8">
-            <LiquidFillGauge percentage={78} size={240} />
+            <LiquidFillGauge percentage={reportData?.student?.attendance_pct || 78} size={240} />
           </div>
         </GlassCard>
 
@@ -201,7 +235,7 @@ export default function ReportGraphReferencePage() {
 
         <GlassCard title="Live Classes" subtitle="Attendance Rate">
           <div className="flex-1 flex items-center justify-center py-4">
-            <NeonProgressGauge percentage={92} label="Attended" color="#FFC436" />
+            <NeonProgressGauge percentage={reportData?.student?.avg_score || 92} label="Attended" color="#FFC436" />
           </div>
         </GlassCard>
 

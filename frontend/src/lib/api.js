@@ -489,6 +489,8 @@ export const reminderApi = {
 };
 
 export const reportApi = {
+  getSmartReport: (studentId, period = 'overall') =>
+    apiClient(`/reports/student/${studentId}/smart-report?period=${period}`),
   // Teacher fetches a specific student's report
   getV2: (studentId, period = 'overall') =>
     apiClient(`/students/${studentId}/report/v2?period=${period}`),
@@ -571,6 +573,14 @@ export const assignmentApi = {
 export const aiApi = {
   generateInsights: (studentId, stats) =>
     apiClient('/insights/generate', { method: 'POST', body: JSON.stringify({ student_id: studentId, stats }) }),
+
+  // Called by StudentReportCard — extracts student_id from report data object.
+  generateStudentReport: async (data, period) => {
+    const studentId = data?.student?.id;
+    if (!studentId) throw new Error('Missing student ID');
+    const res = await apiClient('/insights/generate', { method: 'POST', body: JSON.stringify({ student_id: studentId, stats: { period } }) });
+    return { report: res.insights };
+  },
 
   // Last generated analysis for this student+period — instant, no LLM call.
   getCachedInsights: (studentId, period = 'overall') =>
