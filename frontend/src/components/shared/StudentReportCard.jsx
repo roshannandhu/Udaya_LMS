@@ -49,6 +49,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
   const { 
     student = {}, 
     trendData = [], 
+    progressionData = [],
     radarData = [], 
     polarData = [], 
     scatterData = [], 
@@ -65,6 +66,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
     quadrantData = [],
     activityData = [] 
   } = data || {};
+
+  const PERIODS = [
+    { id: 'overall', label: 'Overall' },
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'weekly',  label: 'Weekly'  },
+  ];
 
   const handleGenerateAI = async () => {
     setShowAiModal(true);
@@ -93,10 +100,18 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
             </div>
           </div>
           <div className="flex gap-1 md:gap-2">
+            {onPeriodChange && PERIODS.map(p => (
+              <button key={p.id} onClick={() => onPeriodChange(p.id)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all ${
+                  period === p.id
+                    ? 'bg-[#112B3C] text-white border-[#112B3C]'
+                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300'
+                }`}>
+                {p.label}
+              </button>
+            ))}
             <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Share2 size={14} /></button>
             <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Download size={14} /></button>
-            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><Edit2 size={14} /></button>
-            <button className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white text-gray-600 flex items-center justify-center shadow-sm border border-gray-100"><MoreHorizontal size={14} /></button>
           </div>
         </div>
       )}
@@ -143,7 +158,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
 
         {/* ROW 2 */}
         <GlassCard className="col-span-2 md:col-span-4 xl:col-span-4" title="Subject Progression" subtitle="Test scores over time">
-          <SubjectProgressionLineChart data={trendData} />
+          <SubjectProgressionLineChart data={progressionData.length > 0 ? progressionData : trendData} />
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Assignments" subtitle="Health (Speedometer)">
           <AssignmentSpeedometer data={assignmentData} />
@@ -183,8 +198,8 @@ export default function StudentReportCard({ data, period, onPeriodChange, showHe
         <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Quiz Speeds" subtitle="Score vs Time (Bubble)">
           <QuizBubbleScatter data={scatterData} />
         </GlassCard>
-        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Science Test (Bell Curve)">
-          <TestBellCurve data={bellData} studentScore={85} />
+        <GlassCard className="col-span-2 md:col-span-2 xl:col-span-2" title="Class Distribution" subtitle="Score distribution (Bell Curve)">
+          <TestBellCurve data={bellData} studentScore={student.avg_score || 75} />
         </GlassCard>
 
         {/* ROW 7 */}
