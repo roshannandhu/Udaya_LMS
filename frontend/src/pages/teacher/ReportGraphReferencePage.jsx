@@ -34,7 +34,7 @@ const GlassCard = ({ title, subtitle, children, className = "" }) => (
       <h3 className="text-[#112B3C] font-black text-lg tracking-tight">{title}</h3>
       {subtitle && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">{subtitle}</p>}
     </div>
-    <div className="w-full flex-1 flex flex-col justify-center relative">
+    <div className="w-full flex-1 flex flex-col justify-center relative min-w-0">
       {children}
     </div>
   </div>

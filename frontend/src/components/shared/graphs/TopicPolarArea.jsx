@@ -7,7 +7,7 @@ export default function TopicPolarArea({ data }) {
     <div className="w-full h-full min-h-[220px] pt-2">
       <ResponsiveContainer width="100%" height={220}>
         {/* We use RadarChart but style it to look like a Polar Area Chart by using fill on the whole polygon */}
-        <RadarChart cx="50%" cy="50%" outerRadius="65%" data={data}>
+        <RadarChart cx="50%" cy="50%" outerRadius="55%" data={data}>
           <PolarGrid stroke="#E5E7EB" gridType="polygon" />
           <PolarAngleAxis dataKey="topic" tick={{ fill: '#112B3C', fontSize: 10, fontWeight: 'bold' }} />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />

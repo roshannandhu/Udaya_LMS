@@ -6,7 +6,7 @@ export default function SubjectRadarChart({ data }) {
   return (
     <div className="w-full h-full min-h-[220px] pt-2">
       <ResponsiveContainer width="100%" height={220}>
-        <RadarChart cx="50%" cy="50%" outerRadius="65%" data={data}>
+        <RadarChart cx="50%" cy="50%" outerRadius="55%" data={data}>
           <PolarGrid stroke="#E5E7EB" />
           <PolarAngleAxis dataKey="subject" tick={{ fill: '#112B3C', fontSize: 11, fontWeight: 'bold' }} />
           <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
