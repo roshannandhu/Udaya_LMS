@@ -1,8 +1,13 @@
 import React from 'react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
+import EmptyChart from './EmptyChart';
 
 export default function QuizBubbleScatter({ data = [] }) {
   // data: [{ name: 'Test 1', dateIndex: 1, score: 85, time: 20 }, ...]
+  if (!data.length) {
+    return <EmptyChart label="No timed quiz data yet" height={220} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height={220}>

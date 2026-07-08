@@ -1,8 +1,13 @@
 import React from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function SubjectRadarChart({ data }) {
+export default function SubjectRadarChart({ data = [] }) {
   // data format: [{ subject: 'Math', student: 90, classAvg: 75 }, ...]
+  if (!data.length) {
+    return <EmptyChart label="No subject scores yet" height={280} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[280px] pt-2">
       <ResponsiveContainer width="100%" height={280}>

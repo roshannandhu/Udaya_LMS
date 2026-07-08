@@ -1,8 +1,13 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function TestBellCurve({ data, studentScore }) {
+export default function TestBellCurve({ data = [], studentScore }) {
   // data: [{ scoreBin: 40, count: 2 }, { scoreBin: 50, count: 5 }, ...]
+  if (!data.length) {
+    return <EmptyChart label="No class distribution yet" height={220} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height={220}>

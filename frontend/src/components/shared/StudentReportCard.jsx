@@ -252,7 +252,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         </GlassCard>
 
         <GlassCard className="md:col-span-6 xl:col-span-8" title="Subject Progression" subtitle="How scores moved across recent tests" tone="cyan" tall>
-          <SubjectProgressionLineChart data={progressionData.length > 0 ? progressionData : trendData} />
+          <SubjectProgressionLineChart data={progressionData} />
         </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Assignments" subtitle="Submitted, pending, and overdue work" tone="violet" tall>
           <AssignmentSpeedometer data={assignmentData} />

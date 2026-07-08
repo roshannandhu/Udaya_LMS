@@ -1,8 +1,12 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function GradientAreaTrendChart({ data, classAverageLine = false }) {
+export default function GradientAreaTrendChart({ data = [], classAverageLine = false }) {
   // data format: [{ name: 'Test 1', studentScore: 85, classScore: 72 }, ...]
+  if (!data.length) {
+    return <EmptyChart label="No test trend yet" height={280} />;
+  }
   
   return (
     <div className="w-full h-full min-h-[280px] pt-3 pb-2">

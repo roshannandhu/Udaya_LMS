@@ -1,10 +1,14 @@
 import React from 'react';
+import EmptyChart from './EmptyChart';
 
-export default function EngagementHeatmap({ data }) {
+export default function EngagementHeatmap({ data = [] }) {
   // data format: [{ date: '2026-07-01', count: 5 }, ...]
   // This is a simplified GitHub-style grid representation
   const weeks = 4;
   const days = 7;
+  if (!data.length) {
+    return <EmptyChart label="No engagement activity yet" height={260} />;
+  }
   
   // Create dummy grid if data isn't perfectly sized
   const grid = Array(weeks).fill().map(() => Array(days).fill(0));

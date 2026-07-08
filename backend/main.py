@@ -2967,10 +2967,14 @@ def get_subjects(standard_id: Optional[str] = None, user = Depends(verify_token)
         response = service_supabase.table("subject_classes").select("*").eq("standard_id", standard_id).execute()
         return response.data or []
     elif user["role"] == "student":
-        student = service_supabase.table("students").select("standard_id").eq("id", user["user_id"]).single().execute()
-        if not student.data or not student.data.get("standard_id"):
+        effective_student_id = user.get("student_id") or user.get("user_id")
+        if not effective_student_id:
             return []
-        response = service_supabase.table("subject_classes").select("*").eq("standard_id", student.data["standard_id"]).execute()
+        student = service_supabase.table("students").select("standard_id").eq("id", effective_student_id).limit(1).execute()
+        student_row = student.data[0] if student.data else None
+        if not student_row or not student_row.get("standard_id"):
+            return []
+        response = service_supabase.table("subject_classes").select("*").eq("standard_id", student_row["standard_id"]).execute()
         return response.data or []
     else:
         # Teacher: return all subjects for their standards. Claim any orphaned
@@ -3569,7 +3573,8 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
             raise HTTPException(status_code=403, detail="Student only for /me/ routes")
         student_id = user.get("student_id") or user.get("user_id") or ""
     # Students can only fetch their own report
-    if user["role"] == "student" and user.get("student_id") != student_id:
+    requester_student_id = user.get("student_id") or user.get("user_id")
+    if user["role"] == "student" and requester_student_id != student_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
@@ -11591,32 +11596,35 @@ LANGUAGE — KEEP IT SIMPLE:
 * If you must use a study term, explain it in brackets the first time, e.g. "active recall (testing yourself from memory)".
 * One idea per sentence or bullet. Prefer concrete verbs: watch, practise, ask, revise, attempt.
 
-YOU SEE THE STUDENT'S COMPLETE LMS RECORD: profile and class standing, every subject's numbers, full recent test history, weak topics with lesson-video status, day-by-day activity patterns and streaks, assignment status, the class baseline, AND the actual upcoming week (scheduled tests, live classes, assignment due dates, unwatched videos). Analyse ALL of it together — the diagnosis must connect history, habits and the week ahead.
+YOU SEE THE STUDENT'S COMPLETE LMS RECORD: profile and class standing, per-subject scores vs class average, per-subject improving/declining trends, every test with class comparison, weak topics with video status, activity patterns, streaks, assignment status, detected learning style, pre-computed subject priority, anti-patterns, AND the upcoming week. Analyse ALL of it together — the diagnosis must connect history, habits and the week ahead.
 
 HOW TO DIAGNOSE (reason silently, output only conclusions):
-1. Cross-reference signals before concluding. Examples of patterns to look for:
-   - Weak topic + lesson video NOT watched → a preparation gap, not an ability gap. The fix is watching the lesson before reattempting.
-   - Weak topic + video watched → a comprehension gap. The fix is active recall: notes, practice questions, asking the teacher.
-   - High video completion but flat test scores → passive watching; prescribe self-testing.
-   - Falling improvement trend or "Erratic" consistency → cramming/irregular routine; prescribe a fixed daily slot (use the streak and "most active days" pattern).
-   - Strong best-subject vs weak weakest-subject gap → time is being spent where it's comfortable, not where it's needed.
-   - Low test coverage or an OPEN test in the upcoming week → missed tests are silent score killers; schedule it explicitly.
-2. Use the streak: a live streak is momentum to protect (say so); a broken/short streak is the first habit to rebuild.
-3. Compare against the class baseline and rank only to motivate, never to shame.
+1. START with "Detected learning style" and "Detected anti-patterns" — these are the highest-signal inputs. Name the pattern explicitly when writing recommendations.
+2. Use "Subject study priority" as the order for your timetable and focus advice — it was computed from urgency (gap, trend, upcoming test, unwatched videos). Follow it.
+3. Root-cause decision tree — apply per weak subject before prescribing a fix:
+   - Weak topic + video NOT watched → PREPARATION GAP (not ability). Fix: watch the video first, then attempt questions.
+   - Weak topic + video watched + attended class → COMPREHENSION GAP. Fix: active recall (write key points from memory, then check), not re-watching.
+   - Weak topic + video watched + low attendance → FOUNDATION GAP. Fix: catch up on missed classes first, then active recall.
+   - Score declining over multiple tests (from "Subject score progression") → MOMENTUM LOSS. Fix: smaller daily sessions, protect streak.
+   - Score well below class average (from "Subject-by-subject gap") → SIGNIFICANT GAP. Fix: name the exact gap and set a specific numeric target.
+   - Test participation < 50% → AVOIDANCE. Fix: attempt every available test even unprepared — failure is feedback.
+4. Use the streak: a live streak is momentum to protect; a zero streak after a long one means routine broke — name this directly.
+5. "Subject score progression" shows which subjects are improving vs declining — a declining subject that is also below class avg is the #1 priority regardless of preference.
+6. "Test history" now includes class avg and rank per test — use these to call out specific wins ("you beat the class on X") and specific gaps ("you were 12th out of 15 on Y — here's why").
 
 RULES:
 * {greeting_rule}
-* Praise 2 concrete, real wins first (name the subject/test/streak — no empty praise).
-* For each weakness: likely root cause in one sentence, then the fix.
-* "Solutions & Study Ideas" must give 3-4 study techniques, each tied to a diagnosed cause and naming the real subject/topic/video it applies to (e.g. active-recall flashcards for a watched-but-weak topic; watch-then-summarise for an unwatched one). No generic advice.
-* "Goals" must be 2-3 measurable targets, each with a number and a deadline (e.g. "Hit a 5-day study streak by <day>", "Score 70%+ on the next <weakest subject from the data> test"). Goals, not predictions.
-* "Weekly Timetable" is a 7-day plan, one line per day, formatted exactly like: **<Day>:** 30 min — watch "<video title from the data>" (<subject>), then 5 recall questions.
-  - Place every real upcoming event on its actual day: live classes at their listed day, open/scheduled tests before they close, pending assignments before their due dates.
-  - Put unwatched videos for the weakest subjects early in the week.
-  - 30-90 minutes per day; include exactly ONE light/rest day with only a 10-minute review.
-  - Apart from the real items, only revision of topics named in the data is allowed — never invent lessons or events.
-  - If the upcoming week has no scheduled events, say so in one clause and build the week from weak-topic revision and unwatched videos.
-* Be specific everywhere: name the actual subjects, topics, videos and tests from the data. No generic "study harder".
+* Praise 2 concrete, real wins first — name the actual subject, test title, or streak length. No empty praise like "great job".
+* For EACH weakness: state the root cause (use the decision tree above — one sentence), then the specific fix naming real subjects/videos/topics.
+* "Solutions & Study Ideas" must give 3-4 techniques, EACH tied to a diagnosed root cause and naming the real subject/topic/video from the data. Distinguish: watch-then-summarise for a PREPARATION gap; active-recall for a COMPREHENSION gap; daily consistency for MOMENTUM LOSS. No generic advice.
+* "Goals" — use the pre-computed "Pre-computed study goals" as your source. Adapt them into natural language. Goals must have a number AND a deadline. Goals, not predictions. Do not invent new numbers.
+* "Weekly Timetable" — the "Timetable priority skeleton" gives you the subject allocation per day. Use it as the structural base. Then fill each day with real content:
+  - Place every real upcoming event (tests, live classes, assignments) on its exact scheduled day.
+  - Fill study slots with specific unwatched videos or topics from the data — never invent content.
+  - Format exactly: **<Day date>:** 45 min — watch "<real video title>" (<subject>), then 5 recall questions on <topic>.
+  - Day 6 is the light day (15 min review only). Day 7 is rest or catch-up.
+  - 30-60 minutes per study day, one task at a time.
+* Be specific everywhere. Name actual subjects, topics, videos, tests. "Study Chemistry" is not specific. "Watch the Organic Reactions video in Chemistry, then write 5 reactions from memory" is.
 * End with one short, personal line of encouragement. Never say you are an AI, never mention "the data".
 
 SECTIONS (use these exact markdown headings, in this order):
@@ -11633,24 +11641,33 @@ Name: {name_for_prompt}
 Standard: {stats.get("standard_name", "N/A")}
 Report period: {period}
 Profile & standing: {profile_for_prompt}
+Class rank context: {stats.get("rank_summary", "N/A")}
 Study streak & activity patterns: {stats.get("activity_patterns", stats.get("streak_data", "N/A"))}
 Score trend: {stats.get("trend_data", "N/A")}
+Subject score progression (improving/declining per subject): {stats.get("subject_progression", "N/A")}
 Best subject: {stats.get("best_subject", "N/A")}
 Weakest subject: {stats.get("weakest_subject", "N/A")}
+Subject-by-subject gap vs class average: {stats.get("subject_vs_class", "N/A")}
+Subject study priority (pre-computed, follow this order): {stats.get("subject_priority", "N/A")}
+Detected learning style & habit patterns: {stats.get("learning_style", "N/A")}
+Detected anti-patterns (address these directly): {stats.get("anti_patterns", "None detected")}
 Per-subject detail: {stats.get("subjects_detail", stats.get("subject_breakdown", "N/A"))}
-Test history (oldest → newest): {stats.get("test_history", stats.get("recent_tests", "N/A"))}
+Test history with class comparison (oldest → newest): {stats.get("test_history", stats.get("recent_tests", "N/A"))}
 Weak topics (topic — score — video watched?): {stats.get("weak_topics_detail", stats.get("topic_data", "N/A"))}
 Assignments: {stats.get("assignments_detail", stats.get("assignment_data", "N/A"))}
 Class baseline: {stats.get("class_baseline", "N/A")}
 Attendance: {stats.get("attendance_data", "N/A")}
 Video progress: {stats.get("video_progress_data", "N/A")}
-UPCOMING WEEK (real scheduled events — anchor the timetable to these): {stats.get("upcoming_week", "N/A")}
+UPCOMING WEEK (real scheduled events — pin these to exact days in timetable): {stats.get("upcoming_week", "N/A")}
+Pre-computed study goals (use these as the basis for "Goals" section): {stats.get("smart_goals", "N/A")}
+Timetable priority skeleton (subject allocation per day — fill with real content): {stats.get("timetable_skeleton", "N/A")}
 
 OUTPUT REQUIREMENTS:
-* Markdown, 350-600 words total.
-* "Performance Summary" is 2-3 sentences capturing the whole picture, including class standing.
+* Markdown, 450-700 words total.
+* "Performance Summary" is 2-3 sentences: overall picture, class rank context, and the single most important thing to do next.
 * Lead with what to do next, not a recap of the past.
 * Only cite a percentage when it makes a point clearer.
+* If an anti-pattern is detected, address it directly in "What Needs Attention" — do not soften or skip it.
 """
 
 
@@ -11748,6 +11765,8 @@ def fetch_upcoming_for_student(student_id: str, standard_id: str, weak_subject_i
 def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
     """Distill the full report-v2 payload into the structured digest the mentor
     prompt consumes. Server-computed — the model sees the whole LMS record."""
+    from datetime import datetime, timedelta
+
     s = report.get("student") or {}
     radar = report.get("subject_radar") or []
     timeline = sorted(report.get("test_timeline") or [], key=lambda t: t.get("date") or "")
@@ -11773,11 +11792,27 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
         for r in radar
     ) or "No subject data"
 
-    test_history = "; ".join(
-        f"{(t.get('date') or '')[:10]} {t.get('test_title')} ({t.get('subject') or '?'}) {round(t.get('score_pct') or 0)}%"
-        + (" FLAGGED" if t.get("flagged") else "")
-        for t in timeline[-15:]
-    ) or "No tests taken"
+    # Enriched test history: per-test class avg + rank so the AI can say
+    # "you beat the class on this one" or "you were 8th out of 15".
+    def _test_entry(t):
+        parts = [
+            f"{(t.get('date') or '')[:10]}",
+            f"{t.get('test_title')} ({t.get('subject') or '?'})",
+            f"{round(t.get('score_pct') or 0)}%",
+        ]
+        c_avg = t.get("class_avg_score_pct")
+        t_rank = t.get("rank")
+        t_total = t.get("total_attempts")
+        if c_avg is not None:
+            diff = round((t.get("score_pct") or 0) - c_avg)
+            sign = "+" if diff >= 0 else ""
+            rank_str = f", rank {t_rank}/{t_total}" if (t_rank and t_total) else ""
+            parts.append(f"[class avg {round(c_avg)}%, {sign}{diff} vs class{rank_str}]")
+        if t.get("flagged"):
+            parts.append("FLAGGED")
+        return " ".join(parts)
+
+    test_history = "; ".join(_test_entry(t) for t in timeline[-15:]) or "No tests taken"
 
     weak = sorted(topics, key=lambda t: t.get("score_pct") or 0)[:8]
     weak_topics = "; ".join(
@@ -11796,7 +11831,6 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
         for row in report.get(key) or []:
             if row.get("date") and pred(row):
                 active_days.add(row["date"][:10])
-    from datetime import datetime, timedelta
     sorted_days = sorted(active_days)
     best = run = 0
     prev = None
@@ -11867,14 +11901,237 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
     best_sub = max(tested, key=lambda r: r.get("test_avg") or 0) if tested else None
     worst_sub = min(tested, key=lambda r: r.get("test_avg") or 0) if len(tested) > 1 else None
 
-    # These two prompt fields used to arrive only from the browser payload; the
-    # prompt must stay fully server-fed now that client stats are ignored.
     vid_total = sum(r.get("video_total") or 0 for r in radar)
     vid_done = sum(r.get("video_done") or 0 for r in radar)
     attendance_data = f"Attendance is {round(s.get('attendance_pct') or 0)}%"
     video_progress_data = (
         f"Video completion is {round(vid_done / vid_total * 100) if vid_total else 0}% ({vid_done}/{vid_total} videos)"
     )
+
+    # ── Subject progression direction (improving / declining / flat per subject) ─
+    sub_scores: dict = {}
+    for t in timeline:
+        sub_scores.setdefault(t.get("subject") or "Unknown", []).append(t.get("score_pct") or 0)
+
+    progression_lines = []
+    for sub, slist in sub_scores.items():
+        if len(slist) < 2:
+            continue
+        if len(slist) >= 4:
+            mid2 = len(slist) // 2
+            delta = round(sum(slist[mid2:]) / len(slist[mid2:]) - sum(slist[:mid2]) / mid2)
+        else:
+            delta = round(slist[-1] - slist[0])
+        direction = "improving" if delta > 3 else "declining" if delta < -3 else "flat"
+        sign = "+" if delta >= 0 else ""
+        progression_lines.append(f"{sub}: {sign}{delta}% ({direction})")
+    subject_progression = "; ".join(progression_lines) or "Not enough test data per subject for a trend"
+
+    # ── Per-subject gap vs class average ──────────────────────────────────────
+    class_avg_score = round(ca.get("avg_score") or 0) if ca else 0
+    subject_gaps = []
+    if ca and class_avg_score:
+        for r in radar:
+            if (r.get("test_count") or 0) == 0:
+                continue
+            sub_avg = round(r.get("test_avg") or 0)
+            gap = sub_avg - class_avg_score
+            sign = "+" if gap >= 0 else ""
+            level = "ABOVE class avg" if gap >= 5 else "BELOW class avg" if gap <= -5 else "at class avg"
+            subject_gaps.append(f"{r['subject']}: {sub_avg}% ({sign}{gap}%, {level})")
+    subject_vs_class = "; ".join(subject_gaps) or "Class comparison not available"
+
+    # ── Subject priority score (pre-computed, highest urgency first) ──────────
+    upcoming_tests_raw = upcoming.get("tests") or ""
+    upcoming_test_subjects: set = set()
+    if upcoming_tests_raw and upcoming_tests_raw != "None scheduled":
+        for part in upcoming_tests_raw.split(";"):
+            m = re.search(r'\(([^)]+)\)', part.strip())
+            if m:
+                upcoming_test_subjects.add(m.group(1).strip())
+
+    priorities = []
+    for r in radar:
+        sub_name = r.get("subject") or "?"
+        fscore = 0
+        reasons = []
+
+        gap = class_avg_score - round(r.get("test_avg") or 0)
+        if gap > 0 and (r.get("test_count") or 0) > 0:
+            fscore += gap
+            reasons.append(f"{gap}% below class avg")
+
+        slist = sub_scores.get(sub_name, [])
+        if len(slist) >= 2 and slist[-1] - slist[0] < -5:
+            fscore += 25
+            reasons.append("score declining")
+
+        v_total = r.get("video_total") or 0
+        v_done = r.get("video_done") or 0
+        unwatched = v_total - v_done
+        if unwatched > 0:
+            fscore += unwatched * 5
+            reasons.append(f"{unwatched} unwatched video(s)")
+
+        if sub_name in upcoming_test_subjects:
+            fscore += 40
+            reasons.append("test coming up this week")
+
+        att = r.get("attendance_pct") or 0
+        if 0 < att < 70:
+            fscore += 15
+            reasons.append(f"attendance only {round(att)}%")
+
+        if (r.get("test_count") or 0) == 0 and v_total > 0:
+            fscore += 20
+            reasons.append("no tests taken yet")
+
+        priorities.append({"subject": sub_name, "score": fscore, "why": ", ".join(reasons) or "on track"})
+
+    priorities.sort(key=lambda x: -x["score"])
+    priority_detail = " | ".join(
+        f"#{i+1} {p['subject']} (focus score {p['score']}: {p['why']})"
+        for i, p in enumerate(priorities)
+    ) or "No priority data"
+
+    # ── Learning style detection ──────────────────────────────────────────────
+    avg_video_pct = (vid_done / vid_total * 100) if vid_total else 0
+    test_participation_pct = (len(timeline) / coverage * 100) if coverage else 0
+    avg_score_val = float(s.get("avg_score") or 0)
+
+    weekend_days = sum(weekday_counts.get(d, 0) for d in ("Saturday", "Sunday"))
+    weekend_crammer = len(active_days) > 0 and (weekend_days / len(active_days)) > 0.6
+    passive_watcher = avg_video_pct > 65 and avg_score_val < 60 and len(timeline) >= 2
+    test_avoider = coverage > 3 and test_participation_pct < 45
+    former_consistent = best > 6 and current == 0
+
+    sub_time = {r.get("subject"): r.get("video_done") or 0 for r in radar}
+    # Only flag bias when the student actually watches videos — if all counts are 0
+    # max() picks arbitrarily, which would be a false positive.
+    most_time_sub = max(sub_time, key=lambda k: sub_time[k]) if (sub_time and max(sub_time.values(), default=0) > 0) else None
+    best_sub_name = best_sub.get("subject") if best_sub else None
+    best_sub_bias = most_time_sub and best_sub_name and most_time_sub == best_sub_name and len(radar) > 1
+
+    styles = []
+    if passive_watcher:
+        styles.append("Passive Watcher (watches videos but test scores remain low — needs active recall over re-watching)")
+    if test_avoider:
+        styles.append(f"Test Avoider (only {round(test_participation_pct)}% of available tests attempted — missing the feedback loop that drives improvement)")
+    if weekend_crammer:
+        styles.append("Weekend Crammer (most study activity on weekends — needs a daily 30-min habit instead of weekend sprints)")
+    if former_consistent:
+        styles.append(f"Former Consistent Learner (previously had a {best}-day streak but currently inactive — routine disrupted, needs to restart small)")
+    if best_sub_bias and best_sub_name:
+        styles.append(f"Best-Subject Bias (most video time goes to {best_sub_name} which is already the strongest subject — the weakest subject needs that time)")
+    if not styles:
+        if current >= 5:
+            styles.append("Consistent Learner (active daily streak — build on this momentum)")
+        elif avg_score_val >= 70:
+            styles.append("Strong Performer (above-average scores — focus on weak spots to break into top of class)")
+        else:
+            styles.append("Developing Learner (building habits — consistency and test practice are the key levers right now)")
+    learning_style = "; ".join(styles)
+
+    # ── Anti-pattern detection ────────────────────────────────────────────────
+    anti_patterns = []
+
+    if len(scores) >= 6 and all(scores[-(i+1)] < scores[-(i+4)] for i in range(3)):
+        anti_patterns.append("SILENT DECLINE: scores have been falling for 3+ consecutive tests with no correction")
+
+    if avg_video_pct > 70 and test_participation_pct < 30 and coverage > 2:
+        anti_patterns.append("VIDEO BINGE WITHOUT TESTING: high video completion but very few tests attempted — watching alone does not build exam skill")
+
+    flagged_count = sum(1 for t in timeline if t.get("flagged"))
+    if flagged_count >= 2:
+        anti_patterns.append(f"INTEGRITY FLAGS: {flagged_count} test(s) flagged — student should review test-taking conduct with teacher")
+
+    a_total = astats.get("total") or 0
+    a_submitted = astats.get("submitted") or 0
+    if a_total >= 3 and a_total > 0 and (a_submitted / a_total) < 0.5:
+        anti_patterns.append(f"ASSIGNMENT AVOIDANCE: only {a_submitted}/{a_total} assignments submitted ({round(a_submitted/a_total*100)}%) — assignments build the same skills tested in exams")
+
+    anti_pattern_summary = "; ".join(anti_patterns) if anti_patterns else "None detected"
+
+    # ── Rank context with motivational framing ────────────────────────────────
+    if rank and total:
+        pct = max(1, round(rank / total * 100))
+        if pct <= 10:
+            rank_summary = f"Rank {rank}/{total} — top 10% of class (excellent standing, defend it)"
+        elif pct <= 30:
+            rank_summary = f"Rank {rank}/{total} — top 30% of class (above average, push into top 10)"
+        elif pct <= 60:
+            rank_summary = f"Rank {rank}/{total} — middle of class (realistic to reach top 30% with consistent effort)"
+        else:
+            rank_summary = f"Rank {rank}/{total} — bottom 40% of class (significant improvement is achievable with focused daily study)"
+    else:
+        rank_summary = "Rank not yet computed"
+
+    # ── Pre-computed smart goals (measurable, deadline-anchored) ─────────────
+    smart_goals = []
+
+    if worst_sub and ca:
+        current_score = round(worst_sub.get("test_avg") or 0)
+        if current_score < class_avg_score:
+            # Below class avg: realistic target is to reach class avg (or +15 if closer)
+            target = min(class_avg_score, current_score + 15)
+            comparison = f"class avg {class_avg_score}%"
+        else:
+            # Already at or above class avg: push 10 points higher
+            target = current_score + 10
+            comparison = f"already above class avg ({class_avg_score}%), push further"
+        has_test = worst_sub.get("subject", "") in upcoming_tests_raw
+        deadline = "on the next available test" if has_test else "within the next 2 weeks"
+        smart_goals.append(
+            f"Score {target}%+ in {worst_sub['subject']} {deadline} "
+            f"(currently {current_score}%, {comparison})"
+        )
+
+    if current < 5:
+        smart_goals.append(f"Build a 5-day study streak (currently at {current} day(s) — start today)")
+    else:
+        smart_goals.append(f"Extend current {current}-day streak to {current + 7} days without breaking it")
+
+    if priorities:
+        top = priorities[0]
+        top_r = next((r for r in radar if r.get("subject") == top["subject"]), None)
+        if top_r:
+            unwatched = (top_r.get("video_total") or 0) - (top_r.get("video_done") or 0)
+            if unwatched > 0:
+                smart_goals.append(
+                    f"Watch {min(unwatched, 3)} {top['subject']} video(s) this week "
+                    f"({top_r.get('video_done') or 0}/{top_r.get('video_total') or 0} done so far)"
+                )
+
+    if test_avoider and coverage > len(timeline):
+        remaining = coverage - len(timeline)
+        smart_goals.append(f"Attempt at least {min(remaining, 3)} more test(s) this period to close the participation gap")
+
+    smart_goals_str = " | ".join(f"({i+1}) {g}" for i, g in enumerate(smart_goals[:4])) or "N/A"
+
+    # ── Timetable skeleton (pre-assign subject priority per day) ─────────────
+    now = datetime.now()
+    priority_subjects = [p["subject"] for p in priorities if p["score"] > 0][:3]
+    skel_lines = []
+    for i in range(7):
+        day = now + timedelta(days=i + 1)
+        day_label = day.strftime("%A %d %b")
+        if i == 5:
+            skel_lines.append(f"{day_label}: LIGHT DAY — 15-min review only, no new material")
+        elif i == 6:
+            skel_lines.append(f"{day_label}: Rest or catch-up if behind on any day above")
+        elif i == 0 and priority_subjects:
+            skel_lines.append(f"{day_label}: {priority_subjects[0]} — top priority, watch unwatched video first then do practice questions")
+        elif i == 1 and len(priority_subjects) > 1:
+            skel_lines.append(f"{day_label}: {priority_subjects[1]} — second priority subject")
+        elif i == 2 and priority_subjects:
+            skel_lines.append(f"{day_label}: {priority_subjects[0]} — revisit + attempt any open test")
+        elif i == 3 and len(priority_subjects) > 2:
+            skel_lines.append(f"{day_label}: {priority_subjects[2]} — third priority subject")
+        elif i == 4:
+            skel_lines.append(f"{day_label}: Mixed revision — all subjects, 15 min each")
+        else:
+            skel_lines.append(f"{day_label}: Revision or open test attempt")
+    timetable_skeleton = "; ".join(skel_lines)
 
     return {
         "student_name": s.get("name") or "Student",
@@ -11894,6 +12151,15 @@ def compose_student_analysis(report: dict, upcoming: dict, period: str) -> dict:
         "upcoming_week": upcoming_week,
         "best_subject": f"{best_sub['subject']} ({round(best_sub.get('test_avg') or 0)}% avg)" if best_sub else "N/A",
         "weakest_subject": f"{worst_sub['subject']} ({round(worst_sub.get('test_avg') or 0)}% avg)" if worst_sub else "N/A",
+        # Enriched fields for smarter AI mentor advice
+        "subject_progression": subject_progression,
+        "subject_vs_class": subject_vs_class,
+        "subject_priority": priority_detail,
+        "learning_style": learning_style,
+        "anti_patterns": anti_pattern_summary,
+        "rank_summary": rank_summary,
+        "smart_goals": smart_goals_str,
+        "timetable_skeleton": timetable_skeleton,
     }
 
 

@@ -1,8 +1,13 @@
 import React from 'react';
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function TopicPolarArea({ data }) {
+export default function TopicPolarArea({ data = [] }) {
   // data: [{ topic: 'Algebra', score: 90 }, { topic: 'Geometry', score: 65 }, ...]
+  if (!data.length) {
+    return <EmptyChart label="No topic scores yet" height={280} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[280px] pt-2">
       <ResponsiveContainer width="100%" height={280}>

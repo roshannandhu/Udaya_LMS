@@ -1,8 +1,13 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function OverlappingAreaChart({ data }) {
+export default function OverlappingAreaChart({ data = [] }) {
   // data: [{ day: 'Mon', videos: 40, tests: 20, notes: 30 }]
+  if (!data.length) {
+    return <EmptyChart label="No activity mix yet" height={220} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height={220}>

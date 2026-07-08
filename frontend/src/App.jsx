@@ -12,6 +12,7 @@ import SplashScreen from './components/SplashScreen';
 import UpdateBanner from './components/UpdateBanner';
 import useLiveClassEvents from './hooks/useLiveClassEvents';
 import { startNotificationSync, stopNotificationSync } from './lib/notifications';
+import { CHUNK_RELOAD_FLAG, recoverFromChunkLoadError } from './lib/chunkRecovery';
 
 import TeacherLayout      from './pages/teacher/TeacherLayout';
 import StudentLayout      from './pages/student/StudentLayout';
@@ -20,7 +21,6 @@ import ReportGraphReferencePage from './pages/teacher/ReportGraphReferencePage';
 // Wrap React.lazy so a failed dynamic import (usually a stale chunk after a new
 // deploy/rebuild) triggers ONE automatic reload to fetch fresh assets instead of
 // crashing the whole app. The reload flag is shared with ErrorBoundary.
-const RELOAD_FLAG = 'cl_reloaded';
 // Every lazy route's import factory, collected so we can warm them all on idle.
 const _routeFactories = [];
 function lazyWithRetry(factory) {
@@ -28,12 +28,11 @@ function lazyWithRetry(factory) {
   return lazy(async () => {
     try {
       const mod = await factory();
-      try { sessionStorage.removeItem(RELOAD_FLAG); } catch { /* ignore */ }
+      try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch { /* ignore */ }
       return mod;
     } catch (err) {
-      if (!sessionStorage.getItem(RELOAD_FLAG)) {
-        try { sessionStorage.setItem(RELOAD_FLAG, '1'); } catch { /* ignore */ }
-        window.location.reload();
+      if (!sessionStorage.getItem(CHUNK_RELOAD_FLAG)) {
+        recoverFromChunkLoadError();
         return new Promise(() => {}); // hold render until the reload happens
       }
       throw err; // already retried once — let ErrorBoundary show the fallback

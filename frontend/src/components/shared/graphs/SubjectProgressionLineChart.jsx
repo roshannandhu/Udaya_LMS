@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function SubjectProgressionLineChart({ data }) {
+export default function SubjectProgressionLineChart({ data = [] }) {
   // data: [ { testName: 'T1', Math: 85, Science: 90, English: 70 }, ... ]
   const COLORS = ['#2563EB', '#7C3AED', '#D97706', '#059669', '#E11D48'];
   
@@ -10,6 +11,9 @@ export default function SubjectProgressionLineChart({ data }) {
   // Extract subjects dynamically
   const allSubjects = data && data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'testName') : [];
   const subjectsToRender = selectedSubject === 'All' ? allSubjects : [selectedSubject];
+  if (!data.length || !allSubjects.length) {
+    return <EmptyChart label="No subject progression yet" height={280} />;
+  }
 
   return (
     <div className="w-full h-full min-h-[280px] pt-12 pb-2 relative">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Treemap, ResponsiveContainer, Tooltip } from 'recharts';
+import EmptyChart from './EmptyChart';
 
 const CustomizedContent = (props) => {
   const { root, depth, x, y, width, height, index, payload, colors, rank, name } = props;
@@ -29,8 +30,12 @@ const CustomizedContent = (props) => {
   );
 };
 
-export default function LearningTreemap({ data }) {
+export default function LearningTreemap({ data = [] }) {
   const COLORS = ['#67E8F9', '#A78BFA', '#FDE047', '#FCA5A5', '#2DD4BF'];
+  if (!data.length) {
+    return <EmptyChart label="No topic activity yet" height={220} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[220px] pt-2">
       <ResponsiveContainer width="100%" height={220}>

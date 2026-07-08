@@ -1,8 +1,14 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import EmptyChart from './EmptyChart';
 
-export default function TimeAllocationDonut({ data }) {
+export default function TimeAllocationDonut({ data = [] }) {
   // data: [{ name: 'Videos', value: 400, color: '#67E8F9' }]
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  if (!data.length || total <= 0) {
+    return <EmptyChart label="No learning time recorded yet" height={280} />;
+  }
+
   return (
     <div className="w-full h-full min-h-[280px] flex flex-col relative">
       <div className="flex-1 min-h-[280px]">
@@ -33,7 +39,7 @@ export default function TimeAllocationDonut({ data }) {
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-4">
         <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Total Mins</span>
         <span className="text-2xl font-serif font-black text-[#112B3C]">
-          {data.reduce((a,b) => a + b.value, 0)}
+          {total}
         </span>
       </div>
       <div className="flex flex-wrap justify-center gap-3 mt-4 text-[9px] font-bold uppercase tracking-wider text-gray-500">

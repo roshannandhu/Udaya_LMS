@@ -1,5 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import EmptyChart from './EmptyChart';
 
 const RangeBar = (props) => {
   const { x, y, width, height, studentScore, minScore, maxScore } = props;
@@ -18,10 +19,13 @@ const RangeBar = (props) => {
   );
 };
 
-export default function QuizRangeChart({ data }) {
+export default function QuizRangeChart({ data = [] }) {
   // data: [{ name: 'Test 1', minScore: 40, maxScore: 95, studentScore: 85 }]
   // For Recharts BarChart to simulate a floating bar, we use a stacked bar approach or custom shape.
   // Custom shape is much cleaner here.
+  if (!data.length) {
+    return <EmptyChart label="No quiz range data yet" height={260} />;
+  }
   
   const chartData = data.map(d => ({ ...d, range: [d.minScore, d.maxScore] }));
 
