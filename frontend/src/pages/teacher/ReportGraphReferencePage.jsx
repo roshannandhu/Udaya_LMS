@@ -186,7 +186,7 @@ export default function ReportGraphReferencePage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 md:auto-rows-min grid-flow-dense"
+        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 md:auto-rows-[160px] grid-flow-dense"
       >
         {/* ROW 1: KPIs & Calendars */}
         <GlassCard title="Attendance" subtitle="Monthly Status">
@@ -195,7 +195,7 @@ export default function ReportGraphReferencePage() {
 
         <GlassCard title="Course Progress" subtitle="Overall Completion" rowSpan={2}>
           <div className="flex-1 flex items-center justify-center py-8">
-            <LiquidFillGauge percentage={78} size={200} />
+            <LiquidFillGauge percentage={78} size={240} />
           </div>
         </GlassCard>
 

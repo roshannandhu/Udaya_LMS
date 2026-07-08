@@ -4,9 +4,9 @@ import { AreaChart, Area, XAxis, YAxis, ReferenceLine, ResponsiveContainer, Tool
 export default function TestBellCurve({ data, studentScore }) {
   // data: [{ scoreBin: 40, count: 2 }, { scoreBin: 50, count: 5 }, ...]
   return (
-    <div className="w-full h-full min-h-[220px] -ml-4 mt-2">
+    <div className="w-full h-full min-h-[260px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
           <defs>
             <linearGradient id="bellGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#7059FF" stopOpacity={0.4}/>

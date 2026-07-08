@@ -4,9 +4,9 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 export default function LeaderboardBumpChart({ data }) {
   // data: [{ week: 'W1', rank: 15 }, { week: 'W2', rank: 8 }, ...]
   return (
-    <div className="w-full h-full min-h-[220px] -ml-4 mt-2">
+    <div className="w-full h-full min-h-[260px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+        <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
           <XAxis dataKey="week" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
           {/* YAxis reversed for rank (1 is highest) */}
