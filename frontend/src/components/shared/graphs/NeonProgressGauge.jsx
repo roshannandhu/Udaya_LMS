@@ -1,11 +1,12 @@
 import React from 'react';
 
 export default function NeonProgressGauge({ percentage, label, color = '#FDE047' }) {
+  const pct = Math.max(0, Math.min(100, Number(percentage) || 0));
   const size = 120;
   const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (percentage / 100) * circumference;
+  const offset = circumference - (pct / 100) * circumference;
   
   return (
     <div className="flex flex-col items-center justify-center">
@@ -37,7 +38,7 @@ export default function NeonProgressGauge({ percentage, label, color = '#FDE047'
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-black text-slate-950 tabular-nums">{Math.round(percentage)}%</span>
+          <span className="text-2xl font-black text-slate-950 tabular-nums">{Math.round(pct)}%</span>
         </div>
       </div>
       <span className="mt-4 font-bold text-xs text-slate-500">{label}</span>

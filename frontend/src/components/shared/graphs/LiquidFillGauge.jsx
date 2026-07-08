@@ -1,13 +1,14 @@
 import React from 'react';
 
 export default function LiquidFillGauge({ percentage, size = 160 }) {
+  const pct = Math.max(0, Math.min(100, Number(percentage) || 0));
   const r = size / 2 - 10;
   const cx = size / 2;
   const cy = size / 2;
   
   // Calculate wave offset based on percentage
   // At 0%, water is at bottom. At 100%, water is at top.
-  const waterHeight = (percentage / 100) * (r * 2);
+  const waterHeight = (pct / 100) * (r * 2);
   const yOffset = cy + r - waterHeight;
   
   return (
@@ -47,7 +48,7 @@ export default function LiquidFillGauge({ percentage, size = 160 }) {
       </svg>
       
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none drop-shadow-md">
-        <span className="text-4xl font-black text-slate-950 drop-shadow-sm tabular-nums">{Math.round(percentage)}%</span>
+        <span className="text-4xl font-black text-slate-950 drop-shadow-sm tabular-nums">{Math.round(pct)}%</span>
       </div>
       
       <style dangerouslySetInnerHTML={{__html: `

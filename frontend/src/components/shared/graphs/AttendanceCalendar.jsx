@@ -6,17 +6,22 @@ export default function AttendanceCalendar({ month, daysData = [], testDaysData 
   const viewMonth = month instanceof Date ? month : new Date();
   const year = viewMonth.getFullYear();
   const monthIndex = viewMonth.getMonth();
+  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
   const firstWeekday = new Date(year, monthIndex, 1).getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
-  daysData.forEach((item, index) => {
-    const day = Number(item.dayNumber || String(item.date || '').slice(8, 10) || index + 1);
-    if (Number.isFinite(day)) byDay.set(day, { attendance: item });
+  daysData.forEach((item) => {
+    const date = String(item.date || '');
+    if (date && date.slice(0, 7) !== monthKey) return;
+    const day = Number(item.dayNumber || date.slice(8, 10));
+    if (Number.isFinite(day) && day >= 1 && day <= daysInMonth) byDay.set(day, { attendance: item });
   });
 
-  testDaysData.forEach((item, index) => {
-    const day = Number(item.dayNumber || String(item.date || '').slice(8, 10) || index + 1);
-    if (!Number.isFinite(day)) return;
+  testDaysData.forEach((item) => {
+    const date = String(item.date || '');
+    if (date && date.slice(0, 7) !== monthKey) return;
+    const day = Number(item.dayNumber || date.slice(8, 10));
+    if (!Number.isFinite(day) || day < 1 || day > daysInMonth) return;
     const existing = byDay.get(day) || {};
     byDay.set(day, { ...existing, test: item });
   });
@@ -41,6 +46,12 @@ export default function AttendanceCalendar({ month, daysData = [], testDaysData 
 
   return (
     <div className="flex flex-col w-full gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-black text-slate-900">
+          {viewMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        </div>
+        <div className="text-xs font-bold text-slate-500">{byDay.size} active day{byDay.size === 1 ? '' : 's'}</div>
+      </div>
       <div className="grid grid-cols-7 gap-1.5 text-center w-full text-[10px] md:text-xs text-slate-500 font-bold">
         {days.map((d, index) => <div key={`${d}-${index}`}>{d}</div>)}
       </div>
@@ -50,7 +61,7 @@ export default function AttendanceCalendar({ month, daysData = [], testDaysData 
           const attendance = d.attendance || {};
           const test = d.test || {};
           return (
-            <div key={d.dayNumber} className={`min-h-[54px] md:min-h-[64px] rounded-2xl border p-1.5 md:p-2 transition-all ${getStatusColor(attendance.status)}`} title={[attendance.info, test.testName].filter(Boolean).join(' - ')}>
+            <div key={d.dayNumber} className={`min-h-[54px] md:min-h-[64px] rounded-xl border p-1.5 md:p-2 transition-all ${getStatusColor(attendance.status)}`} title={[attendance.info, test.testName].filter(Boolean).join(' - ')}>
               <div className="flex items-start justify-between gap-1">
                 <span className="text-[11px] md:text-xs font-black tabular-nums">{d.dayNumber}</span>
                 {test.hasTest && (
@@ -59,7 +70,7 @@ export default function AttendanceCalendar({ month, daysData = [], testDaysData 
               </div>
               {test.hasTest && (
                 <div className="mt-1 text-[9px] md:text-[10px] leading-tight text-left">
-                  <div className="font-extrabold text-blue-700 truncate">{test.score ? `${test.score}%` : 'Test'}</div>
+                  <div className="font-extrabold text-blue-700 truncate">{test.score !== undefined && test.score !== null ? `${test.score}%` : 'Test'}</div>
                   {test.testName && <div className="font-semibold text-slate-500 truncate">{test.testName}</div>}
                 </div>
               )}
