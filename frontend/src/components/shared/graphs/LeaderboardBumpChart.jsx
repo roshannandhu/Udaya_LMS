@@ -1,13 +1,17 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import EmptyChart from './EmptyChart';
 
 export default function LeaderboardBumpChart({ data = [] }) {
-  if (!data || data.length === 0) return <div className="text-xs text-gray-400 p-4 text-center">No rank data</div>;
+  const safeData = data
+    .map((item) => ({ ...item, rank: Number(item.rank) }))
+    .filter((item) => Number.isFinite(item.rank) && item.rank > 0);
+  if (!safeData.length) return <EmptyChart label="No rank data yet" height={220} />;
   // data: [{ week: 'W1', rank: 15 }, { week: 'W2', rank: 8 }, ...]
   return (
     <div className="w-full h-full min-h-[220px] pt-4 pb-2 pr-4">
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
+        <LineChart data={safeData} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
           <XAxis dataKey="week" tick={{fontSize: 9, fill: '#888', fontWeight: 700}} axisLine={false} tickLine={false} />
           {/* YAxis reversed for rank (1 is highest) */}

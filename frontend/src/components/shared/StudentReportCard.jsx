@@ -33,6 +33,38 @@ const cardTone = {
   cyan: 'border-t-[#0891B2]',
 };
 
+class ReportSectionBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Student report section failed:', error, info);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full min-h-[220px] rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 flex items-center justify-center px-6 text-center text-sm font-bold text-slate-400">
+          This report section is unavailable right now.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const GlassCard = ({ title, subtitle, children, className = "", onClick = null, tone = "blue", tall = false }) => (
   <div 
     onClick={onClick}
@@ -43,7 +75,7 @@ const GlassCard = ({ title, subtitle, children, className = "", onClick = null, 
       {subtitle && <p className="text-xs font-semibold text-slate-500 mt-1 leading-snug">{subtitle}</p>}
     </div>
     <div className="w-full flex-1 flex flex-col justify-center relative min-w-0 pointer-events-auto">
-      {children}
+      <ReportSectionBoundary>{children}</ReportSectionBoundary>
     </div>
   </div>
 );
