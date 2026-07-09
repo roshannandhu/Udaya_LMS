@@ -193,7 +193,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
     
     <div className="relative z-10">
       <div className="flex gap-5">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm p-1">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner p-1">
           {student?.avatar_url ? (
             <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
           ) : (
@@ -215,7 +215,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
             {student?.username && <span>- @{student.username}</span>}
           </div>
           <div className="mt-4 flex items-center gap-3">
-            <div className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md">
+            <div className="rounded-full border border-white/20 bg-indigo-950/20 px-3 py-1 text-xs font-semibold text-white">
               {title}
             </div>
             <span className="text-xs text-indigo-200">{subtitle}</span>
@@ -226,7 +226,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
       {rightStats && (
         <div className="mt-5 grid grid-cols-3 gap-3">
           {rightStats.map((stat, i) => (
-            <div key={i} className="rounded-xl bg-white/10 px-4 py-2 text-center backdrop-blur-md">
+            <div key={i} className="rounded-xl bg-indigo-950/20 px-4 py-2 text-center">
               <span className="text-xs font-medium text-indigo-200">{stat.label}</span>
               <span className="mt-0.5 block text-lg font-bold text-white">{stat.value}</span>
             </div>
@@ -237,10 +237,17 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
   </div>
 );
 
-const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = true, breakBefore = false }) => {
+const PageBreak = () => (
+  <div
+    className="html2pdf__page-break"
+    style={{ height: 0, breakAfter: 'page', pageBreakAfter: 'always', clear: 'both' }}
+  />
+);
+
+const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = true }) => {
   const sectionStyle = avoidBreak ? { pageBreakInside: 'avoid' } : undefined;
   return (
-  <div className={`mt-10 ${breakBefore ? 'pdf-page-start pt-8' : ''} ${className}`} style={sectionStyle}>
+  <div className={`mt-10 ${className}`} style={sectionStyle}>
     <div className="mb-6 flex items-center gap-3 border-b border-gray-100 pb-3">
       <div className={`rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-5 w-5 ${color.text}`} strokeWidth={2.5} />
@@ -254,12 +261,12 @@ const Section = ({ title, icon: Icon, color, children, className = '', avoidBrea
 
 const KpiCard = ({ icon: Icon, label, value, color }) => (
   <div className="flex min-h-[112px] flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-    <div className="mb-3 flex items-start gap-2">
+    <div className="mb-2 flex items-center justify-between gap-2">
       <div className={`shrink-0 rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-4 w-4 ${color.text}`} strokeWidth={2.5} />
       </div>
-      <span className="min-w-0 break-words text-[10px] font-bold uppercase leading-4 tracking-wide text-gray-500">{label}</span>
     </div>
+    <span className="whitespace-nowrap text-[9px] font-bold uppercase leading-4 text-gray-500">{label}</span>
     <span className="mt-auto break-words text-2xl font-bold leading-tight text-gray-900">{value}</span>
   </div>
 );
@@ -710,6 +717,8 @@ const StudentReportTemplate = ({ data, period }) => {
         <KpiCard icon={Zap} label="Live Classes" value={liveLabel} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} />
       </div>
 
+      <PageBreak />
+
       <Section title="Class Benchmark" icon={Award} color={{ bg: 'bg-slate-100', text: 'text-slate-700' }}>
         <div className="grid grid-cols-2 gap-6 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
           <div className="space-y-5">
@@ -754,7 +763,7 @@ const StudentReportTemplate = ({ data, period }) => {
       )}
 
       {radar.length > 0 && (
-        <Section title="Subject Mastery X-Ray" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} breakBefore>
+        <Section title="Subject Mastery X-Ray" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
           <div className="grid grid-cols-2 gap-6 rounded-xl border border-gray-100 bg-gray-50/30 p-6">
             <div className="flex-1 flex justify-center">
               <RadarChart cx="50%" cy="50%" outerRadius="75%" width={270} height={250} data={radar}>
@@ -771,6 +780,13 @@ const StudentReportTemplate = ({ data, period }) => {
               ))}
             </div>
           </div>
+        </Section>
+      )}
+
+      {radar.length > 0 && subjectRows.length > 0 && (
+        <>
+          <PageBreak />
+          <Section title="Subject Deep Dive" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
           <div className="mt-5 grid grid-cols-1 gap-3">
             {subjectRows.slice(0, 6).map(r => {
               const assignPct = r.assignment_total ? percentOf(r.assignment_submitted, r.assignment_total) : null;
@@ -790,10 +806,13 @@ const StudentReportTemplate = ({ data, period }) => {
               );
             })}
           </div>
-        </Section>
+          </Section>
+        </>
       )}
 
-      <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} breakBefore>
+      {radar.length > 0 && <PageBreak />}
+
+      <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }}>
         <div className="space-y-5">
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <div className="mb-4">
@@ -854,14 +873,19 @@ const StudentReportTemplate = ({ data, period }) => {
       </Section>
 
       {heatmap.length > 0 && (
-        <Section title="Attendance Calendar" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }}>
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm flex justify-center">
-            <CalendarHeatmap heatmapData={heatmap} />
-          </div>
-        </Section>
+        <>
+          <PageBreak />
+          <Section title="Attendance Calendar" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }}>
+            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm flex justify-center">
+              <CalendarHeatmap heatmapData={heatmap} />
+            </div>
+          </Section>
+        </>
       )}
 
-      <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} breakBefore>
+      <PageBreak />
+
+      <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
         <div className="grid grid-cols-2 gap-5 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Priority</p>
