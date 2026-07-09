@@ -101,6 +101,7 @@ const localDateKey = (date) => {
   return `${y}-${m}-${d}`;
 };
 
+
 // PDF generation core
 async function generatePdf(element, filename) {
   const opt = {
@@ -116,7 +117,7 @@ async function generatePdf(element, filename) {
       windowWidth: PDF_CANVAS_WIDTH,
     },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak:    { mode: ['css', 'legacy'] }
+    pagebreak:    { mode: ['css'] }
   };
   await html2pdf().set(opt).from(element).save();
 }
@@ -237,13 +238,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
   </div>
 );
 
-const PageBreak = () => (
-  <div
-    className="html2pdf__page-break"
-    style={{ height: 0, breakAfter: 'page', pageBreakAfter: 'always', clear: 'both' }}
-  />
-);
-
+// Empty PageBreak removed
 const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = true }) => {
   const sectionStyle = avoidBreak ? { pageBreakInside: 'avoid' } : undefined;
   return (
@@ -717,7 +712,7 @@ const StudentReportTemplate = ({ data, period }) => {
         <KpiCard icon={Zap} label="Live Classes" value={liveLabel} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} />
       </div>
 
-      <PageBreak />
+
 
       <Section title="Class Benchmark" icon={Award} color={{ bg: 'bg-slate-100', text: 'text-slate-700' }}>
         <div className="grid grid-cols-2 gap-6 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
@@ -785,7 +780,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
       {radar.length > 0 && subjectRows.length > 0 && (
         <>
-          <PageBreak />
+    
           <Section title="Subject Deep Dive" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
           <div className="mt-5 grid grid-cols-1 gap-3">
             {subjectRows.slice(0, 6).map(r => {
@@ -810,7 +805,7 @@ const StudentReportTemplate = ({ data, period }) => {
         </>
       )}
 
-      {radar.length > 0 && <PageBreak />}
+      
 
       <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }}>
         <div className="space-y-5">
@@ -874,7 +869,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
       {heatmap.length > 0 && (
         <>
-          <PageBreak />
+    
           <Section title="Attendance Calendar" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }}>
             <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm flex justify-center">
               <CalendarHeatmap heatmapData={heatmap} />
@@ -883,7 +878,7 @@ const StudentReportTemplate = ({ data, period }) => {
         </>
       )}
 
-      <PageBreak />
+
 
       <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
         <div className="grid grid-cols-2 gap-5 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
