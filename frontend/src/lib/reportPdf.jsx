@@ -6,6 +6,8 @@ import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
 import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, LayoutGrid, Award, Brain, ClipboardCheck, Layers, ShieldCheck, TrendingUp, ListChecks, Gauge } from 'lucide-react';
 
+const PDF_CANVAS_WIDTH = 720;
+
 // Helpers
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
 const gradeFor = (score) => {
@@ -111,7 +113,7 @@ async function generatePdf(element, filename) {
       letterRendering: true,
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: 794,
+      windowWidth: PDF_CANVAS_WIDTH,
     },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak:    { mode: ['css', 'legacy'] }
@@ -149,7 +151,7 @@ async function mountAndPrint(Component, props, filename) {
     position: 'fixed',
     left: '0',
     top: '0',
-    width: '794px',
+    width: `${PDF_CANVAS_WIDTH}px`,
     minHeight: '1123px',
     background: '#ffffff',
     zIndex: '2147483647',
@@ -157,7 +159,7 @@ async function mountAndPrint(Component, props, filename) {
   });
 
   const container = document.createElement('div');
-  container.style.width = '794px';
+  container.style.width = `${PDF_CANVAS_WIDTH}px`;
   container.style.background = '#ffffff';
   host.appendChild(container);
   document.body.appendChild(host);
@@ -185,28 +187,28 @@ async function mountAndPrint(Component, props, filename) {
 
 // Shared UI components
 const Header = ({ title, subtitle, student, brand, rightStats }) => (
-  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-violet-700 to-fuchsia-700 p-8 text-white shadow-xl" style={{ pageBreakInside: 'avoid' }}>
+  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-violet-700 to-fuchsia-700 p-7 text-white shadow-xl" style={{ pageBreakInside: 'avoid' }}>
     <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
     <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
     
-    <div className="relative z-10 flex items-start justify-between">
-      <div className="flex gap-6">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm p-1">
+    <div className="relative z-10">
+      <div className="flex gap-5">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm p-1">
           {student?.avatar_url ? (
             <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
           ) : (
-            <span className="text-4xl font-bold text-white shadow-sm">
+            <span className="text-3xl font-bold text-white shadow-sm">
               {(student?.name || 'S').charAt(0).toUpperCase()}
             </span>
           )}
         </div>
 
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="mb-3 flex items-center gap-2">
             {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-6 w-6 rounded bg-white p-0.5" crossOrigin="anonymous" />}
             <span className="text-xs font-semibold tracking-wider text-indigo-100 uppercase">{brand.name}</span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">{student?.name || 'Student'}</h1>
+          <h1 className="break-words text-3xl font-bold tracking-tight text-white">{student?.name || 'Student'}</h1>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-indigo-100/90">
             {student?.student_code && <span>{student.student_code}</span>}
             {student?.standard_name && <span>- {student.standard_name}</span>}
@@ -222,11 +224,11 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
       </div>
 
       {rightStats && (
-        <div className="flex flex-col items-end gap-3">
+        <div className="mt-5 grid grid-cols-3 gap-3">
           {rightStats.map((stat, i) => (
-            <div key={i} className="flex flex-col items-end rounded-xl bg-white/10 px-4 py-2 text-right backdrop-blur-md">
+            <div key={i} className="rounded-xl bg-white/10 px-4 py-2 text-center backdrop-blur-md">
               <span className="text-xs font-medium text-indigo-200">{stat.label}</span>
-              <span className="text-lg font-bold text-white">{stat.value}</span>
+              <span className="mt-0.5 block text-lg font-bold text-white">{stat.value}</span>
             </div>
           ))}
         </div>
@@ -235,8 +237,10 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
   </div>
 );
 
-const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = true }) => (
-  <div className={`mt-10 ${className}`} style={avoidBreak ? { pageBreakInside: 'avoid' } : undefined}>
+const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = true, breakBefore = false }) => {
+  const sectionStyle = avoidBreak ? { pageBreakInside: 'avoid' } : undefined;
+  return (
+  <div className={`mt-10 ${breakBefore ? 'pdf-page-start pt-8' : ''} ${className}`} style={sectionStyle}>
     <div className="mb-6 flex items-center gap-3 border-b border-gray-100 pb-3">
       <div className={`rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-5 w-5 ${color.text}`} strokeWidth={2.5} />
@@ -245,32 +249,48 @@ const Section = ({ title, icon: Icon, color, children, className = '', avoidBrea
     </div>
     {children}
   </div>
-);
+  );
+};
 
 const KpiCard = ({ icon: Icon, label, value, color }) => (
-  <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-    <div className="mb-3 flex items-center gap-3">
-      <div className={`rounded-lg p-2 ${color.bg}`}>
+  <div className="flex min-h-[112px] flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+    <div className="mb-3 flex items-start gap-2">
+      <div className={`shrink-0 rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-4 w-4 ${color.text}`} strokeWidth={2.5} />
       </div>
-      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
+      <span className="min-w-0 break-words text-[10px] font-bold uppercase leading-4 tracking-wide text-gray-500">{label}</span>
     </div>
-    <span className="text-2xl font-bold text-gray-900">{value}</span>
+    <span className="mt-auto break-words text-2xl font-bold leading-tight text-gray-900">{value}</span>
   </div>
 );
 
-const ProgressBar = ({ label, value, max = 100, color, valueText }) => {
+const ProgressBar = ({ label, value, max = 100, color, valueText, labelClassName = 'w-28' }) => {
   const pct = Math.max(0, Math.min(100, (value / max) * 100)) || 0;
   return (
-    <div className="flex items-center gap-4" style={{ pageBreakInside: 'avoid' }}>
-      <span className="w-32 text-sm font-semibold text-gray-700 truncate">{label}</span>
+    <div className="flex items-center gap-3" style={{ pageBreakInside: 'avoid' }}>
+      <span className={`${labelClassName} break-words text-xs font-semibold leading-snug text-gray-700`}>{label}</span>
       <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
         <div className={`h-full ${color.fill} rounded-full`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-12 text-right text-sm font-bold text-gray-900">{valueText || `${Math.round(pct)}%`}</span>
+      <span className="w-14 text-right text-xs font-bold text-gray-900">{valueText || `${Math.round(pct)}%`}</span>
     </div>
   );
 };
+
+const SignalBar = ({ row }) => (
+  <div className="min-w-0 rounded-xl border border-gray-100 bg-gray-50/60 p-3" style={{ pageBreakInside: 'avoid' }}>
+    <div className="mb-2 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="break-words text-sm font-black text-gray-900">{row.label}</p>
+        <p className="mt-1 text-[11px] leading-4 text-gray-500">{row.note}</p>
+      </div>
+      <p className="shrink-0 text-sm font-black text-gray-950">{row.display}</p>
+    </div>
+    <div className="h-2.5 overflow-hidden rounded-full bg-white">
+      <div className={`h-full rounded-full ${row.color.fill}`} style={{ width: `${clampPct(row.value)}%` }} />
+    </div>
+  </div>
+);
 
 const ScoreRing = ({ value, label, sublabel, color = '#4f46e5', size = 136 }) => {
   const pct = clampPct(value);
@@ -315,12 +335,12 @@ const InsightCard = ({ icon: Icon, title, body, tone = 'blue' }) => {
     slate: 'border-slate-200 bg-slate-50 text-slate-700',
   };
   return (
-    <div className={`rounded-xl border p-4 ${tones[tone] || tones.blue}`} style={{ pageBreakInside: 'avoid' }}>
-      <div className="mb-2 flex items-center gap-2">
+    <div className={`min-w-0 rounded-xl border p-3 ${tones[tone] || tones.blue}`} style={{ pageBreakInside: 'avoid' }}>
+      <div className="mb-2 flex items-start gap-2">
         <Icon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
-        <h3 className="text-sm font-bold text-gray-900">{title}</h3>
+        <h3 className="min-w-0 break-words text-xs font-bold leading-4 text-gray-900">{title}</h3>
       </div>
-      <p className="text-xs leading-relaxed text-gray-600">{body}</p>
+      <p className="break-words text-[11px] leading-5 text-gray-600">{body}</p>
     </div>
   );
 };
@@ -364,7 +384,7 @@ const ActivitySquares = ({ rows, valueKey = 'count', color = 'bg-indigo-500', em
           return (
             <div
               key={`${row.date || index}-${index}`}
-              className={`h-4 w-4 rounded-sm border border-black/5 ${value > 0 ? color : empty}`}
+              className={`aspect-square w-full rounded-sm border border-black/5 ${value > 0 ? color : empty}`}
               style={value > 0 ? { opacity: strength / 100 } : undefined}
               title={`${row.date || ''}: ${value}`}
             />
@@ -385,20 +405,29 @@ const EmptyState = ({ title, body }) => (
 // Realistic GitHub-style calendar heatmap
 const CalendarHeatmap = ({ heatmapData }) => {
   if (!heatmapData || heatmapData.length === 0) return null;
-  
-  // Sort data and slice last 12 weeks (84 days) for a neat 12-column grid
-  const sorted = [...heatmapData].sort((a,b) => new Date(a.date) - new Date(b.date)).slice(-84);
-  
-  // Pad the beginning so it aligns with the correct day of week (0=Sun, 6=Sat)
-  const firstDate = new Date(sorted[0].date);
-  const startDayOfWeek = firstDate.getDay(); 
-  
-  const paddedGrid = Array(startDayOfWeek).fill(null).concat(sorted);
-  
-  // Create columns of 7 days
+
+  const byDate = new Map(
+    heatmapData
+      .filter(row => row?.date)
+      .map(row => [String(row.date).slice(0, 10), row])
+  );
+  const validDates = [...byDate.keys()]
+    .map(date => new Date(`${date}T00:00:00`))
+    .filter(date => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a - b);
+  if (!validDates.length) return null;
+
+  const endDate = validDates[validDates.length - 1];
+  const days = Array.from({ length: 84 }).map((_, index) => {
+    const d = new Date(endDate);
+    d.setDate(d.getDate() - (83 - index));
+    const key = localDateKey(d);
+    return byDate.get(key) || { date: key, present: 0, late: 0, absent: 0, total: 0 };
+  });
+
   const columns = [];
-  for (let i = 0; i < paddedGrid.length; i += 7) {
-    columns.push(paddedGrid.slice(i, i + 7));
+  for (let i = 0; i < days.length; i += 7) {
+    columns.push(days.slice(i, i + 7));
   }
 
   const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -415,21 +444,25 @@ const CalendarHeatmap = ({ heatmapData }) => {
         
         {/* Grid */}
         <div className="flex gap-1 overflow-hidden">
-          {columns.map((col, colIdx) => (
-            <div key={colIdx} className="flex flex-col gap-1">
-              {/* Month label approximation above the column */}
-              <div className="h-4 text-[10px] font-medium text-gray-500">
-                {col[0] && new Date(col[0].date).getDate() <= 7 
-                  ? new Date(col[0].date).toLocaleString('default', { month: 'short' }) 
-                  : ''}
+          {columns.map((col, colIdx) => {
+            const monthStart = col.find(day => {
+              const parsed = new Date(`${day.date}T00:00:00`);
+              return !Number.isNaN(parsed.getTime()) && parsed.getDate() === 1;
+            });
+            const labelDay = colIdx === 0 ? col[0] : monthStart;
+            const monthLabel = labelDay
+              ? new Date(`${labelDay.date}T00:00:00`).toLocaleString('default', { month: 'short' })
+              : '';
+            return (
+              <div key={colIdx} className="flex flex-col gap-1">
+                <div className="h-4 text-[10px] font-medium text-gray-500">{monthLabel}</div>
+                {col.map((d, rowIdx) => {
+                  const bg = (d.present > 0) ? 'bg-emerald-500' : (d.late > 0) ? 'bg-amber-400' : (d.total > 0) ? 'bg-red-400' : 'bg-gray-100';
+                  return <div key={d.date || rowIdx} className={`h-4 w-4 rounded-sm ${bg} shadow-sm border border-black/5`} />;
+                })}
               </div>
-              {col.map((d, rowIdx) => {
-                if (!d) return <div key={rowIdx} className="h-4 w-4 rounded-sm bg-transparent" />;
-                const bg = (d.present > 0) ? 'bg-emerald-500' : (d.late > 0) ? 'bg-amber-400' : (d.total > 0) ? 'bg-red-400' : 'bg-gray-100';
-                return <div key={rowIdx} className={`h-4 w-4 rounded-sm ${bg} shadow-sm border border-black/5`} />;
-              })}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       
@@ -628,9 +661,10 @@ const StudentReportTemplate = ({ data, period }) => {
       score,
     };
   });
+  const hasActivitySquares = testHeatmap.length > 0 || videoHeatmap.length > 0 || assignmentHeatmap.length > 0;
 
   return (
-    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px] box-border">
+    <div className="mx-auto box-border bg-white p-7 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
       <Header 
         title={`Student Growth ${periodTitle(period)}`}
         subtitle={periodRange(period)}
@@ -644,16 +678,16 @@ const StudentReportTemplate = ({ data, period }) => {
       />
 
       <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-        <div className="flex gap-7">
+        <div className="grid grid-cols-[136px_minmax(0,1fr)] gap-6">
           <ScoreRing value={health} label="Learning Health" sublabel={healthMeta.title} color={healthMeta.color} />
-          <div className="flex-1">
+          <div className="min-w-0">
             <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-widest text-indigo-500">Learning Passport</p>
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-gray-950">{healthMeta.title}</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500">{healthMeta.text}</p>
               </div>
-              <div className="rounded-xl bg-gray-50 px-4 py-3 text-right">
+              <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-3 text-right">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Period Points</p>
                 <p className="text-2xl font-black text-gray-950">{periodPoints}</p>
               </div>
@@ -665,13 +699,13 @@ const StudentReportTemplate = ({ data, period }) => {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-4 gap-4">
+      <div className="mt-8 grid grid-cols-4 gap-3" style={{ pageBreakInside: 'avoid' }}>
         <KpiCard icon={Target} label="Avg Score" value={`${Math.round(avgForPeriod ?? s.avg_score ?? 0)}%`} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }} />
         <KpiCard icon={Calendar} label="Attendance" value={`${Math.round(s.attendance_pct ?? 0)}%`} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }} />
         <KpiCard icon={Trophy} label="Rank" value={rankLabel} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
-        <KpiCard icon={Video} label="Tests Taken" value={data.total_tests_in_standard ? `${timeline.length}/${data.total_tests_in_standard}` : timeline.length} color={{ bg: 'bg-rose-100', text: 'text-rose-600' }} />
+        <KpiCard icon={Video} label="Tests" value={data.total_tests_in_standard ? `${timeline.length}/${data.total_tests_in_standard}` : timeline.length} color={{ bg: 'bg-rose-100', text: 'text-rose-600' }} />
         <KpiCard icon={ClipboardCheck} label="Assignments" value={totalAssignments ? `${submittedAssignments}/${totalAssignments}` : '-'} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} />
-        <KpiCard icon={Book} label="Topic Mastery" value={topicMap.length ? pctText(topicMastery) : '-'} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} />
+        <KpiCard icon={Book} label="Topic" value={topicMap.length ? pctText(topicMastery) : '-'} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} />
         <KpiCard icon={Clock} label="Video Time" value={totalVideoMinutes ? `${totalVideoMinutes}m` : '-'} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
         <KpiCard icon={Zap} label="Live Classes" value={liveLabel} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} />
       </div>
@@ -696,7 +730,7 @@ const StudentReportTemplate = ({ data, period }) => {
       {chartData.length >= 2 && (
         <Section title="Score Trend vs Class" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }}>
           <div className="h-64 w-full rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6">
-            <LineChart width={710} height={205} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+            <LineChart width={620} height={205} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
@@ -720,24 +754,24 @@ const StudentReportTemplate = ({ data, period }) => {
       )}
 
       {radar.length > 0 && (
-        <Section title="Subject Mastery X-Ray" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
-          <div className="flex gap-8 items-center rounded-xl border border-gray-100 bg-gray-50/30 p-6">
+        <Section title="Subject Mastery X-Ray" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} breakBefore>
+          <div className="grid grid-cols-2 gap-6 rounded-xl border border-gray-100 bg-gray-50/30 p-6">
             <div className="flex-1 flex justify-center">
-              <RadarChart cx="50%" cy="50%" outerRadius="75%" width={300} height={250} data={radar}>
+              <RadarChart cx="50%" cy="50%" outerRadius="75%" width={270} height={250} data={radar}>
                 <PolarGrid stroke="#e5e7eb" />
                 <PolarAngleAxis dataKey="subject" tick={{ fill: '#4b5563', fontSize: 10, fontWeight: 600 }} />
                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                 <Radar name="Performance" dataKey="test_avg" stroke="#8b5cf6" strokeWidth={2} fill="#8b5cf6" fillOpacity={0.4} isAnimationActive={false} />
               </RadarChart>
             </div>
-            <div className="flex-1 flex flex-col gap-4 pr-6">
+            <div className="flex flex-col gap-4">
               <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Score Distribution</h3>
               {subjectRows.slice(0, 6).map(r => (
-                <ProgressBar key={r.subject_id || r.subject} label={r.subject} value={r.test_avg} color={{ fill: 'bg-violet-500' }} />
+                <ProgressBar key={r.subject_id || r.subject} label={r.subject} value={r.test_avg} color={{ fill: 'bg-violet-500' }} labelClassName="w-24" />
               ))}
             </div>
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-4">
+          <div className="mt-5 grid grid-cols-1 gap-3">
             {subjectRows.slice(0, 6).map(r => {
               const assignPct = r.assignment_total ? percentOf(r.assignment_submitted, r.assignment_total) : null;
               return (
@@ -759,23 +793,18 @@ const StudentReportTemplate = ({ data, period }) => {
         </Section>
       )}
 
-      <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }}>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} breakBefore>
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <div className="mb-4">
               <h3 className="text-sm font-black text-gray-900">Evidence Balance</h3>
               <p className="mt-1 text-xs leading-5 text-gray-500">Progress is shown by its own unit, not by mixing minutes with counts.</p>
             </div>
-            <div className="space-y-4">
-              {signalRows.map((row) => (
-                <div key={row.label}>
-                  <ProgressBar label={row.label} value={row.value} color={row.color} valueText={row.display} />
-                  <p className="ml-36 mt-1 text-[11px] leading-4 text-gray-500">{row.note}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-3">
+              {signalRows.map((row) => <SignalBar key={row.label} row={row} />)}
             </div>
           </div>
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <div className="mb-5">
               <h3 className="text-sm font-black text-gray-900">7-Day Study Rhythm</h3>
               <p className="mt-1 text-xs leading-5 text-gray-500">Activity score combines video, test, and assignment evidence as a consistency indicator.</p>
@@ -810,14 +839,18 @@ const StudentReportTemplate = ({ data, period }) => {
             )}
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-3 gap-4">
-          {testHeatmap.length > 0 && <ActivitySquares rows={testHeatmap} valueKey="count" color="bg-violet-500" label="Test activity, last 28 days" />}
-          {videoHeatmap.length > 0 && <ActivitySquares rows={videoHeatmap} valueKey="minutes" color="bg-blue-500" label="Video minutes, last 28 days" />}
-          {assignmentHeatmap.length > 0 && <ActivitySquares rows={assignmentHeatmap} valueKey="count" color="bg-amber-500" label="Assignments, last 28 days" />}
-          {!testHeatmap.length && !videoHeatmap.length && !assignmentHeatmap.length && (
+        {hasActivitySquares && (
+          <div className="mt-5 grid grid-cols-3 gap-4">
+            {testHeatmap.length > 0 && <ActivitySquares rows={testHeatmap} valueKey="count" color="bg-violet-500" label="Test activity, last 28 days" />}
+            {videoHeatmap.length > 0 && <ActivitySquares rows={videoHeatmap} valueKey="minutes" color="bg-blue-500" label="Video minutes, last 28 days" />}
+            {assignmentHeatmap.length > 0 && <ActivitySquares rows={assignmentHeatmap} valueKey="count" color="bg-amber-500" label="Assignments, last 28 days" />}
+          </div>
+        )}
+        {!hasActivitySquares && rhythmRows.length > 0 && (
+          <div className="mt-5">
             <EmptyState title="Activity rhythm not available" body="Once videos, tests, and assignments are recorded, this area becomes a habit map." />
+          </div>
           )}
-        </div>
       </Section>
 
       {heatmap.length > 0 && (
@@ -828,7 +861,7 @@ const StudentReportTemplate = ({ data, period }) => {
         </Section>
       )}
 
-      <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
+      <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} breakBefore>
         <div className="grid grid-cols-2 gap-5 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Priority</p>
@@ -956,7 +989,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
   ].filter(d => d.value > 0);
 
   return (
-    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px] box-border">
+    <div className="mx-auto box-border bg-white p-8 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
       <Header 
         title={testMeta?.title || result.testTitle || 'Exam'}
         subtitle={testMeta?.subject_name || 'Subject'}
@@ -1165,7 +1198,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
   }
 
   return (
-    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px] box-border">
+    <div className="mx-auto box-border bg-white p-8 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
       <Header
         title={testMeta?.title || result.testTitle || 'Exam'}
         subtitle={testMeta?.subject_name || 'Subject'}
@@ -1251,7 +1284,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
           <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
             <Award className="h-4 w-4 text-amber-500" /> Class Position
           </h3>
-          <BarChart width={310} height={165} data={benchmarkData} margin={{ top: 8, right: 0, left: -25, bottom: 0 }}>
+          <BarChart width={270} height={165} data={benchmarkData} margin={{ top: 8, right: 0, left: -25, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
@@ -1436,7 +1469,7 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
   );
 
   return (
-    <div className="bg-white p-8 font-sans text-gray-900 mx-auto w-[794px] box-border">
+    <div className="mx-auto box-border bg-white p-8 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
       <div className="rounded-2xl bg-neutral-900 p-8 text-white" style={{ pageBreakInside: 'avoid' }}>
         <div className="flex items-center justify-between gap-6">
           <div>
