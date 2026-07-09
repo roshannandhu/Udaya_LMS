@@ -239,10 +239,10 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
 );
 
 // Empty PageBreak removed
-const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = true }) => {
-  const sectionStyle = avoidBreak ? { pageBreakInside: 'avoid' } : undefined;
+// Empty PageBreak removed
+const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = false }) => {
   return (
-  <div className={`mt-10 ${className}`} style={sectionStyle}>
+  <div className={`mt-10 ${className}`}>
     <div className="mb-6 flex items-center gap-3 border-b border-gray-100 pb-3">
       <div className={`rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-5 w-5 ${color.text}`} strokeWidth={2.5} />
@@ -679,7 +679,7 @@ const StudentReportTemplate = ({ data, period }) => {
         ]}
       />
 
-      <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex gap-6">
           <ScoreRing value={health} label="Learning Health" sublabel={healthMeta.title} color={healthMeta.color} />
           <div className="min-w-0 flex-1">
@@ -701,7 +701,7 @@ const StudentReportTemplate = ({ data, period }) => {
         </div>
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-3 *:w-[calc(25%-9px)]" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 flex flex-wrap gap-3 *:w-[calc(25%-9px)]">
         <KpiCard icon={Target} label="Avg Score" value={`${Math.round(avgForPeriod ?? s.avg_score ?? 0)}%`} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }} />
         <KpiCard icon={Calendar} label="Attendance" value={`${Math.round(s.attendance_pct ?? 0)}%`} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }} />
         <KpiCard icon={Trophy} label="Rank" value={rankLabel} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
@@ -1021,7 +1021,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
       />
 
       {(result.flagged || result.cancelled) && (
-        <div className="mt-8 flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-5" style={{ pageBreakInside: 'avoid' }}>
+        <div className="mt-8 flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-5">
           <AlertTriangle className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
           <div>
             <h3 className="font-bold text-red-900">{result.cancelled ? 'Exam Terminated' : 'Integrity Alert'}</h3>
@@ -1035,7 +1035,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
       )}
 
       {/* Visual Analytics Row */}
-      <div className="mt-8 flex flex-wrap gap-6 *:w-[calc(50%-12px)]" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 flex flex-wrap gap-6 *:w-[calc(50%-12px)]">
         {/* Accuracy Donut Chart */}
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div className="relative flex items-center justify-center h-[160px] w-[160px]">
@@ -1231,7 +1231,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
       />
 
       {(result.flagged || result.cancelled) && (
-        <div className="mt-8 flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-5" style={{ pageBreakInside: 'avoid' }}>
+        <div className="mt-8 flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-5">
           <AlertTriangle className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
           <div>
             <h3 className="font-bold text-red-900">{result.cancelled ? 'Exam Terminated' : 'Integrity Alert'}</h3>
@@ -1244,7 +1244,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
         </div>
       )}
 
-      <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex gap-7">
           <ScoreRing value={scorePct} label="Exam Score" sublabel={`${score} / ${totalMarks || '-'} marks`} color={healthMeta.color} />
           <ScoreRing value={examHealth} label="Exam Health" sublabel={healthMeta.title} color={healthMeta.color} size={126} />
@@ -1275,7 +1275,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
         <KpiCard icon={Zap} label="Points" value={result.points_earned ?? 0} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} />
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-6 *:w-[calc(50%-12px)]" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 flex flex-wrap gap-6 *:w-[calc(50%-12px)]">
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div className="relative flex items-center justify-center h-[160px] w-[160px]">
             <PieChart width={160} height={160}>
