@@ -225,7 +225,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
       </div>
 
       {rightStats && (
-        <div className="mt-5 grid grid-cols-3 gap-3">
+        <div className="mt-5 flex flex-wrap gap-3 *:w-[calc(33.333%-8px)]">
           {rightStats.map((stat, i) => (
             <div key={i} className="rounded-xl bg-indigo-950/20 px-4 py-2 text-center">
               <span className="text-xs font-medium text-indigo-200">{stat.label}</span>
@@ -282,7 +282,7 @@ const ProgressBar = ({ label, value, max = 100, color, valueText, labelClassName
 const SignalBar = ({ row }) => (
   <div className="min-w-0 rounded-xl border border-gray-100 bg-gray-50/60 p-3" style={{ pageBreakInside: 'avoid' }}>
     <div className="mb-2 flex items-start justify-between gap-4">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="break-words text-sm font-black text-gray-900">{row.label}</p>
         <p className="mt-1 text-[11px] leading-4 text-gray-500">{row.note}</p>
       </div>
@@ -680,11 +680,11 @@ const StudentReportTemplate = ({ data, period }) => {
       />
 
       <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-        <div className="grid grid-cols-[136px_minmax(0,1fr)] gap-6">
+        <div className="flex gap-6">
           <ScoreRing value={health} label="Learning Health" sublabel={healthMeta.title} color={healthMeta.color} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="mb-4 flex items-start justify-between gap-4">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-widest text-indigo-500">Learning Passport</p>
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-gray-950">{healthMeta.title}</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500">{healthMeta.text}</p>
@@ -694,14 +694,14 @@ const StudentReportTemplate = ({ data, period }) => {
                 <p className="text-2xl font-black text-gray-950">{periodPoints}</p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-wrap gap-3 *:w-[calc(33.333%-8px)]">
               {insights.map((item, i) => <InsightCard key={i} {...item} />)}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-4 gap-3" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 flex flex-wrap gap-3 *:w-[calc(25%-9px)]" style={{ pageBreakInside: 'avoid' }}>
         <KpiCard icon={Target} label="Avg Score" value={`${Math.round(avgForPeriod ?? s.avg_score ?? 0)}%`} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }} />
         <KpiCard icon={Calendar} label="Attendance" value={`${Math.round(s.attendance_pct ?? 0)}%`} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }} />
         <KpiCard icon={Trophy} label="Rank" value={rankLabel} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
@@ -715,7 +715,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
 
       <Section title="Class Benchmark" icon={Award} color={{ bg: 'bg-slate-100', text: 'text-slate-700' }}>
-        <div className="grid grid-cols-2 gap-6 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
+        <div className="flex flex-wrap gap-6 *:w-[calc(50%-12px)] rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
           <div className="space-y-5">
             <BenchmarkBar label="Score" value={scoreValue} compare={classAvg.avg_score} color="bg-indigo-500" />
             <BenchmarkBar label="Attendance" value={attendanceValue} compare={classAvg.attendance_pct} color="bg-teal-500" />
@@ -759,7 +759,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
       {radar.length > 0 && (
         <Section title="Subject Mastery X-Ray" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
-          <div className="grid grid-cols-2 gap-6 rounded-xl border border-gray-100 bg-gray-50/30 p-6">
+          <div className="flex flex-wrap gap-6 *:w-[calc(50%-12px)] rounded-xl border border-gray-100 bg-gray-50/30 p-6">
             <div className="flex-1 flex justify-center">
               <RadarChart cx="50%" cy="50%" outerRadius="75%" width={270} height={250} data={radar}>
                 <PolarGrid stroke="#e5e7eb" />
@@ -782,7 +782,7 @@ const StudentReportTemplate = ({ data, period }) => {
         <>
     
           <Section title="Subject Deep Dive" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
-          <div className="mt-5 grid grid-cols-1 gap-3">
+          <div className="mt-5 flex flex-col gap-3">
             {subjectRows.slice(0, 6).map(r => {
               const assignPct = r.assignment_total ? percentOf(r.assignment_submitted, r.assignment_total) : null;
               return (
@@ -814,7 +814,7 @@ const StudentReportTemplate = ({ data, period }) => {
               <h3 className="text-sm font-black text-gray-900">Evidence Balance</h3>
               <p className="mt-1 text-xs leading-5 text-gray-500">Progress is shown by its own unit, not by mixing minutes with counts.</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-wrap gap-3 *:w-[calc(50%-6px)]">
               {signalRows.map((row) => <SignalBar key={row.label} row={row} />)}
             </div>
           </div>
@@ -839,7 +839,7 @@ const StudentReportTemplate = ({ data, period }) => {
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] font-semibold text-gray-600">
+                <div className="mt-4 flex flex-wrap gap-2 *:w-[calc(50%-4px)] text-[11px] font-semibold text-gray-600">
                   {rhythmRows.slice(-2).map((row) => (
                     <div key={`rhythm-${row.date}`} className="rounded-lg bg-gray-50 p-2">
                       <p className="font-black text-gray-800">{row.detail}</p>
@@ -854,7 +854,7 @@ const StudentReportTemplate = ({ data, period }) => {
           </div>
         </div>
         {hasActivitySquares && (
-          <div className="mt-5 grid grid-cols-3 gap-4">
+          <div className="mt-5 flex flex-wrap gap-4 *:w-[calc(33.333%-10px)]">
             {testHeatmap.length > 0 && <ActivitySquares rows={testHeatmap} valueKey="count" color="bg-violet-500" label="Test activity, last 28 days" />}
             {videoHeatmap.length > 0 && <ActivitySquares rows={videoHeatmap} valueKey="minutes" color="bg-blue-500" label="Video minutes, last 28 days" />}
             {assignmentHeatmap.length > 0 && <ActivitySquares rows={assignmentHeatmap} valueKey="count" color="bg-amber-500" label="Assignments, last 28 days" />}
@@ -881,7 +881,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
 
       <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
-        <div className="grid grid-cols-2 gap-5 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
+        <div className="flex flex-wrap gap-5 *:w-[calc(50%-10px)] rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Priority</p>
             <h3 className="mt-1 text-xl font-black text-gray-950">{weakestSubject ? weakestSubject.subject : strongestSubject?.subject || 'Learning consistency'}</h3>
@@ -1035,7 +1035,7 @@ const ExamResultTemplate = ({ reviewData, result, student, testMeta }) => {
       )}
 
       {/* Visual Analytics Row */}
-      <div className="mt-8 grid grid-cols-2 gap-6" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 flex flex-wrap gap-6 *:w-[calc(50%-12px)]" style={{ pageBreakInside: 'avoid' }}>
         {/* Accuracy Donut Chart */}
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div className="relative flex items-center justify-center h-[160px] w-[160px]">
@@ -1255,7 +1255,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
               Accuracy {pctText(accuracyPct)}, completion {pctText(completionPct)}, and integrity {result.cancelled ? 'terminated' : result.flagged ? 'flagged' : 'clear'}.
               {classAvgPct !== undefined ? ` Score is ${compareCopy(scorePct, classAvgPct)}.` : ' Class benchmark was not available for this view.'}
             </p>
-            <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="mt-4 flex flex-wrap gap-3 *:w-[calc(33.333%-8px)]">
               <InsightCard icon={CheckCircle} title="Correct" body={`${correctCount} answer${correctCount === 1 ? '' : 's'} secured marks.`} tone="emerald" />
               <InsightCard icon={XCircle} title="Marks Lost" body={`${wrongCount} wrong, ${skippedCount} skipped, ${deducted} negative marks.`} tone={wrongCount || skippedCount || deducted ? 'red' : 'emerald'} />
               <InsightCard icon={ShieldCheck} title="Integrity" body={result.cancelled ? 'Exam was terminated.' : result.flagged ? 'Flagged for teacher review.' : 'No suspicious activity recorded.'} tone={result.cancelled || result.flagged ? 'red' : 'blue'} />
@@ -1264,7 +1264,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-4 gap-4">
+      <div className="mt-8 flex flex-wrap gap-4 *:w-[calc(25%-12px)]">
         <KpiCard icon={Target} label="Score" value={`${Math.round(scorePct)}%`} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }} />
         <KpiCard icon={Gauge} label="Accuracy" value={pctText(accuracyPct)} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
         <KpiCard icon={Layers} label="Completion" value={pctText(completionPct)} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} />
@@ -1275,7 +1275,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
         <KpiCard icon={Zap} label="Points" value={result.points_earned ?? 0} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} />
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-6" style={{ pageBreakInside: 'avoid' }}>
+      <div className="mt-8 flex flex-wrap gap-6 *:w-[calc(50%-12px)]" style={{ pageBreakInside: 'avoid' }}>
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div className="relative flex items-center justify-center h-[160px] w-[160px]">
             <PieChart width={160} height={160}>
@@ -1316,7 +1316,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
       </div>
 
       <Section title="Answer Matrix & Marks Leakage" icon={LayoutGrid} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }}>
-        <div className="grid grid-cols-2 gap-6">
+        <div className="flex flex-wrap gap-6 *:w-[calc(50%-12px)]">
           <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm overflow-hidden flex flex-col">
             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
               <LayoutGrid className="h-4 w-4 text-indigo-500" /> Answer Matrix
@@ -1351,7 +1351,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
             <div className="space-y-4">
               <BenchmarkBar label="Accuracy" value={accuracyPct} compare={100} valueLabel="Actual" compareLabel="Target" color="bg-emerald-500" />
               <BenchmarkBar label="Completion" value={completionPct} compare={100} valueLabel="Actual" compareLabel="Target" color="bg-blue-500" />
-              <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="flex flex-wrap gap-3 *:w-[calc(33.333%-8px)] pt-2">
                 <div className="rounded-xl bg-white p-3 text-center shadow-sm">
                   <p className="text-[10px] font-bold uppercase text-gray-400">Wrong</p>
                   <p className="text-xl font-black text-red-600">{wrongCount}</p>
@@ -1371,7 +1371,7 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
       </Section>
 
       <Section title="Revision Plan" icon={Brain} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }}>
-        <div className="grid grid-cols-2 gap-5 rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
+        <div className="flex flex-wrap gap-5 *:w-[calc(50%-10px)] rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
           <div className="space-y-3">
             {revisionPlan.map((item, i) => (
               <div key={i} className="flex gap-3 rounded-xl bg-white p-3 shadow-sm">
@@ -1506,7 +1506,7 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-4 gap-4">
+      <div className="mt-8 flex flex-wrap gap-4 *:w-[calc(25%-12px)]">
         <KpiCard icon={Trophy} label="Avg Score" value={`${Math.round(overview.avg_score || 0)}%`} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
         <KpiCard icon={CheckCircle} label="Attendance" value={`${Math.round(overview.avg_attendance || 0)}%`} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} />
         <KpiCard icon={Target} label="At Risk" value={atRisk.length} color={{ bg: 'bg-red-100', text: 'text-red-600' }} />
