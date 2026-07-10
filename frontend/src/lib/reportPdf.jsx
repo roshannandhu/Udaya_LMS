@@ -117,7 +117,7 @@ async function generatePdf(element, filename) {
       windowWidth: PDF_CANVAS_WIDTH,
     },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak:    { mode: ['css'] }
+    pagebreak:    { mode: ['css', 'legacy'] }
   };
   await html2pdf().set(opt).from(element).save();
 }
@@ -474,19 +474,12 @@ const DeltaTag = ({ value, compare, suffix = '%' }) => {
   );
 };
 
-// Printable A4 height at the 720px canvas is ~1030px; min-height keeps each page's
-// footer near the physical bottom while leaving a safety margin so a page never
-// spills a few pixels onto the next sheet.
-const REPORT_PAGE_MIN_HEIGHT = 980;
-
-const ReportPage = ({ page, total = 4, brand, last = false, children }) => (
-  <div className="flex flex-col" style={{ minHeight: REPORT_PAGE_MIN_HEIGHT, paddingTop: 12, ...(last ? {} : { pageBreakAfter: 'always' }) }}>
-    <div className="flex-1">{children}</div>
-    <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-3 text-[10px] font-semibold text-gray-400" style={{ pageBreakInside: 'avoid' }}>
-      <span>{brand.name} - Student Report Card</span>
-      <span>Generated on {fmtDate(new Date().toISOString())}</span>
-      <span>Page {page} of {total}</span>
-    </div>
+// Flowing page group: forces a new PDF page before sections 2-4 via pageBreakBefore.
+// No fixed heights — content flows naturally, sections keep their natural size.
+// pageBreakInside: 'avoid' on individual cards prevents mid-card splits.
+const PageGroup = ({ breakBefore = false, children }) => (
+  <div style={breakBefore ? { pageBreakBefore: 'always' } : {}}>
+    {children}
   </div>
 );
 
@@ -655,10 +648,10 @@ const StudentReportTemplate = ({ data, period }) => {
   if (effortBits.length) remarkSentences.push(`On effort, ${effortBits.join(', ')}.`);
 
   return (
-    <div className="mx-auto box-border bg-white p-7 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
+    <div className="bg-white font-sans text-gray-900 p-7" style={{ width: PDF_CANVAS_WIDTH }}>
 
       {/* ── PAGE 1 — The verdict: grade, rank, headline numbers, remark ──── */}
-      <ReportPage page={1} brand={brand}>
+      <PageGroup>
         <ReportCardHeader student={s} brand={brand} period={period} />
 
         <div className="mt-6 flex gap-5">
@@ -722,10 +715,10 @@ const StudentReportTemplate = ({ data, period }) => {
             </div>
           </div>
         </Section>
-      </ReportPage>
+      </PageGroup>
 
-      {/* ── PAGE 2 — Marks: subject table, trend chart, recent tests ─────── */}
-      <ReportPage page={2} brand={brand}>
+      {/* ── PAGE 2 — Marks: subject table, trend chart ──────────────────── */}
+      <PageGroup breakBefore>
         <PageStrip student={s} title="Marks & Subjects" period={period} />
 
         <Section title="Subject-wise Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} compact>
@@ -772,7 +765,7 @@ const StudentReportTemplate = ({ data, period }) => {
         <Section title="Score Trend vs Class" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
           {chartData.length >= 2 ? (
             <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6">
-              <LineChart width={620} height={205} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <LineChart width={620} height={200} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
@@ -783,19 +776,30 @@ const StudentReportTemplate = ({ data, period }) => {
               <div className="mt-1 flex justify-end gap-5 text-[11px] font-semibold text-gray-500">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-[#2383E2]" /> Student</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-slate-400" /> Class avg</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-amber-400" /> Pass line</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-amber-400" /> Pass line (35%)</span>
               </div>
               <p className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-600">{trendCaption}</p>
             </div>
+          ) : chartData.length === 1 ? (
+            <div className="flex items-center gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-5" style={{ pageBreakInside: 'avoid' }}>
+              <div className="shrink-0 text-center">
+                <p className="text-5xl font-black text-gray-950">{chartData[0].score}%</p>
+                <p className="mt-1 text-xs font-semibold text-gray-500">{chartData[0].name}</p>
+              </div>
+              <p className="text-xs leading-5 text-gray-500">Only one test has been completed so far. A trend line appears once there are two or more results — this will fill in automatically as more tests are taken.</p>
+            </div>
           ) : (
-            <EmptyState title="Not enough tests to show a trend" body="At least two test attempts are needed. This chart will appear in the next report." />
+            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-5 text-center" style={{ pageBreakInside: 'avoid' }}>
+              <p className="text-sm font-bold text-gray-700">No tests taken yet</p>
+              <p className="mt-1 text-xs text-gray-500">A score trend chart will appear here once the first test is attempted.</p>
+            </div>
           )}
         </Section>
 
-      </ReportPage>
+      </PageGroup>
 
       {/* ── PAGE 3 — Test history & discipline: recent tests, attendance ── */}
-      <ReportPage page={3} brand={brand}>
+      <PageGroup breakBefore>
         <PageStrip student={s} title="Test History & Attendance" period={period} />
 
         <Section title="Recent Tests" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} compact>
@@ -837,21 +841,37 @@ const StudentReportTemplate = ({ data, period }) => {
               </div>
               {attendanceCaption && <p className="mt-4 border-t border-gray-100 pt-3 text-xs leading-5 text-gray-600">{attendanceCaption}</p>}
             </div>
+          ) : s.attendance_pct !== undefined && s.attendance_pct !== null ? (
+            <div className="flex items-center gap-6 rounded-xl border border-gray-100 bg-white p-6" style={{ pageBreakInside: 'avoid' }}>
+              <div className="shrink-0 text-center">
+                <p className={`text-5xl font-black ${bandFor(attendanceValue).text}`}>{Math.round(attendanceValue)}%</p>
+                <p className="mt-1 text-xs font-semibold text-gray-500">Overall Attendance</p>
+              </div>
+              <div className="flex-1">
+                <div className="h-4 overflow-hidden rounded-full bg-gray-100">
+                  <div className={`h-full rounded-full ${bandFor(attendanceValue).fill}`} style={{ width: `${attendanceValue}%` }} />
+                </div>
+                <div className="mt-2">
+                  <DeltaTag value={attendanceValue} compare={classAvg.attendance_pct} />
+                </div>
+                <p className="mt-3 text-xs leading-5 text-gray-500">Day-by-day calendar data is not yet available. The percentage above is from the teacher's register. The calendar will appear once daily attendance records are synced.</p>
+              </div>
+            </div>
           ) : (
             <EmptyState title="No attendance records yet" body="Once attendance is marked, a day-by-day calendar appears here." />
           )}
         </Section>
 
-      </ReportPage>
+      </PageGroup>
 
       {/* ── PAGE 4 — Effort & what next: work done, weak topics, plan ────── */}
-      <ReportPage page={4} brand={brand} last>
+      <PageGroup breakBefore>
         <PageStrip student={s} title="Effort & Next Steps" period={period} />
 
         <Section title="Work Completed" icon={ClipboardCheck} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
           {effortRows.length ? (
             <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
-              <div className="flex flex-wrap gap-x-8 gap-y-3 *:w-[calc(50%-16px)]">
+              <div className={`flex flex-wrap gap-x-8 gap-y-3 ${effortRows.length >= 2 ? '*:w-[calc(50%-16px)]' : ''}`}>
                 {effortRows.map(row => (
                   <ProgressBar
                     key={row.label}
@@ -925,7 +945,13 @@ const StudentReportTemplate = ({ data, period }) => {
             </p>
           </div>
         </Section>
-      </ReportPage>
+
+        <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-3 text-[10px] font-semibold text-gray-400" style={{ pageBreakInside: 'avoid' }}>
+          <span>{brand.name} - Student Report Card</span>
+          <span>Generated on {fmtDate(new Date().toISOString())}</span>
+          <span>Computer-generated · {periodTitle(period)}</span>
+        </div>
+      </PageGroup>
     </div>
   );
 };
@@ -1781,8 +1807,10 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
                     <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs font-semibold leading-5 text-emerald-700">
                       {shortText(options[q.correct_idx] ?? `Option ${safeNumber(q.correct_idx) + 1}`, 44)}
                     </td>
-                    <td className="border-b border-gray-100 px-2 py-2.5 text-center align-top">
-                      <V3StatusChip state={state} />
+                    <td className="border-b border-gray-100 px-2 py-2.5 align-top">
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <V3StatusChip state={state} />
+                      </div>
                     </td>
                   </tr>
                 );

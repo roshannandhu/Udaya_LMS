@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Loader2, Download } from 'lucide-react';
 import { testApi } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth';
 import { Reveal } from '../../components/bits';
 
 export default function StudentTestReviewPage() {
@@ -9,6 +10,8 @@ export default function StudentTestReviewPage() {
   const { state } = useLocation();
   const test_id = state?.test_id;
   const result = state?.result;
+  const stateMeta = state?.testMeta;
+  const { user } = useAuthStore();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,18 +23,24 @@ export default function StudentTestReviewPage() {
     setPdfBusy(true);
     try {
       const { buildExamResultPdf } = await import('../../lib/reportPdf');
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
       await buildExamResultPdf({
         reviewData: data,
         result,
         student: {
-          name:         user.name,
-          student_code: user.student_code,
-          standard_name:user.standard_name,
-          avatar_url:   user.avatar_url,
-          username:     user.username,
+          name:          user?.name,
+          student_code:  user?.student_code,
+          standard_name: user?.standard_name,
+          avatar_url:    user?.avatar_url,
+          username:      user?.username,
         },
-        testMeta: { title: result?.testTitle },
+        testMeta: {
+          title:         result?.testTitle || stateMeta?.title,
+          subject_name:  stateMeta?.subject_name,
+          duration_mins: stateMeta?.duration_mins,
+          total_marks:   result?.total_marks || stateMeta?.total_marks,
+          scheduled_for: stateMeta?.scheduled_for,
+          topic_tag:     stateMeta?.topic_tag,
+        },
       });
     } catch (e) {
       console.error('PDF error', e);

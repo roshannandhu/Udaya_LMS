@@ -284,7 +284,13 @@ export default function StudentTestTakingPage() {
             auto,
             cancelled: terminated,
             test_id: testId,
-          }
+          },
+          testMeta: {
+            title:         test?.title,
+            duration_mins: test?.duration_mins,
+            total_marks:   test?.total_marks,
+            scheduled_for: test?.scheduled_for,
+          },
         },
       });
     } catch (err) {
