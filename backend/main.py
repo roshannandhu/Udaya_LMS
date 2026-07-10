@@ -3622,7 +3622,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
 
     # ── Test attempts (period filtered) ──────────────────────────────
     q = service_supabase.table("test_attempts").select(
-        "id, score, correct_count, wrong_count, submitted_at, flagged, tests(id, title, total_marks, class_id)"
+        "id, score, correct_count, wrong_count, submitted_at, started_at, flagged, tests(id, title, total_marks, class_id)"
     ).eq("student_id", student_id).order("submitted_at")
     if period_start:
         q = q.gte("submitted_at", period_start)
@@ -3637,8 +3637,20 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         score_pct = round((a.get("score") or 0) / total * 100, 1)
         class_id = t.get("class_id", "")
         sub = sub_map.get(class_id, {})
+        time_minutes = None
+        started_raw = a.get("started_at")
+        submitted_raw = a.get("submitted_at")
+        if started_raw and submitted_raw:
+            try:
+                s_dt = datetime.fromisoformat(str(started_raw).replace("Z", "+00:00"))
+                e_dt = datetime.fromisoformat(str(submitted_raw).replace("Z", "+00:00"))
+                diff_mins = (e_dt - s_dt).total_seconds() / 60
+                if 0 < diff_mins < 300:
+                    time_minutes = round(diff_mins, 1)
+            except Exception:
+                pass
         test_timeline.append({
-            "date": a.get("submitted_at") or a.get("created_at"),
+            "date": submitted_raw or a.get("created_at"),
             "test_title": t.get("title", "Test"),
             "test_id": t.get("id"),
             "total_marks": total,
@@ -3647,10 +3659,12 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
             "emoji": sub.get("emoji", "book"),
             "score_pct": score_pct,
             "flagged": a.get("flagged", False),
+            "time_minutes": time_minutes,
         })
 
-    # Per-exam rank: this student's position among ALL attempts of each test.
+    # Per-exam rank + class bell-curve bins from all students on the same tests.
     # One bulk query for every test in the timeline, grouped + sorted in memory.
+    class_bell_bins = [{"scoreBin": i * 10, "count": 0} for i in range(11)]
     timeline_test_ids = [t["test_id"] for t in test_timeline if t.get("test_id")]
     if timeline_test_ids:
         try:
@@ -3678,6 +3692,11 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                     entry["class_min_score_pct"] = round(min(class_pcts), 1)
                     entry["class_max_score_pct"] = round(max(class_pcts), 1)
                     entry["class_avg_score_pct"] = round(sum(class_pcts) / len(class_pcts), 1)
+                for r in rows:
+                    if total_marks > 0:
+                        pct = (r.get("score") or 0) / total_marks * 100
+                        bin_idx = max(0, min(10, int(pct / 10)))
+                        class_bell_bins[bin_idx]["count"] += 1
         except Exception:
             pass  # rank is decorative — never fail the report over it
 
@@ -4119,13 +4138,19 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                 consistency = 0
                 mastery = 0
                 ta_res = service_supabase.table("test_attempts").select(
-                    "score, tests(total_marks)"
+                    "score, tests(total_marks, class_id)"
                 ).in_("student_id", ids).execute()
                 pcts = []
+                subj_pcts: dict = {}
                 for a in (ta_res.data or []):
-                    tm = (a.get("tests") or {}).get("total_marks") or 0
+                    t_info = a.get("tests") or {}
+                    tm = t_info.get("total_marks") or 0
+                    cid = t_info.get("class_id") or ""
                     if tm > 0:
-                        pcts.append((a.get("score") or 0) / tm * 100)
+                        p = (a.get("score") or 0) / tm * 100
+                        pcts.append(p)
+                        if cid:
+                            subj_pcts.setdefault(cid, []).append(p)
                 if pcts:
                     m = sum(pcts) / len(pcts)
                     sd = (sum((p - m) ** 2 for p in pcts) / len(pcts)) ** 0.5
@@ -4133,6 +4158,10 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                     mastery = round(sum(1 for p in pcts if p >= 75) / len(pcts) * 100, 1)
                 class_averages["consistency"] = consistency
                 class_averages["mastery"] = mastery
+                class_averages["by_subject"] = {
+                    cid: round(sum(v) / len(v), 1)
+                    for cid, v in subj_pcts.items()
+                }
                 _class_avg_cache[std_id] = (time_module.time() + 180, class_averages)
         except Exception as exc:
             print(f"Class averages error (non-fatal): {exc}")
@@ -4161,6 +4190,7 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "subjects": subjects,
         "live_classes_stats": live_classes_stats,
         "class_averages": class_averages,
+        "class_bell_bins": class_bell_bins,
     }
 
 
@@ -7782,7 +7812,7 @@ def get_test_results(test_id: str, user = Depends(verify_token)):
 
     # Get all attempts with student info, including avatar for result lists/PDFs.
     attempts = service_supabase.table("test_attempts").select(
-        "*, students(name, username, avatar_url)"
+        "*, students(name, username, avatar_url, student_code)"
     ).eq("test_id", test_id).execute()
     attempts_list = sorted(attempts.data or [], key=lambda x: x.get("score") or 0, reverse=True)
     total_attempts = len(attempts_list)

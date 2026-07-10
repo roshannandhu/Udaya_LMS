@@ -1,10 +1,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import html2pdf from 'html2pdf.js';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar, LineChart, Line, ReferenceLine } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, ReferenceLine } from 'recharts';
 import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
-import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, Video, XCircle, Zap, Activity, LayoutGrid, Award, Brain, ClipboardCheck, Layers, ShieldCheck, TrendingUp, ListChecks, Gauge } from 'lucide-react';
+import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, XCircle, Zap, Activity, LayoutGrid, Award, Brain, ClipboardCheck, Layers, ShieldCheck, TrendingUp, TrendingDown, Minus, ListChecks, Gauge } from 'lucide-react';
 
 const PDF_CANVAS_WIDTH = 720;
 
@@ -122,7 +122,11 @@ async function generatePdf(element, filename) {
   await html2pdf().set(opt).from(element).save();
 }
 
-const waitForFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
+const waitForFrame = () => new Promise(resolve => {
+  // rAF never fires in hidden/background tabs — fall back so the export can't hang
+  const timer = setTimeout(resolve, 300);
+  requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+});
 const waitForMs = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const withTimeout = (promise, ms) => Promise.race([promise, waitForMs(ms)]);
 
@@ -240,10 +244,10 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
 
 // Empty PageBreak removed
 // Empty PageBreak removed
-const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = false }) => {
+const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = false, compact = false }) => {
   return (
-  <div className={`mt-10 ${className}`}>
-    <div className="mb-6 flex items-center gap-3 border-b border-gray-100 pb-3">
+  <div className={`${compact ? 'mt-6' : 'mt-10'} ${className}`}>
+    <div className={`${compact ? 'mb-4' : 'mb-6'} flex items-center gap-3 border-b border-gray-100 pb-3`}>
       <div className={`rounded-lg p-2 ${color.bg}`}>
         <Icon className={`h-5 w-5 ${color.text}`} strokeWidth={2.5} />
       </div>
@@ -278,21 +282,6 @@ const ProgressBar = ({ label, value, max = 100, color, valueText, labelClassName
     </div>
   );
 };
-
-const SignalBar = ({ row }) => (
-  <div className="min-w-0 rounded-xl border border-gray-100 bg-gray-50/60 p-3" style={{ pageBreakInside: 'avoid' }}>
-    <div className="mb-2 flex items-start justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        <p className="break-words text-sm font-black text-gray-900">{row.label}</p>
-        <p className="mt-1 text-[11px] leading-4 text-gray-500">{row.note}</p>
-      </div>
-      <p className="shrink-0 text-sm font-black text-gray-950">{row.display}</p>
-    </div>
-    <div className="h-2.5 overflow-hidden rounded-full bg-white">
-      <div className={`h-full rounded-full ${row.color.fill}`} style={{ width: `${clampPct(row.value)}%` }} />
-    </div>
-  </div>
-);
 
 const ScoreRing = ({ value, label, sublabel, color = '#4f46e5', size = 136 }) => {
   const pct = clampPct(value);
@@ -372,31 +361,6 @@ const BenchmarkBar = ({ label, value, compare, valueLabel = 'Student', compareLa
   </div>
 );
 
-const ActivitySquares = ({ rows, valueKey = 'count', color = 'bg-indigo-500', empty = 'bg-gray-100', label }) => {
-  const slice = [...(rows || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).slice(-28);
-  if (!slice.length) return null;
-  const max = Math.max(1, ...slice.map(row => safeNumber(row?.[valueKey])));
-  return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-      {label && <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-500">{label}</p>}
-      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(14, minmax(0, 1fr))' }}>
-        {slice.map((row, index) => {
-          const value = safeNumber(row?.[valueKey]);
-          const strength = value <= 0 ? 0 : Math.max(30, Math.round((value / max) * 100));
-          return (
-            <div
-              key={`${row.date || index}-${index}`}
-              className={`aspect-square w-full rounded-sm border border-black/5 ${value > 0 ? color : empty}`}
-              style={value > 0 ? { opacity: strength / 100 } : undefined}
-              title={`${row.date || ''}: ${value}`}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 const EmptyState = ({ title, body }) => (
   <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center" style={{ pageBreakInside: 'avoid' }}>
     <p className="text-sm font-bold text-gray-800">{title}</p>
@@ -404,72 +368,73 @@ const EmptyState = ({ title, body }) => (
   </div>
 );
 
-// Realistic GitHub-style calendar heatmap
-const CalendarHeatmap = ({ heatmapData }) => {
-  if (!heatmapData || heatmapData.length === 0) return null;
-
+// Real month-view attendance calendar: one wall-calendar block per month with
+// date numbers, colored by attendance. Flex rows (no CSS grid) — html2canvas
+// stretches grids vertically. Shows the last 2 months that contain records.
+const MonthCalendar = ({ heatmapData }) => {
   const byDate = new Map(
-    heatmapData
+    (heatmapData || [])
       .filter(row => row?.date)
       .map(row => [String(row.date).slice(0, 10), row])
   );
-  const validDates = [...byDate.keys()]
-    .map(date => new Date(`${date}T00:00:00`))
-    .filter(date => !Number.isNaN(date.getTime()))
-    .sort((a, b) => a - b);
-  if (!validDates.length) return null;
+  const monthKeys = [...new Set(
+    [...byDate.keys()].filter(d => !Number.isNaN(new Date(`${d}T00:00:00`).getTime())).map(d => d.slice(0, 7))
+  )].sort().slice(-2);
+  if (!monthKeys.length) return null;
 
-  const endDate = validDates[validDates.length - 1];
-  const days = Array.from({ length: 84 }).map((_, index) => {
-    const d = new Date(endDate);
-    d.setDate(d.getDate() - (83 - index));
-    const key = localDateKey(d);
-    return byDate.get(key) || { date: key, present: 0, late: 0, absent: 0, total: 0 };
-  });
+  const dayColor = (rec) => {
+    if (!rec || !safeNumber(rec.total)) return 'bg-gray-100 text-gray-400';
+    if (safeNumber(rec.present) > 0) return 'bg-emerald-500 text-white';
+    if (safeNumber(rec.late) > 0) return 'bg-amber-400 text-white';
+    return 'bg-red-400 text-white';
+  };
 
-  const columns = [];
-  for (let i = 0; i < days.length; i += 7) {
-    columns.push(days.slice(i, i + 7));
-  }
-
-  const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        {/* Y-Axis Labels */}
-        <div className="flex flex-col gap-1 pr-2 pt-5">
-          {daysOfWeek.map((d, i) => (
-            <div key={i} className="h-4 text-[10px] font-medium text-gray-400 flex items-center justify-end">{i % 2 === 1 ? d : ''}</div>
-          ))}
-        </div>
-        
-        {/* Grid */}
-        <div className="flex gap-1 overflow-hidden">
-          {columns.map((col, colIdx) => {
-            const monthStart = col.find(day => {
-              const parsed = new Date(`${day.date}T00:00:00`);
-              return !Number.isNaN(parsed.getTime()) && parsed.getDate() === 1;
-            });
-            const labelDay = colIdx === 0 ? col[0] : monthStart;
-            const monthLabel = labelDay
-              ? new Date(`${labelDay.date}T00:00:00`).toLocaleString('default', { month: 'short' })
-              : '';
-            return (
-              <div key={colIdx} className="flex flex-col gap-1">
-                <div className="h-4 text-[10px] font-medium text-gray-500">{monthLabel}</div>
-                {col.map((d, rowIdx) => {
-                  const bg = (d.present > 0) ? 'bg-emerald-500' : (d.late > 0) ? 'bg-amber-400' : (d.total > 0) ? 'bg-red-400' : 'bg-gray-100';
-                  return <div key={d.date || rowIdx} className={`h-4 w-4 rounded-sm ${bg} shadow-sm border border-black/5`} />;
-                })}
+    <div className="flex flex-col items-center gap-4">
+      <div className="flex justify-center gap-12">
+        {monthKeys.map((key) => {
+          const [y, m] = key.split('-').map(Number);
+          const first = new Date(y, m - 1, 1);
+          const daysInMonth = new Date(y, m, 0).getDate();
+          const cells = [
+            ...Array.from({ length: first.getDay() }, () => null),
+            ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+          ];
+          while (cells.length % 7 !== 0) cells.push(null);
+          const weeks = [];
+          for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+          return (
+            <div key={key}>
+              <p className="mb-2 text-center text-xs font-black text-gray-800">
+                {first.toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
+              </p>
+              <div className="mb-1 flex gap-1">
+                {weekdays.map((d, i) => (
+                  <div key={i} className="flex h-5 w-7 items-center justify-center text-[9px] font-bold text-gray-400">{d}</div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+              <div className="flex flex-col gap-1">
+                {weeks.map((week, wi) => (
+                  <div key={wi} className="flex gap-1">
+                    {week.map((day, di) => {
+                      if (!day) return <div key={di} className="h-7 w-7" />;
+                      const dateKey = `${key}-${String(day).padStart(2, '0')}`;
+                      return (
+                        <div key={di} className={`flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-bold ${dayColor(byDate.get(dateKey))}`}>
+                          {day}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
-      
-      {/* Legend */}
-      <div className="mt-2 flex gap-4 text-xs font-medium text-gray-500">
+      <div className="flex gap-4 text-xs font-medium text-gray-500">
         <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-gray-100 border border-black/5" /> No Class</span>
         <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-emerald-500 border border-black/5" /> Present</span>
         <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-amber-400 border border-black/5" /> Late</span>
@@ -480,7 +445,107 @@ const CalendarHeatmap = ({ heatmapData }) => {
 };
 
 
-// Report 1: student overall report
+// ─── Report card building blocks (student report, 4 fixed pages) ────────────
+// One color language for the whole report card: green >= 75, amber 50-74, red < 50.
+const bandFor = (pct) => {
+  const s = clampPct(pct);
+  if (s >= 75) return { text: 'text-emerald-700', bg: 'bg-emerald-100', fill: 'bg-emerald-500', hex: '#059669' };
+  if (s >= 50) return { text: 'text-amber-700', bg: 'bg-amber-100', fill: 'bg-amber-500', hex: '#d97706' };
+  return { text: 'text-red-700', bg: 'bg-red-100', fill: 'bg-red-500', hex: '#dc2626' };
+};
+
+const DeltaTag = ({ value, compare, suffix = '%' }) => {
+  const c = Number(compare);
+  if (!Number.isFinite(c)) return <span className="text-[11px] font-semibold text-gray-400">Class average not available</span>;
+  const diff = Math.round(safeNumber(value) - c);
+  if (diff === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-gray-500">
+        <Minus className="h-3 w-3" strokeWidth={3} /> Same as class average
+      </span>
+    );
+  }
+  const up = diff > 0;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${up ? 'text-emerald-600' : 'text-red-600'}`}>
+      {up ? <TrendingUp className="h-3 w-3" strokeWidth={3} /> : <TrendingDown className="h-3 w-3" strokeWidth={3} />}
+      {Math.abs(diff)}{suffix} {up ? 'above' : 'below'} class average
+    </span>
+  );
+};
+
+// Printable A4 height at the 720px canvas is ~1030px; min-height keeps each page's
+// footer near the physical bottom while leaving a safety margin so a page never
+// spills a few pixels onto the next sheet.
+const REPORT_PAGE_MIN_HEIGHT = 980;
+
+const ReportPage = ({ page, total = 4, brand, last = false, children }) => (
+  <div className="flex flex-col" style={{ minHeight: REPORT_PAGE_MIN_HEIGHT, paddingTop: 12, ...(last ? {} : { pageBreakAfter: 'always' }) }}>
+    <div className="flex-1">{children}</div>
+    <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-3 text-[10px] font-semibold text-gray-400" style={{ pageBreakInside: 'avoid' }}>
+      <span>{brand.name} - Student Report Card</span>
+      <span>Generated on {fmtDate(new Date().toISOString())}</span>
+      <span>Page {page} of {total}</span>
+    </div>
+  </div>
+);
+
+const PageStrip = ({ student, title, period }) => (
+  <div className="mb-2 flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-5 py-3" style={{ pageBreakInside: 'avoid' }}>
+    <div>
+      <p className="text-sm font-black text-gray-900">{title}</p>
+      <p className="text-[11px] font-semibold text-gray-500">{student?.name || 'Student'}{student?.student_code ? ` - ${student.student_code}` : ''}</p>
+    </div>
+    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{periodTitle(period)} - {periodRange(period)}</p>
+  </div>
+);
+
+// Header matches the app theme: flat "ink" surface (tailwind `ink` #1A1A1A), no gradients.
+const ReportCardHeader = ({ student, brand, period }) => (
+  <div className="rounded-2xl bg-neutral-900 p-6 text-white" style={{ pageBreakInside: 'avoid' }}>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-7 w-7 rounded bg-white p-0.5" crossOrigin="anonymous" />}
+        <span className="text-sm font-bold tracking-wide text-white">{brand.name}</span>
+      </div>
+      <div className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold text-white">Student Report Card</div>
+    </div>
+    <div className="mt-5 flex items-center gap-5">
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-700">
+        {student?.avatar_url
+          ? <img src={student.avatar_url} alt="Profile" className="h-full w-full object-cover" crossOrigin="anonymous" />
+          : <span className="text-2xl font-bold text-white">{(student?.name || 'S').charAt(0).toUpperCase()}</span>}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h1 className="break-words text-2xl font-black tracking-tight">{student?.name || 'Student'}</h1>
+        <p className="mt-1 text-xs font-semibold text-neutral-300">
+          {[student?.student_code, student?.standard_name, student?.username ? `@${student.username}` : null].filter(Boolean).join('  -  ')}
+        </p>
+      </div>
+      <div className="shrink-0 rounded-xl bg-white/10 px-4 py-2 text-right">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-300">{periodTitle(period)}</p>
+        <p className="text-xs font-bold text-white">{periodRange(period)}</p>
+      </div>
+    </div>
+  </div>
+);
+
+const HeadlineStat = ({ icon: Icon, label, value, band, children }) => (
+  <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+    <div className="flex items-center gap-2">
+      <div className={`shrink-0 rounded-lg p-1.5 ${band.bg}`}>
+        <Icon className={`h-4 w-4 ${band.text}`} strokeWidth={2.5} />
+      </div>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{label}</span>
+    </div>
+    <p className="mt-2 text-3xl font-black text-gray-950">{value}</p>
+    <div className="mt-1 min-h-[16px]">{children}</div>
+  </div>
+);
+
+// Report 1: student report card — 4 fixed pages.
+// Page 1 verdict, page 2 marks, page 3 effort, page 4 next steps. Every chart
+// carries a one-line takeaway; every headline number carries a class comparison.
 const StudentReportTemplate = ({ data, period }) => {
   const s = data.student || {};
   const brand = getBranding();
@@ -489,504 +554,378 @@ const StudentReportTemplate = ({ data, period }) => {
   const timeline = data.test_timeline || [];
   const topicMap = data.topic_map || [];
   const heatmap = data.attendance_heatmap || [];
-  const videoHeatmap = data.video_heatmap || [];
-  const testHeatmap = data.test_heatmap || [];
-  const assignmentHeatmap = data.assignment_heatmap || [];
   const assignmentStats = data.assignment_stats || {};
   const liveStats = data.live_classes_stats || {};
   const classAvg = data.class_averages || {};
 
+  // ── Headline numbers ──────────────────────────────────────────────────────
   const periodScores = timeline.map(t => safeNumber(t.score_pct, NaN)).filter(Number.isFinite);
   const avgForPeriod = period === 'overall'
     ? safeNumber(s.avg_score, avgOf(periodScores))
     : (periodScores.length ? avgOf(periodScores) : safeNumber(s.avg_score));
   const scoreValue = clampPct(avgForPeriod);
   const attendanceValue = clampPct(s.attendance_pct);
+  const hasScore = timeline.length > 0 || safeNumber(s.avg_score) > 0;
   const grade = gradeFor(scoreValue);
-  const rankLabel = data.rank && data.total_students ? `${data.rank} / ${data.total_students}` : '-';
+  const scoreBand = bandFor(scoreValue);
+  const rankLabel = data.rank && data.total_students ? `${data.rank} of ${data.total_students}` : null;
   const periodPoints = data.period_points ?? s.points ?? 0;
 
-  const assignmentCompletion = percentOf(assignmentStats.submitted, assignmentStats.total);
-  const assignmentSignal = assignmentStats.total ? assignmentCompletion : safeNumber(assignmentStats.avg_marks_pct, NaN);
-  const topicMastery = data.topic_mastery_pct ?? percentOf(topicMap.filter(t => safeNumber(t.score_pct) >= 60).length, topicMap.length);
-  const videoCompletion = avgOf(radar.filter(r => safeNumber(r.video_total) > 0).map(r => r.video_pct));
-  const liveAttendance = safeNumber(liveStats.attendance_pct, NaN);
-  const testParticipation = data.total_tests_in_standard ? percentOf(timeline.length, data.total_tests_in_standard) : NaN;
-
-  const health = weightedHealth([
-    { value: scoreValue, weight: 0.36, has: periodScores.length || s.avg_score !== undefined },
-    { value: attendanceValue, weight: 0.18, has: s.attendance_pct !== undefined },
-    { value: topicMastery, weight: 0.14, has: topicMap.length > 0 },
-    { value: assignmentSignal, weight: 0.12, has: assignmentStats.total > 0 || Number.isFinite(assignmentSignal) },
-    { value: videoCompletion, weight: 0.10, has: radar.some(r => safeNumber(r.video_total) > 0) },
-    { value: liveAttendance, weight: 0.06, has: Number.isFinite(liveAttendance) && safeNumber(liveStats.total) > 0 },
-    { value: testParticipation, weight: 0.04, has: Number.isFinite(testParticipation) },
-  ]);
-  const healthMeta = healthLabel(health);
-
-  const totalVideoMinutes = Math.round(sumBy(videoHeatmap, 'minutes'));
-  const videoSessions = sumBy(videoHeatmap, 'count');
   const submittedAssignments = safeNumber(assignmentStats.submitted);
   const totalAssignments = safeNumber(assignmentStats.total);
   const pendingAssignments = Math.max(0, totalAssignments - submittedAssignments);
-  const liveLabel = liveStats.total ? `${liveStats.attended || 0}/${liveStats.total}` : '-';
 
-  // Prepare chart data
+  // ── Subjects ──────────────────────────────────────────────────────────────
+  const subjectRows = [...radar].sort((a, b) => safeNumber(b.test_avg) - safeNumber(a.test_avg));
+  const testedSubjects = subjectRows.filter(r => safeNumber(r.test_count) > 0);
+  const strongestSubject = testedSubjects[0];
+  const weakestSubject = testedSubjects.length > 1 ? testedSubjects[testedSubjects.length - 1] : null;
+
+  // ── Trend chart + caption ─────────────────────────────────────────────────
   const chartData = [...timeline]
-    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
     .slice(-10)
     .map((t, index) => ({
       name: shortText(t.test_title, 12, `T${index + 1}`),
       score: Math.round(clampPct(t.score_pct)),
       classScore: Math.round(clampPct(t.class_avg_score_pct ?? classAvg.avg_score ?? scoreValue)),
     }));
+  const trendDelta = chartData.length >= 2 ? chartData[chartData.length - 1].score - chartData[0].score : null;
+  const trendCaption = chartData.length >= 2
+    ? `Scores moved from ${chartData[0].score}% to ${chartData[chartData.length - 1].score}% across the last ${chartData.length} tests (${trendDelta >= 0 ? 'up' : 'down'} ${Math.abs(trendDelta)}%). Overall average is ${compareCopy(scoreValue, classAvg.avg_score).toLowerCase()}.`
+    : null;
+  const recentTests = [...timeline].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
 
-  const subjectRows = [...radar].sort((a, b) => safeNumber(b.test_avg) - safeNumber(a.test_avg));
-  const strongestSubject = subjectRows.find(r => safeNumber(r.test_count) > 0);
-  const weakestSubject = [...radar]
-    .filter(r => safeNumber(r.test_count) > 0)
-    .sort((a, b) => safeNumber(a.test_avg) - safeNumber(b.test_avg))[0];
+  // ── Attendance summary ────────────────────────────────────────────────────
+  const classDays = heatmap.filter(d => safeNumber(d.total) > 0);
+  const attendedDays = classDays.filter(d => safeNumber(d.present) > 0 || safeNumber(d.late) > 0).length;
+  const attendanceCaption = classDays.length
+    ? `Present ${attendedDays} of ${classDays.length} class days (${Math.round(percentOf(attendedDays, classDays.length))}%). ${compareCopy(attendanceValue, classAvg.attendance_pct)}.`
+    : null;
+
+  // ── Effort (work completed vs available) ──────────────────────────────────
+  const videosCompleted = sumBy(radar, 'video_done');
+  const videosAvailable = sumBy(radar, 'video_total');
+  const effortRows = [
+    { label: 'Tests attempted', done: timeline.length, total: safeNumber(data.total_tests_in_standard), color: { fill: 'bg-neutral-900' } },
+    { label: 'Assignments submitted', done: submittedAssignments, total: totalAssignments, color: { fill: 'bg-amber-500' } },
+    { label: 'Videos completed', done: videosCompleted, total: videosAvailable, color: { fill: 'bg-blue-500' } },
+    { label: 'Live classes attended', done: safeNumber(liveStats.attended), total: safeNumber(liveStats.total), color: { fill: 'bg-emerald-500' } },
+  ].filter(r => r.total > 0 || r.done > 0);
+
+  // ── Weak topics + action plan ─────────────────────────────────────────────
   const weakTopics = [...topicMap]
     .filter(t => safeNumber(t.score_pct) < 60 || !t.video_completed)
     .sort((a, b) => safeNumber(a.score_pct) - safeNumber(b.score_pct));
-  const priorityTopics = weakTopics.length ? weakTopics : [...topicMap].sort((a, b) => safeNumber(a.score_pct) - safeNumber(b.score_pct));
-  const recentDelta = chartData.length >= 2 ? chartData[chartData.length - 1].score - chartData[0].score : null;
-
-  const insights = [
-    {
-      icon: TrendingUp,
-      title: 'Score direction',
-      body: recentDelta === null
-        ? compareCopy(scoreValue, classAvg.avg_score)
-        : `${recentDelta >= 0 ? '+' : ''}${recentDelta}% across recent tests. ${compareCopy(scoreValue, classAvg.avg_score)}`,
-      tone: recentDelta === null ? 'blue' : recentDelta >= 0 ? 'emerald' : 'amber',
-    },
-    {
-      icon: Gauge,
-      title: 'Learning balance',
-      body: `Attendance ${pctText(attendanceValue)}, topic mastery ${pctText(topicMastery)}, video completion ${pctText(videoCompletion)}.`,
-      tone: health >= 70 ? 'emerald' : health >= 50 ? 'amber' : 'red',
-    },
-    {
-      icon: ClipboardCheck,
-      title: 'Work completion',
-      body: totalAssignments
-        ? `${submittedAssignments}/${totalAssignments} assignments submitted with ${pctText(assignmentStats.avg_marks_pct)} average marks.`
-        : `${timeline.length} tests, ${totalVideoMinutes} video minutes, ${liveStats.attended || 0} live classes tracked.`,
-      tone: !totalAssignments || assignmentCompletion >= 75 ? 'violet' : 'amber',
-    },
-  ];
+  const priorityTopics = (weakTopics.length ? weakTopics : [...topicMap].sort((a, b) => safeNumber(a.score_pct) - safeNumber(b.score_pct))).slice(0, 4);
 
   const actionPlan = [
-    attendanceValue < 75 ? `Attendance reset: attend the next 3 scheduled classes and keep the weekly attendance above 80%.` : null,
-    weakestSubject ? `Subject focus: improve ${weakestSubject.subject} from ${pctText(weakestSubject.test_avg)} to the next 10% band.` : null,
-    weakTopics[0] ? `Revision target: redo ${weakTopics[0].topic || weakTopics[0].test_title || 'the weakest topic'} and finish the linked video before the next test.` : null,
-    pendingAssignments > 0 ? `Assignment catch-up: submit ${pendingAssignments} pending assignment${pendingAssignments > 1 ? 's' : ''} before taking another mock test.` : null,
-    videoCompletion < 70 && radar.some(r => safeNumber(r.video_total) > 0) ? `Video practice: complete unfinished concept videos in the lowest scoring subject.` : null,
-    !timeline.length ? `Start with the first available exam so the LMS can build a stronger performance baseline.` : null,
-  ].filter(Boolean).slice(0, 5);
+    s.attendance_pct !== undefined && s.attendance_pct !== null && attendanceValue < 75
+      ? `Attend every scheduled class for the next two weeks to lift attendance from ${Math.round(attendanceValue)}% above 80%.` : null,
+    weakestSubject
+      ? `Revise ${weakestSubject.subject} basics and retake one practice test to move it from ${pctText(weakestSubject.test_avg)} past ${Math.min(100, Math.round(safeNumber(weakestSubject.test_avg)) + 10)}%.` : null,
+    priorityTopics[0] && safeNumber(priorityTopics[0].score_pct) < 60
+      ? `Rewatch the "${priorityTopics[0].topic || 'weakest topic'}" video and redo its questions before the next test.` : null,
+    pendingAssignments > 0
+      ? `Submit the ${pendingAssignments} pending assignment${pendingAssignments > 1 ? 's' : ''} this week.` : null,
+    !timeline.length
+      ? `Attempt the first available test so the next report can show a real performance baseline.` : null,
+  ].filter(Boolean).slice(0, 3);
   if (!actionPlan.length) {
-    actionPlan.push('Maintain the current rhythm: one revision block, one practice test, and one assignment review each week.');
+    actionPlan.push('Keep the current rhythm: one revision session, one practice test, and one assignment review every week.');
   }
 
-  const videosCompleted = sumBy(radar, 'video_done');
-  const videosAvailable = sumBy(radar, 'video_total');
-  const videoSignalPct = videosAvailable ? percentOf(videosCompleted, videosAvailable) : clampPct(totalVideoMinutes / 3);
-  const testSignalPct = Number.isFinite(testParticipation) ? testParticipation : (timeline.length ? 100 : 0);
-  const assignmentSignalPct = totalAssignments ? assignmentCompletion : (submittedAssignments ? 100 : 0);
-  const liveSignalPct = safeNumber(liveStats.total) ? percentOf(liveStats.attended, liveStats.total) : (safeNumber(liveStats.attended) ? 100 : 0);
-  const signalRows = [
-    {
-      label: 'Concept videos',
-      value: videoSignalPct,
-      display: videosAvailable ? `${videosCompleted}/${videosAvailable}` : `${totalVideoMinutes} min`,
-      note: `${totalVideoMinutes} watched minutes across ${videoSessions} session${videoSessions === 1 ? '' : 's'}`,
-      color: { fill: 'bg-blue-500' },
-    },
-    {
-      label: 'Tests attempted',
-      value: testSignalPct,
-      display: data.total_tests_in_standard ? `${timeline.length}/${data.total_tests_in_standard}` : `${timeline.length}`,
-      note: data.total_tests_in_standard ? 'Attempt rate from available exams' : 'Completed exam attempts in this period',
-      color: { fill: 'bg-violet-500' },
-    },
-    {
-      label: 'Assignments',
-      value: assignmentSignalPct,
-      display: totalAssignments ? `${submittedAssignments}/${totalAssignments}` : `${submittedAssignments}`,
-      note: `${pendingAssignments} pending assignment${pendingAssignments === 1 ? '' : 's'}`,
-      color: { fill: 'bg-amber-500' },
-    },
-    {
-      label: 'Live classes',
-      value: liveSignalPct,
-      display: liveLabel,
-      note: safeNumber(liveStats.total) ? 'Scheduled live sessions attended' : 'No scheduled baseline yet',
-      color: { fill: 'bg-emerald-500' },
-    },
-  ];
-  const videoByDate = Object.fromEntries(videoHeatmap.map((r) => [String(r.date || '').slice(0, 10), safeNumber(r.minutes)]));
-  const testByDate = Object.fromEntries(testHeatmap.map((r) => [String(r.date || '').slice(0, 10), safeNumber(r.count)]));
-  const assignmentByDate = Object.fromEntries(assignmentHeatmap.map((r) => [String(r.date || '').slice(0, 10), safeNumber(r.count)]));
-  const sourceRhythmDates = [...new Set([
-    ...Object.keys(videoByDate),
-    ...Object.keys(testByDate),
-    ...Object.keys(assignmentByDate),
-  ])].sort();
-  const endRhythmDate = sourceRhythmDates.length
-    ? new Date(`${sourceRhythmDates[sourceRhythmDates.length - 1]}T00:00:00`)
-    : null;
-  const rhythmDates = endRhythmDate
-    ? Array.from({ length: 7 }, (_, index) => {
-        const d = new Date(endRhythmDate);
-        d.setDate(d.getDate() - (6 - index));
-        return localDateKey(d);
-      })
-    : [];
-  const rhythmRows = rhythmDates.map((date) => {
-    const videoMinutes = safeNumber(videoByDate[date]);
-    const tests = safeNumber(testByDate[date]);
-    const assignments = safeNumber(assignmentByDate[date]);
-    const score = Math.min(100, Math.round(
-      Math.min(videoMinutes / 45, 1) * 40 +
-      Math.min(tests / 2, 1) * 35 +
-      Math.min(assignments / 2, 1) * 25
-    ));
-    const parsed = new Date(`${date}T00:00:00`);
-    return {
-      date,
-      day: Number.isNaN(parsed.getTime()) ? date.slice(5) : parsed.toLocaleDateString('en-IN', { weekday: 'short' }),
-      detail: Number.isNaN(parsed.getTime()) ? date.slice(5) : parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-      videoMinutes: Math.round(videoMinutes),
-      tests,
-      assignments,
-      score,
-    };
-  });
-  const hasActivitySquares = testHeatmap.length > 0 || videoHeatmap.length > 0 || assignmentHeatmap.length > 0;
+  // ── Teacher's remark (plain sentences, all traceable to the numbers) ──────
+  const firstName = (s.name || 'The student').trim().split(/\s+/)[0];
+  const remarkSentences = [];
+  if (hasScore) {
+    remarkSentences.push(`${firstName} scored an average of ${Math.round(scoreValue)}% (Grade ${grade.grade})${rankLabel ? ` and currently ranks ${rankLabel} in the class` : ''}.`);
+  } else {
+    remarkSentences.push(`${firstName} has not attempted any tests in this period, so no grade is assigned yet.`);
+  }
+  if (strongestSubject && weakestSubject && strongestSubject !== weakestSubject) {
+    remarkSentences.push(`Strongest subject is ${strongestSubject.subject} at ${pctText(strongestSubject.test_avg)}, while ${weakestSubject.subject} at ${pctText(weakestSubject.test_avg)} needs the most attention.`);
+  } else if (strongestSubject) {
+    remarkSentences.push(`${strongestSubject.subject} is the strongest subject so far at ${pctText(strongestSubject.test_avg)}.`);
+  }
+  const effortBits = [];
+  if (s.attendance_pct !== undefined && s.attendance_pct !== null) effortBits.push(`attendance is ${Math.round(attendanceValue)}%`);
+  if (totalAssignments) effortBits.push(`${submittedAssignments} of ${totalAssignments} assignments submitted`);
+  if (videosAvailable) effortBits.push(`${videosCompleted} of ${videosAvailable} videos completed`);
+  if (effortBits.length) remarkSentences.push(`On effort, ${effortBits.join(', ')}.`);
 
   return (
     <div className="mx-auto box-border bg-white p-7 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
-      <Header 
-        title={`Student Growth ${periodTitle(period)}`}
-        subtitle={periodRange(period)}
-        student={s}
-        brand={brand}
-        rightStats={[
-          { label: 'Health', value: `${health}/100` },
-          { label: 'Grade', value: grade.grade },
-          ...(data.rank ? [{ label: 'Class Rank', value: rankLabel }] : [])
-        ]}
-      />
 
-      <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <div className="flex gap-6">
-          <ScoreRing value={health} label="Learning Health" sublabel={healthMeta.title} color={healthMeta.color} />
-          <div className="min-w-0 flex-1">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-500">Learning Passport</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight text-gray-950">{healthMeta.title}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-gray-500">{healthMeta.text}</p>
+      {/* ── PAGE 1 — The verdict: grade, rank, headline numbers, remark ──── */}
+      <ReportPage page={1} brand={brand}>
+        <ReportCardHeader student={s} brand={brand} period={period} />
+
+        <div className="mt-6 flex gap-5">
+          <div className={`flex w-44 shrink-0 flex-col items-center justify-center rounded-2xl border border-gray-100 p-5 ${hasScore ? scoreBand.bg : 'bg-gray-50'}`} style={{ pageBreakInside: 'avoid' }}>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Overall Grade</p>
+            <p className={`mt-1 text-6xl font-black ${hasScore ? scoreBand.text : 'text-gray-300'}`}>{hasScore ? grade.grade : '-'}</p>
+            <p className="mt-1 text-[11px] font-semibold text-gray-500">{hasScore ? `${Math.round(scoreValue)}% average` : 'No tests yet'}</p>
+          </div>
+          <div className="flex flex-1 items-center justify-between rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+            <ScoreRing
+              value={scoreValue}
+              label="Average Score"
+              sublabel={hasScore ? compareCopy(scoreValue, classAvg.avg_score) : 'No test attempted yet'}
+              color={hasScore ? scoreBand.hex : '#9ca3af'}
+              size={128}
+            />
+            <div className="flex flex-col gap-4 text-right">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Class Rank</p>
+                <p className="text-2xl font-black text-gray-950">{rankLabel || '-'}</p>
               </div>
-              <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-3 text-right">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Period Points</p>
-                <p className="text-2xl font-black text-gray-950">{periodPoints}</p>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Tests Taken</p>
+                <p className="text-2xl font-black text-gray-950">{data.total_tests_in_standard ? `${timeline.length} of ${data.total_tests_in_standard}` : timeline.length}</p>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-3 *:w-[calc(33.333%-8px)]">
-              {insights.map((item, i) => <InsightCard key={i} {...item} />)}
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-8 flex flex-wrap gap-3 *:w-[calc(25%-9px)]">
-        <KpiCard icon={Target} label="Avg Score" value={`${Math.round(avgForPeriod ?? s.avg_score ?? 0)}%`} color={{ bg: 'bg-indigo-100', text: 'text-indigo-600' }} />
-        <KpiCard icon={Calendar} label="Attendance" value={`${Math.round(s.attendance_pct ?? 0)}%`} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }} />
-        <KpiCard icon={Trophy} label="Rank" value={rankLabel} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
-        <KpiCard icon={Video} label="Tests" value={data.total_tests_in_standard ? `${timeline.length}/${data.total_tests_in_standard}` : timeline.length} color={{ bg: 'bg-rose-100', text: 'text-rose-600' }} />
-        <KpiCard icon={ClipboardCheck} label="Assignments" value={totalAssignments ? `${submittedAssignments}/${totalAssignments}` : '-'} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} />
-        <KpiCard icon={Book} label="Topic" value={topicMap.length ? pctText(topicMastery) : '-'} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} />
-        <KpiCard icon={Clock} label="Video Time" value={totalVideoMinutes ? `${totalVideoMinutes}m` : '-'} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
-        <KpiCard icon={Zap} label="Live Classes" value={liveLabel} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} />
-      </div>
-
-
-
-      <Section title="Class Benchmark" icon={Award} color={{ bg: 'bg-slate-100', text: 'text-slate-700' }}>
-        <div className="flex flex-wrap gap-6 *:w-[calc(50%-12px)] rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
-          <div className="space-y-5">
-            <BenchmarkBar label="Score" value={scoreValue} compare={classAvg.avg_score} color="bg-indigo-500" />
-            <BenchmarkBar label="Attendance" value={attendanceValue} compare={classAvg.attendance_pct} color="bg-teal-500" />
-            <BenchmarkBar label="Points" value={periodPoints} compare={classAvg.points} color="bg-amber-500" />
-          </div>
-          <div className="rounded-xl bg-white p-5 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Benchmark Reading</p>
-            <p className="mt-3 text-sm leading-7 text-gray-600">
-              Score is {compareCopy(scoreValue, classAvg.avg_score)}. Attendance is {compareCopy(attendanceValue, classAvg.attendance_pct)}.
-              {data.rank && data.total_students ? ` Current points rank is ${data.rank} out of ${data.total_students} students.` : ' Rank will appear once class points are available.'}
-            </p>
-          </div>
+        <div className="mt-5 flex gap-4 *:flex-1">
+          <HeadlineStat icon={Calendar} label="Attendance" value={s.attendance_pct !== undefined && s.attendance_pct !== null ? `${Math.round(attendanceValue)}%` : '-'} band={bandFor(attendanceValue)}>
+            <DeltaTag value={attendanceValue} compare={classAvg.attendance_pct} />
+          </HeadlineStat>
+          <HeadlineStat
+            icon={ClipboardCheck}
+            label="Assignments"
+            value={totalAssignments ? `${submittedAssignments}/${totalAssignments}` : '-'}
+            band={totalAssignments ? bandFor(percentOf(submittedAssignments, totalAssignments)) : { bg: 'bg-gray-100', text: 'text-gray-500' }}
+          >
+            <span className="text-[11px] font-bold text-gray-500">{totalAssignments ? `${pendingAssignments} pending` : 'None assigned yet'}</span>
+          </HeadlineStat>
+          <HeadlineStat icon={Trophy} label="Points" value={periodPoints} band={{ bg: 'bg-[#E3EFFB]', text: 'text-[#2383E2]' }}>
+            <DeltaTag value={periodPoints} compare={classAvg.points} suffix=" pts" />
+          </HeadlineStat>
         </div>
-      </Section>
 
-      {chartData.length >= 2 && (
-        <Section title="Score Trend vs Class" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }}>
-          <div className="h-64 w-full rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6">
-            <LineChart width={620} height={205} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
-              <ReferenceLine y={35} stroke="#f59e0b" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="classScore" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5' }} isAnimationActive={false} />
-            </LineChart>
-            <div className="mt-1 flex justify-end gap-5 text-[11px] font-semibold text-gray-500">
-              <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-indigo-600" /> Student</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-slate-400" /> Class avg</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-amber-400" /> Pass line</span>
+        <Section title="Teacher's Remark" icon={FileText} color={{ bg: 'bg-[#EAE4F2]', text: 'text-[#6940A5]' }}>
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-6" style={{ pageBreakInside: 'avoid' }}>
+            <p className="text-sm leading-7 text-gray-700">{remarkSentences.join(' ')}</p>
+            <div className="mt-6 flex items-end justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+                  <QRCode value={`${brand.url}/verify/${s.id || 'student'}`} size={44} level="L" />
+                </div>
+                <p className="text-[10px] uppercase leading-4 tracking-widest text-gray-400">Scan to view<br />live report</p>
+              </div>
+              <div className="text-center">
+                <div className="h-10 w-44 border-b border-gray-300" />
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Teacher's Signature & Date</p>
+              </div>
             </div>
           </div>
         </Section>
-      )}
+      </ReportPage>
 
-      {radar.length > 0 && (
-        <Section title="Subject Mastery X-Ray" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
-          <div className="flex flex-wrap gap-6 *:w-[calc(50%-12px)] rounded-xl border border-gray-100 bg-gray-50/30 p-6">
-            <div className="flex-1 flex justify-center">
-              <RadarChart cx="50%" cy="50%" outerRadius="75%" width={270} height={250} data={radar}>
-                <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: '#4b5563', fontSize: 10, fontWeight: 600 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                <Radar name="Performance" dataKey="test_avg" stroke="#8b5cf6" strokeWidth={2} fill="#8b5cf6" fillOpacity={0.4} isAnimationActive={false} />
-              </RadarChart>
+      {/* ── PAGE 2 — Marks: subject table, trend chart, recent tests ─────── */}
+      <ReportPage page={2} brand={brand}>
+        <PageStrip student={s} title="Marks & Subjects" period={period} />
+
+        <Section title="Subject-wise Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} compact>
+          {subjectRows.length ? (
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3">Subject</th>
+                    <th className="px-4 py-3 text-center">Tests</th>
+                    <th className="px-4 py-3 text-center">Avg Score</th>
+                    <th className="px-4 py-3 text-center">Grade</th>
+                    <th className="px-4 py-3 text-center">Attendance</th>
+                    <th className="px-4 py-3 text-center">Videos</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {subjectRows.slice(0, 8).map((r, i) => {
+                    const tested = safeNumber(r.test_count) > 0;
+                    const band = bandFor(r.test_avg);
+                    return (
+                      <tr key={r.subject_id || r.subject || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{r.subject || 'Subject'}</td>
+                        <td className="px-4 py-3 text-center text-gray-500">{safeNumber(r.test_count)}</td>
+                        <td className="px-4 py-3 text-center font-bold text-gray-900">{tested ? pctText(r.test_avg) : '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          {tested
+                            ? <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{gradeFor(r.test_avg).grade}</span>
+                            : <span className="text-xs text-gray-400">No tests</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center text-gray-500">{r.attendance_pct !== undefined && r.attendance_pct !== null ? pctText(r.attendance_pct) : '-'}</td>
+                        <td className="px-4 py-3 text-center text-gray-500">{safeNumber(r.video_total) ? `${safeNumber(r.video_done)}/${safeNumber(r.video_total)}` : '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div className="flex flex-col gap-4">
-              <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Score Distribution</h3>
-              {subjectRows.slice(0, 6).map(r => (
-                <ProgressBar key={r.subject_id || r.subject} label={r.subject} value={r.test_avg} color={{ fill: 'bg-violet-500' }} labelClassName="w-24" />
+          ) : (
+            <EmptyState title="No subject data yet" body="Subject-wise marks appear here once tests are taken in each subject." />
+          )}
+        </Section>
+
+        <Section title="Score Trend vs Class" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
+          {chartData.length >= 2 ? (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6">
+              <LineChart width={620} height={205} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
+                <ReferenceLine y={35} stroke="#f59e0b" strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="classScore" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="score" stroke="#2383E2" strokeWidth={3} dot={{ r: 4, fill: '#2383E2' }} isAnimationActive={false} />
+              </LineChart>
+              <div className="mt-1 flex justify-end gap-5 text-[11px] font-semibold text-gray-500">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-[#2383E2]" /> Student</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-slate-400" /> Class avg</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-amber-400" /> Pass line</span>
+              </div>
+              <p className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-600">{trendCaption}</p>
+            </div>
+          ) : (
+            <EmptyState title="Not enough tests to show a trend" body="At least two test attempts are needed. This chart will appear in the next report." />
+          )}
+        </Section>
+
+      </ReportPage>
+
+      {/* ── PAGE 3 — Test history & discipline: recent tests, attendance ── */}
+      <ReportPage page={3} brand={brand}>
+        <PageStrip student={s} title="Test History & Attendance" period={period} />
+
+        <Section title="Recent Tests" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} compact>
+          {recentTests.length ? (
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Test</th>
+                    <th className="px-4 py-3 text-center">Score</th>
+                    <th className="px-4 py-3 text-center">Class Avg</th>
+                    <th className="px-4 py-3 text-center">Rank</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {recentTests.map((t, i) => (
+                    <tr key={t.test_id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
+                      <td className="px-4 py-3 text-gray-500">{fmtDate(t.date)}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">{shortText(t.test_title, 34)}</td>
+                      <td className="px-4 py-3 text-center font-bold text-gray-900">{Math.round(clampPct(t.score_pct))}%</td>
+                      <td className="px-4 py-3 text-center text-gray-500">{t.class_avg_score_pct !== undefined && t.class_avg_score_pct !== null ? `${Math.round(clampPct(t.class_avg_score_pct))}%` : '-'}</td>
+                      <td className="px-4 py-3 text-center text-gray-500">{t.rank ? `${t.rank}/${t.total_attempts}` : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No tests in this period" body="Test results appear here as soon as an exam is attempted." />
+          )}
+        </Section>
+
+        <Section title="Attendance Calendar" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }} compact>
+          {heatmap.length ? (
+            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div className="flex justify-center">
+                <MonthCalendar heatmapData={heatmap} />
+              </div>
+              {attendanceCaption && <p className="mt-4 border-t border-gray-100 pt-3 text-xs leading-5 text-gray-600">{attendanceCaption}</p>}
+            </div>
+          ) : (
+            <EmptyState title="No attendance records yet" body="Once attendance is marked, a day-by-day calendar appears here." />
+          )}
+        </Section>
+
+      </ReportPage>
+
+      {/* ── PAGE 4 — Effort & what next: work done, weak topics, plan ────── */}
+      <ReportPage page={4} brand={brand} last>
+        <PageStrip student={s} title="Effort & Next Steps" period={period} />
+
+        <Section title="Work Completed" icon={ClipboardCheck} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
+          {effortRows.length ? (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
+              <div className="flex flex-wrap gap-x-8 gap-y-3 *:w-[calc(50%-16px)]">
+                {effortRows.map(row => (
+                  <ProgressBar
+                    key={row.label}
+                    label={row.label}
+                    value={row.total ? percentOf(row.done, row.total) : 100}
+                    color={row.color}
+                    valueText={row.total ? `${row.done}/${row.total}` : `${row.done}`}
+                    labelClassName="w-28"
+                  />
+                ))}
+              </div>
+              <p className="mt-3 border-t border-gray-200 pt-2 text-xs leading-5 text-gray-600">
+                Each bar shows work completed out of what was available in this period.
+              </p>
+            </div>
+          ) : (
+            <EmptyState title="No activity recorded yet" body="Tests, assignments, videos, and live classes will be summarised here." />
+          )}
+        </Section>
+
+        <Section title="Topics That Need Work" icon={Zap} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} compact>
+          {priorityTopics.length ? (
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3">Topic</th>
+                    <th className="px-4 py-3">Subject</th>
+                    <th className="px-4 py-3 text-center">Mastery</th>
+                    <th className="px-4 py-3 text-center">Video</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {priorityTopics.map((t, i) => {
+                    const band = bandFor(t.score_pct);
+                    return (
+                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{t.topic || 'Concept'}</td>
+                        <td className="px-4 py-2.5 text-gray-500">{t.subject}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{Math.round(safeNumber(t.score_pct))}%</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          {t.video_completed
+                            ? <span className="inline-flex items-center text-emerald-600"><CheckCircle className="mr-1 h-4 w-4" /> Watched</span>
+                            : <span className="inline-flex items-center text-gray-400"><XCircle className="mr-1 h-4 w-4" /> Unwatched</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No topic data yet" body="Topic-level strengths and weaknesses appear once tests with topics are attempted." />
+          )}
+        </Section>
+
+        <Section title="Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} compact>
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/40 p-4">
+            <div className="space-y-2.5">
+              {actionPlan.map((step, i) => (
+                <div key={i} className="flex gap-3 rounded-xl bg-white p-2.5 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-black text-amber-700">{i + 1}</span>
+                  <p className="text-sm leading-5 text-gray-700">{step}</p>
+                </div>
               ))}
             </div>
-          </div>
-        </Section>
-      )}
-
-      {radar.length > 0 && subjectRows.length > 0 && (
-        <>
-    
-          <Section title="Subject Deep Dive" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }}>
-          <div className="mt-5 flex flex-col gap-3">
-            {subjectRows.slice(0, 6).map(r => {
-              const assignPct = r.assignment_total ? percentOf(r.assignment_submitted, r.assignment_total) : null;
-              return (
-                <div key={`sub-${r.subject_id || r.subject}`} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-black text-gray-900">{r.subject || 'Subject'}</h3>
-                    <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-700">{pctText(r.test_avg)}</span>
-                  </div>
-                  <div className="space-y-2">
-                    <ProgressBar label="Tests" value={r.test_avg} color={{ fill: 'bg-violet-500' }} />
-                    <ProgressBar label="Attendance" value={r.attendance_pct} color={{ fill: 'bg-teal-500' }} />
-                    <ProgressBar label="Videos" value={r.video_pct} color={{ fill: 'bg-blue-500' }} />
-                    {assignPct !== null && <ProgressBar label="Assignments" value={assignPct} color={{ fill: 'bg-amber-500' }} />}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          </Section>
-        </>
-      )}
-
-      
-
-      <Section title="Learning Signals & Study Rhythm" icon={Gauge} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }}>
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="mb-4">
-              <h3 className="text-sm font-black text-gray-900">Evidence Balance</h3>
-              <p className="mt-1 text-xs leading-5 text-gray-500">Progress is shown by its own unit, not by mixing minutes with counts.</p>
-            </div>
-            <div className="flex flex-wrap gap-3 *:w-[calc(50%-6px)]">
-              {signalRows.map((row) => <SignalBar key={row.label} row={row} />)}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="mb-5">
-              <h3 className="text-sm font-black text-gray-900">7-Day Study Rhythm</h3>
-              <p className="mt-1 text-xs leading-5 text-gray-500">Activity score combines video, test, and assignment evidence as a consistency indicator.</p>
-            </div>
-            {rhythmRows.length > 0 ? (
-              <div>
-                <div className="flex items-end gap-2">
-                  {rhythmRows.map((row) => (
-                    <div key={row.date} className="flex-1 text-center">
-                      <div className="flex h-28 items-end justify-center rounded-lg bg-gray-50 px-1 py-2">
-                        <div
-                          className="w-full rounded-t-md bg-gradient-to-t from-blue-600 to-cyan-400"
-                          style={{ height: `${Math.max(8, row.score)}%` }}
-                        />
-                      </div>
-                      <p className="mt-2 text-[11px] font-black text-gray-800">{row.day}</p>
-                      <p className="text-[10px] font-bold text-gray-400">{row.score}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2 *:w-[calc(50%-4px)] text-[11px] font-semibold text-gray-600">
-                  {rhythmRows.slice(-2).map((row) => (
-                    <div key={`rhythm-${row.date}`} className="rounded-lg bg-gray-50 p-2">
-                      <p className="font-black text-gray-800">{row.detail}</p>
-                      <p>{row.videoMinutes}m video - {row.tests} tests - {row.assignments} assignments</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <EmptyState title="Study rhythm not available" body="Once videos, tests, and assignments are recorded, this area becomes a consistency map." />
-            )}
-          </div>
-        </div>
-        {hasActivitySquares && (
-          <div className="mt-5 flex flex-wrap gap-4 *:w-[calc(33.333%-10px)]">
-            {testHeatmap.length > 0 && <ActivitySquares rows={testHeatmap} valueKey="count" color="bg-violet-500" label="Test activity, last 28 days" />}
-            {videoHeatmap.length > 0 && <ActivitySquares rows={videoHeatmap} valueKey="minutes" color="bg-blue-500" label="Video minutes, last 28 days" />}
-            {assignmentHeatmap.length > 0 && <ActivitySquares rows={assignmentHeatmap} valueKey="count" color="bg-amber-500" label="Assignments, last 28 days" />}
-          </div>
-        )}
-        {!hasActivitySquares && rhythmRows.length > 0 && (
-          <div className="mt-5">
-            <EmptyState title="Activity rhythm not available" body="Once videos, tests, and assignments are recorded, this area becomes a habit map." />
-          </div>
-          )}
-      </Section>
-
-      {heatmap.length > 0 && (
-        <>
-    
-          <Section title="Attendance Calendar" icon={Calendar} color={{ bg: 'bg-teal-100', text: 'text-teal-600' }}>
-            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm flex justify-center">
-              <CalendarHeatmap heatmapData={heatmap} />
-            </div>
-          </Section>
-        </>
-      )}
-
-
-
-      <Section title="Next Action Plan" icon={ListChecks} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
-        <div className="flex flex-wrap gap-5 *:w-[calc(50%-10px)] rounded-2xl border border-gray-100 bg-gray-50/40 p-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Priority</p>
-            <h3 className="mt-1 text-xl font-black text-gray-950">{weakestSubject ? weakestSubject.subject : strongestSubject?.subject || 'Learning consistency'}</h3>
-            <p className="mt-2 text-sm leading-7 text-gray-600">
-              {weakestSubject
-                ? `${weakestSubject.subject} is the fastest improvement opportunity at ${pctText(weakestSubject.test_avg)}. Pair revision with the linked videos and one practice attempt.`
-                : `No weak subject pattern is visible yet. Continue building data through regular tests and video completion.`}
+            <p className="mt-3 border-t border-gray-200 pt-2.5 text-center text-[10px] leading-4 text-gray-500">
+              Computer-generated report from {brand.name}. Scores, attendance, and activity come directly from LMS records for the stated period.
             </p>
           </div>
-          <div className="space-y-3">
-            {actionPlan.map((step, i) => (
-              <div key={i} className="flex gap-3 rounded-xl bg-white p-3 shadow-sm">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-black text-amber-700">{i + 1}</span>
-                <p className="text-sm leading-6 text-gray-700">{step}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      {topicMap.length > 0 && (
-        <Section title="Topic Mastery Map" icon={Zap} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} avoidBreak={false}>
-          <div className="overflow-hidden rounded-xl border border-gray-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">Priority Topic</th>
-                  <th className="px-4 py-3">Subject</th>
-                  <th className="px-4 py-3 text-center">Mastery</th>
-                  <th className="px-4 py-3 text-center">Video Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {priorityTopics.map((t, i) => {
-                  const mastery = t.score_pct || 0;
-                  const mColor = mastery >= 75 ? 'text-emerald-600 bg-emerald-50' : mastery >= 50 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
-                  return (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
-                      <td className="px-4 py-3 font-medium">{t.topic || 'Concept'}</td>
-                      <td className="px-4 py-3 text-gray-500">{t.subject}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${mColor}`}>
-                          {Math.round(mastery)}%
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {t.video_completed 
-                          ? <span className="inline-flex items-center text-emerald-600"><CheckCircle className="mr-1 h-4 w-4" /> Watched</span>
-                          : <span className="inline-flex items-center text-gray-400"><XCircle className="mr-1 h-4 w-4" /> Unwatched</span>
-                        }
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
         </Section>
-      )}
-
-      {timeline.length > 0 && (
-        <Section title="Exam History" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} avoidBreak={false}>
-          <div className="overflow-hidden rounded-xl border border-gray-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Exam Name</th>
-                  <th className="px-4 py-3 text-center">Score</th>
-                  <th className="px-4 py-3 text-center">Class Avg</th>
-                  <th className="px-4 py-3 text-center">Rank</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {[...timeline].sort((a,b) => new Date(b.date) - new Date(a.date)).map((t, i) => (
-                  <tr key={i} className="bg-white" style={{ pageBreakInside: 'avoid' }}>
-                    <td className="px-4 py-3 text-gray-500">{fmtDate(t.date)}</td>
-                    <td className="px-4 py-3 font-medium">{t.test_title}</td>
-                    <td className="px-4 py-3 text-center font-bold text-gray-900">{Math.round(t.score_pct)}%</td>
-                    <td className="px-4 py-3 text-center text-gray-500">{t.class_avg_score_pct !== undefined ? `${Math.round(t.class_avg_score_pct)}%` : '-'}</td>
-                    <td className="px-4 py-3 text-center text-gray-500">{t.rank ? `${t.rank}/${t.total_attempts}` : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
-      )}
-
-      {/* Footer */}
-      <div className="mt-12 border-t border-gray-100 pt-8 pb-4 flex items-center justify-between" style={{ pageBreakInside: 'avoid' }}>
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-bold text-gray-800">{brand.name} Learning Management System</span>
-          <span className="text-xs text-gray-400 font-medium tracking-wide">Report generated securely on {fmtDate(new Date().toISOString())}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right text-[10px] text-gray-400 uppercase tracking-widest">
-            <p>Scan to Verify</p>
-            <p>Authenticity</p>
-          </div>
-          <div className="p-1 bg-white border border-gray-200 rounded-lg shadow-sm">
-            <QRCode value={`${brand.url}/verify/${s.id || 'student'}`} size={48} level="L" />
-          </div>
-        </div>
-      </div>
+      </ReportPage>
     </div>
   );
 };
@@ -1463,6 +1402,399 @@ const ExamResultTemplateV2 = ({ reviewData, result, student, testMeta }) => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Exam Result V3 — simple 3-page report card.
+// Page 1: fixed-height summary a parent can read in 10 seconds.
+// Page 2: answer map + plain-language tips. Page 3+: question review table.
+// Layout rules for html2canvas: flexbox only (no CSS grid), explicit pixel
+// widths on every column, fixed table layout, no line-clamp.
+// ---------------------------------------------------------------------------
+
+const V3_PASS_MARK_PCT = 35;
+const V3_GRADE_LEGEND = 'Grades: A+ 90-100 · A 80-89 · B+ 70-79 · B 60-69 · C 50-59 · D 35-49 · E below 35 · Pass mark 35%';
+
+const fmtMarks = (n) => {
+  const v = safeNumber(n);
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+};
+
+const v3DefaultRemark = ({ cancelled, flagged, scorePct }) => {
+  if (cancelled) return 'This exam was cancelled because of a rule violation during the test. Please meet the teacher to discuss the next step.';
+  if (flagged) return 'The result is under review because unusual activity was noticed during the exam. Please meet the teacher.';
+  if (scorePct >= 90) return 'Outstanding result. Keep the same study routine and help classmates where you can.';
+  if (scorePct >= 75) return 'Very good performance. A little more practice on the missed questions will push this even higher.';
+  if (scorePct >= 60) return 'Good effort. Redo the wrong answers this week and attempt one timed practice test.';
+  if (scorePct >= V3_PASS_MARK_PCT) return 'Passed, but there is clear room to improve. Focus on the questions listed on the next pages.';
+  return 'Below the pass mark this time. Please revise the basics and meet the teacher for a revision plan.';
+};
+
+const V3StatusChip = ({ state }) => {
+  if (state === 'correct') return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+      <CheckCircle className="h-3 w-3" strokeWidth={3} /> Correct
+    </span>
+  );
+  if (state === 'skipped') return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-600">
+      <Minus className="h-3 w-3" strokeWidth={3} /> Skipped
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">
+      <XCircle className="h-3 w-3" strokeWidth={3} /> Wrong
+    </span>
+  );
+};
+
+const V3StatTile = ({ icon: Icon, label, value, iconColor }) => (
+  <div className="flex-1 rounded-xl border border-gray-200 bg-white p-3 text-center" style={{ pageBreakInside: 'avoid' }}>
+    <div className="flex items-center justify-center gap-1.5">
+      <Icon className={`h-3.5 w-3.5 ${iconColor}`} strokeWidth={2.5} />
+      <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{label}</span>
+    </div>
+    <p className="mt-1.5 text-2xl font-black leading-none text-gray-950">{value}</p>
+  </div>
+);
+
+const V3CompareBar = ({ label, value, barColor }) => (
+  <div className="flex items-center gap-3" style={{ pageBreakInside: 'avoid' }}>
+    <span className="w-28 shrink-0 text-xs font-semibold text-gray-600">{label}</span>
+    <div className="h-4 flex-1 overflow-hidden rounded-full bg-gray-100">
+      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(clampPct(value), 1)}%` }} />
+    </div>
+    <span className="w-12 shrink-0 text-right text-sm font-bold text-gray-900">{Math.round(clampPct(value))}%</span>
+  </div>
+);
+
+const V3PageTitle = ({ title, sub, right }) => (
+  <div className="mb-5 flex items-end justify-between border-b-2 border-ink pb-3">
+    <div>
+      <h2 className="text-xl font-black tracking-tight text-gray-950">{title}</h2>
+      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+    </div>
+    {right && <span className="whitespace-nowrap text-right text-[10px] font-bold uppercase leading-4 tracking-widest text-gray-400">{shortText(right, 44)}</span>}
+  </div>
+);
+
+export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) => {
+  const brand = getBranding();
+
+  // ---- derived numbers ----
+  const totalMarks = safeNumber(result.total_marks ?? testMeta?.total_marks);
+  const score = safeNumber(result.score);
+  const scorePct = clampPct(result.percentage ?? (totalMarks ? (score / totalMarks) * 100 : 0));
+  const grade = gradeFor(scorePct);
+  const cancelled = Boolean(result.cancelled);
+  const flagged = Boolean(result.flagged) && !cancelled;
+  const passed = !cancelled && scorePct >= V3_PASS_MARK_PCT;
+
+  const qs = Array.isArray(reviewData?.questions) ? reviewData.questions : [];
+  const ans = reviewData?.answers || {};
+  const correctCount = safeNumber(result.correct_count, qs.filter(q => answerStatus(q, ans).isCorrect).length);
+  const wrongCount = safeNumber(result.wrong_count, qs.filter(q => { const s = answerStatus(q, ans); return s.answered && !s.isCorrect; }).length);
+  const totalQuestions = qs.length || safeNumber(result.total, correctCount + wrongCount);
+  const skippedCount = Math.max(0, totalQuestions - correctCount - wrongCount);
+  const answeredCount = correctCount + wrongCount;
+  const accuracyPct = answeredCount ? percentOf(correctCount, answeredCount) : 0;
+  const completionPct = totalQuestions ? percentOf(answeredCount, totalQuestions) : 0;
+  const deducted = safeNumber(result.marks_deducted);
+
+  const durationMins = safeNumber(testMeta?.duration_mins, 0) || null;
+  let timeTakenMins = null;
+  const startedAt = result.started_at ? new Date(result.started_at) : null;
+  const submittedAt = result.submitted_at ? new Date(result.submitted_at) : null;
+  if (startedAt && submittedAt && !Number.isNaN(startedAt.getTime()) && !Number.isNaN(submittedAt.getTime()) && submittedAt > startedAt) {
+    timeTakenMins = Math.max(1, Math.round((submittedAt - startedAt) / 60000));
+    if (durationMins && timeTakenMins > durationMins) timeTakenMins = durationMins;
+  }
+  const timeText = timeTakenMins !== null
+    ? `${timeTakenMins}${durationMins ? `/${durationMins}` : ''}`
+    : durationMins ? `${durationMins}` : '-';
+
+  const classAvgPct = result.class_avg_score_pct !== undefined && result.class_avg_score_pct !== null ? clampPct(result.class_avg_score_pct) : undefined;
+  const highestPct = result.highest_score_pct !== undefined && result.highest_score_pct !== null ? clampPct(result.highest_score_pct) : undefined;
+
+  const remark = (result.teacher_remark || '').trim() || v3DefaultRemark({ cancelled, flagged, scorePct });
+
+  // ---- answer map (falls back to counts when question data is missing) ----
+  const matrixItems = totalQuestions > 0
+    ? Array.from({ length: totalQuestions }).map((_, index) => {
+        const q = qs[index];
+        if (q) {
+          const status = answerStatus(q, ans);
+          return { index, state: status.isCorrect ? 'correct' : status.isSkipped ? 'skipped' : 'wrong' };
+        }
+        const state = index < correctCount ? 'correct' : index < correctCount + wrongCount ? 'wrong' : 'skipped';
+        return { index, state };
+      })
+    : [];
+
+  const plural = (n) => (n === 1 ? '' : 's');
+  const tips = [
+    wrongCount > 0 ? `Redo the ${wrongCount} wrong question${plural(wrongCount)} on the review page without looking at the answers first.` : null,
+    skippedCount > 0 ? `${skippedCount} question${plural(skippedCount)} ${skippedCount === 1 ? 'was' : 'were'} left blank — practise finishing the paper${durationMins ? ` within ${durationMins} minutes` : ''}.` : null,
+    deducted > 0 ? `${fmtMarks(deducted)} mark${plural(deducted)} lost to negative marking — answer only after ruling out at least two options.` : null,
+    accuracyPct < 70 && answeredCount > 0 ? `Accuracy is ${pctText(accuracyPct)} — revise the topic once more before trying to answer faster.` : null,
+  ].filter(Boolean).slice(0, 4);
+  if (!tips.length) tips.push('Great paper — keep one quick revision and one timed practice before the next exam.');
+
+  const examDate = fmtDate(result.submitted_at || testMeta?.scheduled_for || new Date().toISOString());
+  const identityRows = [
+    { label: 'Student ID', value: student?.student_code || '-' },
+    { label: 'Exam date', value: examDate },
+    ...(testMeta?.topic_tag ? [{ label: 'Topic', value: shortText(testMeta.topic_tag, 30) }] : []),
+    { label: 'Duration', value: durationMins ? `${durationMins} min` : '-' },
+  ];
+
+  const footer = (
+    <div className="mt-5 border-t border-gray-200 pt-3" style={{ pageBreakInside: 'avoid' }}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold text-gray-800">{brand.name}</p>
+          <p className="mt-0.5 text-[10px] font-medium text-gray-400">Result generated on {fmtDate(new Date().toISOString())} · This is a computer-generated document.</p>
+          <p className="mt-1.5 text-[9px] font-medium text-gray-400">{V3_GRADE_LEGEND}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="text-right text-[9px] font-bold uppercase tracking-widest text-gray-400">
+            <p>Scan to</p>
+            <p>Verify</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-1">
+            <QRCode value={`${brand.url}/verify/exam/${result.id || 'exam'}`} size={44} level="L" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto box-border bg-white px-8 py-6 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
+
+      {/* ============================== PAGE 1 ============================== */}
+      {/* Brand bar */}
+      <div className="flex items-center justify-between border-b-2 border-ink pb-4">
+        <div className="flex items-center gap-3">
+          {brand.logoUrl && (
+            <img src={brand.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg bg-white object-contain" crossOrigin="anonymous" />
+          )}
+          <div>
+            <p className="text-lg font-black leading-tight tracking-tight text-gray-950">{brand.name}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Exam Result Report</p>
+          </div>
+        </div>
+        <div className="rounded-lg bg-ink px-4 py-2 text-xs font-black uppercase tracking-widest text-white">
+          Exam Result
+        </div>
+      </div>
+
+      {/* Identity */}
+      <div className="mt-4 flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4" style={{ pageBreakInside: 'avoid' }}>
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-pastel-sky">
+          {student?.avatar_url ? (
+            <img src={student.avatar_url} alt="Student" className="h-full w-full object-cover" crossOrigin="anonymous" />
+          ) : (
+            <span className="text-xl font-black text-[#2383E2]">{(student?.name || 'S').charAt(0).toUpperCase()}</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xl font-black leading-7 tracking-tight text-gray-950">{shortText(student?.name || 'Student', 30)}</p>
+          <p className="mt-0.5 text-xs font-semibold leading-5 text-gray-500">
+            {shortText([student?.standard_name, testMeta?.subject_name].filter(Boolean).join(' · ') || '-', 50)}
+          </p>
+          <p className="mt-0.5 text-xs font-bold leading-5 text-gray-700">{shortText(testMeta?.title || 'Exam', 52)}</p>
+        </div>
+        <div className="w-52 shrink-0">
+          {identityRows.map((row, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 py-0.5">
+              <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-gray-400">{row.label}</span>
+              <span className="whitespace-nowrap text-xs font-bold leading-5 text-gray-800">{shortText(row.value, 22)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Integrity banner */}
+      {(flagged || cancelled) && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4" style={{ pageBreakInside: 'avoid' }}>
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+          <div>
+            <h3 className="text-sm font-bold text-red-900">{cancelled ? 'Exam Cancelled' : 'Result Under Review'}</h3>
+            <p className="mt-0.5 text-xs leading-5 text-red-700">
+              {cancelled
+                ? 'This exam was cancelled due to a rule violation during the test. The score is recorded as 0. Please contact the teacher.'
+                : 'Unusual activity was noticed during this exam, so the result is under teacher review. Please contact the teacher.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Score hero */}
+      <div className="mt-4 flex gap-4" style={{ pageBreakInside: 'avoid' }}>
+        <div className="flex-1 rounded-xl border border-[#D2E4F8] bg-pastel-sky p-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#2383E2]">Marks Obtained</p>
+          <div className="mt-1 flex items-end gap-3">
+            <span className="text-5xl font-black leading-none tracking-tight text-gray-950">{fmtMarks(score)}</span>
+            <span className="pb-0.5 text-xl font-bold text-gray-400">/ {totalMarks ? fmtMarks(totalMarks) : '-'}</span>
+            <span className={`mb-1 ml-1 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide text-white ${cancelled ? 'bg-red-600' : passed ? 'bg-emerald-600' : 'bg-red-600'}`}>
+              {cancelled ? 'Cancelled' : passed ? 'Passed' : 'Not Passed'}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-semibold text-gray-600">{Math.round(scorePct)}% score{deducted > 0 ? ` · includes -${fmtMarks(deducted)} negative marks` : ''}</p>
+        </div>
+        <div className="flex w-32 shrink-0 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Grade</span>
+          <span className={`mt-1 text-4xl font-black leading-none ${grade.color}`}>{grade.grade}</span>
+        </div>
+        <div className="flex w-32 shrink-0 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Class Rank</span>
+          <span className="mt-1 text-4xl font-black leading-none text-gray-950">{result.rank || '-'}</span>
+          {result.total_attempts ? <span className="mt-1 text-[10px] font-bold text-gray-400">of {result.total_attempts}</span> : null}
+        </div>
+      </div>
+
+      {/* Counts row */}
+      <div className="mt-4 flex gap-3" style={{ pageBreakInside: 'avoid' }}>
+        <V3StatTile icon={CheckCircle} label="Correct" value={correctCount} iconColor="text-emerald-500" />
+        <V3StatTile icon={XCircle} label="Wrong" value={wrongCount} iconColor="text-red-500" />
+        <V3StatTile icon={Minus} label="Skipped" value={skippedCount} iconColor="text-gray-400" />
+        <V3StatTile icon={AlertTriangle} label="Negative" value={deducted > 0 ? `-${fmtMarks(deducted)}` : '0'} iconColor="text-amber-500" />
+        <V3StatTile icon={Clock} label="Time (min)" value={timeText} iconColor="text-blue-500" />
+      </div>
+
+      {/* Class comparison */}
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4" style={{ pageBreakInside: 'avoid' }}>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-800">
+          <Trophy className="h-4 w-4 text-amber-500" /> Compared with the class
+        </h3>
+        <div className="space-y-3">
+          <V3CompareBar label={student?.name ? shortText(student.name.split(' ')[0], 14) : 'Student'} value={scorePct} barColor="bg-[#2383E2]" />
+          {classAvgPct !== undefined && <V3CompareBar label="Class average" value={classAvgPct} barColor="bg-gray-400" />}
+          {highestPct !== undefined && <V3CompareBar label="Class topper" value={highestPct} barColor="bg-emerald-500" />}
+        </div>
+        {classAvgPct !== undefined && (
+          <p className="mt-3 text-xs font-semibold text-gray-500">{shortText(student?.name || 'The student', 24)} scored {compareCopy(scorePct, classAvgPct)}.</p>
+        )}
+      </div>
+
+      {/* Teacher's note */}
+      <div className="mt-4 rounded-xl border-l-4 border-ink bg-gray-50 p-4" style={{ pageBreakInside: 'avoid' }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Teacher's Note</p>
+        <p className="mt-1 text-sm leading-6 text-gray-700">{remark}</p>
+      </div>
+
+      {footer}
+
+      {/* ============================== PAGE 2 ============================== */}
+      {!cancelled && matrixItems.length > 0 && (
+        <div style={{ pageBreakBefore: 'always' }} className="pt-2">
+          <V3PageTitle
+            title="Answer Map"
+            sub="Every question at a glance — green is correct, red is wrong, grey was skipped"
+            right={`${student?.name || 'Student'} · ${shortText(testMeta?.title || 'Exam', 30)}`}
+          />
+
+          <div className="rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex flex-wrap gap-2">
+              {matrixItems.map((item) => {
+                const bg = item.state === 'correct' ? 'bg-emerald-500' : item.state === 'skipped' ? 'bg-gray-300' : 'bg-red-500';
+                return (
+                  <div key={item.index} className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white ${bg}`}>
+                    {item.index + 1}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex gap-5 border-t border-gray-100 pt-3 text-[11px] font-semibold text-gray-500">
+              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-emerald-500" /> Correct ({correctCount})</span>
+              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-red-500" /> Wrong ({wrongCount})</span>
+              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-gray-300" /> Skipped ({skippedCount})</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex gap-4">
+            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
+                <Target className="h-4 w-4 text-red-500" /> Where marks were lost
+              </h3>
+              <div className="space-y-3">
+                <V3CompareBar label="Accuracy" value={accuracyPct} barColor="bg-emerald-500" />
+                <V3CompareBar label="Completed" value={completionPct} barColor="bg-blue-500" />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-gray-500">
+                Accuracy = correct answers out of attempted. Completed = questions attempted out of {totalQuestions}.
+              </p>
+            </div>
+            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
+                <Brain className="h-4 w-4 text-[#2383E2]" /> What to do next
+              </h3>
+              <div className="space-y-2.5">
+                {tips.map((tip, i) => (
+                  <div key={i} className="flex gap-2.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-pastel-sky text-[10px] font-black text-[#2383E2]">{i + 1}</span>
+                    <p className="text-xs leading-5 text-gray-700">{tip}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================== PAGE 3+ ============================== */}
+      {!cancelled && qs.length > 0 && (
+        <div style={{ pageBreakBefore: 'always' }} className="pt-2">
+          <V3PageTitle
+            title="Question Review"
+            sub="Each question with the given answer and the correct answer"
+            right={`${student?.name || 'Student'} · ${shortText(testMeta?.title || 'Exam', 30)}`}
+          />
+          <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 34 }} />
+              <col />
+              <col style={{ width: 128 }} />
+              <col style={{ width: 128 }} />
+              <col style={{ width: 92 }} />
+            </colgroup>
+            <thead>
+              <tr className="bg-gray-50 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                <th className="border-b border-gray-200 px-2 py-2.5 text-center">#</th>
+                <th className="border-b border-gray-200 px-3 py-2.5">Question</th>
+                <th className="border-b border-gray-200 px-3 py-2.5">Given Answer</th>
+                <th className="border-b border-gray-200 px-3 py-2.5">Correct Answer</th>
+                <th className="border-b border-gray-200 px-2 py-2.5 text-center">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {qs.map((q, i) => {
+                const { studentAnswer, isCorrect, isSkipped } = answerStatus(q, ans);
+                const options = Array.isArray(q.options) ? q.options : [];
+                const state = isCorrect ? 'correct' : isSkipped ? 'skipped' : 'wrong';
+                return (
+                  <tr key={i} className={state === 'wrong' ? 'bg-red-50/60' : 'bg-white'} style={{ pageBreakInside: 'avoid' }}>
+                    <td className="border-b border-gray-100 px-2 py-2.5 text-center align-top text-xs font-bold text-gray-400">{i + 1}</td>
+                    <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs font-medium leading-5 text-gray-800">{shortText(q.question, 120)}</td>
+                    <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs leading-5 text-gray-600">
+                      {isSkipped ? <span className="italic text-gray-400">Skipped</span> : shortText(options[studentAnswer] ?? `Option ${safeNumber(studentAnswer) + 1}`, 44)}
+                    </td>
+                    <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs font-semibold leading-5 text-emerald-700">
+                      {shortText(options[q.correct_idx] ?? `Option ${safeNumber(q.correct_idx) + 1}`, 44)}
+                    </td>
+                    <td className="border-b border-gray-100 px-2 py-2.5 text-center align-top">
+                      <V3StatusChip state={state} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Exporters
 export function buildStudentReportPdf({ data, period = 'overall' }) {
   if (!data) return;
@@ -1472,8 +1804,11 @@ export function buildStudentReportPdf({ data, period = 'overall' }) {
 
 export function buildExamResultPdf({ reviewData, result, student, testMeta }) {
   if (!result) return;
-  const name = (student?.name || 'Student').replace(/\s+/g, '_');
-  return mountAndPrint(ExamResultTemplateV2, { reviewData, result, student, testMeta }, `${name}_Exam_Result.pdf`);
+  const clean = (s, max) => String(s || '').trim().replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, max);
+  const who = clean(student?.student_code, 20) || clean(student?.name, 24) || 'Student';
+  const what = clean(testMeta?.title, 40) || 'Exam';
+  const when = String(result.submitted_at || new Date().toISOString()).slice(0, 10);
+  return mountAndPrint(ExamResultTemplateV3, { reviewData, result, student, testMeta }, `${who}_${what}_${when}.pdf`);
 }
 
 const ClassAnalyticsTemplate = ({ analytics, standardName }) => {

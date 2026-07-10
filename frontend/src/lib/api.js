@@ -568,10 +568,11 @@ const normalizeReportV2 = (report = {}) => {
     progressionByTest[key][t.subject || 'General'] = clampPct(t.score_pct);
   });
 
+  const bySubject = (report.class_averages || {}).by_subject || {};
   const radarData = (report.subject_radar || []).map((r) => ({
     subject: r.subject || 'Subject',
     student: clampPct(r.test_count ? r.test_avg : (r.attendance_pct || r.video_pct || 0)),
-    classAvg,
+    classAvg: clampPct(r.subject_id && bySubject[r.subject_id] != null ? bySubject[r.subject_id] : classAvg),
   }));
 
   const topicItems = report.topic_map || [];
@@ -734,14 +735,14 @@ const normalizeReportV2 = (report = {}) => {
     ...timeItems.filter((item) => item.value > 0),
   ];
 
-  const attendanceDays = (report.attendance_heatmap || []).slice(-31).map((r, index) => {
+  const attendanceDays = (report.attendance_heatmap || []).map((r) => {
     const status = (r.absent || 0) > (r.present || 0) + (r.late || 0)
       ? 'absent'
       : (r.late || 0) > 0 ? 'late' : 'present';
     return { date: r.date, dayNumber: dayNumber(r.date, null), status, info: status };
   });
 
-  const testDays = timeline.slice(-31).map((t, index) => ({
+  const testDays = timeline.map((t) => ({
     date: t.date,
     dayNumber: dayNumber(t.date, null),
     hasTest: true,
@@ -749,11 +750,16 @@ const normalizeReportV2 = (report = {}) => {
     testName: t.test_title || 'Test',
   }));
 
-  const bellBins = Array.from({ length: 11 }, (_, i) => ({ scoreBin: i * 10, count: 0 }));
-  timeline.forEach((t) => {
-    const bin = Math.max(0, Math.min(10, Math.floor(clampPct(t.score_pct) / 10)));
-    bellBins[bin].count += 1;
-  });
+  const bellBins = report.class_bell_bins && report.class_bell_bins.some((b) => b.count > 0)
+    ? report.class_bell_bins
+    : (() => {
+        const bins = Array.from({ length: 11 }, (_, i) => ({ scoreBin: i * 10, count: 0 }));
+        timeline.forEach((t) => {
+          const bin = Math.max(0, Math.min(10, Math.floor(clampPct(t.score_pct) / 10)));
+          bins[bin].count += 1;
+        });
+        return bins;
+      })();
 
   return {
     ...report,

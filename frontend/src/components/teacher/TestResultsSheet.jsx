@@ -86,15 +86,32 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
     if (pdfBusy === attempt.id) return;
     setPdfBusy(attempt.id);
     try {
-      // Fetch the question+answer review data for this student's attempt
-      const reviewData = await testApi.getAttemptReview(test.id, attempt.student_id).catch(() => null);
+      // Teacher-side review data: /attempt-review is student-only, so pull the
+      // questions (with correct_idx) from the teacher edit endpoint and pair
+      // them with this attempt's stored answers.
+      let reviewData = null;
+      try {
+        const editData = await testApi.getTestForEdit(test.id);
+        let answers = attempt.answers;
+        if (typeof answers === 'string') {
+          try { answers = JSON.parse(answers); } catch { answers = {}; }
+        }
+        reviewData = { questions: editData?.questions || [], answers: answers || {} };
+      } catch { /* PDF still renders from summary counts */ }
+
+      const resultsTest = results?.test || {};
+      const totalMarks = test.total_marks || test.totalMarks || resultsTest.total_marks;
+      // stats.avg_score / highest_score are raw marks — convert to % for the PDF
+      const marksToPct = (m) => (m !== undefined && m !== null && totalMarks ? (m / totalMarks) * 100 : undefined);
+
       const { buildExamResultPdf } = await import('../../lib/reportPdf');
       await buildExamResultPdf({
         reviewData,
         result: {
+          id:            attempt.id,
           score:         attempt.score,
-          total_marks:   test.total_marks || test.totalMarks,
-          percentage:    test.total_marks ? (attempt.score / test.total_marks) * 100 : null,
+          total_marks:   totalMarks,
+          percentage:    totalMarks ? (attempt.score / totalMarks) * 100 : null,
           correct_count: attempt.correct_count,
           wrong_count:   attempt.wrong_count,
           marks_deducted: attempt.marks_deducted,
@@ -103,10 +120,10 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
           cancelled:     attempt.terminated,
           points_earned: attempt.points_earned,
           rank:          attempt.rank,
-          total_attempts: results?.attempts?.length,
-          class_avg_score_pct: results?.stats?.avg_score,
-          highest_score_pct: results?.stats?.highest_score,
-          lowest_score_pct: results?.stats?.lowest_score,
+          total_attempts: attempt.total_attempts || results?.attempts?.length,
+          class_avg_score_pct: marksToPct(results?.stats?.avg_score),
+          highest_score_pct: marksToPct(results?.stats?.highest_score),
+          lowest_score_pct: marksToPct(results?.stats?.lowest_score),
           flagged_count: results?.stats?.flagged_count,
           started_at:    attempt.started_at,
           submitted_at:  attempt.submitted_at,
@@ -114,16 +131,17 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
         student: {
           name:         student.name,
           student_code: student.student_code,
-          standard_name: student.standard_name,
+          standard_name: resultsTest.subject_classes?.standards?.name || student.standard_name,
           avatar_url:   student.avatar_url,
           username:     student.username,
         },
         testMeta: {
           title:        test.title,
-          subject_name: test.subject_name || test.subject || '',
-          duration_mins: test.duration_mins || test.duration,
-          total_marks:  test.total_marks || test.totalMarks,
+          subject_name: resultsTest.subject_classes?.name || test.subject_name || test.subject || '',
+          duration_mins: test.duration_mins || test.duration || resultsTest.duration_mins,
+          total_marks:  totalMarks,
           scheduled_for: test.scheduled_for,
+          topic_tag:    resultsTest.topic_tag || test.topic_tag,
         },
       });
     } catch (e) {
