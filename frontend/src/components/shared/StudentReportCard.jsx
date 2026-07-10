@@ -130,27 +130,32 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   const aiRequestRef = useRef(0);
   const autoOpenTriggeredRef = useRef(false);
 
-  const { 
-    student = {}, 
-    trendData = [], 
+  const {
+    student = {},
+    trendData = [],
     progressionData = [],
-    radarData = [], 
-    polarData = [], 
-    scatterData = [], 
-    rangeData = [], 
-    heatmapData = [], 
+    radarData = [],
+    polarData = [],
+    scatterData = [],
+    rangeData = [],
+    heatmapData = [],
     learningSignalData = [],
     activityFlowData = [],
-    attendanceDays = [], 
-    testDays = [], 
-    bumpData = [], 
-    assignmentData = [], 
-    bellData = [], 
+    attendanceDays = [],
+    testDays = [],
+    bumpData = [],
+    assignmentData = [],
+    bellData = [],
     quadrantData = [],
     activityData = [],
     donutData = [],
     streakData = {},
     badges = [],
+    insightChips = [],
+    classPercentile = null,
+    classSize = 0,
+    periodAvgScore = null,
+    periodAttendancePct = null,
   } = data || {};
   const studentId = student?.id;
   const reportPeriod = period || 'overall';
@@ -164,15 +169,15 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     { id: 'monthly', label: 'Monthly' },
     { id: 'weekly',  label: 'Weekly'  },
   ];
-  const avgScore = Math.round(student.avg_score || 0);
-  const attendancePct = Math.round(student.attendance_pct || 0);
+  const avgScore = Math.round(periodAvgScore ?? student.avg_score ?? 0);
+  const attendancePct = Math.round(periodAttendancePct ?? student.attendance_pct ?? 0);
   const firstName = student.name ? student.name.split(' ')[0] : 'Student';
   const animatedScore = useCountUp(avgScore);
   const animatedAttendance = useCountUp(attendancePct);
   const animatedStreak = useCountUp(streakData?.current || 0);
 
   const handleShare = async () => {
-    const text = `Udaya LMS Report for ${student.name || 'Student'} (${period}). Score: ${student.avg_score ?? 'N/A'}% | Attendance: ${student.attendance_pct ?? 'N/A'}%`;
+    const text = `Udaya LMS Report for ${student.name || 'Student'} (${period}). Score: ${avgScore ?? 'N/A'}% | Attendance: ${attendancePct ?? 'N/A'}%`;
     if (navigator.share) {
       try { await navigator.share({ title: `${student.name || 'Student'} - Report Card`, text }); return; } catch {}
     }
@@ -287,7 +292,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         <div className="md:col-span-6 xl:col-span-4 grid grid-cols-2 gap-3 md:gap-4">
           <MetricTile icon={TrendingUp} label="Avg Score" value={`${animatedScore}%`} accent={avgScore === 0 ? 'blue' : avgScore >= 80 ? 'emerald' : avgScore >= 40 ? 'amber' : 'rose'} />
           <MetricTile icon={CalendarDays} label="Attendance" value={`${animatedAttendance}%`} accent={attendancePct === 0 ? 'blue' : attendancePct >= 90 ? 'emerald' : attendancePct >= 75 ? 'amber' : 'rose'} />
-          <MetricTile icon={Award} label="Rank" value={data?.rank ? `#${data.rank}` : '--'} accent="amber" />
+          <MetricTile icon={Award} label={`Rank · ${PERIODS.find(p => p.id === reportPeriod)?.label || 'Overall'}`} value={data?.rank ? `#${data.rank}` : '--'} accent="amber" />
           <div className="rounded-card p-4 ring-1 bg-gradient-to-br from-orange-50 to-amber-50 ring-orange-100 shadow-soft">
             <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-orange-400">
               <span>🔥</span> Streak
@@ -307,6 +312,18 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
             {badges.map((b, i) => (
               <div key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-100 shadow-soft text-sm font-bold text-slate-700">
                 <span>{b.emoji}</span> {b.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {insightChips.length > 0 && (
+          <div className="md:col-span-6 xl:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-3">
+            {insightChips.map((chip, i) => (
+              <div key={i} className="rounded-card p-4 bg-white border border-slate-100 shadow-soft flex flex-col gap-1.5">
+                <span className="text-xl">{chip.emoji}</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{chip.title}</span>
+                <span className="text-sm font-extrabold text-slate-800 leading-snug">{chip.desc}</span>
               </div>
             ))}
           </div>
@@ -337,12 +354,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         </GlassCard>
         <GlassCard className="md:col-span-3 xl:col-span-3" title="Attendance" subtitle="Present days and consistency" tone="emerald">
           <div className="flex-1 flex items-center justify-center py-4">
-            <LiquidFillGauge percentage={student.attendance_pct || 0} size={150} />
+            <LiquidFillGauge percentage={attendancePct} size={150} />
           </div>
         </GlassCard>
         <GlassCard className="md:col-span-3 xl:col-span-3" title="Score Health" subtitle="Current academic average" tone="amber">
           <div className="flex-1 flex items-center justify-center py-4">
-            <NeonProgressGauge percentage={student.avg_score || 0} label="Average" color="#D97706" />
+            <NeonProgressGauge percentage={avgScore} label="Average" color="#D97706" />
           </div>
         </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-6" title="Recent Activity" subtitle="Latest learning events" tone="blue">
@@ -350,6 +367,21 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         </GlassCard>
 
         <SectionTitle eyebrow="Assessments" title="Test behavior and class position" />
+
+        {classPercentile !== null && classSize > 1 && (
+          <div className="md:col-span-6 xl:col-span-12 rounded-card p-4 md:p-5 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 shadow-soft flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-wider text-violet-500">Class percentile</p>
+              <p className="text-base md:text-lg font-black text-slate-900 mt-1 leading-snug">
+                You scored higher than <span className="text-violet-600">{classPercentile}%</span> of your class
+                {classSize > 0 && <span className="text-slate-400 font-bold text-sm ml-1">({classSize} student{classSize === 1 ? '' : 's'})</span>}
+              </p>
+            </div>
+            <div className="text-4xl md:text-5xl font-black text-violet-600 tabular-nums flex-shrink-0">
+              {classPercentile}<span className="text-2xl">%</span>
+            </div>
+          </div>
+        )}
 
         <GlassCard className="md:col-span-6 xl:col-span-6" title="Class Range" subtitle="Student score position inside class spread" tone="blue">
           <QuizRangeChart data={rangeData} />
@@ -361,7 +393,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           <QuizBubbleScatter data={scatterData} />
         </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Class Distribution" subtitle="Score distribution with student marker" tone="amber">
-          <TestBellCurve data={bellData} studentScore={student.avg_score || 75} />
+          <TestBellCurve data={bellData} studentScore={avgScore || 75} />
         </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Rank Progression" subtitle="Movement on the leaderboard" tone="amber">
           <LeaderboardBumpChart data={bumpData} />

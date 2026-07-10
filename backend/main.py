@@ -3936,15 +3936,20 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         if subjects:
             class_ids_for_assign = [s["id"] for s in subjects]
             all_assigns_res = service_supabase.table("assignments").select(
-                "id, class_id, title"
+                "id, class_id, title, created_at"
             ).in_("class_id", class_ids_for_assign).execute()
             all_assigns = all_assigns_res.data or []
+            if period_start:
+                all_assigns = [a for a in all_assigns if (a.get("created_at") or "") >= period_start]
             assign_ids = [a["id"] for a in all_assigns]
 
             if assign_ids:
-                subs_res = service_supabase.table("assignment_submissions").select(
+                subs_q = service_supabase.table("assignment_submissions").select(
                     "assignment_id, marks_obtained, points_earned, submitted_at, graded_at"
-                ).eq("student_id", student_id).in_("assignment_id", assign_ids).execute()
+                ).eq("student_id", student_id).in_("assignment_id", assign_ids)
+                if period_start:
+                    subs_q = subs_q.gte("submitted_at", period_start)
+                subs_res = subs_q.execute()
                 my_assign_subs = subs_res.data or []
             else:
                 my_assign_subs = []
@@ -4078,7 +4083,10 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
     try:
         if subjects:
             class_ids = [s["id"] for s in subjects]
-            lc_res = service_supabase.table("live_classes").select("id").in_("class_id", class_ids).in_("status", ["ended", "live"]).execute()
+            lc_q = service_supabase.table("live_classes").select("id").in_("class_id", class_ids).in_("status", ["ended", "live"])
+            if period_start:
+                lc_q = lc_q.gte("scheduled_at", period_start)
+            lc_res = lc_q.execute()
             lcs = lc_res.data or []
             live_classes_stats["total"] = len(lcs)
             if lcs:
@@ -4165,7 +4173,14 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
                 _class_avg_cache[std_id] = (time_module.time() + 180, class_averages)
         except Exception as exc:
             print(f"Class averages error (non-fatal): {exc}")
-            class_averages = None
+            class_averages = {}
+
+    # ── Period-specific avg score and attendance ────────────────────────────
+    period_avg_score = round(sum(t["score_pct"] for t in test_timeline) / len(test_timeline), 1) if test_timeline else None
+    _att_total = len(att_rows)
+    _att_present = sum(1 for r in att_rows if r.get("status") == "present")
+    _att_late = sum(1 for r in att_rows if r.get("status") == "late")
+    period_attendance_pct = round((_att_present + _att_late * 0.5) / _att_total * 100, 1) if _att_total > 0 else None
 
     return {
         "student": student,
@@ -4191,6 +4206,8 @@ def get_student_report_v2(student_id: str, period: str = "overall", user = Depen
         "live_classes_stats": live_classes_stats,
         "class_averages": class_averages,
         "class_bell_bins": class_bell_bins,
+        "period_avg_score": period_avg_score,
+        "period_attendance_pct": period_attendance_pct,
     }
 
 
@@ -12712,7 +12729,7 @@ _WA_AUTO_KEYS = {
     "student name", "student id", "class", "username", "password", "login link",
     "institute name", "attendance", "score", "points", "latest exam",
     "latest assignment", "study material", "live class", "latest video", "date", "time",
-    "month", "year", "parent name", "student phone", "app download link",
+    "month", "year", "parent name", "parent phone", "student phone", "app download link",
 }
 
 # Legacy / loose spellings → canonical auto key. Keeps old templates and snake-case
@@ -12724,8 +12741,12 @@ _WA_ALIAS = {
     "school_name": "institute name", "school": "institute name", "institute": "institute name",
     "login_url": "login link", "link": "login link", "url": "login link",
     "parent_name": "parent name", "guardian": "parent name",
+    "parent_phone": "parent phone", "parent mobile": "parent phone",
+    "parent_mobile": "parent phone", "guardian phone": "parent phone",
+    "guardian_phone": "parent phone",
     "student_phone": "student phone", "phone": "student phone", "mobile": "student phone",
-    "test": "latest exam", "exam": "latest exam", "latest_test": "latest exam",
+    "test": "latest exam", "exam": "latest exam", "exam name": "latest exam",
+    "exam_name": "latest exam", "latest_test": "latest exam",
     "assignment": "latest assignment", "homework": "latest assignment", "latest_assignment": "latest assignment",
     "study_material": "study material", "material": "study material", "notes": "study material",
     "live_class": "live class", "zoom": "live class", "meeting": "live class",
@@ -12750,7 +12771,8 @@ def _wa_auto_value(key: str, recip: dict) -> str:
         "login link":        _wa_login_url() or "",
         "institute name":    _wa_branding_name() or _DEFAULT_INSTITUTE_NAME,
         "parent name":       "Parent",
-        "student phone":     recip.get("phone") or "",
+        "parent phone":      recip.get("parent_phone") or recip.get("phone") or "",
+        "student phone":     recip.get("student_phone") or "",
         "attendance":        f"{recip.get('attendance_pct') or 0}%",
         "score":             f"{recip.get('avg_score') or 0}%",
         "points":            str(recip.get("points") or 0),
@@ -13339,15 +13361,26 @@ async def wa_connection(user = Depends(verify_token)):
     # "is the URL set" — so the console banner agrees with the QR/status page.
     if provider == "baileys":
         import whatsapp_client as client
+        outbox_pending = 0
+        try:
+            import whatsapp_outbox
+            outbox_pending = whatsapp_outbox.pending_count()
+        except Exception:
+            pass
         try:
             svc = await client.status()
             connected = bool(svc.get("connected"))
             return {"provider": provider, "connected": connected,
                     "state": "open" if connected else "close",
-                    "number": svc.get("number") or "", "qr": svc.get("qr")}
+                    "number": svc.get("number") or "", "qr": svc.get("qr"),
+                    "today_count": svc.get("today_count"),
+                    "queue_length": svc.get("queue_length"),
+                    "warmup_limit": svc.get("warmup_limit"),
+                    "outbox_pending": outbox_pending}
         except client.ServiceDownError:
             return {"provider": provider, "connected": False, "state": "service_down",
-                    "number": "", "error": "The WhatsApp service is unreachable. Messages are buffered until it returns."}
+                    "number": "", "outbox_pending": outbox_pending,
+                    "error": "The WhatsApp service is unreachable. Messages are buffered until it returns."}
         except Exception as e:
             print(f"[wa] connection status failed: {e}")
             return {"provider": provider, "connected": False, "state": "close", "number": ""}
@@ -13402,7 +13435,19 @@ def wa_recipients(standard_ids: Optional[str] = None, user = Depends(verify_toke
 @app.get("/api/teacher/whatsapp/variables")
 def wa_variables(user = Depends(verify_token)):
     _wa_require_teacher(user)
-    return {"variables": [{**v, "token": "{" + v["name"] + "}"} for v in WA_VARIABLES]}
+    primary = {
+        "Student Name", "Student ID", "Class", "Password", "Login Link",
+        "Attendance", "Score", "Latest Exam", "Institute Name", "Date",
+        "Fee Amount", "Due Date", "Class Date", "Class Time",
+    }
+    variables = []
+    for v in WA_VARIABLES:
+        variables.append({
+            **v,
+            "advanced": bool(v.get("advanced")) or v["name"] not in primary,
+            "token": "{" + v["name"] + "}",
+        })
+    return {"variables": variables}
 
 
 # ── Media upload ──────────────────────────────────────────────────────────────
@@ -13644,6 +13689,33 @@ def wa_messages(limit: int = 100, status: Optional[str] = None, user = Depends(v
     except Exception:
         return {"messages": [], "spend_total": 0, "count": 0}
     return {"messages": rows, "spend_total": total, "count": len(rows)}
+
+
+@app.delete("/api/teacher/whatsapp/messages")
+def wa_clear_messages(status: Optional[str] = None, before: Optional[str] = None,
+                      standard_id: Optional[str] = None, user = Depends(verify_token)):
+    """Clear delivery-report rows for the current teacher only.
+
+    This intentionally does not delete saved templates, automatic jobs, or chat
+    inbox rows. Parent chats have their own per-message/per-thread delete flow.
+    """
+    _wa_require_teacher(user)
+    try:
+        q = service_supabase.table("whatsapp_messages").delete().eq(
+            "teacher_id", user["teacher_id"])
+        if status == "pending":
+            q = q.in_("status", ["queued", "not_configured"])
+        elif status:
+            q = q.eq("status", status)
+        if before:
+            q = q.lt("created_at", before)
+        if standard_id:
+            q = q.eq("standard_id", standard_id)
+        res = q.execute()
+        deleted = len(res.data or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not clear delivery history: {e}")
+    return {"ok": True, "deleted": deleted}
 
 
 # ── Dashboard stats (KPIs + donut + month spend + recent + scheduled) ──────────
@@ -14418,13 +14490,13 @@ def _wa_match_inbound(from_phone: str):
         return None
     try:
         srows = service_supabase.table("students").select(
-            "id, name, standard_id").in_("phone", variants).execute().data or []
+            "id, name, standard_id").in_("parent_phone", variants).execute().data or []
     except Exception:
         srows = []
     if not srows:
         try:
             srows = service_supabase.table("students").select(
-                "id, name, standard_id").in_("parent_phone", variants).execute().data or []
+                "id, name, standard_id").in_("phone", variants).execute().data or []
         except Exception:
             srows = []
     if not srows:
@@ -14637,7 +14709,7 @@ async def _wa_handle_baileys_event(body: dict):
     })
 
 
-async def _wa_handle_baileys_event(body: dict):
+async def _wa_handle_baileys_event_legacy_disabled(body: dict):
     from_phone = body.get("phone") or ""
     msg_body = body.get("body") or ""
     media_b64 = body.get("media_b64")
@@ -14901,7 +14973,7 @@ def wa_inbox_mark_read(data: WhatsAppInboxReadInput, user = Depends(verify_token
         q = service_supabase.table("whatsapp_inbox").update(
             {"read_by_teacher": True}).eq("teacher_id", user["teacher_id"])
         if data.from_phone:
-            q = q.eq("from_phone", data.from_phone)
+            q = q.in_("from_phone", _wa_phone_variants(data.from_phone))
         if data.message_ids:
             q = q.in_("id", data.message_ids)
         q.execute()
@@ -14925,8 +14997,11 @@ def wa_inbox_delete_chat(phone: str, user = Depends(verify_token)):
     _wa_require_teacher(user)
     try:
         # Wipe all inbound and outbound messages for this phone and teacher
-        service_supabase.table("whatsapp_inbox").delete().eq("teacher_id", user["teacher_id"]).eq("from_phone", phone).execute()
-        service_supabase.table("whatsapp_messages").delete().eq("teacher_id", user["teacher_id"]).eq("to_phone", phone).execute()
+        variants = _wa_phone_variants(phone)
+        service_supabase.table("whatsapp_inbox").delete().eq(
+            "teacher_id", user["teacher_id"]).in_("from_phone", variants).execute()
+        service_supabase.table("whatsapp_messages").delete().eq(
+            "teacher_id", user["teacher_id"]).in_("to_phone", variants).execute()
     except Exception as e:
         print(f"[wa] inbox delete chat failed: {e}")
     return {"ok": True}

@@ -111,7 +111,7 @@ def _teacher_standard_ids(main, teacher_id: str) -> set:
 def _load_student_for_teacher(main, teacher_id: str, student_id: str) -> dict:
     """Fetch a student and verify it belongs to one of this teacher's standards."""
     res = main.service_supabase.table("students").select(
-        "id, name, parent_phone, standard_id, whatsapp_opt_out, attendance_pct, avg_score"
+        "id, name, phone, parent_phone, standard_id, whatsapp_opt_out, attendance_pct, avg_score"
     ).eq("id", student_id).single().execute()
     s = res.data
     if not s:
@@ -148,7 +148,7 @@ def _resolve_parents(main, teacher_id: str, standard_id: str) -> list:
         "id", standard_id).single().execute().data or {}
     std_name = std.get("name") or ""
     students = main.service_supabase.table("students").select(
-        "id, name, parent_phone, standard_id, whatsapp_opt_out, attendance_pct, avg_score"
+        "id, name, phone, parent_phone, standard_id, whatsapp_opt_out, attendance_pct, avg_score"
     ).eq("standard_id", standard_id).execute().data or []
     out = []
     for s in students:
@@ -341,7 +341,7 @@ async def send_bulk_reports(body: BulkReportsBody, user=Depends(current_teacher)
     # Re-fetch full student rows for the report builder (recips are trimmed).
     ids = [r["id"] for r in recips]
     rows = main.service_supabase.table("students").select(
-        "id, name, parent_phone, standard_id, whatsapp_opt_out, attendance_pct, avg_score"
+        "id, name, phone, parent_phone, standard_id, whatsapp_opt_out, attendance_pct, avg_score"
     ).in_("id", ids).execute().data or []
     students = {s["id"]: s for s in rows}
 
@@ -455,9 +455,15 @@ async def status(user=Depends(current_teacher)):
         "today_count": _today_count(main, teacher_id),
         "daily_limit": _daily_limit(),
         "queue_length": queue_length,
+        "outbox_pending": 0,
         "warmup_limit": None,
         "recent": recent,
     }
+    try:
+        import whatsapp_outbox
+        out["outbox_pending"] = whatsapp_outbox.pending_count()
+    except Exception:
+        pass
 
     # Baileys transport: overlay the Node service's live connection + QR + counters.
     if provider == "baileys":

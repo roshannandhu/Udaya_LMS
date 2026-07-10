@@ -64,7 +64,6 @@ const SettingsPage            = lazyWithRetry(() => import('./pages/teacher/Sett
 const AttendancePage          = lazyWithRetry(() => import('./pages/teacher/AttendancePage'));
 const TeacherLiveClassesPage  = lazyWithRetry(() => import('./pages/teacher/TeacherLiveClassesPage'));
 const WhatsAppPage            = lazyWithRetry(() => import('./pages/teacher/WhatsAppCenterPage'));
-const WhatsAppStatusPage      = lazyWithRetry(() => import('./pages/teacher/WhatsAppStatus'));
 const AppDownloadPage         = lazyWithRetry(() => import('./pages/AppDownloadPage'));
 const PrivacyPolicyPage       = lazyWithRetry(() => import('./pages/PrivacyPolicyPage'));
 const DeleteAccountPage       = lazyWithRetry(() => import('./pages/DeleteAccountPage'));
@@ -332,7 +331,7 @@ export default function App() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="whatsapp" element={<WhatsAppPage />} />
-          <Route path="whatsapp/status" element={<WhatsAppStatusPage />} />
+          <Route path="whatsapp/status" element={<Navigate to="/teacher/whatsapp" replace state={{ tab: 'settings' }} />} />
         </Route>
 
         <Route path="/student" element={

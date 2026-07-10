@@ -548,6 +548,9 @@ const localDateKey = (date) => {
 
 const normalizeReportV2 = (report = {}) => {
   const student = report.student || {};
+  const periodAvgScore = report.period_avg_score != null ? Math.round(report.period_avg_score) : null;
+  const periodAttendancePct = report.period_attendance_pct != null ? Math.round(report.period_attendance_pct) : null;
+  const displayScore = periodAvgScore ?? clampPct(student.avg_score || 0);
   const classAvg = clampPct(report.class_averages?.avg_score ?? student.avg_score);
   const timeline = [...(report.test_timeline || [])].sort((a, b) =>
     String(a.date || '').localeCompare(String(b.date || ''))
@@ -570,11 +573,29 @@ const normalizeReportV2 = (report = {}) => {
     progressionByTest[key][t.subject || 'General'] = clampPct(t.score_pct);
   });
 
+  // Per-subject trend direction (improving / flat / declining) from test progression
+  const subjectScores = {};
+  Object.values(progressionByTest).forEach((row) => {
+    Object.entries(row).forEach(([subj, score]) => {
+      if (subj === 'testName' || typeof score !== 'number') return;
+      (subjectScores[subj] = subjectScores[subj] || []).push(score);
+    });
+  });
+  const subjectTrendDir = {};
+  Object.entries(subjectScores).forEach(([subj, scores]) => {
+    if (scores.length < 2) { subjectTrendDir[subj] = 'flat'; return; }
+    const half = Math.ceil(scores.length / 2);
+    const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const delta = avg(scores.slice(-half)) - avg(scores.slice(0, half));
+    subjectTrendDir[subj] = delta > 4 ? 'up' : delta < -4 ? 'down' : 'flat';
+  });
+
   const bySubject = (report.class_averages || {}).by_subject || {};
   const radarData = (report.subject_radar || []).map((r) => ({
     subject: r.subject || 'Subject',
     student: clampPct(r.test_count ? r.test_avg : (r.attendance_pct || r.video_pct || 0)),
     classAvg: clampPct(r.subject_id && bySubject[r.subject_id] != null ? bySubject[r.subject_id] : classAvg),
+    trendDir: subjectTrendDir[r.subject] || 'flat',
   }));
 
   const topicItems = report.topic_map || [];
@@ -614,7 +635,7 @@ const normalizeReportV2 = (report = {}) => {
   (report.assignment_heatmap || []).forEach((r) => bump(r.date, r.count || 0));
   const heatmapData = Object.entries(activityByDate)
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-28)
+    .slice(-84)
     .map(([date, count]) => ({ date, count }));
 
   // Streak computation from combined activity calendar
@@ -786,6 +807,39 @@ const normalizeReportV2 = (report = {}) => {
         return bins;
       })();
 
+  // Class percentile from bell distribution
+  const classSize = bellBins.reduce((s, b) => s + b.count, 0);
+  const studentBinIdx = Math.max(0, Math.min(10, Math.floor(displayScore / 10)));
+  const studentsBelow = bellBins.slice(0, studentBinIdx).reduce((s, b) => s + b.count, 0);
+  const classPercentile = classSize > 1 ? Math.round((studentsBelow / (classSize - 1)) * 100) : null;
+
+  // Auto insight chips derived from already-computed data
+  const insightChips = [];
+  if (radarData.length > 0) {
+    const sorted = [...radarData].sort((a, b) => b.student - a.student);
+    insightChips.push({ emoji: '🌟', title: 'Strongest subject', desc: `${sorted[0].subject} — ${sorted[0].student}%`, color: '#059669' });
+    const worst = sorted[sorted.length - 1];
+    if (sorted.length > 1)
+      insightChips.push({
+        emoji: worst.student < 50 ? '⚠️' : '📖',
+        title: worst.student < 50 ? 'Needs attention' : 'Lowest subject',
+        desc: `${worst.subject} — ${worst.student}%`,
+        color: worst.student < 50 ? '#DC2626' : '#D97706',
+      });
+  }
+  const aboveClass = radarData.filter((r) => r.student > r.classAvg).length;
+  if (radarData.length > 0)
+    insightChips.push({
+      emoji: aboveClass >= radarData.length / 2 ? '📈' : '📉',
+      title: 'vs Class average',
+      desc: `Above avg in ${aboveClass} of ${radarData.length} subjects`,
+      color: aboveClass >= radarData.length / 2 ? '#2563EB' : '#7C3AED',
+    });
+  if (trendData.length >= 2) {
+    const best = trendData.reduce((m, t) => (t.studentScore > m.studentScore ? t : m));
+    insightChips.push({ emoji: '🏅', title: 'Personal best', desc: `${best.name} — ${best.studentScore}%`, color: '#F59E0B' });
+  }
+
   // Badges — derived purely from already-computed data, no extra fetches
   const badges = [];
   if (currentStreak >= 7) badges.push({ emoji: '🔥', label: `${currentStreak}-day streak`, color: '#F97316' });
@@ -819,7 +873,6 @@ const normalizeReportV2 = (report = {}) => {
     scatterData,
     rangeData,
     heatmapData,
-    overlapData,
     donutData,
     treemapData: donutData.map((d) => ({ name: d.name, size: d.value })),
     learningSignalData,
@@ -832,6 +885,11 @@ const normalizeReportV2 = (report = {}) => {
     quadrantData: scatterData,
     streakData,
     badges,
+    classPercentile,
+    classSize,
+    insightChips,
+    periodAvgScore,
+    periodAttendancePct,
     activityData: recentTests.slice(-5).reverse().map((t) => ({
       time: String(t.date || '').slice(11, 16) || '--',
       title: `${t.test_title || 'Test'} - ${clampPct(t.score_pct)}%`,
@@ -1006,6 +1064,14 @@ export const whatsappApi = {
   // History + spend total
   getMessages: (limit = 100, status) =>
     apiClient(`/teacher/whatsapp/messages?limit=${limit}${status ? `&status=${status}` : ''}`),
+  clearMessages: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.before) params.set('before', filters.before);
+    if (filters.standard_id) params.set('standard_id', filters.standard_id);
+    const qs = params.toString();
+    return apiClient(`/teacher/whatsapp/messages${qs ? `?${qs}` : ''}`, { method: 'DELETE' });
+  },
 
   // Dashboard stats (KPIs, donut, month spend, recent, scheduled)
   getStats: () => apiClient('/teacher/whatsapp/stats'),

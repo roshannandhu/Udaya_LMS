@@ -15,82 +15,105 @@ function intensityClass(count) {
   return 'bg-teal-600 border-teal-700 shadow-sm shadow-teal-200';
 }
 
+const WEEKS = 12;
+const DAYS = WEEKS * 7;
+
 export default function EngagementHeatmap({ data = [] }) {
   const [tooltip, setTooltip] = useState(null);
 
   if (!data.length) {
-    return <EmptyChart label="No engagement activity yet" height={260} />;
+    return <EmptyChart label="No engagement activity yet" height={220} />;
   }
 
-  // Build a date-keyed lookup
+  // Date-keyed lookup
   const countByDate = {};
   data.forEach((d) => {
     if (d.date) countByDate[String(d.date).slice(0, 10)] = d.count || 0;
   });
 
-  // 28-day window ending at the latest date with activity
+  // 84-day window (12 weeks) ending at latest active date
   const allDates = Object.keys(countByDate).sort();
   const endDateStr = allDates[allDates.length - 1] || localDateKey(new Date());
   const endDate = new Date(`${endDateStr}T00:00:00`);
 
-  // 28 slots, oldest first — 4 columns of 7 rows each
-  const slots = Array.from({ length: 28 }, (_, i) => {
+  const slots = Array.from({ length: DAYS }, (_, i) => {
     const d = new Date(endDate);
-    d.setDate(d.getDate() - (27 - i));
+    d.setDate(d.getDate() - (DAYS - 1 - i));
     const key = localDateKey(d);
     return {
       date: key,
       count: countByDate[key] || 0,
       label: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      monthAbbr: d.toLocaleDateString(undefined, { month: 'short' }),
+      dayOfMonth: d.getDate(),
     };
   });
 
-  const weeks = [0, 1, 2, 3].map((wi) => slots.slice(wi * 7, (wi + 1) * 7));
-  const totalActive = allDates.length;
+  const weeks = Array.from({ length: WEEKS }, (_, wi) => slots.slice(wi * 7, (wi + 1) * 7));
+
+  // Show month label on the week that contains the 1st of a new month
+  const weekMonthLabel = weeks.map((week) => {
+    const monthStart = week.find((s) => s.dayOfMonth === 1);
+    return monthStart ? monthStart.monthAbbr : '';
+  });
+
+  const totalActive = allDates.filter((d) => (countByDate[d] || 0) > 0).length;
 
   return (
-    <div className="w-full flex flex-col pt-2 select-none">
-      <div className="flex gap-2.5 md:gap-3.5 justify-center">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="flex flex-col gap-2 md:gap-2.5">
-            {week.map((slot) => (
-              <div
-                key={slot.date}
-                className={`w-9 h-9 md:w-11 md:h-11 rounded-xl border transition-all cursor-pointer hover:scale-110 active:scale-95 ${intensityClass(slot.count)}`}
-                onMouseEnter={() => setTooltip(slot)}
-                onMouseLeave={() => setTooltip(null)}
-                onClick={() => setTooltip((t) => (t?.date === slot.date ? null : slot))}
-                aria-label={`${slot.label}: ${slot.count} activities`}
-              />
+    <div className="w-full flex flex-col pt-1 select-none">
+      <div className="overflow-x-auto pb-1 -mx-1">
+        <div className="px-1" style={{ minWidth: '320px' }}>
+          {/* Month labels row */}
+          <div className="flex gap-1.5 mb-1">
+            {weeks.map((_, wi) => (
+              <div key={wi} className="w-6 md:w-7 text-[8px] font-black uppercase text-slate-400 text-center leading-none h-3">
+                {weekMonthLabel[wi]}
+              </div>
             ))}
           </div>
-        ))}
+
+          {/* Heatmap grid — 12 columns × 7 rows */}
+          <div className="flex gap-1.5">
+            {weeks.map((week, wi) => (
+              <div key={wi} className="flex flex-col gap-1.5">
+                {week.map((slot) => (
+                  <div
+                    key={slot.date}
+                    className={`w-6 h-6 md:w-7 md:h-7 rounded-md border transition-all cursor-pointer hover:scale-110 active:scale-95 ${intensityClass(slot.count)}`}
+                    onMouseEnter={() => setTooltip(slot)}
+                    onMouseLeave={() => setTooltip(null)}
+                    onClick={() => setTooltip((t) => (t?.date === slot.date ? null : slot))}
+                    aria-label={`${slot.label}: ${slot.count} activities`}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Tap/hover tooltip */}
-      <div className={`mt-3 h-9 flex items-center justify-center transition-opacity duration-150 ${tooltip ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      <div className={`mt-2 h-8 flex items-center justify-center transition-opacity duration-150 ${tooltip ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         {tooltip && (
-          <div className="text-xs font-bold text-slate-700 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100 text-center">
+          <div className="text-xs font-bold text-slate-700 bg-slate-50 rounded-xl px-3 py-1.5 border border-slate-100 text-center">
             <span className="text-slate-500">{tooltip.label}</span>
             {' — '}
             <span className={tooltip.count > 0 ? 'text-teal-700' : 'text-slate-400'}>
-              {tooltip.count > 0
-                ? `${tooltip.count} activit${tooltip.count === 1 ? 'y' : 'ies'}`
-                : 'No activity'}
+              {tooltip.count > 0 ? `${tooltip.count} activit${tooltip.count === 1 ? 'y' : 'ies'}` : 'No activity'}
             </span>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-3">
-        <span className="text-[11px] font-bold text-slate-400">{totalActive} active day{totalActive === 1 ? '' : 's'} in last 28</span>
-        <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-[11px] font-bold text-slate-400">{totalActive} active day{totalActive === 1 ? '' : 's'} in last 12 weeks</span>
+        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
           <span>Less</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 rounded bg-slate-100 border border-slate-200" />
-            <div className="w-3 h-3 rounded bg-teal-100 border border-teal-200" />
-            <div className="w-3 h-3 rounded bg-teal-300" />
-            <div className="w-3 h-3 rounded bg-teal-600" />
+            <div className="w-2.5 h-2.5 rounded bg-slate-100 border border-slate-200" />
+            <div className="w-2.5 h-2.5 rounded bg-teal-100 border border-teal-200" />
+            <div className="w-2.5 h-2.5 rounded bg-teal-300" />
+            <div className="w-2.5 h-2.5 rounded bg-teal-600" />
           </div>
           <span>More</span>
         </div>

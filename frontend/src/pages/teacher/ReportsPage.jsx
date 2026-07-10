@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trophy, Download, AlertTriangle, Users, BookOpen, Clock, CheckCircle, BarChart3 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ScatterChart, Scatter, Cell, ReferenceLine } from 'recharts';
 import { Avatar, Btn, Skeleton } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
 import { apiClient } from '../../lib/api';
@@ -86,6 +86,46 @@ export default function ReportsPage() {
     (s.has_tests && (s.avg_score || 0) < 40);
   const atRiskCount = students.filter(isAtRisk).length;
 
+  // Score distribution — bucketed by band from existing students array
+  const scoreBands = (() => {
+    const bands = [
+      { band: '< 40%', count: 0, color: '#EF4444' },
+      { band: '40–60%', count: 0, color: '#F59E0B' },
+      { band: '60–80%', count: 0, color: '#6366F1' },
+      { band: '80%+', count: 0, color: '#10B981' },
+    ];
+    students.filter((s) => s.has_tests).forEach((s) => {
+      const score = Math.round(s.avg_score || 0);
+      const idx = score < 40 ? 0 : score < 60 ? 1 : score < 80 ? 2 : 3;
+      bands[idx].count++;
+    });
+    return bands;
+  })();
+
+  // Performance scatter — score vs attendance per student
+  const scatterStudents = students
+    .filter((s) => s.has_tests || s.has_attendance)
+    .map((s) => ({
+      name: s.name,
+      x: Math.round(s.attendance_pct || 0),
+      y: Math.round(s.avg_score || 0),
+      risk: isAtRisk(s),
+      id: s.id,
+    }));
+
+  const ScatterTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload;
+    return (
+      <div className="bg-white rounded-xl shadow-lg p-3 text-xs border border-slate-100">
+        <p className="font-bold text-slate-900 mb-1">{d?.name}</p>
+        <p className="text-slate-500">Score: <b className="text-slate-800">{d?.y}%</b></p>
+        <p className="text-slate-500">Attendance: <b className="text-slate-800">{d?.x}%</b></p>
+        {d?.risk && <p className="text-red-600 font-bold mt-1">⚠ At risk</p>}
+      </div>
+    );
+  };
+
   return (
     <div>
       <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
@@ -167,6 +207,44 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            {/* At-risk student cards */}
+            {atRiskCount > 0 && (
+              <div className="glass-panel p-5 rounded-2xl border border-red-100 bg-red-50/25">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 bg-red-100 text-red-600 rounded-lg"><AlertTriangle size={16} /></div>
+                  <h2 className="font-semibold">Requires Attention</h2>
+                  <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">{atRiskCount}</span>
+                  <span className="ml-auto text-xs text-neutral-400">Click to open student report</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {students.filter(isAtRisk).slice(0, 6).map((s) => (
+                    <div key={s.id} onClick={() => setReportStudentId(s.id)}
+                      className="flex items-center gap-3 p-3 bg-white rounded-xl border border-red-100 cursor-pointer hover:shadow-sm hover:border-red-200 transition-all">
+                      <Avatar src={s.avatar_url} name={s.name} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-neutral-900 truncate">{s.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {s.has_tests && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${(s.avg_score || 0) < 40 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                              {Math.round(s.avg_score || 0)}% score
+                            </span>
+                          )}
+                          {s.has_attendance && (s.attendance_pct || 0) < 75 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
+                              {Math.round(s.attendance_pct || 0)}% present
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {atRiskCount > 6 && (
+                  <p className="text-xs text-neutral-400 mt-3 text-center">+{atRiskCount - 6} more in the roster below</p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Chart */}
               <div className="lg:col-span-2 glass-panel p-5 rounded-2xl border border-white/60">
@@ -228,6 +306,78 @@ export default function ReportsPage() {
                 )}
               </div>
             </div>
+
+            {/* Class analytics row: score distribution + score vs attendance scatter */}
+            {students.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Score distribution histogram */}
+                <div className="glass-panel p-5 rounded-2xl border border-white/60">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-violet-100 text-violet-600 rounded-lg"><BarChart3 size={16} /></div>
+                    <h2 className="font-semibold">Score Distribution</h2>
+                    <span className="ml-auto text-xs text-neutral-400">{students.filter((s) => s.has_tests).length} students with scores</span>
+                  </div>
+                  <div className="h-52">
+                    {students.filter((s) => s.has_tests).length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={scoreBands} barSize={44} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+                          <XAxis dataKey="band" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#737373' }} />
+                          <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#737373' }} width={28} />
+                          <RechartsTooltip
+                            cursor={{ fill: '#f5f5f5' }}
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: 12 }}
+                            formatter={(v) => [`${v} student${v === 1 ? '' : 's'}`, 'Count']}
+                          />
+                          <Bar dataKey="count" radius={[6, 6, 0, 0]} name="Students">
+                            {scoreBands.map((band, idx) => <Cell key={idx} fill={band.color} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-neutral-400 text-sm">No test data yet</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Score vs Attendance scatter */}
+                <div className="glass-panel p-5 rounded-2xl border border-white/60">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 bg-teal-100 text-teal-600 rounded-lg"><Users size={16} /></div>
+                    <h2 className="font-semibold">Score vs Attendance</h2>
+                    <span className="text-xs text-neutral-400 ml-1">each dot = 1 student</span>
+                  </div>
+                  <div className="h-52">
+                    {scatterStudents.length > 1 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart margin={{ top: 10, right: 20, left: -20, bottom: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                          <XAxis type="number" dataKey="x" name="Attendance" unit="%" domain={[0, 100]}
+                            tick={{ fontSize: 10, fill: '#737373' }} label={{ value: 'Attendance %', position: 'insideBottom', offset: -10, fontSize: 10, fill: '#737373' }} />
+                          <YAxis type="number" dataKey="y" name="Score" unit="%" domain={[0, 100]}
+                            tick={{ fontSize: 10, fill: '#737373' }} />
+                          <RechartsTooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                          {/* Threshold lines */}
+                          <ReferenceLine x={75} stroke="#F97316" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: '75%', position: 'top', fontSize: 9, fill: '#F97316' }} />
+                          <ReferenceLine y={40} stroke="#EF4444" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: '40%', position: 'right', fontSize: 9, fill: '#EF4444' }} />
+                          <Scatter data={scatterStudents} name="Students" onClick={(d) => setReportStudentId(d.id)}>
+                            {scatterStudents.map((s, idx) => (
+                              <Cell key={idx} fill={s.risk ? '#EF4444' : '#14B8A6'} fillOpacity={0.75} />
+                            ))}
+                          </Scatter>
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-neutral-400 text-sm">Not enough data yet</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 mt-1 text-[10px] font-semibold text-neutral-400 flex-wrap">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-teal-400 inline-block" /> On track</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> At risk</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Leaderboard — weekly / monthly / all-time class rankings */}
             <div className="glass-panel p-5 rounded-2xl border border-white/60">
