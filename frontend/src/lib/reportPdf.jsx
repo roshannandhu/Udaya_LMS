@@ -1823,6 +1823,206 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
   );
 };
 
+// ── Class Marksheet (teacher view — ranked list + integrity section) ─────────
+const V3_PASS_PCT = 35;
+
+const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
+  const brand = getBranding();
+  const totalM = safeNumber(test?.total_marks || test?.totalMarks, 100);
+  const resultsTest = test?._resultsTest || {};
+  const subjectName = resultsTest?.subject_classes?.name || test?.subject_name || test?.subject || '';
+  const standardName = resultsTest?.subject_classes?.standards?.name || '';
+
+  const sorted = [...(attempts || [])].sort((a, b) => (a.rank || 999) - (b.rank || 999));
+  const flagged = sorted.filter(a => a.flagged);
+  const passedCount = sorted.filter(a => totalM && (a.score / totalM) * 100 >= V3_PASS_PCT).length;
+  const avgPct = totalM && stats?.avg_score != null ? ((stats.avg_score / totalM) * 100).toFixed(1) : '--';
+  const highPct = totalM && stats?.highest_score != null ? ((stats.highest_score / totalM) * 100).toFixed(1) : '--';
+
+  return (
+    <div className="mx-auto box-border bg-white px-8 py-6 font-sans text-gray-900" style={{ width: PDF_CANVAS_WIDTH }}>
+
+      {/* Brand bar */}
+      <div className="flex items-center justify-between border-b-2 border-ink pb-4">
+        <div className="flex items-center gap-3">
+          {brand.logoUrl && (
+            <img src={brand.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg bg-white object-contain" crossOrigin="anonymous" />
+          )}
+          <div>
+            <p className="text-lg font-black leading-tight tracking-tight text-gray-950">{brand.name}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Class Marksheet</p>
+          </div>
+        </div>
+        <div className="rounded-lg bg-ink px-4 py-2 text-xs font-black uppercase tracking-widest text-white">Marksheet</div>
+      </div>
+
+      {/* Test identity + summary strip */}
+      <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4" style={{ pageBreakInside: 'avoid' }}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-black tracking-tight text-gray-950">{shortText(test?.title || 'Exam', 58)}</p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {[subjectName, standardName, test?.duration_mins ? `${test.duration_mins} min` : null, fmtDate(test?.scheduled_for || new Date().toISOString())].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-5 text-center">
+            {[
+              { label: 'Appeared', value: sorted.length },
+              { label: 'Passed', value: passedCount },
+              { label: 'Avg %', value: avgPct + '%' },
+              { label: 'Highest', value: highPct + '%' },
+              { label: 'Flagged', value: flagged.length },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
+                <p className="mt-0.5 text-lg font-black leading-none text-gray-900">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Ranked results table */}
+      <div className="mt-4">
+        <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: 36 }} />
+            <col style={{ width: 86 }} />
+            <col />
+            <col style={{ width: 64 }} />
+            <col style={{ width: 52 }} />
+            <col style={{ width: 44 }} />
+            <col style={{ width: 56 }} />
+            <col style={{ width: 50 }} />
+            <col style={{ width: 52 }} />
+            <col style={{ width: 52 }} />
+          </colgroup>
+          <thead>
+            <tr className="bg-gray-900 text-white text-[9px] font-bold uppercase tracking-wide">
+              <th className="px-2 py-2.5 text-center">Rank</th>
+              <th className="px-2 py-2.5">Student ID</th>
+              <th className="px-3 py-2.5">Name</th>
+              <th className="px-2 py-2.5 text-center">Score/{totalM}</th>
+              <th className="px-2 py-2.5 text-center">%</th>
+              <th className="px-2 py-2.5 text-center">Grade</th>
+              <th className="px-2 py-2.5 text-center">Correct</th>
+              <th className="px-2 py-2.5 text-center">Wrong</th>
+              <th className="px-2 py-2.5 text-center">Neg.</th>
+              <th className="px-2 py-2.5 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((a, i) => {
+              const student = a.students || {};
+              const pct = totalM ? (safeNumber(a.score) / totalM) * 100 : 0;
+              const { grade, color } = gradeFor(pct);
+              const pass = pct >= V3_PASS_PCT;
+              return (
+                <tr key={a.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} style={{ pageBreakInside: 'avoid' }}>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-bold text-gray-500">
+                    {(a.rank || i + 1)}
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-[10px] font-mono text-gray-500">
+                    {shortText(student.student_code || '-', 12)}
+                  </td>
+                  <td className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-800">
+                    {shortText(student.name || 'Unknown', 22)}
+                    {a.flagged && <span className="ml-1.5 text-[9px] font-bold text-red-600 uppercase">Flag</span>}
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-bold text-gray-900">
+                    {fmtMarks(a.score)}
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-bold text-gray-900">
+                    {pct.toFixed(1)}
+                  </td>
+                  <td className={`border-b border-gray-100 px-2 py-2 text-center text-xs font-black ${color}`}>{grade}</td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-semibold text-emerald-600">{a.correct_count ?? '-'}</td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-semibold text-red-500">{a.wrong_count ?? '-'}</td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-semibold text-amber-600">
+                    {safeNumber(a.marks_deducted) > 0 ? `-${fmtMarks(a.marks_deducted)}` : '—'}
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-2 text-center">
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${pass ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {pass ? 'Pass' : 'Fail'}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Integrity Issues section — only if there are flagged students */}
+      {flagged.length > 0 && (
+        <div style={{ pageBreakBefore: sorted.length > 25 ? 'always' : 'auto' }} className="mt-6">
+          <div className="mb-4 flex items-end justify-between border-b-2 border-red-600 pb-3">
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-gray-950">Integrity Issues</h2>
+              <p className="mt-0.5 text-xs text-gray-400">{flagged.length} student{flagged.length !== 1 ? 's' : ''} flagged for suspicious activity during this exam</p>
+            </div>
+          </div>
+          <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 36 }} />
+              <col style={{ width: 86 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 64 }} />
+              <col style={{ width: 52 }} />
+              <col style={{ width: 48 }} />
+              <col />
+            </colgroup>
+            <thead>
+              <tr className="bg-red-800 text-white text-[9px] font-bold uppercase tracking-wide">
+                <th className="px-2 py-2.5 text-center">Rank</th>
+                <th className="px-2 py-2.5">Student ID</th>
+                <th className="px-3 py-2.5">Name</th>
+                <th className="px-2 py-2.5 text-center">Score</th>
+                <th className="px-2 py-2.5 text-center">%</th>
+                <th className="px-2 py-2.5 text-center">Events</th>
+                <th className="px-3 py-2.5">Event Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flagged.map((a, i) => {
+                const student = a.students || {};
+                const pct = totalM ? ((safeNumber(a.score) / totalM) * 100).toFixed(1) : '--';
+                const events = Array.isArray(a.cheat_events) ? a.cheat_events : [];
+                const details = events.length
+                  ? events.map(e => `${new Date(e.timestamp).toLocaleTimeString()}: ${e.type}`).join(' · ')
+                  : (a.terminated ? 'Exam terminated (screenshot/recording detected)' : 'Flagged');
+                return (
+                  <tr key={a.id || i} className={i % 2 === 0 ? 'bg-red-50' : 'bg-white'} style={{ pageBreakInside: 'avoid' }}>
+                    <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-gray-500">{a.rank || '-'}</td>
+                    <td className="border-b border-red-100 px-2 py-2 text-[10px] font-mono text-gray-500">{shortText(student.student_code || '-', 12)}</td>
+                    <td className="border-b border-red-100 px-3 py-2 text-xs font-semibold text-gray-800">{shortText(student.name || 'Unknown', 20)}</td>
+                    <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold">{fmtMarks(a.score)}/{totalM}</td>
+                    <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{pct}%</td>
+                    <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{events.length || (a.terminated ? 1 : 0)}</td>
+                    <td className="border-b border-red-100 px-3 py-2 text-[9px] leading-4 text-gray-600">{shortText(details, 90)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="mt-5 border-t border-gray-200 pt-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[9px] text-gray-400">
+            {brand.name} · Marksheet generated on {fmtDate(new Date().toISOString())} · {sorted.length} student{sorted.length !== 1 ? 's' : ''} · Pass mark: {V3_PASS_PCT}%
+          </p>
+          <p className="text-[9px] text-gray-400">Computer-generated — {V3_GRADE_LEGEND}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Exporters
 export function buildStudentReportPdf({ data, period = 'overall' }) {
   if (!data) return;
@@ -1837,6 +2037,14 @@ export function buildExamResultPdf({ reviewData, result, student, testMeta }) {
   const what = clean(testMeta?.title, 40) || 'Exam';
   const when = String(result.submitted_at || new Date().toISOString()).slice(0, 10);
   return mountAndPrint(ExamResultTemplateV3, { reviewData, result, student, testMeta }, `${who}_${what}_${when}.pdf`);
+}
+
+export function buildClassMarksheetPdf({ test, attempts, stats }) {
+  if (!attempts?.length) return;
+  const clean = (s, max) => String(s || '').trim().replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, max);
+  const what = clean(test?.title, 40) || 'Exam';
+  const when = new Date().toISOString().slice(0, 10);
+  return mountAndPrint(ClassMarksheetTemplate, { test, attempts, stats }, `${what}_Marksheet_${when}.pdf`);
 }
 
 const ClassAnalyticsTemplate = ({ analytics, standardName }) => {

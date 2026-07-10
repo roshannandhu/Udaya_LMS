@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2, RotateCcw, Download } from 'lucide-react';
+import { Clock, Check, X, Flag, Trash2, Edit2, Minus, Loader2, Save, Medal, Bell, Send, Eye, CheckCircle2, RotateCcw, Download, FileSpreadsheet, FileDown } from 'lucide-react';
 import { Sheet, Avatar, Tag, Btn, Skeleton, Input } from '../ui';
 import { testApi, apiClient, whatsappApi } from '../../lib/api';
 import { examResultsPayload } from './whatsapp/reportDefaults';
+
+const ExamResultPreviewLazy = lazy(() =>
+  import('../../lib/reportPdf').then(m => ({ default: m.ExamResultTemplateV3 }))
+);
 
 export default function TestResultsSheet({ open, onClose, test, onSuccess, onDelete }) {
   const navigate = useNavigate();
@@ -19,6 +23,11 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
   const [reattempts, setReattempts] = useState([]); // pending re-attempt requests
   const [reattemptBusy, setReattemptBusy] = useState(null); // request id being processed
   const [pdfBusy, setPdfBusy] = useState(null); // attempt id currently generating PDF
+  const [previewAttempt, setPreviewAttempt] = useState(null); // null = closed
+  const [previewReviewData, setPreviewReviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [xlsBusy, setXlsBusy] = useState(false);
+  const [marksheetBusy, setMarksheetBusy] = useState(false);
 
   useEffect(() => {
     if (open && test?.id) {
@@ -81,74 +90,158 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
     }
   };
 
-  const handleDownloadExamPdf = async (attempt) => {
+  // Shared helper: build the 4 props needed by buildExamResultPdf / preview modal.
+  const buildAttemptPdfProps = (attempt, reviewData = null) => {
     const student = attempt.students || {};
+    const resultsTest = results?.test || {};
+    const totalMarks = test.total_marks || test.totalMarks || resultsTest.total_marks;
+    const marksToPct = (m) => (m != null && totalMarks ? (m / totalMarks) * 100 : undefined);
+    return {
+      reviewData,
+      result: {
+        id:             attempt.id,
+        score:          attempt.score,
+        total_marks:    totalMarks,
+        percentage:     totalMarks ? (attempt.score / totalMarks) * 100 : null,
+        correct_count:  attempt.correct_count,
+        wrong_count:    attempt.wrong_count,
+        marks_deducted: attempt.marks_deducted,
+        total:          (attempt.correct_count || 0) + (attempt.wrong_count || 0),
+        flagged:        attempt.flagged,
+        cancelled:      attempt.terminated,
+        points_earned:  attempt.points_earned,
+        rank:           attempt.rank,
+        total_attempts: attempt.total_attempts || results?.attempts?.length,
+        class_avg_score_pct: marksToPct(results?.stats?.avg_score),
+        highest_score_pct:   marksToPct(results?.stats?.highest_score),
+        lowest_score_pct:    marksToPct(results?.stats?.lowest_score),
+        flagged_count:  results?.stats?.flagged_count,
+        started_at:     attempt.started_at,
+        submitted_at:   attempt.submitted_at,
+      },
+      student: {
+        name:          student.name,
+        student_code:  student.student_code,
+        standard_name: resultsTest.subject_classes?.standards?.name || student.standard_name,
+        avatar_url:    student.avatar_url,
+        username:      student.username,
+      },
+      testMeta: {
+        title:         test.title,
+        subject_name:  resultsTest.subject_classes?.name || test.subject_name || test.subject || '',
+        duration_mins: test.duration_mins || test.duration || resultsTest.duration_mins,
+        total_marks:   totalMarks,
+        scheduled_for: test.scheduled_for,
+        topic_tag:     resultsTest.topic_tag || test.topic_tag,
+      },
+    };
+  };
+
+  const handleDownloadExamPdf = async (attempt) => {
     if (pdfBusy === attempt.id) return;
     setPdfBusy(attempt.id);
     try {
-      // Teacher-side review data: /attempt-review is student-only, so pull the
-      // questions (with correct_idx) from the teacher edit endpoint and pair
-      // them with this attempt's stored answers.
       let reviewData = null;
       try {
         const editData = await testApi.getTestForEdit(test.id);
         let answers = attempt.answers;
-        if (typeof answers === 'string') {
-          try { answers = JSON.parse(answers); } catch { answers = {}; }
-        }
+        if (typeof answers === 'string') { try { answers = JSON.parse(answers); } catch { answers = {}; } }
         reviewData = { questions: editData?.questions || [], answers: answers || {} };
       } catch { /* PDF still renders from summary counts */ }
-
-      const resultsTest = results?.test || {};
-      const totalMarks = test.total_marks || test.totalMarks || resultsTest.total_marks;
-      // stats.avg_score / highest_score are raw marks — convert to % for the PDF
-      const marksToPct = (m) => (m !== undefined && m !== null && totalMarks ? (m / totalMarks) * 100 : undefined);
-
       const { buildExamResultPdf } = await import('../../lib/reportPdf');
-      await buildExamResultPdf({
-        reviewData,
-        result: {
-          id:            attempt.id,
-          score:         attempt.score,
-          total_marks:   totalMarks,
-          percentage:    totalMarks ? (attempt.score / totalMarks) * 100 : null,
-          correct_count: attempt.correct_count,
-          wrong_count:   attempt.wrong_count,
-          marks_deducted: attempt.marks_deducted,
-          total:         (attempt.correct_count || 0) + (attempt.wrong_count || 0),
-          flagged:       attempt.flagged,
-          cancelled:     attempt.terminated,
-          points_earned: attempt.points_earned,
-          rank:          attempt.rank,
-          total_attempts: attempt.total_attempts || results?.attempts?.length,
-          class_avg_score_pct: marksToPct(results?.stats?.avg_score),
-          highest_score_pct: marksToPct(results?.stats?.highest_score),
-          lowest_score_pct: marksToPct(results?.stats?.lowest_score),
-          flagged_count: results?.stats?.flagged_count,
-          started_at:    attempt.started_at,
-          submitted_at:  attempt.submitted_at,
-        },
-        student: {
-          name:         student.name,
-          student_code: student.student_code,
-          standard_name: resultsTest.subject_classes?.standards?.name || student.standard_name,
-          avatar_url:   student.avatar_url,
-          username:     student.username,
-        },
-        testMeta: {
-          title:        test.title,
-          subject_name: resultsTest.subject_classes?.name || test.subject_name || test.subject || '',
-          duration_mins: test.duration_mins || test.duration || resultsTest.duration_mins,
-          total_marks:  totalMarks,
-          scheduled_for: test.scheduled_for,
-          topic_tag:    resultsTest.topic_tag || test.topic_tag,
-        },
-      });
+      await buildExamResultPdf(buildAttemptPdfProps(attempt, reviewData));
     } catch (e) {
       console.error('Exam PDF failed', e);
       alert('Failed to generate PDF. Please try again.');
     } finally {
       setPdfBusy(null);
+    }
+  };
+
+  const handlePreviewPdf = async (attempt) => {
+    setPreviewAttempt(attempt);
+    setPreviewReviewData(null);
+    setPreviewLoading(true);
+    try {
+      const editData = await testApi.getTestForEdit(test.id);
+      let answers = attempt.answers;
+      if (typeof answers === 'string') { try { answers = JSON.parse(answers); } catch { answers = {}; } }
+      setPreviewReviewData({ questions: editData?.questions || [], answers: answers || {} });
+    } catch { /* preview renders from summary counts */ }
+    setPreviewLoading(false);
+  };
+
+  const handleExportExcel = async () => {
+    if (!results?.attempts?.length || xlsBusy) return;
+    setXlsBusy(true);
+    try {
+      const totalM = test.total_marks || test.totalMarks || 100;
+      const PASS_PCT = 35;
+      const grade = (pct) => {
+        const s = Math.round(pct || 0);
+        if (s >= 90) return 'A+'; if (s >= 80) return 'A'; if (s >= 70) return 'B+';
+        if (s >= 60) return 'B'; if (s >= 50) return 'C'; if (s >= 35) return 'D'; return 'E';
+      };
+      const sorted = [...results.attempts].sort((a, b) => (a.rank || 999) - (b.rank || 999));
+      const HEADER = ['Rank', 'Student ID', 'Name', 'Score', `Total (${totalM})`, '%', 'Grade', 'Correct', 'Wrong', 'Neg. Marks', 'Points', 'Status', 'Flagged'];
+      const rows = sorted.map((a, i) => {
+        const s = a.students || {};
+        const pct = totalM ? (a.score / totalM) * 100 : 0;
+        return [
+          a.rank || (i + 1), s.student_code || '', s.name || 'Unknown',
+          a.score ?? 0, totalM, parseFloat(pct.toFixed(1)), grade(pct),
+          a.correct_count || 0, a.wrong_count || 0,
+          a.marks_deducted || 0, a.points_earned || 0,
+          pct >= PASS_PCT ? 'Pass' : 'Fail', a.flagged ? 'Yes' : 'No',
+        ];
+      });
+      const COLS = [{wch:6},{wch:16},{wch:24},{wch:8},{wch:10},{wch:8},{wch:7},{wch:8},{wch:7},{wch:11},{wch:8},{wch:8},{wch:8}];
+      const cheated = sorted.filter(a => a.flagged);
+      const CHEAT_HDR = ['Rank', 'Student ID', 'Name', 'Score', '%', 'Events', 'Event Details'];
+      const cheatRows = cheated.map(a => {
+        const s = a.students || {};
+        const pct = totalM ? parseFloat(((a.score / totalM) * 100).toFixed(1)) : 0;
+        const evts = Array.isArray(a.cheat_events) ? a.cheat_events : [];
+        const detail = evts.length ? evts.map(e => `${new Date(e.timestamp).toLocaleTimeString()}: ${e.type}`).join('; ') : (a.terminated ? 'Exam terminated' : 'Flagged');
+        return [a.rank || '-', s.student_code || '', s.name || 'Unknown', a.score ?? 0, pct, evts.length || (a.terminated ? 1 : 0), detail];
+      });
+
+      const clean = s => String(s || '').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+      const filename = `${clean(test.title) || 'Exam'}_Results_${new Date().toISOString().slice(0, 10)}`;
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+      const ws1 = XLSX.utils.aoa_to_sheet([HEADER, ...rows]); ws1['!cols'] = COLS;
+      XLSX.utils.book_append_sheet(wb, ws1, 'Results');
+      if (cheatRows.length) {
+        const ws2 = XLSX.utils.aoa_to_sheet([CHEAT_HDR, ...cheatRows]);
+        ws2['!cols'] = [{wch:6},{wch:16},{wch:24},{wch:8},{wch:8},{wch:8},{wch:70}];
+        XLSX.utils.book_append_sheet(wb, ws2, 'Integrity Issues');
+      }
+      XLSX.writeFile(wb, `${filename}.xlsx`);
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      alert('Export failed. Please try again.');
+    } finally {
+      setXlsBusy(false);
+    }
+  };
+
+  const handleExportMarksheetPdf = async () => {
+    if (!results?.attempts?.length || marksheetBusy) return;
+    setMarksheetBusy(true);
+    try {
+      const { buildClassMarksheetPdf } = await import('../../lib/reportPdf');
+      const resultsTest = results?.test || {};
+      await buildClassMarksheetPdf({
+        test: { ...test, _resultsTest: resultsTest },
+        attempts: results.attempts,
+        stats: results.stats,
+      });
+    } catch (err) {
+      console.error('Marksheet PDF failed:', err);
+      alert('Failed to generate marksheet. Please try again.');
+    } finally {
+      setMarksheetBusy(false);
     }
   };
 
@@ -226,7 +319,66 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
   const isScheduled = test.status === 'scheduled' && (!test.scheduled_for || new Date(test.scheduled_for) > new Date());
   const isDraft = test.status === 'draft';
 
+  // Build preview props using the shared helper (reviewData injected after fetch)
+  const previewProps = previewAttempt
+    ? buildAttemptPdfProps(previewAttempt, previewReviewData)
+    : null;
+
   return (
+    <>
+    {/* ── PDF Preview Modal ───────────────────────────────────────────────── */}
+    {previewAttempt && (
+      <div
+        className="fixed inset-0 z-[200] flex flex-col bg-black/60"
+        onClick={e => { if (e.target === e.currentTarget) setPreviewAttempt(null); }}
+      >
+        {/* Modal header */}
+        <div className="flex items-center justify-between gap-4 bg-white px-5 py-3 shadow-md flex-shrink-0">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{(previewAttempt.students || {}).name || 'Student'} — Result Preview</p>
+            <p className="text-[11px] text-neutral-400">Scroll to see all pages · downloading saves the same content</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => handleDownloadExamPdf(previewAttempt)}
+              disabled={pdfBusy === previewAttempt.id}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-700 transition-colors disabled:opacity-50"
+            >
+              {pdfBusy === previewAttempt.id ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              Download PDF
+            </button>
+            <button
+              onClick={() => setPreviewAttempt(null)}
+              className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal body — scrollable, grey background, white PDF centered */}
+        <div className="flex-1 overflow-y-auto bg-[#E5E5E5] p-6">
+          {previewLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={28} className="animate-spin text-neutral-400" />
+            </div>
+          ) : previewProps ? (
+            <div className="mx-auto bg-white shadow-xl" style={{ width: 720 }}>
+              <Suspense fallback={
+                <div className="flex items-center justify-center py-24">
+                  <Loader2 size={24} className="animate-spin text-neutral-300" />
+                </div>
+              }>
+                <ExamResultPreviewLazy {...previewProps} />
+              </Suspense>
+            </div>
+          ) : (
+            <div className="text-center py-20 text-sm text-neutral-400">Preview unavailable</div>
+          )}
+        </div>
+      </div>
+    )}
+
     <Sheet open={open} onClose={onClose} title={isEditing ? 'Edit Test' : (test.title || 'Test Results')} size="lg">
       {(isScheduled || isDraft) ? (
         <>
@@ -398,54 +550,80 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
                 results.attempts.length === 0 ? (
                   <div className="text-center py-8 text-sm text-neutral-500">No attempts yet.</div>
                 ) : (
-                  <div className="space-y-1.5 max-h-96 overflow-y-auto">
-                    {results.attempts.map((a, i) => {
-                      const student = a.students || {};
-                      const totalM = test.total_marks || test.totalMarks || 100;
-                      const scorePct = a.score != null ? ((a.score / totalM) * 100).toFixed(1) : 0;
-                      const displayRank = a.rank || i + 1;
-                      return (
-                        <div key={a.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-md bg-white border ${a.flagged ? 'border-red-200' : 'border-white/60'}`}>
-                          <span className={`text-xs font-semibold w-5 flex justify-center tabular-nums ${displayRank <= 3 ? 'text-amber-600' : 'text-neutral-500'}`}>
-                            {displayRank === 1 ? <Medal size={15} className="text-amber-400" /> : displayRank === 2 ? <Medal size={15} className="text-neutral-400" /> : displayRank === 3 ? <Medal size={15} className="text-amber-700" /> : displayRank}
-                          </span>
-                          <Avatar name={student.name} src={student.avatar_url} size="sm" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium truncate">{student.name || 'Unknown'}</p>
-                              {(a.flagged || (a.cheat_events && a.cheat_events.length > 0)) && (
-                                <Tag color="red" title={a.cheat_events?.map(e => `${new Date(e.timestamp).toLocaleTimeString()}: ${e.type}`).join('\n')}>
-                                  <Flag size={10} /> Cheating ({a.cheat_events?.length || 1})
+                  <>
+                    {/* Export actions */}
+                    <div className="flex gap-2 mb-3 flex-wrap">
+                      <button
+                        onClick={handleExportExcel}
+                        disabled={xlsBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-white/60 bg-white/40 hover:bg-white/70 text-neutral-700 transition-colors disabled:opacity-50"
+                      >
+                        {xlsBusy ? <Loader2 size={12} className="animate-spin" /> : <FileSpreadsheet size={12} />}
+                        {xlsBusy ? 'Exporting…' : 'Export Excel'}
+                      </button>
+                      <button
+                        onClick={handleExportMarksheetPdf}
+                        disabled={marksheetBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-white/60 bg-white/40 hover:bg-white/70 text-neutral-700 transition-colors disabled:opacity-50"
+                      >
+                        {marksheetBusy ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+                        {marksheetBusy ? 'Generating…' : 'Marksheet PDF'}
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-96 overflow-y-auto">
+                      {results.attempts.map((a, i) => {
+                        const student = a.students || {};
+                        const totalM = test.total_marks || test.totalMarks || 100;
+                        const scorePct = a.score != null ? ((a.score / totalM) * 100).toFixed(1) : 0;
+                        const displayRank = a.rank || i + 1;
+                        return (
+                          <div key={a.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-md bg-white border ${a.flagged ? 'border-red-200' : 'border-white/60'}`}>
+                            <span className={`text-xs font-semibold w-5 flex justify-center tabular-nums ${displayRank <= 3 ? 'text-amber-600' : 'text-neutral-500'}`}>
+                              {displayRank === 1 ? <Medal size={15} className="text-amber-400" /> : displayRank === 2 ? <Medal size={15} className="text-neutral-400" /> : displayRank === 3 ? <Medal size={15} className="text-amber-700" /> : displayRank}
+                            </span>
+                            <Avatar name={student.name} src={student.avatar_url} size="sm" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium truncate">{student.name || 'Unknown'}</p>
+                                {(a.flagged || (a.cheat_events && a.cheat_events.length > 0)) && (
+                                  <Tag color="red" title={a.cheat_events?.map(e => `${new Date(e.timestamp).toLocaleTimeString()}: ${e.type}`).join('\n')}>
+                                    <Flag size={10} /> Cheating ({a.cheat_events?.length || 1})
+                                  </Tag>
+                                )}
+                              </div>
+                              <p className="text-xs text-neutral-500">
+                                {a.correct_count} correct, {a.wrong_count} wrong
+                                {a.marks_deducted > 0 && ` (−${a.marks_deducted.toFixed(2)} deducted)`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="text-right mr-1">
+                                <Tag color={scorePct >= 80 ? 'green' : scorePct >= 60 ? 'blue' : scorePct >= 40 ? 'amber' : 'red'}>
+                                  {scorePct}%
                                 </Tag>
-                              )}
+                                <p className="text-[10px] text-neutral-400 mt-0.5">{a.points_earned} pts</p>
+                              </div>
+                              <button
+                                onClick={() => handlePreviewPdf(a)}
+                                title="Preview result PDF"
+                                className="p-1.5 rounded-lg text-neutral-400 hover:text-[#2383E2] hover:bg-blue-50 transition-colors"
+                              >
+                                <Eye size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDownloadExamPdf(a)}
+                                disabled={pdfBusy === a.id}
+                                title="Download result PDF"
+                                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors disabled:opacity-40"
+                              >
+                                {pdfBusy === a.id ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                              </button>
                             </div>
-                            <p className="text-xs text-neutral-500">
-                              {a.correct_count} correct, {a.wrong_count} wrong
-                              {a.marks_deducted > 0 && ` (−${a.marks_deducted.toFixed(2)} deducted)`}
-                            </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-right">
-                              <Tag color={scorePct >= 80 ? 'green' : scorePct >= 60 ? 'blue' : scorePct >= 40 ? 'amber' : 'red'}>
-                                {scorePct}%
-                              </Tag>
-                              <p className="text-[10px] text-neutral-400 mt-0.5">{a.points_earned} pts</p>
-                            </div>
-                            <button
-                              onClick={() => handleDownloadExamPdf(a)}
-                              disabled={pdfBusy === a.id}
-                              title="Download exam result PDF"
-                              className="p-1.5 rounded-lg text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40"
-                            >
-                              {pdfBusy === a.id
-                                ? <Loader2 size={13} className="animate-spin" />
-                                : <Download size={13} />}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 )
               )}
 
@@ -557,5 +735,6 @@ export default function TestResultsSheet({ open, onClose, test, onSuccess, onDel
         </>
       )}
     </Sheet>
+    </>
   );
 }
