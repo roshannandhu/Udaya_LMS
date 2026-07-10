@@ -248,7 +248,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
                       Drop a PDF or image here, or click to browse
                     </p>
                     <p className="text-xs text-neutral-400">
-                      PDF · JPG · PNG · WEBP · Max 10 MB
+                      PDF · JPG · PNG · WEBP
                     </p>
                   </>
                 )}

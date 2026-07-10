@@ -21,6 +21,8 @@ const gradeFor = (score) => {
   return { grade: 'E', color: 'text-red-500', bg: 'bg-red-500/10' };
 };
 
+const gradeDesc = (g) => ({ 'A+': 'Outstanding', A: 'Excellent', 'B+': 'Very Good', B: 'Good', C: 'Average', D: 'Needs Work', E: 'Below Pass' }[g] || '');
+
 const safeNumber = (value, fallback = 0) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -154,12 +156,12 @@ async function mountAndPrint(Component, props, filename) {
   host.setAttribute('aria-hidden', 'true');
   Object.assign(host.style, {
     position: 'fixed',
-    left: '0',
+    left: '-9999px',
     top: '0',
     width: `${PDF_CANVAS_WIDTH}px`,
     minHeight: '1123px',
     background: '#ffffff',
-    zIndex: '2147483647',
+    zIndex: '-1',
     pointerEvents: 'none',
   });
 
@@ -435,10 +437,10 @@ const MonthCalendar = ({ heatmapData }) => {
         })}
       </div>
       <div className="flex gap-4 text-xs font-medium text-gray-500">
-        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-gray-100 border border-black/5" /> No Class</span>
-        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-emerald-500 border border-black/5" /> Present</span>
-        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-amber-400 border border-black/5" /> Late</span>
-        <span className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-red-400 border border-black/5" /> Absent</span>
+        <div className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 shrink-0 rounded-sm border border-gray-300 bg-gray-100" />No Class</div>
+        <div className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 shrink-0 rounded-sm bg-emerald-500" />Present</div>
+        <div className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 shrink-0 rounded-sm bg-amber-400" />Late</div>
+        <div className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 shrink-0 rounded-sm bg-red-400" />Absent</div>
       </div>
     </div>
   );
@@ -523,8 +525,8 @@ const ReportCardHeader = ({ student, brand, period }) => (
   </div>
 );
 
-const HeadlineStat = ({ icon: Icon, label, value, band, children }) => (
-  <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+const HeadlineStat = ({ icon: Icon, label, value, band, children, className = '' }) => (
+  <div className={`rounded-2xl border border-gray-100 bg-white p-4 shadow-sm ${className}`} style={{ pageBreakInside: 'avoid' }}>
     <div className="flex items-center gap-2">
       <div className={`shrink-0 rounded-lg p-1.5 ${band.bg}`}>
         <Icon className={`h-4 w-4 ${band.text}`} strokeWidth={2.5} />
@@ -681,19 +683,20 @@ const StudentReportTemplate = ({ data, period }) => {
           </div>
         </div>
 
-        <div className="mt-5 flex gap-4 *:flex-1">
-          <HeadlineStat icon={Calendar} label="Attendance" value={s.attendance_pct !== undefined && s.attendance_pct !== null ? `${Math.round(attendanceValue)}%` : '-'} band={bandFor(attendanceValue)}>
+        <div className="mt-5 flex gap-4">
+          <HeadlineStat icon={Calendar} className="flex-1" label="Attendance" value={s.attendance_pct !== undefined && s.attendance_pct !== null ? `${Math.round(attendanceValue)}%` : '-'} band={bandFor(attendanceValue)}>
             <DeltaTag value={attendanceValue} compare={classAvg.attendance_pct} />
           </HeadlineStat>
           <HeadlineStat
             icon={ClipboardCheck}
+            className="flex-1"
             label="Assignments"
             value={totalAssignments ? `${submittedAssignments}/${totalAssignments}` : '-'}
             band={totalAssignments ? bandFor(percentOf(submittedAssignments, totalAssignments)) : { bg: 'bg-gray-100', text: 'text-gray-500' }}
           >
             <span className="text-[11px] font-bold text-gray-500">{totalAssignments ? `${pendingAssignments} pending` : 'None assigned yet'}</span>
           </HeadlineStat>
-          <HeadlineStat icon={Trophy} label="Points" value={periodPoints} band={{ bg: 'bg-[#E3EFFB]', text: 'text-[#2383E2]' }}>
+          <HeadlineStat icon={Trophy} className="flex-1" label="Points" value={periodPoints} band={{ bg: 'bg-[#E3EFFB]', text: 'text-[#2383E2]' }}>
             <DeltaTag value={periodPoints} compare={classAvg.points} suffix=" pts" />
           </HeadlineStat>
         </div>
@@ -745,9 +748,11 @@ const StudentReportTemplate = ({ data, period }) => {
                         <td className="px-4 py-3 text-center text-gray-500">{safeNumber(r.test_count)}</td>
                         <td className="px-4 py-3 text-center font-bold text-gray-900">{tested ? pctText(r.test_avg) : '-'}</td>
                         <td className="px-4 py-3 text-center">
-                          {tested
-                            ? <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{gradeFor(r.test_avg).grade}</span>
-                            : <span className="text-xs text-gray-400">No tests</span>}
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            {tested
+                              ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{gradeFor(r.test_avg).grade}</span>
+                              : <span className="text-xs text-gray-400">No tests</span>}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-center text-gray-500">{r.attendance_pct !== undefined && r.attendance_pct !== null ? pctText(r.attendance_pct) : '-'}</td>
                         <td className="px-4 py-3 text-center text-gray-500">{safeNumber(r.video_total) ? `${safeNumber(r.video_done)}/${safeNumber(r.video_total)}` : '-'}</td>
@@ -871,16 +876,17 @@ const StudentReportTemplate = ({ data, period }) => {
         <Section title="Work Completed" icon={ClipboardCheck} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
           {effortRows.length ? (
             <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4">
-              <div className={`flex flex-wrap gap-x-8 gap-y-3 ${effortRows.length >= 2 ? '*:w-[calc(50%-16px)]' : ''}`}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 32, rowGap: 12 }}>
                 {effortRows.map(row => (
-                  <ProgressBar
-                    key={row.label}
-                    label={row.label}
-                    value={row.total ? percentOf(row.done, row.total) : 100}
-                    color={row.color}
-                    valueText={row.total ? `${row.done}/${row.total}` : `${row.done}`}
-                    labelClassName="w-28"
-                  />
+                  <div key={row.label} style={{ width: effortRows.length >= 2 ? 'calc(50% - 16px)' : '100%' }}>
+                    <ProgressBar
+                      label={row.label}
+                      value={row.total ? percentOf(row.done, row.total) : 100}
+                      color={row.color}
+                      valueText={row.total ? `${row.done}/${row.total}` : `${row.done}`}
+                      labelClassName="w-28"
+                    />
+                  </div>
                 ))}
               </div>
               <p className="mt-3 border-t border-gray-200 pt-2 text-xs leading-5 text-gray-600">
@@ -912,12 +918,16 @@ const StudentReportTemplate = ({ data, period }) => {
                         <td className="px-4 py-2.5 font-medium text-gray-800">{t.topic || 'Concept'}</td>
                         <td className="px-4 py-2.5 text-gray-500">{t.subject}</td>
                         <td className="px-4 py-2.5 text-center">
-                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{Math.round(safeNumber(t.score_pct))}%</span>
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{Math.round(safeNumber(t.score_pct))}%</span>
+                          </div>
                         </td>
                         <td className="px-4 py-2.5 text-center">
-                          {t.video_completed
-                            ? <span className="inline-flex items-center text-emerald-600"><CheckCircle className="mr-1 h-4 w-4" /> Watched</span>
-                            : <span className="inline-flex items-center text-gray-400"><XCircle className="mr-1 h-4 w-4" /> Unwatched</span>}
+                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                            {t.video_completed
+                              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#059669' }}><CheckCircle className="h-4 w-4" /> Watched</span>
+                              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#9ca3af' }}><XCircle className="h-4 w-4" /> Unwatched</span>}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1445,13 +1455,13 @@ const fmtMarks = (n) => {
 };
 
 const v3DefaultRemark = ({ cancelled, flagged, scorePct }) => {
-  if (cancelled) return 'This exam was cancelled because of a rule violation during the test. Please meet the teacher to discuss the next step.';
-  if (flagged) return 'The result is under review because unusual activity was noticed during the exam. Please meet the teacher.';
-  if (scorePct >= 90) return 'Outstanding result. Keep the same study routine and help classmates where you can.';
-  if (scorePct >= 75) return 'Very good performance. A little more practice on the missed questions will push this even higher.';
-  if (scorePct >= 60) return 'Good effort. Redo the wrong answers this week and attempt one timed practice test.';
-  if (scorePct >= V3_PASS_MARK_PCT) return 'Passed, but there is clear room to improve. Focus on the questions listed on the next pages.';
-  return 'Below the pass mark this time. Please revise the basics and meet the teacher for a revision plan.';
+  if (cancelled) return 'This exam was cancelled due to a rule violation during the test. Please contact the teacher to understand the next steps and arrange a re-attempt if applicable.';
+  if (flagged) return 'The result is under review because unusual activity was noticed during this exam. Please contact the teacher to clarify.';
+  if (scorePct >= 90) return 'Outstanding result — your child has mastered this topic. Encourage them to keep up this study routine and help their classmates where they can.';
+  if (scorePct >= 75) return 'Very good performance. A short revision of the wrong answers will make the next result even stronger. Well done!';
+  if (scorePct >= 60) return 'Good effort. Reviewing the wrong answers this week and attempting one timed practice test at home will help improve further.';
+  if (scorePct >= V3_PASS_MARK_PCT) return 'Passed, but there is clear room to improve. Please encourage your child to review the questions listed on the next pages before the next test.';
+  return 'Below the pass mark this time. Please contact the teacher for a personalised revision plan and provide extra study support at home.';
 };
 
 const V3StatusChip = ({ state }) => {
@@ -1472,13 +1482,55 @@ const V3StatusChip = ({ state }) => {
   );
 };
 
-const V3StatTile = ({ icon: Icon, label, value, iconColor }) => (
+const V3StatTile = ({ icon: Icon, label, value, iconColor, sub }) => (
   <div className="flex-1 rounded-xl border border-gray-200 bg-white p-3 text-center" style={{ pageBreakInside: 'avoid' }}>
     <div className="flex items-center justify-center gap-1.5">
       <Icon className={`h-3.5 w-3.5 ${iconColor}`} strokeWidth={2.5} />
       <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{label}</span>
     </div>
     <p className="mt-1.5 text-2xl font-black leading-none text-gray-950">{value}</p>
+    {sub && <p className="mt-1 text-[10px] font-semibold text-gray-400">{sub}</p>}
+  </div>
+);
+
+const V3ParentSummary = ({ name, passed, cancelled, score, totalMarks, scorePct, grade, rank, totalAttempts, wrongCount, skippedCount }) => (
+  <div className="mt-4 rounded-xl border-2 border-amber-200 bg-amber-50 p-4" style={{ pageBreakInside: 'avoid' }}>
+    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-amber-700">For Parents</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <span style={{ marginTop: 1, fontSize: 13, fontWeight: 900, lineHeight: 1, color: cancelled ? '#c2410c' : passed ? '#059669' : '#dc2626', flexShrink: 0 }}>{cancelled ? '⚠' : passed ? '✓' : '✗'}</span>
+        <p style={{ fontSize: 13, fontWeight: 700, lineHeight: '20px', color: '#111827', margin: 0 }}>
+          {cancelled
+            ? `${name}'s exam was cancelled — a rule violation was detected. Please contact the teacher.`
+            : passed
+            ? `${name} has PASSED this exam.`
+            : `${name} has NOT PASSED. The pass mark is ${V3_PASS_MARK_PCT}%. Further revision is needed.`}
+        </p>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <span style={{ marginTop: 1, fontSize: 13, lineHeight: 1, color: '#3b82f6', flexShrink: 0 }}>◉</span>
+        <p style={{ fontSize: 13, lineHeight: '20px', color: '#374151', margin: 0 }}>
+          Scored <strong>{fmtMarks(score)} out of {totalMarks} marks</strong> — {Math.round(scorePct)}% — Grade <strong>{grade.grade}</strong> <span style={{ color: '#9ca3af' }}>({gradeDesc(grade.grade)})</span>
+        </p>
+      </div>
+      {rank ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ marginTop: 1, fontSize: 13, lineHeight: 1, color: '#f59e0b', flexShrink: 0 }}>★</span>
+          <p style={{ fontSize: 13, lineHeight: '20px', color: '#374151', margin: 0 }}>
+            Ranked <strong>#{rank}</strong>{totalAttempts ? ` in the class (${totalAttempts} students appeared)` : ' in the class'}
+          </p>
+        </div>
+      ) : null}
+      {(wrongCount > 0 || skippedCount > 0) ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ marginTop: 1, fontSize: 13, lineHeight: 1, color: '#ef4444', flexShrink: 0 }}>→</span>
+          <p style={{ fontSize: 13, lineHeight: '20px', color: '#374151', margin: 0 }}>
+            {[wrongCount > 0 && `${wrongCount} question${wrongCount > 1 ? 's' : ''} answered incorrectly`, skippedCount > 0 && `${skippedCount} question${skippedCount > 1 ? 's' : ''} left unanswered`].filter(Boolean).join(' · ')}
+            {' — see Page 3 for the detailed question-by-question breakdown.'}
+          </p>
+        </div>
+      ) : null}
+    </div>
   </div>
 );
 
@@ -1533,9 +1585,10 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
     timeTakenMins = Math.max(1, Math.round((submittedAt - startedAt) / 60000));
     if (durationMins && timeTakenMins > durationMins) timeTakenMins = durationMins;
   }
+  const timeSub = timeTakenMins !== null && durationMins ? `of ${durationMins} min` : null;
   const timeText = timeTakenMins !== null
-    ? `${timeTakenMins}${durationMins ? `/${durationMins}` : ''}`
-    : durationMins ? `${durationMins}` : '-';
+    ? `${timeTakenMins} min`
+    : durationMins ? `${durationMins} min` : '-';
 
   const classAvgPct = result.class_avg_score_pct !== undefined && result.class_avg_score_pct !== null ? clampPct(result.class_avg_score_pct) : undefined;
   const highestPct = result.highest_score_pct !== undefined && result.highest_score_pct !== null ? clampPct(result.highest_score_pct) : undefined;
@@ -1557,12 +1610,12 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
 
   const plural = (n) => (n === 1 ? '' : 's');
   const tips = [
-    wrongCount > 0 ? `Redo the ${wrongCount} wrong question${plural(wrongCount)} on the review page without looking at the answers first.` : null,
-    skippedCount > 0 ? `${skippedCount} question${plural(skippedCount)} ${skippedCount === 1 ? 'was' : 'were'} left blank — practise finishing the paper${durationMins ? ` within ${durationMins} minutes` : ''}.` : null,
-    deducted > 0 ? `${fmtMarks(deducted)} mark${plural(deducted)} lost to negative marking — answer only after ruling out at least two options.` : null,
-    accuracyPct < 70 && answeredCount > 0 ? `Accuracy is ${pctText(accuracyPct)} — revise the topic once more before trying to answer faster.` : null,
+    wrongCount > 0 ? `Ask your child to try the ${wrongCount} wrong question${plural(wrongCount)} again at home, then check the answers using Page 3 of this report.` : null,
+    skippedCount > 0 ? `Your child left ${skippedCount} question${plural(skippedCount)} unanswered${durationMins ? ` in the ${durationMins}-minute test` : ''}. Practising timed tests at home will help improve speed and confidence.` : null,
+    deducted > 0 ? `${fmtMarks(deducted)} mark${deducted !== 1 ? 's were' : ' was'} deducted for wrong answers. Encourage your child to skip questions they are unsure about rather than guessing.` : null,
+    accuracyPct < 70 && answeredCount > 0 ? `Only ${pctText(accuracyPct)} of attempted questions were correct. A topic revision session before the next test is recommended.` : null,
   ].filter(Boolean).slice(0, 4);
-  if (!tips.length) tips.push('Great paper — keep one quick revision and one timed practice before the next exam.');
+  if (!tips.length) tips.push('Well done! Go through the question review on Page 3 together to stay sharp for the next exam.');
 
   const examDate = fmtDate(result.submitted_at || testMeta?.scheduled_for || new Date().toISOString());
   const identityRows = [
@@ -1578,7 +1631,8 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
         <div>
           <p className="text-sm font-bold text-gray-800">{brand.name}</p>
           <p className="mt-0.5 text-[10px] font-medium text-gray-400">Result generated on {fmtDate(new Date().toISOString())} · This is a computer-generated document.</p>
-          <p className="mt-1.5 text-[9px] font-medium text-gray-400">{V3_GRADE_LEGEND}</p>
+          <p className="mt-1 text-[10px] font-semibold text-gray-500">📄 Page 2 — question results map · Page 3 — full question-by-question answer review</p>
+          <p className="mt-1 text-[9px] font-medium text-gray-400">{V3_GRADE_LEGEND}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <div className="text-right text-[9px] font-bold uppercase tracking-widest text-gray-400">
@@ -1639,6 +1693,21 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
         </div>
       </div>
 
+      {/* Parent summary */}
+      <V3ParentSummary
+        name={shortText(student?.name || 'Your child', 24)}
+        passed={passed}
+        cancelled={cancelled}
+        score={score}
+        totalMarks={totalMarks}
+        scorePct={scorePct}
+        grade={grade}
+        rank={result.rank}
+        totalAttempts={result.total_attempts}
+        wrongCount={wrongCount}
+        skippedCount={skippedCount}
+      />
+
       {/* Integrity banner */}
       {(flagged || cancelled) && (
         <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4" style={{ pageBreakInside: 'avoid' }}>
@@ -1665,11 +1734,12 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
               {cancelled ? 'Cancelled' : passed ? 'Passed' : 'Not Passed'}
             </span>
           </div>
-          <p className="mt-2 text-sm font-semibold text-gray-600">{Math.round(scorePct)}% score{deducted > 0 ? ` · includes -${fmtMarks(deducted)} negative marks` : ''}</p>
+          <p className="mt-2 text-sm font-semibold text-gray-600">{Math.round(scorePct)}% score{deducted > 0 ? ` · −${fmtMarks(deducted)} penalty for wrong answers` : ''} · Pass mark: {V3_PASS_MARK_PCT}%</p>
         </div>
         <div className="flex w-32 shrink-0 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4">
           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Grade</span>
           <span className={`mt-1 text-4xl font-black leading-none ${grade.color}`}>{grade.grade}</span>
+          <span className="mt-1 text-[10px] font-bold text-gray-400">{gradeDesc(grade.grade)}</span>
         </div>
         <div className="flex w-32 shrink-0 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4">
           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Class Rank</span>
@@ -1683,14 +1753,14 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
         <V3StatTile icon={CheckCircle} label="Correct" value={correctCount} iconColor="text-emerald-500" />
         <V3StatTile icon={XCircle} label="Wrong" value={wrongCount} iconColor="text-red-500" />
         <V3StatTile icon={Minus} label="Skipped" value={skippedCount} iconColor="text-gray-400" />
-        <V3StatTile icon={AlertTriangle} label="Negative" value={deducted > 0 ? `-${fmtMarks(deducted)}` : '0'} iconColor="text-amber-500" />
-        <V3StatTile icon={Clock} label="Time (min)" value={timeText} iconColor="text-blue-500" />
+        <V3StatTile icon={AlertTriangle} label="Penalty" value={deducted > 0 ? `-${fmtMarks(deducted)}` : '0'} iconColor="text-amber-500" sub={deducted > 0 ? 'wrong answers' : null} />
+        <V3StatTile icon={Clock} label="Time Used" value={timeText} iconColor="text-blue-500" sub={timeSub} />
       </div>
 
       {/* Class comparison */}
       <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4" style={{ pageBreakInside: 'avoid' }}>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-800">
-          <Trophy className="h-4 w-4 text-amber-500" /> Compared with the class
+          <Trophy className="h-4 w-4 text-amber-500" /> How {shortText(student?.name?.split(' ')[0] || 'your child', 16)} did vs. the class
         </h3>
         <div className="space-y-3">
           <V3CompareBar label={student?.name ? shortText(student.name.split(' ')[0], 14) : 'Student'} value={scorePct} barColor="bg-[#2383E2]" />
@@ -1714,8 +1784,8 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
       {!cancelled && matrixItems.length > 0 && (
         <div style={{ pageBreakBefore: 'always' }} className="pt-2">
           <V3PageTitle
-            title="Answer Map"
-            sub="Every question at a glance — green is correct, red is wrong, grey was skipped"
+            title="Question Results"
+            sub="Every question at a glance — green = correct · red = wrong · grey = not attempted (skipped)"
             right={`${student?.name || 'Student'} · ${shortText(testMeta?.title || 'Exam', 30)}`}
           />
 
@@ -1740,19 +1810,19 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
           <div className="mt-4 flex gap-4">
             <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
               <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
-                <Target className="h-4 w-4 text-red-500" /> Where marks were lost
+                <Target className="h-4 w-4 text-red-500" /> Why marks were lost
               </h3>
               <div className="space-y-3">
-                <V3CompareBar label="Accuracy" value={accuracyPct} barColor="bg-emerald-500" />
-                <V3CompareBar label="Completed" value={completionPct} barColor="bg-blue-500" />
+                <V3CompareBar label="Correct rate" value={accuracyPct} barColor="bg-emerald-500" />
+                <V3CompareBar label="Attempted" value={completionPct} barColor="bg-blue-500" />
               </div>
               <p className="mt-3 text-xs leading-5 text-gray-500">
-                Accuracy = correct answers out of attempted. Completed = questions attempted out of {totalQuestions}.
+                Correct rate = right answers out of {answeredCount} attempted. Attempted = {answeredCount} of {totalQuestions} questions answered.
               </p>
             </div>
             <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
               <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
-                <Brain className="h-4 w-4 text-[#2383E2]" /> What to do next
+                <Brain className="h-4 w-4 text-[#2383E2]" /> How to Help at Home
               </h3>
               <div className="space-y-2.5">
                 {tips.map((tip, i) => (
@@ -1777,11 +1847,11 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
           />
           <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 34 }} />
+              <col style={{ width: 30 }} />
               <col />
-              <col style={{ width: 128 }} />
-              <col style={{ width: 128 }} />
-              <col style={{ width: 92 }} />
+              <col style={{ width: 155 }} />
+              <col style={{ width: 155 }} />
+              <col style={{ width: 78 }} />
             </colgroup>
             <thead>
               <tr className="bg-gray-50 text-[10px] font-bold uppercase tracking-wide text-gray-500">
@@ -1797,17 +1867,19 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
                 const { studentAnswer, isCorrect, isSkipped } = answerStatus(q, ans);
                 const options = Array.isArray(q.options) ? q.options : [];
                 const state = isCorrect ? 'correct' : isSkipped ? 'skipped' : 'wrong';
+                const givenText = isSkipped ? null : (options[studentAnswer] != null ? String(options[studentAnswer]) : `Option ${safeNumber(studentAnswer) + 1}`);
+                const correctText = options[q.correct_idx] != null ? String(options[q.correct_idx]) : `Option ${safeNumber(q.correct_idx) + 1}`;
                 return (
-                  <tr key={i} className={state === 'wrong' ? 'bg-red-50/60' : 'bg-white'} style={{ pageBreakInside: 'avoid' }}>
-                    <td className="border-b border-gray-100 px-2 py-2.5 text-center align-top text-xs font-bold text-gray-400">{i + 1}</td>
-                    <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs font-medium leading-5 text-gray-800">{shortText(q.question, 120)}</td>
-                    <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs leading-5 text-gray-600">
-                      {isSkipped ? <span className="italic text-gray-400">Skipped</span> : shortText(options[studentAnswer] ?? `Option ${safeNumber(studentAnswer) + 1}`, 44)}
+                  <tr key={i} style={{ backgroundColor: state === 'wrong' ? '#fff1f2' : '#ffffff', pageBreakInside: 'avoid' }}>
+                    <td style={{ borderBottom: '1px solid #f3f4f6', padding: '8px 6px', textAlign: 'center', verticalAlign: 'top', fontSize: 11, fontWeight: 700, color: '#9ca3af', wordBreak: 'break-word' }}>{i + 1}</td>
+                    <td style={{ borderBottom: '1px solid #f3f4f6', padding: '8px 10px', verticalAlign: 'top', fontSize: 11, fontWeight: 500, lineHeight: '18px', color: '#1f2937', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{String(q.question || '')}</td>
+                    <td style={{ borderBottom: '1px solid #f3f4f6', padding: '8px 10px', verticalAlign: 'top', fontSize: 11, lineHeight: '18px', color: '#4b5563', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                      {isSkipped ? <span style={{ fontStyle: 'italic', color: '#9ca3af' }}>Not answered</span> : givenText}
                     </td>
-                    <td className="border-b border-gray-100 px-3 py-2.5 align-top text-xs font-semibold leading-5 text-emerald-700">
-                      {shortText(options[q.correct_idx] ?? `Option ${safeNumber(q.correct_idx) + 1}`, 44)}
+                    <td style={{ borderBottom: '1px solid #f3f4f6', padding: '8px 10px', verticalAlign: 'top', fontSize: 11, fontWeight: 600, lineHeight: '18px', color: '#059669', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                      {correctText}
                     </td>
-                    <td className="border-b border-gray-100 px-2 py-2.5 align-top">
+                    <td style={{ borderBottom: '1px solid #f3f4f6', padding: '8px 6px', verticalAlign: 'top' }}>
                       <div style={{ display: 'flex', justifyContent: 'center' }}>
                         <V3StatusChip state={state} />
                       </div>
@@ -2077,11 +2149,11 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
         </div>
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-4 *:w-[calc(25%-12px)]">
-        <KpiCard icon={Trophy} label="Avg Score" value={`${Math.round(overview.avg_score || 0)}%`} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} />
-        <KpiCard icon={CheckCircle} label="Attendance" value={`${Math.round(overview.avg_attendance || 0)}%`} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} />
-        <KpiCard icon={Target} label="At Risk" value={atRisk.length} color={{ bg: 'bg-red-100', text: 'text-red-600' }} />
-        <KpiCard icon={FileText} label="Recent Tests" value={recentTests.length} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} />
+      <div className="mt-8" style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ width: 'calc(25% - 12px)' }}><KpiCard icon={Trophy} label="Avg Score" value={`${Math.round(overview.avg_score || 0)}%`} color={{ bg: 'bg-emerald-100', text: 'text-emerald-600' }} /></div>
+        <div style={{ width: 'calc(25% - 12px)' }}><KpiCard icon={CheckCircle} label="Attendance" value={`${Math.round(overview.avg_attendance || 0)}%`} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} /></div>
+        <div style={{ width: 'calc(25% - 12px)' }}><KpiCard icon={Target} label="At Risk" value={atRisk.length} color={{ bg: 'bg-red-100', text: 'text-red-600' }} /></div>
+        <div style={{ width: 'calc(25% - 12px)' }}><KpiCard icon={FileText} label="Recent Tests" value={recentTests.length} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} /></div>
       </div>
 
       {subjectPerf.length > 0 && (

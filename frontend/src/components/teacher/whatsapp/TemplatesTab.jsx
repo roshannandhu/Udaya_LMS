@@ -65,7 +65,7 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
       if (res?.error) alert(submit ? `Saved, but submitting to WhatsApp failed:\n\n${res.error}` : res.error);
     } catch (e) {
       // Never fail silently — always surface something the teacher can act on.
-      alert(e?.message || 'Could not save the template. Please try again.');
+      alert(e?.message || 'Could not save the message. Please try again.');
     } finally { setBusy(false); }
   };
 
@@ -74,7 +74,7 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
     catch (e) { alert(e.message); }
   };
   const refresh = async (id) => { try { await whatsappApi.templateStatus(id); reload(); } catch (e) { alert(e.message); } };
-  const remove = async (id) => { if (confirm('Delete this template?')) { await whatsappApi.deleteTemplate(id); reload(); } };
+  const remove = async (id) => { if (confirm('Delete this saved message?')) { await whatsappApi.deleteTemplate(id); reload(); } };
 
   const insertTag = (token) => {
     const b = form.body_text || '';
@@ -88,9 +88,9 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
       <div className="glass-panel border border-[#EBEAE7] rounded-card p-4 flex items-start gap-2.5">
         <Copy size={18} className="text-whatsapp-green-fg mt-0.5 flex-shrink-0" />
         <div>
-          <h3 className="text-sm font-semibold text-neutral-800">Message templates</h3>
+          <h3 className="text-sm font-semibold text-neutral-800">Saved messages</h3>
           <p className="text-[11px] text-neutral-500 mt-0.5">
-            A template is a message you save once and reuse. Variables like {'{Student Name}'} fill in
+            A saved message is text you save once and reuse. Variables like {'{Student Name}'} fill in
             each student’s real info automatically. Start from a ready-made one below, or build your own.
           </p>
         </div>
@@ -98,7 +98,7 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
 
       {/* Ready-made library */}
       <div>
-        <SectionHeader title="Ready-made templates"
+        <SectionHeader title="Ready-made saved messages"
           action={<Btn size="sm" variant="primary" icon={Plus} onClick={openNew}>Build your own</Btn>} />
         <div className="space-y-4 mt-1">
           {TEMPLATE_LIBRARY.map((cat) => (
@@ -126,14 +126,14 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
         </div>
       </div>
 
-      {/* Your saved templates */}
+      {/* Your saved messages */}
       <div>
-        <SectionHeader title="Your templates" count={templates.length} />
+        <SectionHeader title="Your saved messages" count={templates.length} />
         <div className="space-y-2">
           {templates.length === 0 && (
             <p className="text-sm text-neutral-400 px-1">
               Nothing saved yet. Tap <span className="font-medium">“Use this”</span> on any ready-made
-              template above, or <button onClick={openNew} className="underline">build your own</button>.
+              message above, or <button onClick={openNew} className="underline">build your own</button>.
             </p>
           )}
           {templates.map((t) => (
@@ -166,10 +166,10 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
       </div>
 
       {/* Builder */}
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit template' : 'Build a template'} size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit saved message' : 'Build a saved message'} size="lg">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="space-y-3">
-            <Input label="Template name" placeholder="e.g. fee_reminder" value={form.name}
+            <Input label="Saved message name" placeholder="e.g. fee_reminder" value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })} />
 
             <Textarea label="Message" rows={6}
@@ -178,7 +178,7 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
 
             <VariablePicker variables={variables} onInsert={insertTag} />
 
-            {/* Optional real attachment — sent with every use of this template */}
+            {/* Optional real attachment — sent with every use of this saved message */}
             <div>
               <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Attach a file (optional)</label>
               {form.media_url ? (
@@ -195,7 +195,7 @@ export default function TemplatesTab({ templates, reload, variables = [], provid
                   {uploading ? 'Uploading…' : 'Add a PDF, image or audio file'}
                 </button>
               )}
-              <p className="text-[11px] text-neutral-400 mt-1">This file goes out every time you use this template.</p>
+              <p className="text-[11px] text-neutral-400 mt-1">This file goes out every time you use this saved message.</p>
               <input ref={fileRef} type="file" className="hidden"
                 accept="image/*,audio/*,application/pdf" onChange={handleFile} />
             </div>

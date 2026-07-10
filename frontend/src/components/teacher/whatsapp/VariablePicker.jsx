@@ -7,11 +7,23 @@ import { Sparkles, HelpCircle, Wand2, Pencil } from 'lucide-react';
 // value before sending. Includes a plain-English "What is a variable?" explainer.
 export default function VariablePicker({ variables = [], onInsert }) {
   const [showHelp, setShowHelp] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const deduped = [];
+  const seen = new Set();
+  (variables || []).forEach((v) => {
+    const key = String(v.name || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    deduped.push(v);
+  });
+  const visibleVariables = showAdvanced ? deduped : deduped.filter((v) => !v.advanced);
+  const advancedCount = deduped.filter((v) => v.advanced).length;
 
   // Preserve backend order while grouping.
   const groups = [];
   const byGroup = {};
-  variables.forEach((v) => {
+  visibleVariables.forEach((v) => {
     if (!byGroup[v.group]) { byGroup[v.group] = []; groups.push(v.group); }
     byGroup[v.group].push(v);
   });
@@ -60,6 +72,13 @@ export default function VariablePicker({ variables = [], onInsert }) {
           </div>
         ))}
       </div>
+
+      {advancedCount > 0 && (
+        <button type="button" onClick={() => setShowAdvanced((s) => !s)}
+          className="mt-2 text-[11px] font-medium text-neutral-500 hover:text-neutral-800">
+          {showAdvanced ? 'Show fewer variables' : `More variables (${advancedCount})`}
+        </button>
+      )}
 
       <div className="flex items-center gap-3 mt-2.5 pt-2 border-t border-[#F1EFEC] text-[10px] text-neutral-400">
         <span className="flex items-center gap-1"><Wand2 size={10} className="text-whatsapp-green-fg" /> Fills automatically</span>

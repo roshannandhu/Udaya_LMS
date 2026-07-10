@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   History, MessagesSquare, Clock, LayoutTemplate, Settings as SettingsIcon,
   ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
-  SlidersHorizontal, IndianRupee, Smartphone, WifiOff,
+  SlidersHorizontal, IndianRupee, Smartphone, WifiOff, HelpCircle,
 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Btn, Input, Skeleton, Tag } from '../../components/ui';
@@ -11,6 +11,8 @@ import { whatsappApi } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
 import SendWizard, { TASKS } from '../../components/teacher/whatsapp/SendWizard';
+import { applyServerAliases } from '../../components/teacher/whatsapp/previewText';
+import GuideSheet from '../../components/teacher/whatsapp/GuideSheet';
 import PendingActions from '../../components/teacher/whatsapp/PendingActions';
 import TemplatesTab from '../../components/teacher/whatsapp/TemplatesTab';
 import ChatsTab from '../../components/teacher/whatsapp/ChatsTab';
@@ -48,6 +50,7 @@ export default function WhatsAppCenterPage() {
     : 'home';
   const [screen, setScreen] = useState(initialScreen);
   const [examId, setExamId] = useState(location.state?.examId || null);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const [config, setConfig] = useState(null);
   const [connection, setConnection] = useState(null);
@@ -60,7 +63,13 @@ export default function WhatsAppCenterPage() {
   const loadConfig = async () => { try { setConfig(await whatsappApi.getConfig()); } catch { setConfig({}); } };
   const loadConnection = async () => { try { setConnection(await whatsappApi.getConnection()); } catch { setConnection({ connected: false }); } };
   const loadTemplates = async () => { try { const r = await whatsappApi.listTemplates(); setTemplates(r.templates || []); } catch { setTemplates([]); } };
-  const loadVariables = async () => { try { const r = await whatsappApi.getVariables(); setVariables(r.variables || []); } catch { setVariables([]); } };
+  const loadVariables = async () => {
+    try {
+      const r = await whatsappApi.getVariables();
+      setVariables(r.variables || []);
+      applyServerAliases(r.aliases); // keep tag-alias handling in lockstep with the backend
+    } catch { setVariables([]); }
+  };
   const loadRecipients = async () => {
     try { const r = await whatsappApi.getRecipients(); setGroups(r.groups || []); }
     catch { setGroups([]); }
@@ -88,11 +97,19 @@ export default function WhatsAppCenterPage() {
   return (
     <div className="min-h-screen bg-[#FAFAF9] pb-28 lg:pb-8">
       <TopBar title="WhatsApp Center" action={
-        <button onClick={() => setScreen('settings')}
-          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-white text-neutral-900 hover:bg-[#F4F2EF] border border-[#EFEDEA] shadow-card">
-          <QrCode size={14} /> Connect
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => setGuideOpen(true)} title="How this works"
+            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-white text-neutral-600 hover:bg-[#F4F2EF] border border-[#EFEDEA] shadow-card">
+            <HelpCircle size={14} /> <span className="hidden sm:inline">Guide</span>
+          </button>
+          <button onClick={() => setScreen('settings')}
+            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-white text-neutral-900 hover:bg-[#F4F2EF] border border-[#EFEDEA] shadow-card">
+            <QrCode size={14} /> Connect
+          </button>
+        </div>
       } />
+
+      <GuideSheet open={guideOpen} onClose={() => setGuideOpen(false)} variables={variables} />
 
       {/* Phone: narrow column. Laptop: home gets a wide grid, wizard/sub-screens breathe. */}
       <div className={`px-4 md:px-8 py-5 mx-auto max-w-3xl ${isTask || sub ? 'lg:max-w-5xl' : 'lg:max-w-6xl'}`}>
@@ -144,6 +161,7 @@ export default function WhatsAppCenterPage() {
             onScreen={setScreen}
             onReviewExam={(id) => { setExamId(id); setScreen('task:exam'); }}
             onSent={loadRecipients}
+            onOpenGuide={() => setGuideOpen(true)}
           />
         )}
       </div>
@@ -152,21 +170,27 @@ export default function WhatsAppCenterPage() {
 }
 
 /* ── Home: connection → pending → task cards, with a laptop right rail ──────── */
-function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, onReviewExam, onSent, currency }) {
+function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, onReviewExam, onSent, currency, onOpenGuide }) {
   const dark = useTheme(s => s.dark);
   return (
     <div className="space-y-5">
       {/* Connection banner */}
       {connection && !connection.connected ? (
-        <button onClick={() => onScreen('settings')}
-          className="w-full flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100/60 transition-colors">
-          <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0"><QrCode size={16} /></span>
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm font-semibold text-amber-900">WhatsApp isn’t connected</span>
-            <span className="block text-xs text-amber-700">Scan a QR code once — then everything below sends from your own number.</span>
-          </span>
-          <ChevronRight size={16} className="text-amber-400 flex-shrink-0" />
-        </button>
+        <div className="space-y-2">
+          <button onClick={() => onScreen('settings')}
+            className="w-full flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100/60 transition-colors">
+            <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0"><QrCode size={16} /></span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-amber-900">WhatsApp isn’t connected</span>
+              <span className="block text-xs text-amber-700">Scan a QR code once — then everything below sends from your own number.</span>
+            </span>
+            <ChevronRight size={16} className="text-amber-400 flex-shrink-0" />
+          </button>
+          <button onClick={onOpenGuide}
+            className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-800 px-1">
+            <HelpCircle size={13} /> New here? See how this works →
+          </button>
+        </div>
       ) : connection?.connected ? (
         <div className="flex items-center gap-2.5 rounded-2xl border border-whatsapp-green-fg/20 bg-whatsapp-green-light/30 px-4 py-2.5">
           <CheckCircle2 size={15} className="text-whatsapp-green-fg flex-shrink-0" />
@@ -338,6 +362,16 @@ function SettingsScreen({ config, reload, onConnected }) {
     <div className="space-y-4 max-w-lg">
       <p className="text-sm text-neutral-500">Link your WhatsApp once — then every message sends from your own number.</p>
 
+      <div className="rounded-card border border-[#EBEAE7] bg-white p-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Setup checklist</p>
+        <div className="space-y-1.5 text-xs text-neutral-600">
+          <p>1. Connect WhatsApp with the QR code.</p>
+          <p>2. Add parent numbers in Students.</p>
+          <p>3. Send a test to your own number.</p>
+          <p>4. Use Send for the first parent message.</p>
+        </div>
+      </div>
+
       {loadingConn ? (
         <Skeleton className="h-28 w-full rounded-2xl" />
       ) : connected ? (
@@ -348,6 +382,11 @@ function SettingsScreen({ config, reload, onConnected }) {
           <div className="flex-1">
             <p className="font-semibold text-neutral-800 leading-tight">Connected</p>
             <p className="text-xs text-neutral-500">{conn.number ? `+${conn.number}` : 'Your WhatsApp is linked.'}</p>
+            {(conn.queue_length || conn.outbox_pending || conn.today_count != null) && (
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                Today {conn.today_count ?? 0} · queue {conn.queue_length ?? 0} · waiting {conn.outbox_pending ?? 0}
+              </p>
+            )}
           </div>
           <Btn size="sm" variant="danger" onClick={disconnect} disabled={busy}>Disconnect</Btn>
         </div>
@@ -363,7 +402,7 @@ function SettingsScreen({ config, reload, onConnected }) {
               </p>
               <p className="text-xs text-neutral-500">
                 {serviceDown
-                  ? 'The service is unreachable right now. Messages are buffered until it returns.'
+                  ? `The service is unreachable right now. ${conn?.outbox_pending || 0} message(s) are waiting.`
                   : 'Scan one QR code from your institute’s phone — then everything sends from your own number. Free, no Meta setup.'}
               </p>
             </div>

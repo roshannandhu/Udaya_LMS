@@ -3,6 +3,7 @@ import { Paperclip, X, FileText, Image as ImageIcon, Music, Type, Loader2 } from
 import { Textarea } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
 import VariablePicker from './VariablePicker';
+import { registryLookup } from './previewText';
 
 const CATEGORIES = [
   { id: 'utility',   label: 'Update',     hint: 'Account & report updates — cheapest' },
@@ -37,8 +38,6 @@ function currentMsgType(value, pendingType) {
 // before sending. A {tag} that matches an auto variable fills itself; anything else
 // (a known "ask" tag, or a custom word) becomes a labelled input.
 export function findAskVars(body = '', registry = []) {
-  const byName = {};
-  (registry || []).forEach((v) => { byName[String(v.name).toLowerCase()] = v; });
   const b = String(body || '').replace(/\{\{/g, '{').replace(/\}\}/g, '}');
   const out = [];
   const seen = new Set();
@@ -48,7 +47,7 @@ export function findAskVars(body = '', registry = []) {
     const name = m[1].trim();
     const key = name.toLowerCase();
     if (!name || seen.has(key)) continue;
-    const v = byName[key];
+    const v = registryLookup(registry, name);
     if (v && v.kind === 'auto') continue; // fills itself
     seen.add(key);
     out.push({ name, example: v?.example || '' });
@@ -56,7 +55,7 @@ export function findAskVars(body = '', registry = []) {
   return out;
 }
 
-// Compose a message: a saved template OR your own words, plus optional media.
+// Compose a message: a saved message OR your own words, plus optional media.
 // One variable format ({Named Tags}); auto tags fill themselves, "ask" tags get a
 // small input below. `value` is owned by the parent.
 export default function Composer({ value, onChange, templates = [], onGoToTemplates,
@@ -148,7 +147,7 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
             className={`px-3 py-1.5 rounded-pill text-xs font-medium border transition-colors ${
               mode === 'template' ? 'bg-ink text-white border-ink'
                 : 'bg-white text-neutral-700 border-[#EBEAE7] hover:bg-[#F4F2EF]'}`}>
-            Use a saved template
+            Use a saved message
           </button>
           <button onClick={() => { if (!forceTemplate) set({ mode: 'freeform' }); }}
             disabled={forceTemplate}
@@ -163,8 +162,8 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
         {isMeta && (
           <p className="text-[11px] text-neutral-400 mt-1">
             {mode === 'template'
-              ? (forceTemplate ? 'Multiple parents selected — a saved template is required on WhatsApp Cloud.'
-                               : 'Templates are pre-approved by WhatsApp, so they reach everyone.')
+              ? (forceTemplate ? 'Multiple parents selected — a saved message is required on WhatsApp Cloud.'
+                               : 'Saved messages are pre-approved by WhatsApp, so they reach everyone.')
               : 'Heads-up: your own words only reach a parent who messaged you in the last 24 hours.'}
           </p>
         )}
@@ -173,25 +172,25 @@ export default function Composer({ value, onChange, templates = [], onGoToTempla
       {mode === 'template' ? (
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Choose a template</label>
+            <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Choose a saved message</label>
             <select value={value.template_name || ''}
               onChange={(e) => {
                 const tmpl = usable.find((t) => t.name === e.target.value);
-                // Auto-attach the template's own file (if it has one).
+                // Auto-attach the saved message's own file (if it has one).
                 set({ template_name: e.target.value, category: tmpl?.category || 'utility',
                   media_url: tmpl?.media_url || null, media_type: tmpl?.media_type || null,
                   media_name: tmpl?.media_name || null });
               }}
               className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm outline-none focus:border-neutral-400">
-              <option value="">Select a template…</option>
+              <option value="">Select a saved message…</option>
               {usable.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
             {usable.length === 0 && (
               <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2 text-[11px] text-amber-800">
-                No saved templates yet.{' '}
+                No saved messages yet.{' '}
                 {onGoToTemplates
-                  ? <button onClick={onGoToTemplates} className="underline font-medium">Create one in Templates →</button>
-                  : 'Create one in the Templates tab.'}
+                  ? <button onClick={onGoToTemplates} className="underline font-medium">Create one in Saved Messages →</button>
+                  : 'Create one in Saved Messages.'}
                 {' '}Or switch to <span className="font-medium">“Write your own”</span>.
               </div>
             )}

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw, Search, Trash2, ChevronDown } from 'lucide-react';
 import { Tag, Skeleton, Avatar } from '../../ui';
 import { whatsappApi } from '../../../lib/api';
 import { fmtDate, msgType } from './RecentMessagesTable';
@@ -13,11 +13,33 @@ const STATUS = {
   not_configured:{ c: 'amber', l: 'Pending' },
 };
 
+// The three ways a teacher can clear delivery reports. Each maps straight onto the
+// DELETE /teacher/whatsapp/messages filters the backend already supports.
+const CLEAR_OPTIONS = [
+  {
+    id: 'all', label: 'Clear everything',
+    confirm: 'Delete ALL delivery reports (sent, delivered, read, failed)?\n\nSaved messages, automatic messages, and parent chats are kept.',
+    filters: () => ({}),
+  },
+  {
+    id: 'failed', label: 'Only failed messages',
+    confirm: 'Delete only the FAILED delivery reports?\n\nEverything that was actually sent stays in the list.',
+    filters: () => ({ status: 'failed' }),
+  },
+  {
+    id: 'old', label: 'Older than 30 days',
+    confirm: 'Delete delivery reports older than 30 days?\n\nThe last 30 days stay in the list.',
+    filters: () => ({ before: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }),
+  },
+];
+
 export default function HistoryTab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [clearOpen, setClearOpen] = useState(false);
+  const clearRef = useRef(null);
 
   const load = async () => {
     setLoading(true);
@@ -26,6 +48,28 @@ export default function HistoryTab() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  // Close the clear menu on any outside click.
+  useEffect(() => {
+    if (!clearOpen) return undefined;
+    const close = (e) => { if (!clearRef.current?.contains(e.target)) setClearOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [clearOpen]);
+
+  const clearHistory = async (option) => {
+    setClearOpen(false);
+    if (!window.confirm(option.confirm)) return;
+    setLoading(true);
+    try {
+      const r = await whatsappApi.clearMessages(option.filters());
+      await load();
+      if (r?.deleted === 0) alert('Nothing matched — no reports were deleted.');
+    } catch (e) {
+      alert(e?.message || 'Could not clear delivery reports.');
+      setLoading(false);
+    }
+  };
 
   const rows = useMemo(() => {
     let r = data?.messages || [];
@@ -60,6 +104,25 @@ export default function HistoryTab() {
             <option value="pending">Pending</option>
           </select>
           <button onClick={load} className="p-2 rounded-lg hover:bg-[#F4F2EF]"><RefreshCw size={15} className="text-neutral-500" /></button>
+          <div className="relative" ref={clearRef}>
+            <button onClick={() => setClearOpen((o) => !o)} disabled={loading || !(data?.messages || []).length}
+              className="flex items-center gap-1 px-2 py-2 rounded-lg hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              title="Clear delivery reports">
+              <Trash2 size={15} className="text-red-500" />
+              <ChevronDown size={12} className="text-red-400" />
+            </button>
+            {clearOpen && (
+              <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-[#EBEAE7] bg-white shadow-lg py-1">
+                <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Clear delivery reports</p>
+                {CLEAR_OPTIONS.map((o) => (
+                  <button key={o.id} onClick={() => clearHistory(o)}
+                    className="block w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-red-50 hover:text-red-700">
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

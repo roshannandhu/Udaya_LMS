@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Award, Bot, CalendarDays, Download, Loader2, Share2, Sparkles, TrendingUp } from 'lucide-react';
 import { aiApi } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth';
 
 // --- Premium Graph Imports ---
 import SubjectProgressionLineChart from './graphs/SubjectProgressionLineChart';
@@ -129,6 +130,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   const [showAiModal, setShowAiModal] = useState(autoOpenAI);
   const aiRequestRef = useRef(0);
   const autoOpenTriggeredRef = useRef(false);
+  const [tokens, setTokens] = useState(null); // { remaining, limit, unlimited }
+  const { user } = useAuthStore();
+  const isStudent = (user?.role ?? localStorage.getItem('tutoria_user_role')) === 'student';
 
   const {
     student = {},
@@ -163,6 +167,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   const aiReport = aiResult.key === aiKey ? aiResult.report : '';
   const aiError = aiResult.key === aiKey ? aiResult.error : '';
   const loadingAi = loadingAiKey === aiKey;
+  const isLimitError = !!aiError && aiError.toLowerCase().includes('daily limit');
 
   const PERIODS = [
     { id: 'overall', label: 'Overall' },
@@ -217,13 +222,26 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         report: res.report || 'Generated insights.',
         error: '',
       });
+      // Decrement local token count after a successful call
+      setTokens(prev => prev && !prev.unlimited
+        ? { ...prev, remaining: Math.max(0, (prev.remaining ?? 1) - 1) }
+        : prev
+      );
     } catch (err) {
       if (aiRequestRef.current !== requestId) return;
+      const msg = err?.message || 'Failed to generate insights.';
       setAiResult({
         key: aiKey,
         report: '',
-        error: err?.message || 'Failed to generate insights.',
+        error: msg,
       });
+      // If the backend rejected with the daily limit, zero out the counter
+      if (msg.toLowerCase().includes('daily limit')) {
+        setTokens(prev => prev
+          ? { ...prev, remaining: 0 }
+          : { remaining: 0, limit: 3, unlimited: false }
+        );
+      }
     } finally {
       if (aiRequestRef.current === requestId) {
         setLoadingAiKey(null);
@@ -237,6 +255,12 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     setShowAiModal(true);
     handleGenerateAI();
   }, [autoOpenAI, handleGenerateAI, studentId]);
+
+  // Fetch remaining AI token count for students on mount
+  useEffect(() => {
+    if (!isStudent) return;
+    aiApi.getTokens().then(t => setTokens(t)).catch(() => {});
+  }, [isStudent]);
 
   return (
     <div className="w-full bg-canvas pb-24 text-slate-900 font-sans">
@@ -271,21 +295,45 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         animate={{ opacity: 1, y: 0 }}
         className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-4 md:gap-5 pb-24"
       >
-        <div className="md:col-span-6 xl:col-span-8 rounded-card bg-gradient-to-br from-[#14B8A6] via-[#22C7C9] to-[#635BFF] text-white p-5 md:p-6 shadow-soft min-h-[220px] flex flex-col justify-between cursor-pointer" onClick={handleGenerateAI}>
+        <div
+          className={`md:col-span-6 xl:col-span-8 rounded-card bg-gradient-to-br from-[#14B8A6] via-[#22C7C9] to-[#635BFF] text-white p-5 md:p-6 shadow-soft min-h-[220px] flex flex-col justify-between ${isLimitError ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'}`}
+          onClick={isLimitError ? undefined : handleGenerateAI}
+        >
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-pill bg-white/15 text-xs font-bold mb-5">
               <Sparkles size={15} />
               AI Mentor
+              {isStudent && tokens && !tokens.unlimited && (
+                <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-black ${tokens.remaining === 0 ? 'bg-red-400/90 text-white' : 'bg-white/30 text-white'}`}>
+                  {tokens.remaining}/{tokens.limit} left today
+                </span>
+              )}
             </div>
             <h2 className="text-2xl md:text-4xl font-black leading-tight tracking-tight">
-              {loadingAi ? 'Generating insights...' : aiReport ? 'Open mentor report' : aiError ? 'Retry mentor report' : `Learning snapshot for ${firstName}`}
+              {loadingAi
+                ? 'Generating insights...'
+                : aiReport
+                  ? 'Open mentor report'
+                  : isLimitError
+                    ? 'Daily limit reached'
+                    : aiError
+                      ? 'Something went wrong'
+                      : `Learning snapshot for ${firstName}`}
             </h2>
             <p className="mt-3 max-w-2xl text-sm md:text-base text-blue-50 leading-relaxed">
-              {aiError || `Scores, attendance, activity, and subject progress are combined into one focused report.`}
+              {isLimitError
+                ? `You've used all ${tokens?.limit ?? 3} AI insights for today. Your limit resets tomorrow — come back then!`
+                : aiError
+                  ? aiError
+                  : `Scores, attendance, activity, and subject progress are combined into one focused report.`}
             </p>
           </div>
-          <button className="mt-5 self-start inline-flex items-center gap-2 rounded-pill bg-white px-4 py-2 text-sm font-black text-blue-700">
-            <Bot size={16} /> {aiReport ? 'View AI report' : 'Generate AI report'}
+          <button
+            disabled={isLimitError}
+            className={`mt-5 self-start inline-flex items-center gap-2 rounded-pill bg-white px-4 py-2 text-sm font-black ${isLimitError ? 'text-gray-400 cursor-not-allowed' : 'text-blue-700'}`}
+          >
+            <Bot size={16} />
+            {aiReport ? 'View AI report' : isLimitError ? 'Try again tomorrow' : 'Generate AI report'}
           </button>
         </div>
 
@@ -445,6 +493,15 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
                   <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-4">
                     <Loader2 size={32} className="animate-spin text-[#FDE047]" />
                     <p className="font-bold text-xs uppercase tracking-widest">Analyzing algorithms...</p>
+                  </div>
+                ) : isLimitError ? (
+                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+                    <span className="text-4xl">⏳</span>
+                    <p className="font-black text-base text-amber-900">Daily limit reached</p>
+                    <p className="text-sm text-amber-700 leading-relaxed">
+                      You've used all <strong>{tokens?.limit ?? 3}</strong> AI insights for today.<br />
+                      Your limit resets at midnight — come back tomorrow!
+                    </p>
                   </div>
                 ) : aiError ? (
                   <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-700">

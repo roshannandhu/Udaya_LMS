@@ -186,6 +186,18 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
     [threads, activeKey]
   );
 
+  const handleClearAllChats = async () => {
+    if (!window.confirm('Delete ALL parent chats?\n\nEvery conversation is removed — incoming parent messages and your sent messages inside them (which also clears the delivery reports). Saved messages and automatic messages are kept.\n\nThis cannot be undone.')) return;
+    try {
+      await whatsappApi.clearInbox();
+      setThreads([]);
+      setActiveKey(null);
+      reportUnread([]);
+    } catch (e) {
+      alert(e?.message || 'Could not clear chats.');
+    }
+  };
+
   const handleDeleteChat = async () => {
     if (!current || !window.confirm('Delete this entire chat history? This cannot be undone.')) return;
     try {
@@ -436,6 +448,11 @@ export default function ChatsTab({ connection, groups = [], onUnreadChange }) {
           <button onClick={load} className="p-2 rounded-lg hover:bg-[#F4F2EF]" title="Refresh">
             <RefreshCw size={15} className="text-neutral-500" />
           </button>
+          {view === 'chats' && (threads || []).length > 0 && (
+            <button onClick={handleClearAllChats} className="p-2 rounded-lg hover:bg-red-50" title="Clear all chats">
+              <Trash2 size={15} className="text-red-500" />
+            </button>
+          )}
         </div>
 
         <div className="space-y-1.5 overflow-y-auto min-h-0 flex-1 pr-0.5">

@@ -101,7 +101,7 @@ function JobModal({ open, onClose, initial, templates, groups, onSaved }) {
           <label className="text-xs font-medium text-neutral-600 mb-1.5 block">Message type</label>
           <select value={form.mode} onChange={(e) => set({ mode: e.target.value })}
             className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
-            <option value="template">Template message</option>
+            <option value="template">Saved message</option>
             <option value="freeform">Free-form text</option>
             <option value="report">Report card (criteria-based)</option>
           </select>
@@ -110,7 +110,7 @@ function JobModal({ open, onClose, initial, templates, groups, onSaved }) {
         {form.mode === 'template' && (
           <select value={form.template_name || ''} onChange={(e) => set({ template_name: e.target.value })}
             className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#EFEDEA] text-sm">
-            <option value="">Select template…</option>
+            <option value="">Select a saved message…</option>
             {approved.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
           </select>
         )}
@@ -188,7 +188,7 @@ export default function AutomationTab({ templates, groups }) {
     const base = { test_to_self: phone, category: j.category || 'utility' };
     let payload;
     if (j.mode === 'template') {
-      if (!j.template_name) { alert('This automation has no template selected yet.'); return; }
+      if (!j.template_name) { alert('This automation has no saved message selected yet.'); return; }
       payload = { ...base, mode: 'template', template_name: j.template_name };
     } else if (j.mode === 'report') {
       const msg = (j.criteria && j.criteria[0]?.message) || j.body_text

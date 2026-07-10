@@ -51,7 +51,9 @@ def _daily_limit() -> int:
 
 def normalize_in(raw: Optional[str]) -> str:
     """Normalise an Indian phone number to digits-with-country-code (e.g. 9198…).
-    Auto-prepends 91 for a bare 10-digit number; strips a leading 0 / +."""
+    Auto-prepends 91 for a bare 10-digit number; strips a leading 0 / +. Anything
+    that doesn't end up a valid 12-digit 91-number returns "" so a truncated or
+    garbage number is skipped instead of silently sent to the wrong recipient."""
     digits = re.sub(r"\D", "", raw or "")
     if not digits:
         return ""
@@ -59,6 +61,8 @@ def normalize_in(raw: Optional[str]) -> str:
         digits = digits[1:]
     if len(digits) == 10:
         digits = "91" + digits
+    if len(digits) != 12 or not digits.startswith("91"):
+        return ""
     return digits
 
 

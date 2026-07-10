@@ -6895,8 +6895,6 @@ async def generate_test_from_pdf(
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    if len(file_bytes) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
 
     ct    = (file.content_type or "").lower()
     fname = (file.filename or "").lower()
@@ -12716,6 +12714,11 @@ WA_VARIABLES = [
     {"name": "App Download Link",  "kind": "auto", "group": "General",     "example": "app download link","description": "Link to download the Android app"},
     {"name": "Date",               "kind": "auto", "group": "General",     "example": "08 Jun 2026",      "description": "Today's date"},
     {"name": "Time",               "kind": "auto", "group": "General",     "example": "03:45 PM",         "description": "Current time"},
+    {"name": "Month",              "kind": "auto", "group": "General",     "example": "June",             "description": "Current month"},
+    {"name": "Year",               "kind": "auto", "group": "General",     "example": "2026",             "description": "Current year"},
+    {"name": "Parent Name",        "kind": "auto", "group": "Student",     "example": "Parent",           "description": "Greeting name (always 'Parent')"},
+    {"name": "Parent Phone",       "kind": "auto", "group": "Student",     "example": "9198xxxxxx10",     "description": "The parent's WhatsApp number"},
+    {"name": "Student Phone",      "kind": "auto", "group": "Student",     "example": "9188xxxxxx20",     "description": "The student's own number"},
     {"name": "Fee Amount",         "kind": "ask",  "group": "You type this", "example": "5000",           "description": "You'll type this before sending"},
     {"name": "Due Date",           "kind": "ask",  "group": "You type this", "example": "15 Jun",         "description": "You'll type this before sending"},
     {"name": "Class Date",         "kind": "ask",  "group": "You type this", "example": "Monday",         "description": "You'll type this before sending"},
@@ -12723,8 +12726,9 @@ WA_VARIABLES = [
     {"name": "Teacher Name",       "kind": "ask",  "group": "You type this", "example": "Mr. Rao",        "description": "You'll type this before sending"},
 ]
 
-# Every key an "auto" variable can resolve to (canonical, lower-cased). Includes a
-# couple of resolvable-but-unlisted ones ({Parent Name}, {Student Phone}).
+# Every key an "auto" variable can resolve to (canonical, lower-cased). Every key
+# here MUST have a matching WA_VARIABLES entry, or the UI will wrongly prompt the
+# teacher for a value the engine then overwrites (test enforces this).
 _WA_AUTO_KEYS = {
     "student name", "student id", "class", "username", "password", "login link",
     "institute name", "attendance", "score", "points", "latest exam",
@@ -12806,9 +12810,11 @@ def _wa_normalize_body(body: str) -> str:
 
 def _wa_render(text_or_list, recip: dict, manual_values: Optional[dict] = None):
     """THE single template engine. Replace every {Named Tag} in a body (or list of
-    strings) with its value for this recipient: auto tags from data, the rest from
-    the teacher's manual_values map. Unknown / empty tags are stripped, never sent
-    as raw braces. Replaces the old positional {{1}} system + guess heuristics."""
+    strings) with its value for this recipient. Resolution order mirrors the live
+    preview exactly (previewText.jsx), so what the teacher sees is what parents get:
+    ① a value the teacher typed (manual_values) ② auto tags from student data
+    ③ an unknown tag stays as its plain word — never raw braces, never silently
+    stripped to an empty hole in the sentence."""
     mv = {str(k).strip().lower(): ("" if v is None else str(v))
           for k, v in (manual_values or {}).items()}
 
@@ -12819,13 +12825,13 @@ def _wa_render(text_or_list, recip: dict, manual_values: Optional[dict] = None):
             raw = m.group(1).strip()
             key = raw.lower()
             canon = _WA_ALIAS.get(key, key)
+            if key in mv and mv[key].strip():
+                return mv[key]
+            if canon in mv and mv[canon].strip():
+                return mv[canon]
             if canon in _WA_AUTO_KEYS:
                 return _wa_auto_value(canon, recip)
-            if key in mv:
-                return mv[key]
-            if canon in mv:
-                return mv[canon]
-            return ""  # unknown / unfilled → strip (no broken placeholder)
+            return raw  # unknown word → keep it visible, same as the preview
 
         out = re.sub(r"\{([^{}]+)\}", repl, s)
         return out.replace("{}", "")
@@ -12882,10 +12888,13 @@ def _wa_positional_values(body: str, recip: dict, manual_values: Optional[dict] 
     for raw in names:
         key = raw.strip().lower()
         canon = _WA_ALIAS.get(key, key)
-        if canon in _WA_AUTO_KEYS:
+        manual = mv.get(key, mv.get(canon, ""))
+        if str(manual).strip():
+            vals.append(str(manual))
+        elif canon in _WA_AUTO_KEYS:
             vals.append(str(_wa_auto_value(canon, recip)))
         else:
-            vals.append(mv.get(key, mv.get(canon, "")))
+            vals.append(manual)
     return vals
 
 
@@ -13447,7 +13456,9 @@ def wa_variables(user = Depends(verify_token)):
             "advanced": bool(v.get("advanced")) or v["name"] not in primary,
             "token": "{" + v["name"] + "}",
         })
-    return {"variables": variables}
+    # Aliases ship with the registry so the frontend preview/classifier never
+    # hand-copies (and drifts from) the backend table again.
+    return {"variables": variables, "aliases": _WA_ALIAS}
 
 
 # ── Media upload ──────────────────────────────────────────────────────────────
@@ -13701,6 +13712,27 @@ def wa_clear_messages(status: Optional[str] = None, before: Optional[str] = None
     """
     _wa_require_teacher(user)
     try:
+        if _wa_messages_have_test_id():
+            try:
+                sq = service_supabase.table("whatsapp_messages").select("test_id, status").eq(
+                    "teacher_id", user["teacher_id"])
+                if status == "pending":
+                    sq = sq.in_("status", ["queued", "not_configured"])
+                elif status:
+                    sq = sq.eq("status", status)
+                if before:
+                    sq = sq.lt("created_at", before)
+                if standard_id:
+                    sq = sq.eq("standard_id", standard_id)
+                sent_test_ids = list({
+                    r.get("test_id") for r in (sq.execute().data or [])
+                    if r.get("test_id") and r.get("status") not in ("failed", "not_configured")
+                })
+                if sent_test_ids:
+                    service_supabase.table("tests").update(
+                        {"results_notify_dismissed": True}).in_("id", sent_test_ids).execute()
+            except Exception as e:
+                print(f"[wa] clear history pending-dedupe preserve skipped: {e}")
         q = service_supabase.table("whatsapp_messages").delete().eq(
             "teacher_id", user["teacher_id"])
         if status == "pending":
@@ -14763,6 +14795,17 @@ async def wa_webhook(request: Request):
     pid = body.get("id") or body.get("message_id")
     status = body.get("status")
 
+    # Status updates from our own Node service always carry the shared token
+    # (whatsapp-service postToBackend sets X-Service-Token on every call). Require
+    # it so nobody can forge delivery ticks. Meta's cloud webhooks can't send our
+    # token, so the gate only applies while the free QR (baileys) transport is
+    # active — the only transport that posts plain {id, status} bodies here.
+    if pid and status:
+        import whatsapp_client as _wac
+        if (_wac.SHARED_TOKEN and wa.get_wa_config().get("provider") == "baileys"
+                and request.headers.get("x-service-token") != _wac.SHARED_TOKEN):
+            return {"ok": True}  # silently drop unauthenticated status posts
+
     # 1) Delivery-status update for a message we sent. Rank-guarded so a late
     #    'delivered' can never downgrade an already-'read' row, then pushed to any
     #    open Chats screens so the ticks move live.
@@ -15005,6 +15048,25 @@ def wa_inbox_delete_chat(phone: str, user = Depends(verify_token)):
     except Exception as e:
         print(f"[wa] inbox delete chat failed: {e}")
     return {"ok": True}
+
+
+@app.delete("/api/teacher/whatsapp/inbox")
+def wa_inbox_clear_all(user = Depends(verify_token)):
+    """Clear EVERY parent chat thread for this teacher — the bulk form of the
+    per-thread delete above: incoming messages go, and so do the outbound rows
+    that render inside those threads (which are also this teacher's delivery
+    reports). Templates, automations and settings are untouched."""
+    _wa_require_teacher(user)
+    try:
+        inbound = service_supabase.table("whatsapp_inbox").delete().eq(
+            "teacher_id", user["teacher_id"]).execute()
+        deleted = len(inbound.data or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not clear chats: {e}")
+    # Outbound rows render inside threads too — clear them via the delivery-report
+    # path so its "already notified" exam dedup preservation runs.
+    wa_clear_messages(user=user)
+    return {"ok": True, "deleted": deleted}
 
 
 # ── Scheduled / automatic jobs ────────────────────────────────────────────────

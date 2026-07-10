@@ -34,11 +34,13 @@ def _write(items: list):
 
 
 def append(phone: str, text: str, *, media_url: Optional[str] = None,
-           media_type: Optional[str] = None, dedupe_key: Optional[str] = None):
+           media_type: Optional[str] = None, media_name: Optional[str] = None,
+           dedupe_key: Optional[str] = None):
     """Buffer one send for later delivery and make sure the drain loop is running."""
     items = _read()
     items.append({"phone": phone, "text": text, "media_url": media_url,
-                  "media_type": media_type, "dedupe_key": dedupe_key})
+                  "media_type": media_type, "media_name": media_name,
+                  "dedupe_key": dedupe_key})
     _write(items)
     ensure_loop()
 
@@ -75,7 +77,7 @@ async def _drain_loop():
             try:
                 await client.send(p["phone"], p.get("text") or "",
                                   media_url=p.get("media_url"), media_type=p.get("media_type"),
-                                  dedupe_key=p.get("dedupe_key"))
+                                  media_name=p.get("media_name"), dedupe_key=p.get("dedupe_key"))
             except client.ServiceDownError:
                 remaining.append(p)  # went down mid-drain — keep for next pass
             except Exception as e:
