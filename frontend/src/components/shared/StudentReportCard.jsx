@@ -22,6 +22,7 @@ import TestBellCurve from './graphs/TestBellCurve';
 import TestQuadrantChart from './graphs/TestQuadrantChart';
 import TopicPolarArea from './graphs/TopicPolarArea';
 import ActivityStepper from './graphs/ActivityStepper';
+import TimeAllocationDonut from './graphs/TimeAllocationDonut';
 
 const cardTone = {
   blue: 'border-l-[#2563EB]',
@@ -85,6 +86,7 @@ const MetricTile = ({ icon: Icon, label, value, accent = "blue" }) => {
     amber: 'bg-amber-50 text-amber-700 ring-amber-100',
     emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
     violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+    rose: 'bg-rose-50 text-rose-700 ring-rose-100',
   };
   return (
     <div className={`rounded-card p-4 ring-1 bg-white shadow-soft ${styles[accent] || styles.blue}`}>
@@ -103,6 +105,23 @@ const SectionTitle = ({ eyebrow, title }) => (
     <h2 className="mt-1 text-xl md:text-2xl font-black text-slate-950 tracking-tight">{title}</h2>
   </div>
 );
+
+function useCountUp(target, duration = 700) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    const n = Number(target);
+    if (!Number.isFinite(n) || n === 0) { setValue(0); return; }
+    let current = 0;
+    const step = n / (duration / 16);
+    const timer = setInterval(() => {
+      current += step;
+      if (current >= n) { setValue(n); clearInterval(timer); }
+      else setValue(Math.round(current));
+    }, 16);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+  return value;
+}
 
 export default function StudentReportCard({ data, period, onPeriodChange, onDownloadPDF, showHeader = true, autoOpenAI = false }) {
   const [aiResult, setAiResult] = useState({ key: null, report: '', error: '' });
@@ -128,7 +147,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     assignmentData = [], 
     bellData = [], 
     quadrantData = [],
-    activityData = [] 
+    activityData = [],
+    donutData = [],
+    streakData = {},
+    badges = [],
   } = data || {};
   const studentId = student?.id;
   const reportPeriod = period || 'overall';
@@ -145,6 +167,9 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   const avgScore = Math.round(student.avg_score || 0);
   const attendancePct = Math.round(student.attendance_pct || 0);
   const firstName = student.name ? student.name.split(' ')[0] : 'Student';
+  const animatedScore = useCountUp(avgScore);
+  const animatedAttendance = useCountUp(attendancePct);
+  const animatedStreak = useCountUp(streakData?.current || 0);
 
   const handleShare = async () => {
     const text = `Udaya LMS Report for ${student.name || 'Student'} (${period}). Score: ${student.avg_score ?? 'N/A'}% | Attendance: ${student.attendance_pct ?? 'N/A'}%`;
@@ -260,11 +285,32 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         </div>
 
         <div className="md:col-span-6 xl:col-span-4 grid grid-cols-2 gap-3 md:gap-4">
-          <MetricTile icon={TrendingUp} label="Avg Score" value={`${avgScore}%`} accent="blue" />
-          <MetricTile icon={CalendarDays} label="Attendance" value={`${attendancePct}%`} accent="emerald" />
+          <MetricTile icon={TrendingUp} label="Avg Score" value={`${animatedScore}%`} accent={avgScore === 0 ? 'blue' : avgScore >= 80 ? 'emerald' : avgScore >= 40 ? 'amber' : 'rose'} />
+          <MetricTile icon={CalendarDays} label="Attendance" value={`${animatedAttendance}%`} accent={attendancePct === 0 ? 'blue' : attendancePct >= 90 ? 'emerald' : attendancePct >= 75 ? 'amber' : 'rose'} />
           <MetricTile icon={Award} label="Rank" value={data?.rank ? `#${data.rank}` : '--'} accent="amber" />
-          <MetricTile icon={Bot} label="AI Status" value={aiReport ? 'Ready' : loadingAi ? '...' : 'Tap'} accent="violet" />
+          <div className="rounded-card p-4 ring-1 bg-gradient-to-br from-orange-50 to-amber-50 ring-orange-100 shadow-soft">
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-orange-400">
+              <span>🔥</span> Streak
+            </div>
+            <div className="mt-2 text-2xl md:text-3xl font-black text-slate-950 tabular-nums leading-none">
+              {animatedStreak}
+              <span className="text-sm font-bold text-orange-300 ml-1">days</span>
+            </div>
+            {(streakData?.best || 0) > 0 && (
+              <div className="text-[11px] font-bold text-slate-400 mt-1">Best {streakData.best}d</div>
+            )}
+          </div>
         </div>
+
+        {badges.length > 0 && (
+          <div className="md:col-span-6 xl:col-span-12 flex gap-2 flex-wrap">
+            {badges.map((b, i) => (
+              <div key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-100 shadow-soft text-sm font-bold text-slate-700">
+                <span>{b.emoji}</span> {b.label}
+              </div>
+            ))}
+          </div>
+        )}
 
         <SectionTitle eyebrow="Performance" title="Scores, subjects, and class benchmark" />
 
@@ -326,13 +372,16 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         <GlassCard className="md:col-span-6 xl:col-span-8" title="Engagement Balance" subtitle="Completion and participation by evidence type" tone="cyan" tall>
           <LearningSignalBars data={learningSignalData} />
         </GlassCard>
+        <GlassCard className="md:col-span-6 xl:col-span-4" title="Activity Mix" subtitle="How you spent your learning time across all activity types" tone="blue" tall>
+          <TimeAllocationDonut data={donutData} />
+        </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Topic Mastery" subtitle="Strong and weak learning areas" tone="amber" tall>
           <TopicPolarArea data={polarData} />
         </GlassCard>
         <GlassCard className="md:col-span-6 xl:col-span-4" title="Assignments" subtitle="Submitted, pending, and overdue work" tone="violet" tall>
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-8" title="Study Rhythm" subtitle="Daily activity score with raw video, test, and assignment counts" tone="emerald" tall>
+        <GlassCard className="md:col-span-6 xl:col-span-4" title="Study Rhythm" subtitle="Daily activity score with raw video, test, and assignment counts" tone="emerald" tall>
           <StudyRhythmTimeline data={activityFlowData} />
         </GlassCard>
 

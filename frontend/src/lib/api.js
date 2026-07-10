@@ -558,6 +558,8 @@ const normalizeReportV2 = (report = {}) => {
         name: shortLabel(t.test_title, `T${index + 1}`),
         studentScore: clampPct(t.score_pct),
         classScore: clampPct(t.class_avg_score_pct ?? classAvg),
+        rank: t.rank || null,
+        totalAttempts: t.total_attempts || null,
       }))
     : [];
 
@@ -614,6 +616,29 @@ const normalizeReportV2 = (report = {}) => {
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-28)
     .map(([date, count]) => ({ date, count }));
+
+  // Streak computation from combined activity calendar
+  const sortedActivityDays = Object.entries(activityByDate)
+    .filter(([, count]) => count > 0)
+    .map(([date]) => date)
+    .sort();
+  let bestStreak = 0, runStreak = 0, prevActivityDay = null;
+  for (const day of sortedActivityDays) {
+    const cur = new Date(`${day}T00:00:00`);
+    if (prevActivityDay) {
+      const diff = Math.round((cur - prevActivityDay) / 86400000);
+      runStreak = diff === 1 ? runStreak + 1 : 1;
+    } else {
+      runStreak = 1;
+    }
+    bestStreak = Math.max(bestStreak, runStreak);
+    prevActivityDay = cur;
+  }
+  const todayKey = localDateKey(new Date());
+  const yesterdayKey = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localDateKey(d); })();
+  const streakActive = (activityByDate[todayKey] || 0) > 0 || (activityByDate[yesterdayKey] || 0) > 0;
+  const currentStreak = streakActive ? runStreak : 0;
+  const streakData = { current: currentStreak, best: bestStreak };
 
   const videoByDate = Object.fromEntries((report.video_heatmap || []).map((r) => [String(r.date).slice(0, 10), r.minutes || 0]));
   const testsByDate = Object.fromEntries((report.test_heatmap || []).map((r) => [String(r.date).slice(0, 10), r.count || 0]));
@@ -728,12 +753,12 @@ const normalizeReportV2 = (report = {}) => {
     };
   });
 
-  const timeItems = totalVideoMinutes > 0
-    ? [{ name: 'Video Minutes', value: totalVideoMinutes, color: '#2563EB' }]
-    : [];
   const donutData = [
-    ...timeItems.filter((item) => item.value > 0),
-  ];
+    totalVideoMinutes > 0 && { name: 'Videos', value: totalVideoMinutes, color: '#2563EB', unit: 'min' },
+    totalTests > 0 && { name: 'Tests', value: totalTests, color: '#7C3AED', unit: 'taken' },
+    assignmentSubmitted > 0 && { name: 'Assignments', value: assignmentSubmitted, color: '#D97706', unit: 'submitted' },
+    liveAttended > 0 && { name: 'Live classes', value: liveAttended, color: '#059669', unit: 'attended' },
+  ].filter(Boolean);
 
   const attendanceDays = (report.attendance_heatmap || []).map((r) => {
     const status = (r.absent || 0) > (r.present || 0) + (r.late || 0)
@@ -761,6 +786,29 @@ const normalizeReportV2 = (report = {}) => {
         return bins;
       })();
 
+  // Badges — derived purely from already-computed data, no extra fetches
+  const badges = [];
+  if (currentStreak >= 7) badges.push({ emoji: '🔥', label: `${currentStreak}-day streak`, color: '#F97316' });
+  else if (currentStreak >= 3) badges.push({ emoji: '⚡', label: `${currentStreak}-day streak`, color: '#FBBF24' });
+
+  const beatClassCount = recentTests.filter(
+    (t) => t.class_avg_score_pct != null && clampPct(t.score_pct) > clampPct(t.class_avg_score_pct)
+  ).length;
+  if (beatClassCount >= 5) badges.push({ emoji: '🏆', label: `Beat class avg ${beatClassCount}×`, color: '#F59E0B' });
+  else if (beatClassCount >= 3) badges.push({ emoji: '⭐', label: `Beat class avg ${beatClassCount}×`, color: '#94A3B8' });
+
+  if (report.rank && report.rank <= 3)
+    badges.push({ emoji: report.rank === 1 ? '🥇' : report.rank === 2 ? '🥈' : '🥉', label: `Rank #${report.rank} in class`, color: '#F59E0B' });
+
+  if (assignmentTotal > 0 && assignmentSubmitted >= assignmentTotal)
+    badges.push({ emoji: '📚', label: '100% assignments', color: '#10B981' });
+
+  if (liveTotal > 0 && liveAttended >= liveTotal)
+    badges.push({ emoji: '🎯', label: '100% live classes', color: '#6366F1' });
+
+  if (videosAvailable > 0 && videosCompleted >= videosAvailable)
+    badges.push({ emoji: '🎬', label: 'All videos done', color: '#0891B2' });
+
   return {
     ...report,
     student,
@@ -773,7 +821,7 @@ const normalizeReportV2 = (report = {}) => {
     heatmapData,
     overlapData,
     donutData,
-    treemapData: timeItems.filter((item) => item.value > 0).map((d) => ({ name: d.name, size: d.value })),
+    treemapData: donutData.map((d) => ({ name: d.name, size: d.value })),
     learningSignalData,
     activityFlowData,
     attendanceDays,
@@ -782,6 +830,8 @@ const normalizeReportV2 = (report = {}) => {
     assignmentData,
     bellData: bellBins,
     quadrantData: scatterData,
+    streakData,
+    badges,
     activityData: recentTests.slice(-5).reverse().map((t) => ({
       time: String(t.date || '').slice(11, 16) || '--',
       title: `${t.test_title || 'Test'} - ${clampPct(t.score_pct)}%`,

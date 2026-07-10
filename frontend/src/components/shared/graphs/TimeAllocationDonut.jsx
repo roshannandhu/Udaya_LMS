@@ -37,16 +37,16 @@ export default function TimeAllocationDonut({ data = [] }) {
         </ResponsiveContainer>
       </div>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-4">
-        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Total Mins</span>
-        <span className="text-2xl font-serif font-black text-[#112B3C]">
-          {total}
-        </span>
+        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Activities</span>
+        <span className="text-2xl font-serif font-black text-[#112B3C]">{data.length}</span>
+        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">types</span>
       </div>
-      <div className="flex flex-wrap justify-center gap-3 mt-4 text-[9px] font-bold uppercase tracking-wider text-gray-500">
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 mt-4 text-[9px] font-bold uppercase tracking-wider text-gray-500">
         {data.map((d, i) => (
           <div key={i} className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: d.color }}></div>
-            {d.name}
+            <div className="w-2.5 h-2.5 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: d.color }}></div>
+            <span>{d.name}</span>
+            {d.unit && <span className="text-gray-300 font-semibold normal-case">({d.value} {d.unit})</span>}
           </div>
         ))}
       </div>
