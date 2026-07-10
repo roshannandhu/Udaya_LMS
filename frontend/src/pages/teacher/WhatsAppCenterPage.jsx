@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   History, MessagesSquare, Clock, LayoutTemplate, Settings as SettingsIcon,
-  LayoutDashboard, ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
+  ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
   SlidersHorizontal, IndianRupee, Smartphone, WifiOff,
 } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
@@ -12,7 +12,6 @@ import { useTheme } from '../../lib/theme';
 
 import SendWizard, { TASKS } from '../../components/teacher/whatsapp/SendWizard';
 import PendingActions from '../../components/teacher/whatsapp/PendingActions';
-import OverviewTab from '../../components/teacher/whatsapp/OverviewTab';
 import TemplatesTab from '../../components/teacher/whatsapp/TemplatesTab';
 import ChatsTab from '../../components/teacher/whatsapp/ChatsTab';
 import HistoryTab from '../../components/teacher/whatsapp/HistoryTab';
@@ -32,12 +31,11 @@ const TASK_CARDS = [
 ];
 
 const SCREENS = {
-  history:    { title: 'Delivery Reports', icon: History },
-  inbox:      { title: 'Chats',            icon: MessagesSquare },
-  automation: { title: 'Automations',      icon: Clock },
-  templates:  { title: 'Templates',        icon: LayoutTemplate },
-  settings:   { title: 'Settings',         icon: SettingsIcon },
-  dashboard:  { title: 'Dashboard',        icon: LayoutDashboard },
+  history:    { title: 'Delivery Reports',   icon: History },
+  inbox:      { title: 'Parent Chats',       icon: MessagesSquare },
+  templates:  { title: 'Saved Messages',     icon: LayoutTemplate },
+  automation: { title: 'Automatic Messages', icon: Clock },
+  settings:   { title: 'Settings',           icon: SettingsIcon },
 };
 
 export default function WhatsAppCenterPage() {
@@ -83,12 +81,6 @@ export default function WhatsAppCenterPage() {
   const parentCount = groups.flatMap(g => g.students).filter(s => s.phone && s.phone.trim() !== '' && !s.opted_out).length;
 
   const goHome = () => { setScreen('home'); setExamId(null); };
-  // OverviewTab quick-actions speak the old tab language — translate it.
-  const navigateFromOverview = (id) => {
-    const map = { compose: 'task:announcement', reports: 'task:exam', credentials: 'task:credentials' };
-    setScreen(map[id] || (SCREENS[id] ? id : 'home'));
-  };
-
   const isTask = screen.startsWith('task:');
   const taskId = isTask ? screen.slice(5) : null;
   const sub = SCREENS[screen];
@@ -96,10 +88,10 @@ export default function WhatsAppCenterPage() {
   return (
     <div className="min-h-screen bg-[#FAFAF9] pb-28 lg:pb-8">
       <TopBar title="WhatsApp Center" action={
-        <Link to="/teacher/whatsapp/status"
+        <button onClick={() => setScreen('settings')}
           className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium bg-white text-neutral-900 hover:bg-[#F4F2EF] border border-[#EFEDEA] shadow-card">
-          <QrCode size={14} /> Status
-        </Link>
+          <QrCode size={14} /> Connect
+        </button>
       } />
 
       {/* Phone: narrow column. Laptop: home gets a wide grid, wizard/sub-screens breathe. */}
@@ -140,7 +132,6 @@ export default function WhatsAppCenterPage() {
             {screen === 'inbox' && <ChatsTab connection={connection} groups={groups} onUnreadChange={setInboxUnread} />}
             {screen === 'automation' && <AutomationTab templates={templates} groups={groups} />}
             {screen === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} variables={variables} provider={provider} />}
-            {screen === 'dashboard' && <OverviewTab onNavigate={navigateFromOverview} currency={currency} />}
             {screen === 'settings' && <SettingsScreen config={config} reload={loadConfig} onConnected={loadConnection} />}
           </div>
         ) : (
@@ -248,7 +239,6 @@ function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, on
               ))}
             </div>
           </div>
-          <StatsRail currency={currency} />
         </div>
       </div>
     </div>
@@ -540,8 +530,7 @@ function AdvancedSettings({ config, reload }) {
           </p>
           <p className="text-xs text-neutral-600 leading-relaxed">
             Sends from your institute’s own paired WhatsApp number — no per-message cost, no Meta setup.
-            Connect or disconnect it from the <strong>Connect WhatsApp</strong> card at the top of this page,
-            or open the full <Link to="/teacher/whatsapp/status" className="text-whatsapp-green-fg font-medium hover:underline">Status page</Link>.
+            Connect or disconnect it from the <strong>Connect WhatsApp</strong> card at the top of this page.
           </p>
         </div>
       )}
