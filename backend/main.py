@@ -181,7 +181,7 @@ try:
 except Exception as _e:
     print(f"[sentry] init skipped: {_e}")
 
-app = FastAPI(title="Tutoria LMS API")
+app = FastAPI(title="Udaya LMS API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1634,7 +1634,7 @@ def send_otp_email(to_email: str, code: str) -> bool:
     """Send the 6-digit login code via SMTP. Returns False on any failure."""
     if not _smtp_ready():
         return False
-    lms = (get_teacher_settings().get("lms_name") or "Tutoria").strip() or "Tutoria"
+    lms = (get_teacher_settings().get("lms_name") or "Udaya").strip() or "Udaya"
     from_addr = SMTP_FROM or SMTP_USER
     try:
         msg = MIMEMultipart("alternative")
@@ -2038,8 +2038,8 @@ def _login_impl(request: LoginRequest):
             except Exception:
                 pass  # default to enabled on any error
 
-        _primary_2fa = not _is_sub and role == "teacher" and get_teacher_settings().get("security_two_step_verification")
-        _needs_otp = (_is_sub and _sub_otp_on) or _primary_2fa
+        # Primary teacher never requires OTP — only sub-teachers do.
+        _needs_otp = _is_sub and _sub_otp_on
 
         if _needs_otp:
             if not _smtp_ready():

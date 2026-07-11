@@ -632,10 +632,9 @@ export default function SettingsPage() {
         <Section title="Security">
           <Row label="Single device login" sub="Students can only be logged in on one device" checked={securitySingleDevice} onChange={v => setSecurityPref('securitySingleDevice', v)} />
           <Row label="Auto-logout students" sub="Log out after 30 days of inactivity" checked={securityAutoLogout} onChange={v => setSecurityPref('securityAutoLogout', v)} />
-          <Row label="Two-step verification" sub="Email teachers a 6-digit code when logging in on a new device" checked={securityTwoStepVerification} onChange={v => setSecurityPref('securityTwoStepVerification', v)} />
-          {securityTwoStepVerification && !otpEmailReady && (
-            <p className="px-4 pb-2 -mt-1 text-[11px] text-amber-600">
-              Email isn't configured yet — add <code className="bg-amber-50 px-1 rounded">SMTP_HOST</code>, <code className="bg-amber-50 px-1 rounded">SMTP_USER</code> and <code className="bg-amber-50 px-1 rounded">SMTP_PASS</code> to backend/.env and restart the backend. Until then, logins skip the code.
+          {!otpEmailReady && (
+            <p className="px-4 py-2 text-[11px] text-amber-600">
+              OTP email not configured — add <code className="bg-amber-50 px-1 rounded">SMTP_HOST</code>, <code className="bg-amber-50 px-1 rounded">SMTP_USER</code> and <code className="bg-amber-50 px-1 rounded">SMTP_PASS</code> to backend/.env. Sub-teachers cannot log in until this is set.
             </p>
           )}
 
