@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useSettingsStore } from '../store';
 
 // Public privacy policy for the Udaya student app — required by Google Play (the
@@ -27,7 +28,11 @@ export default function PrivacyPolicyPage() {
 
   return (
     <div style={{ minHeight: '100dvh', background: '#FAFAF9', color: '#374151', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px clamp(18px,5vw,40px) 80px' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        style={{ maxWidth: 760, margin: '0 auto', padding: '40px clamp(18px,5vw,40px) 80px' }}
+      >
         <a href="/app" style={{ fontSize: 14, fontWeight: 600, color: '#6A3CFF', textDecoration: 'none' }}>← Back to {name}</a>
 
         <h1 style={{ fontSize: 32, fontWeight: 800, color: '#111827', margin: '20px 0 6px' }}>Privacy Policy</h1>
@@ -110,7 +115,7 @@ export default function PrivacyPolicyPage() {
           Questions about this policy or your data? Email{' '}
           <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: '#6A3CFF', fontWeight: 600 }}>{CONTACT_EMAIL}</a>.
         </S>
-      </div>
+      </motion.div>
     </div>
   );
 }

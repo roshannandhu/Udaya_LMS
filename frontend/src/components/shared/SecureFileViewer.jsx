@@ -14,10 +14,8 @@ import {
 // the app; teachers (content owners) keep full web access for managing materials.
 const IS_NATIVE = Capacitor.isNativePlatform();
 
-// pdf.js (lazy worker). v6 ships an ESM worker; Vite resolves the ?url import.
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// Shared mobile-compatible PDF.js runtime and lazy worker.
+import pdfjsLib from '../../lib/pdfjs';
 
 // One PDF page → its own canvas, rendered crisp at `width` CSS px (high-DPI backing
 // store, capped at 2× so big PDFs stay light). Renders independently so the first

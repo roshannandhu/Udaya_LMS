@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Eye, EyeOff, AlertCircle, Loader2, ShieldCheck, ArrowLeft, Smartphone } from 'lucide-react';
 import { useAuthStore, ROLES } from '../lib/auth';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
@@ -130,12 +131,17 @@ export default function LoginPage() {
       <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#EAF3EB] rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-pulse" style={{ animationDuration: '10s' }} />
       <div className="absolute top-[20%] right-[10%] w-[300px] h-[300px] bg-[#FFF6D8] rounded-full mix-blend-multiply filter blur-[60px] opacity-60 animate-pulse" style={{ animationDuration: '7s' }} />
 
-      <div className="w-full max-w-[420px] relative z-10 my-auto">
+      <motion.div
+        className="w-full max-w-[420px] relative z-10 my-auto"
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
 
         {/* Branding */}
         <div className="flex flex-col items-center gap-4 mb-7 justify-center">
           <img src={lmsLogo || DEFAULT_LMS_LOGO} alt="logo" className="w-20 h-20 rounded-[24px] object-cover shadow-md border-[4px] border-white bg-white" />
-          <span 
+          <span
             className="font-extrabold text-[40px] tracking-tight text-neutral-900 text-center drop-shadow-sm leading-none"
           >
             {lmsName || 'Udaya Learn'}
@@ -284,7 +290,7 @@ export default function LoginPage() {
             <Smartphone size={15} /> Get the Android app
           </a>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

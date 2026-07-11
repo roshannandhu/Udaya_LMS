@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { BookOpen, ChevronRight } from 'lucide-react';
 import { Skeleton } from '../../components/ui';
 import { useAppCache } from '../../store';
@@ -111,7 +112,11 @@ export default function AttendancePage() {
       </div>
 
       {/* ── Page content ── */}
-      <div className="px-4 py-3 max-w-2xl mx-auto">
+      <motion.div
+        className="px-4 py-3 max-w-2xl mx-auto"
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      >
         {!loading && standards.length === 0 ? (
           <div className="text-center py-20 bg-white border border-dashed border-neutral-200 rounded-2xl mt-4">
             <BookOpen size={36} className="mx-auto mb-3 text-neutral-300" />
@@ -133,7 +138,7 @@ export default function AttendancePage() {
             onNavigate={id => navigate(`/teacher/students/${id}`)}
           />
         ) : null}
-      </div>
+      </motion.div>
 
     </div>
   );

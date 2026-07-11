@@ -248,12 +248,13 @@ export const testApi = {
     apiClient(`/reattempt-requests/${id}/approve`, { method: 'PATCH' }),
   rejectReattempt: (id) =>
     apiClient(`/reattempt-requests/${id}/reject`, { method: 'PATCH' }),
-  generateFromPdf: async (file, numQuestions = 10, subjectHint = '') => {
+  generateFromPdf: async (file, numQuestions = 10, subjectHint = '', selectedPages = []) => {
     const token = localStorage.getItem(TOKEN_KEY);
     const form = new FormData();
     form.append('file', file);
     form.append('num_questions', String(numQuestions));
     form.append('subject_hint', subjectHint);
+    if (selectedPages.length) form.append('selected_pages', selectedPages.join(','));
     const res = await fetch(`${API_BASE}/tests/generate-from-pdf`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },

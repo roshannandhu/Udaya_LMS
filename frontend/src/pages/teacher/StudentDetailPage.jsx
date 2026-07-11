@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Mail, Phone, Edit2, MoreVertical, MessageSquare, Download, Lock, Trash2, ShieldOff, Shield, Eye, CheckCircle2, Loader2, AlertTriangle, Share2, Trophy } from 'lucide-react';
 import { Btn, Tag, Divider, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient, reportApi } from '../../lib/api';
@@ -282,7 +283,11 @@ export default function StudentDetailPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto">
+      <motion.div
+        className="max-w-5xl mx-auto"
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      >
         {reportLoading ? (
           <div className="flex justify-center py-16"><Loader2 size={26} className="animate-spin text-neutral-400" /></div>
         ) : reportError ? (
@@ -322,7 +327,7 @@ export default function StudentDetailPage() {
             />
           </div>
         ) : null}
-      </div>
+      </motion.div>
 
       {/* Edit Modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit student">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Pin, FileText, Loader2, Search, X, Image as ImageIcon } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { useAuthStore } from '../../lib/auth';
@@ -234,7 +235,12 @@ export default function StudentBroadcastsPage() {
                       </div>
                     )}
 
-                    <div className="flex flex-col max-w-[85%] md:max-w-[70%] self-start items-start mb-1.5 relative group">
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                      className="flex flex-col max-w-[85%] md:max-w-[70%] self-start items-start mb-1.5 relative group"
+                    >
                       <div className="relative w-fit max-w-full px-3 py-2 shadow-sm bg-white rounded-2xl rounded-tl-sm">
                         
                         {/* Pinned Indicator */}
@@ -307,7 +313,7 @@ export default function StudentBroadcastsPage() {
 
                       </div>
 
-                    </div>
+                    </motion.div>
                   </React.Fragment>
                 );
               })}

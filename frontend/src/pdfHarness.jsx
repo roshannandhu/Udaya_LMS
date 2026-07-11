@@ -1,9 +1,8 @@
-// Dev-only harness: renders a button that generates the student report PDF
-// from realistic mock data, so layout/pagination can be inspected without
-// logging in. Not part of the app build — delete freely.
+// Dev-only harness: renders buttons to generate both PDFs from mock data.
+// Tests all avatar types: preset:male, preset:female, null (neutral), and real URL.
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { buildStudentReportPdf } from './lib/reportPdf';
+import { buildStudentReportPdf, buildExamResultPdf } from './lib/reportPdf';
 import './index.css';
 
 const daysAgo = (n) => {
@@ -15,7 +14,7 @@ const daysAgo = (n) => {
 const attendanceHeatmap = Array.from({ length: 70 }, (_, i) => {
   const idx = 69 - i;
   const dow = new Date(daysAgo(idx)).getDay();
-  if (dow === 0) return null; // Sunday: no class
+  if (dow === 0) return null;
   const roll = (idx * 7) % 10;
   return {
     date: daysAgo(idx),
@@ -26,18 +25,20 @@ const attendanceHeatmap = Array.from({ length: 70 }, (_, i) => {
   };
 }).filter(Boolean);
 
-const mockData = {
-  student: {
-    id: 'stu-harness-1',
-    name: 'Priya Sharma',
-    username: 'priya10',
-    student_code: '25UDAYA100007',
-    standard_name: '10th Standard',
-    avatar_url: null,
-    avg_score: 68,
-    attendance_pct: 82,
-    points: 340,
-  },
+const mockStudent = {
+  id: 'stu-harness-1',
+  name: 'Priya Sharma',
+  username: 'priya10',
+  student_code: '25UDAYA100007',
+  standard_name: '10th Standard',
+  avatar_url: null,
+  avg_score: 68,
+  attendance_pct: 82,
+  points: 340,
+};
+
+const mockReportData = {
+  student: mockStudent,
   period: 'overall',
   rank: 4,
   total_students: 32,
@@ -65,9 +66,9 @@ const mockData = {
     { topic: 'Cell Structure', subject: 'Biology', score_pct: 42, video_completed: false },
     { topic: 'Trigonometric Ratios', subject: 'Mathematics', score_pct: 55, video_completed: false },
     { topic: 'Chemical Bonding', subject: 'Chemistry', score_pct: 58, video_completed: true },
-    { topic: 'Newton’s Laws', subject: 'Physics', score_pct: 61, video_completed: true },
+    { topic: "Newton's Laws", subject: 'Physics', score_pct: 61, video_completed: true },
     { topic: 'Quadratic Equations', subject: 'Mathematics', score_pct: 78, video_completed: true },
-    { topic: 'Ohm’s Law', subject: 'Physics', score_pct: 70, video_completed: false },
+    { topic: "Ohm's Law", subject: 'Physics', score_pct: 70, video_completed: false },
     { topic: 'Reading Comprehension', subject: 'English', score_pct: 84, video_completed: true },
   ],
   attendance_heatmap: attendanceHeatmap,
@@ -76,24 +77,104 @@ const mockData = {
   class_averages: { avg_score: 61, attendance_pct: 76, points: 285 },
 };
 
+// MCQ questions for exam PDF test
+const mockQuestions = Array.from({ length: 20 }, (_, i) => ({
+  id: `q${i + 1}`,
+  question: i === 2
+    ? 'A long question about quadratic equations — if ax² + bx + c = 0 and the discriminant b² − 4ac is negative, what can we conclude about the nature of the roots of this equation?'
+    : `Question ${i + 1}: What is the value of x in the equation ${i + 1}x + ${i * 2} = ${i * 3 + 5}?`,
+  options: [`Option A for Q${i + 1}`, `Option B — a moderately long answer choice for question ${i + 1}`, `Option C for Q${i + 1}`, `Option D for Q${i + 1}`],
+  correct_idx: i % 4,
+}));
+
+const mockAnswers = Object.fromEntries(
+  mockQuestions.map((q, i) => [
+    q.id,
+    i < 14 ? (i % 4 === 0 ? 0 : i % 4) : undefined, // 14 answered, 6 skipped
+  ]).filter(([, v]) => v !== undefined)
+);
+
+const mockResult = {
+  id: 'exam-harness-1',
+  score: 56,
+  total_marks: 80,
+  percentage: 70,
+  correct_count: 14,
+  wrong_count: 4,
+  total: 20,
+  marks_deducted: 2,
+  rank: 3,
+  total_attempts: 28,
+  points_earned: 140,
+  class_avg_score_pct: 61,
+  highest_score_pct: 88,
+  submitted_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  started_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 28 * 60 * 1000).toISOString(),
+};
+
+const mockTestMeta = {
+  title: 'Mathematics Unit Test — Quadratic Equations',
+  subject_name: 'Mathematics',
+  duration_mins: 30,
+  scheduled_for: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  topic_tag: 'Quadratic Equations',
+};
+
+// Short exam (5 questions) — tests sparse page 2 filling
+const shortQuestions = mockQuestions.slice(0, 5);
+const shortAnswers = { q1: 0, q2: 1, q3: 3, q4: 0 }; // q5 skipped
+const shortResult = { ...mockResult, score: 30, total_marks: 40, percentage: 75, correct_count: 3, wrong_count: 1, total: 5, marks_deducted: 1, rank: 2 };
+
 function Harness() {
   const [status, setStatus] = useState('idle');
-  const run = async (period) => {
-    setStatus(`generating ${period}...`);
+
+  const run = async (label, fn) => {
+    setStatus(`generating ${label}...`);
     try {
-      await buildStudentReportPdf({ data: mockData, period });
-      setStatus(`done: ${period}`);
+      await fn();
+      setStatus(`✓ done: ${label}`);
     } catch (e) {
-      setStatus(`error: ${e.message}`);
-      console.error('[pdf-harness]', e);
+      setStatus(`✗ error: ${e.message}`);
+      console.error('[pdf-harness]', label, e);
     }
   };
+
+  const btn = (id, label, fn) => (
+    <button
+      id={id}
+      onClick={() => run(label, fn)}
+      style={{ padding: '10px 18px', marginRight: 10, marginBottom: 10, background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
-      <h1>PDF Harness</h1>
-      <p id="status" data-status={status}>Status: {status}</p>
-      <button id="gen-overall" onClick={() => run('overall')} style={{ padding: '10px 20px', marginRight: 10 }}>Generate Overall PDF</button>
-      <button id="gen-weekly" onClick={() => run('weekly')} style={{ padding: '10px 20px' }}>Generate Weekly PDF</button>
+    <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 900 }}>
+      <h1 style={{ fontSize: 22 }}>PDF Harness</h1>
+      <p id="status" style={{ background: status.startsWith('✗') ? '#fee2e2' : status.startsWith('✓') ? '#dcfce7' : '#f3f4f6', padding: '8px 14px', borderRadius: 6, fontSize: 13 }}>
+        Status: {status}
+      </p>
+
+      <h2 style={{ fontSize: 16, marginTop: 28 }}>Student Report Card PDF</h2>
+      <div>
+        {btn('gen-overall', 'Overall Report (avatar: neutral)', () => buildStudentReportPdf({ data: { ...mockReportData, student: { ...mockStudent, avatar_url: null } }, period: 'overall' }))}
+        {btn('gen-overall-male', 'Overall Report (avatar: boy)', () => buildStudentReportPdf({ data: { ...mockReportData, student: { ...mockStudent, avatar_url: 'preset:male' } }, period: 'overall' }))}
+        {btn('gen-overall-female', 'Overall Report (avatar: girl)', () => buildStudentReportPdf({ data: { ...mockReportData, student: { ...mockStudent, avatar_url: 'preset:female' } }, period: 'overall' }))}
+        {btn('gen-overall-upload', 'Overall Report (avatar: uploaded photo → fallback)', () => buildStudentReportPdf({ data: { ...mockReportData, student: { ...mockStudent, avatar_url: 'https://example.com/no-cors-photo.jpg' } }, period: 'overall' }))}
+        {btn('gen-weekly', 'Weekly Report', () => buildStudentReportPdf({ data: mockReportData, period: 'weekly' }))}
+      </div>
+
+      <h2 style={{ fontSize: 16, marginTop: 28 }}>Exam Result PDF (V3)</h2>
+      <div>
+        {btn('gen-exam-neutral', 'Exam PDF — 20 Qs (avatar: neutral)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: mockAnswers }, result: mockResult, student: { ...mockStudent, avatar_url: null }, testMeta: mockTestMeta }))}
+        {btn('gen-exam-male', 'Exam PDF — 20 Qs (avatar: boy)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: mockAnswers }, result: mockResult, student: { ...mockStudent, avatar_url: 'preset:male' }, testMeta: mockTestMeta }))}
+        {btn('gen-exam-female', 'Exam PDF — 20 Qs (avatar: girl)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: mockAnswers }, result: mockResult, student: { ...mockStudent, avatar_url: 'preset:female' }, testMeta: mockTestMeta }))}
+        {btn('gen-exam-upload', 'Exam PDF — uploaded photo → fallback', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: mockAnswers }, result: mockResult, student: { ...mockStudent, avatar_url: 'https://example.com/no-cors-photo.jpg' }, testMeta: mockTestMeta }))}
+        {btn('gen-exam-short', 'Exam PDF — 5 Qs (sparse test)', () => buildExamResultPdf({ reviewData: { questions: shortQuestions, answers: shortAnswers }, result: shortResult, student: mockStudent, testMeta: { ...mockTestMeta, title: 'Short Quiz' } }))}
+        {btn('gen-exam-pass', 'Exam PDF — Passing (72%)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: mockAnswers }, result: { ...mockResult, percentage: 72 }, student: mockStudent, testMeta: mockTestMeta }))}
+        {btn('gen-exam-fail', 'Exam PDF — Failed (28%)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: { q1: 1, q2: 2, q3: 1 } }, result: { ...mockResult, score: 12, percentage: 28, correct_count: 3, wrong_count: 3, marks_deducted: 3 }, student: mockStudent, testMeta: mockTestMeta }))}
+      </div>
     </div>
   );
 }

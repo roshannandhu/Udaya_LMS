@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Video, Calendar, Clock, Users, Plus, CheckCircle, AlertCircle, X, Loader2, Trash2, Play, MoreHorizontal } from 'lucide-react';
 import { Modal, Sheet, Btn, Tag, Avatar, Skeleton } from '../../components/ui';
 import TopBar from '../../components/shared/TopBar';
@@ -449,7 +450,11 @@ export default function TeacherLiveClassesPage() {
             <Btn variant="primary" icon={Plus} onClick={() => setShowSchedule(true)} className="rounded-full">Schedule</Btn>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+            initial="hidden" animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }}
+          >
             {liveClasses.map((lc, idx) => {
               const status = lc.status || 'scheduled';
               const isLive = status === 'live';
@@ -460,6 +465,10 @@ export default function TeacherLiveClassesPage() {
 
               const standardName = standards.find(std => std.id === lc.subject?.standard_id)?.name;
               return (
+                <motion.div
+                  key={lc.id}
+                  variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}
+                >
                 <LiveClassCard
                   key={lc.id}
                   lc={lc}
@@ -506,9 +515,10 @@ export default function TeacherLiveClassesPage() {
                     </button>
                   }
                 />
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </div>
 

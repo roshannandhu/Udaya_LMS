@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Save, KeyRound, Users, BookOpen, GraduationCap, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Avatar, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
@@ -121,19 +122,29 @@ export default function TeacherProfilePage() {
         </div>
       </div>
 
-      <div className="px-3 md:px-8 py-6 max-w-5xl mx-auto space-y-6">
+      <motion.div
+        className="px-3 md:px-8 py-6 max-w-5xl mx-auto space-y-6"
+        initial="hidden" animate="show"
+        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }}
+      >
 
         {/* Avatar + name header */}
-        <div className="glass-panel border-white/60 shadow-sm rounded-xl p-6 flex items-center gap-5">
+        <motion.div
+          variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}
+          className="glass-panel border-white/60 shadow-sm rounded-xl p-6 flex items-center gap-5"
+        >
           <Avatar name={user?.name} size="xl" />
           <div className="flex-1 min-w-0">
             <p className="text-lg font-semibold">{user?.name || 'Teacher'}</p>
             <p className="text-sm text-neutral-500">{user?.email}</p>
           </div>
-        </div>
+        </motion.div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <motion.div
+          variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}
+          className="grid grid-cols-2 md:grid-cols-3 gap-3"
+        >
           {statsLoading ? (
             <>
               {[1, 2, 3].map(i => (
@@ -150,10 +161,10 @@ export default function TeacherProfilePage() {
               <StatCard icon={BookOpen} label="Subjects" value={stats?.subjects_count ?? 0} color="text-amber-600" />
             </>
           )}
-        </div>
+        </motion.div>
 
         {/* Editable name */}
-        <div>
+        <motion.div variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}>
           <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Profile</p>
           <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4 space-y-4">
             <div>
@@ -174,10 +185,10 @@ export default function TeacherProfilePage() {
               </Btn>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Account */}
-        <div>
+        <motion.div variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}>
           <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Account</p>
           <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
             <p className="text-sm text-neutral-600 mb-3">Update your login password to keep your account secure.</p>
@@ -185,9 +196,9 @@ export default function TeacherProfilePage() {
               Change password
             </Btn>
           </div>
-        </div>
+        </motion.div>
 
-      </div>
+      </motion.div>
 
       <ChangePasswordModal open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </div>

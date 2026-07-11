@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Bell, Trash2, Check, Loader2 } from 'lucide-react';
 import { Btn, Modal, Input, Skeleton } from '../../components/ui';
 import { apiClient } from '../../lib/api';
@@ -119,9 +120,17 @@ export default function RemindersPage() {
                   <p className="text-sm text-neutral-600">No pending reminders.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {active.map(r => <ReminderCard key={r.id} r={r} />)}
-                </div>
+                <motion.div
+                  className="space-y-2"
+                  initial="hidden" animate="show"
+                  variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+                >
+                  {active.map(r => (
+                    <motion.div key={r.id} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.22,1,0.36,1] } } }}>
+                      <ReminderCard r={r} />
+                    </motion.div>
+                  ))}
+                </motion.div>
               )}
             </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Plus, Upload, Video, FileQuestion, Shield, Edit2,
   Trash2, Users, ClipboardList, Radio, StickyNote, ListChecks,
@@ -412,7 +413,11 @@ export default function SubjectDetailPage() {
         </div>
       </div>
 
-      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto">
+      <motion.div
+        className="px-3 md:px-8 py-6 max-w-6xl mx-auto"
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      >
         {/* Quick add — one compact row on phone, lives in the right rail on laptop */}
         <div className="flex gap-2 mb-5 lg:hidden">
           {QUICK_ADD.map(q => {
@@ -634,7 +639,7 @@ export default function SubjectDetailPage() {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Modals ── */}
       <EditSubjectModal 

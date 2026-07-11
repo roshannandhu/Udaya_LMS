@@ -173,7 +173,7 @@ export default function AutomationTab({ templates, groups }) {
 
   const toggle = async (id) => { await whatsappApi.toggleJob(id); load(); };
   const runNow = async (id) => {
-    if (!confirm('Run this automation now and message all its recipients for real?')) return;
+    if (!window.confirm('Run this automation now and message all its recipients for real?')) return;
     try { const r = await whatsappApi.runJobNow(id); alert(`Ran job — sent ${r.sent ?? 0} message(s).`); load(); }
     catch (e) { alert(e.message); }
   };
@@ -207,7 +207,7 @@ export default function AutomationTab({ templates, groups }) {
     } catch (e) { alert(e.message); }
   };
 
-  const remove = async (id) => { if (confirm('Delete this job?')) { await whatsappApi.deleteJob(id); load(); } };
+  const remove = async (id) => { if (window.confirm('Delete this job?')) { await whatsappApi.deleteJob(id); load(); } };
 
   return (
     <div>

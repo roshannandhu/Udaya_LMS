@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuthStore } from '../../lib/auth';
 import { MdPerson, MdLibraryBooks, MdPeople, MdChatBubble, MdEvent, MdBarChart, MdNotifications, MdSettings, MdHelp, MdChevronRight, MdEdit, MdLogout, MdLoop } from 'react-icons/md';
 import { FaWhatsapp } from 'react-icons/fa';
@@ -9,6 +10,7 @@ import { Avatar, Modal } from '../../components/ui';
 import { Btn, Input } from '../../components/ui';
 import { PASTEL } from '../../components/cards/pastel';
 import { apiClient } from '../../lib/api';
+import { staggerChildren, fadeUp } from '../../lib/motion';
 
 export default function MorePage() {
   const navigate = useNavigate();
@@ -60,8 +62,11 @@ export default function MorePage() {
   return (
     <div className="min-h-screen bg-transparent">
       <TopBar title="More" />
-      <div className="p-4 space-y-4 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-4">
-        <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
+      <motion.div
+        className="p-4 space-y-4 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-4"
+        variants={staggerChildren} initial="hidden" animate="show"
+      >
+        <motion.div variants={fadeUp} className="glass-panel border-white/60 shadow-sm rounded-xl p-4">
           <div className="flex items-center gap-4">
             <img src="/avatar-neutral.svg" alt="Profile" className="w-14 h-14 rounded-full object-cover shadow-sm border border-neutral-200" />
             <div className="flex-1">
@@ -72,9 +77,9 @@ export default function MorePage() {
               <MdEdit className="w-4 h-4 text-neutral-500" />
             </button>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="glass-panel divide-y divide-[#F1EFEC]">
+        <motion.div variants={fadeUp} className="glass-panel divide-y divide-[#F1EFEC]">
           {items.map((item, i) => (
             <button key={i} onClick={item.onClick} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#F4F2EF] transition-colors text-left">
               <div className="w-8 flex items-center justify-center flex-shrink-0 mr-1">
@@ -87,21 +92,21 @@ export default function MorePage() {
               <MdChevronRight className="w-4 h-4 text-neutral-400 flex-shrink-0" />
             </button>
           ))}
-        </div>
+        </motion.div>
 
-        <div className="glass-panel border-white/60 shadow-sm rounded-xl flex items-center justify-between px-4 py-3">
+        <motion.div variants={fadeUp} className="glass-panel border-white/60 shadow-sm rounded-xl flex items-center justify-between px-4 py-3">
           <div>
             <p className="font-medium text-sm">Appearance</p>
             <p className="text-xs text-neutral-500 mt-0.5">Switch between light and dark</p>
           </div>
           <ThemeToggle showLabel className="border border-[#EFEDEA]" />
-        </div>
+        </motion.div>
 
-        <button onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-red-600 glass-panel border-white/60 shadow-sm rounded-xl hover:bg-[#F4F2EF] transition-colors">
+        <motion.button variants={fadeUp} onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-red-600 glass-panel border-white/60 shadow-sm rounded-xl hover:bg-[#F4F2EF] transition-colors">
           <MdLogout className="w-5 h-5" />
           <span className="font-medium">Sign out</span>
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
 
       <Modal open={profileEdit} onClose={() => setProfileEdit(false)} title="Edit Profile">
         <div className="space-y-4">

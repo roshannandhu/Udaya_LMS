@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { MessageSquare, Settings, X, Check } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import TopBar from '../../components/shared/TopBar';
@@ -174,13 +175,22 @@ export default function BroadcastsPage() {
             <h2 className="text-lg font-bold text-neutral-800">Broadcasts</h2>
           </div>
           
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <motion.div
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+            initial="hidden" animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+          >
             {standards.map(s => {
               const broadcasts = (broadcastsByStandard[s.id] || []).filter(b => !b.deleted);
               const lastMsg = broadcasts[broadcasts.length - 1];
               const isActive = s.id === activeStdId;
               return (
-                <div key={s.id} className={`flex items-center gap-3 px-4 py-3 border-b border-neutral-100 cursor-pointer transition-colors ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`} onClick={() => openThread(s.id)}>
+                <motion.div
+                  key={s.id}
+                  variants={{ hidden: { opacity: 0, x: -12 }, show: { opacity: 1, x: 0, transition: { duration: 0.3, ease: [0.22,1,0.36,1] } } }}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-neutral-100 cursor-pointer transition-colors ${isActive ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'}`}
+                  onClick={() => openThread(s.id)}
+                >
                   <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-neutral-700 overflow-hidden"
                     style={{ background: pastelTokens(pastelFor(s.name), dark).hex }}>
                     <SubjectIcon value={s.emoji} size={24} fallback="graduation" />
@@ -205,10 +215,10 @@ export default function BroadcastsPage() {
                       <TTLPopover standardId={s.id} onClose={() => setTtlOpenFor(null)} />
                     )}
                   </div>
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </div>
 
         {/* Thread pane (Chat Area) */}

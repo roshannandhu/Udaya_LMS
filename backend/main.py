@@ -48,6 +48,71 @@ def _clean_pdf_cache():
     for k in [k for k, v in _pdf_session_cache.items() if v.get("expires", 0) < now]:
         del _pdf_session_cache[k]
 
+
+def _resolve_pdf_page_selection(selected_pages: Optional[str], page_count: int) -> List[int]:
+    """Resolve an optional comma-separated, one-based PDF page selection.
+
+    Missing or blank input intentionally means every page so existing clients retain
+    the full-PDF behavior. A non-blank value is strict: every token must be a positive
+    integer within the uploaded document.
+    """
+    if page_count < 1:
+        raise HTTPException(status_code=400, detail="The uploaded PDF does not contain any pages.")
+
+    if selected_pages is None or not selected_pages.strip():
+        return list(range(1, page_count + 1))
+
+    if len(selected_pages) > 100_000:
+        raise HTTPException(status_code=400, detail="selected_pages is too long.")
+
+    tokens = [token.strip() for token in selected_pages.split(",")]
+    if any(not re.fullmatch(r"[0-9]+", token) for token in tokens):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "selected_pages must be a comma-separated list of positive whole page numbers "
+                "(for example: 1,2,5)."
+            ),
+        )
+
+    max_page_digits = max(12, len(str(page_count)))
+    if any(len(token) > max_page_digits for token in tokens):
+        raise HTTPException(status_code=400, detail="A selected PDF page number is too long.")
+
+    try:
+        pages = sorted({int(token) for token in tokens})
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(status_code=400, detail="A selected PDF page number is invalid.")
+    if not pages or pages[0] < 1:
+        raise HTTPException(status_code=400, detail="PDF page numbers must start at 1.")
+
+    out_of_range = [page for page in pages if page > page_count]
+    if out_of_range:
+        invalid = ", ".join(str(page) for page in out_of_range)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Selected page(s) {invalid} are outside this PDF's page range "
+                f"(1-{page_count})."
+            ),
+        )
+
+    return pages
+
+
+def _extract_selected_pdf_text(pdf: Any, page_numbers: List[int]) -> tuple[str, str]:
+    """Return page-labelled AI input and unlabelled text for readability checks."""
+    extracted_pages = [
+        (page_number, (pdf.pages[page_number - 1].extract_text() or "").strip())
+        for page_number in page_numbers
+    ]
+    readable_text = "\n\n".join(page_text for _, page_text in extracted_pages).strip()
+    labelled_text = "\n\n".join(
+        f"[PDF Page {page_number}]\n{page_text}"
+        for page_number, page_text in extracted_pages
+    ).strip()
+    return labelled_text, readable_text
+
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 # Error monitoring (Sentry) — dormant unless SENTRY_DSN is set in the host env.
@@ -6880,6 +6945,7 @@ async def generate_test_from_pdf(
     file: UploadFile = File(...),
     num_questions: int = Form(10),
     subject_hint: str = Form(""),
+    selected_pages: Optional[str] = Form(None),
     user: dict = Depends(verify_token),
 ):
     if user["role"] != "teacher":
@@ -7166,16 +7232,17 @@ CONTENT:
         if is_pdf:
             with _pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
                 page_count = len(pdf.pages)
-                raw_text = "\n\n".join(
-                    (p.extract_text() or "").strip() for p in pdf.pages
-                ).strip()
+                selected_page_numbers = _resolve_pdf_page_selection(selected_pages, page_count)
+                raw_text, readable_text = _extract_selected_pdf_text(pdf, selected_page_numbers)
             source_type = "pdf"
         else:
             page_count = 1
+            selected_page_numbers = [1]
             raw_text   = _extract_from_image(client, pdf_bytes, ct)
+            readable_text = raw_text
             source_type = "image"
 
-        if len(raw_text) < 80:
+        if len(readable_text) < 80:
             if source_type == "image":
                 raise HTTPException(
                     status_code=400,
@@ -7273,13 +7340,20 @@ CONTENT:
         # Cache text for regenerate-flagged
         _clean_pdf_cache()
         session_id = uuid.uuid4().hex
-        _pdf_session_cache[session_id] = {"text": text, "expires": time_module.time() + _PDF_SESSION_TTL}
+        _pdf_session_cache[session_id] = {
+            "text": text,
+            "selected_pages": selected_page_numbers,
+            "page_count": page_count,
+            "expires": time_module.time() + _PDF_SESSION_TTL,
+        }
 
         return {
             "session_id":              session_id,
             "questions":               final,
             "page_count":              page_count,
-            "chars_extracted":         len(raw_text),
+            "selected_pages":          selected_page_numbers,
+            "selected_page_count":     len(selected_page_numbers),
+            "chars_extracted":         len(readable_text),
             "iterations":              iterations_done,
             "avg_quality":             5.0 if quality_10 == 10.0 else round(quality_10 / 2, 1),
             "quality_out_of_10":       quality_10,
@@ -12599,6 +12673,7 @@ class WhatsAppSendInput(BaseModel):
     body_text: Optional[str] = None
     media_url: Optional[str] = None
     media_type: Optional[str] = None
+    media_name: Optional[str] = None        # original filename shown to recipient
     category: str = "utility"
     test_to_self: Optional[str] = None      # if set, send a single message to this phone only
 
@@ -13614,8 +13689,8 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
                                    template_name=data.template_name,
                                    body_text=free_body, manual_values=data.manual_values,
                                    template_body=template_body, meta_approved=meta_approved,
-                                   media_url=data.media_url,
-                                   media_type=data.media_type, category=data.category,
+                                   media_url=data.media_url, media_type=data.media_type,
+                                   media_name=data.media_name, category=data.category,
                                    language=data.language)
         return {"results": [r], "sent": 1 if r["status"] not in ("failed", "not_configured") else 0,
                 "total_cost": r["cost"], "configured": provider.configured}
@@ -13637,8 +13712,8 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
                 provider, teacher_id, r, mode=data.mode, template_name=data.template_name,
                 body_text=free_body, manual_values=data.manual_values,
                 template_body=template_body, meta_approved=meta_approved,
-                media_url=data.media_url,
-                media_type=data.media_type, category=data.category, language=data.language)
+                media_url=data.media_url, media_type=data.media_type,
+                media_name=data.media_name, category=data.category, language=data.language)
             results.append(res)
             _wa_batch_track(batch_id, res)
         return results
@@ -15064,8 +15139,12 @@ def wa_inbox_clear_all(user = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not clear chats: {e}")
     # Outbound rows render inside threads too — clear them via the delivery-report
-    # path so its "already notified" exam dedup preservation runs.
-    wa_clear_messages(user=user)
+    # path so its "already notified" exam dedup preservation runs. Swallow any
+    # secondary error: inbox is already gone at this point.
+    try:
+        wa_clear_messages(user=user)
+    except Exception as e:
+        print(f"[wa] inbox clear-all: delivery-report cleanup failed: {e}")
     return {"ok": True, "deleted": deleted}
 
 

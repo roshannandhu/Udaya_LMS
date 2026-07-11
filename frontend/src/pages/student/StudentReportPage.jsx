@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { reportApi } from '../../lib/api';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
@@ -52,8 +53,12 @@ export default function StudentReportPage() {
   // Keep the current report on screen (dimmed) while another period loads —
   // blanking the whole page into a spinner on every period click feels broken.
   return (
-    <div className={`relative transition-opacity duration-200 min-h-screen ${loading ? 'opacity-50 pointer-events-none' : ''}`}
-      style={{ background: '#EAF4F7' }}>
+    <motion.div
+      className={`relative transition-opacity duration-200 min-h-screen ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+      style={{ background: '#EAF4F7' }}
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: loading ? 0.5 : 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
       {loading && (
         <div className="fixed top-4 inset-x-0 flex justify-center z-50">
           <span className="inline-flex items-center gap-2 bg-white shadow-card rounded-full px-3 py-1.5 text-[11px] font-bold text-neutral-500">
@@ -69,6 +74,6 @@ export default function StudentReportPage() {
         canExport={false}
         autoOpenAI={autoOpenAI}
       />
-    </div>
+    </motion.div>
   );
 }

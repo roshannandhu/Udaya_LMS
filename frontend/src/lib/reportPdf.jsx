@@ -88,6 +88,11 @@ const getBranding = () => {
   };
 };
 
+// Resolves avatar_url (which may be "preset:male", "preset:female", null, or a real URL)
+// to a usable <img> src. Always returns a string so the caller never needs a conditional.
+const PDF_AVATAR_PRESETS = { 'preset:male': '/avatar-male.svg', 'preset:female': '/avatar-female.svg' };
+const resolveAvatarUrl = (src) => src ? (PDF_AVATAR_PRESETS[src] || src) : '/avatar-neutral.svg';
+
 const periodTitle = (p) => p === 'weekly' ? 'Weekly Report' : p === 'monthly' ? 'Monthly Report' : 'Overall Report';
 const periodRange = (p) => {
   const today = new Date();
@@ -140,14 +145,27 @@ async function waitForAssets(container) {
   const images = Array.from(container.querySelectorAll('img'));
   await Promise.all(images.map(async (img) => {
     if (img.complete && img.naturalWidth > 0) return;
+
+    // Wait for load/decode — swallow errors, we check naturalWidth after
     if (img.decode) {
       await withTimeout(img.decode().catch(() => {}), 1800);
-      return;
+    } else {
+      await withTimeout(new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      }), 1800);
     }
-    await withTimeout(new Promise(resolve => {
-      img.onload = resolve;
-      img.onerror = resolve;
-    }), 1800);
+
+    // If the image still has no pixels (CORS block or any load failure), fall back to
+    // the local neutral avatar so html2canvas never captures a blank avatar box.
+    if (img.naturalWidth === 0) {
+      const src = img.getAttribute('src') || '';
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        img.removeAttribute('crossorigin');
+        img.src = '/avatar-neutral.svg';
+        await withTimeout(new Promise(r => { img.onload = r; img.onerror = r; }), 1000);
+      }
+    }
   }));
 }
 
@@ -201,13 +219,7 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
     <div className="relative z-10">
       <div className="flex gap-5">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner p-1">
-          {student?.avatar_url ? (
-            <img src={student.avatar_url} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
-          ) : (
-            <span className="text-3xl font-bold text-white shadow-sm">
-              {(student?.name || 'S').charAt(0).toUpperCase()}
-            </span>
-          )}
+          <img src={resolveAvatarUrl(student?.avatar_url)} alt="Profile" className="h-full w-full rounded-lg object-cover" crossOrigin="anonymous" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -248,12 +260,12 @@ const Header = ({ title, subtitle, student, brand, rightStats }) => (
 // Empty PageBreak removed
 const Section = ({ title, icon: Icon, color, children, className = '', avoidBreak = false, compact = false }) => {
   return (
-  <div className={`${compact ? 'mt-6' : 'mt-10'} ${className}`}>
-    <div className={`${compact ? 'mb-4' : 'mb-6'} flex items-center gap-3 border-b border-gray-100 pb-3`}>
-      <div className={`rounded-lg p-2 ${color.bg}`}>
-        <Icon className={`h-5 w-5 ${color.text}`} strokeWidth={2.5} />
+  <div className={`${compact ? 'mt-6' : 'mt-8'} ${className}`}>
+    <div className={`${compact ? 'mb-3' : 'mb-4'} flex items-center gap-2 border-b border-gray-100 pb-2.5`} style={{ pageBreakAfter: 'avoid' }}>
+      <div className={`rounded-lg p-1.5 ${color.bg}`}>
+        <Icon className={`h-4 w-4 ${color.text}`} strokeWidth={2.5} />
       </div>
-      <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+      <h2 className="text-base font-bold text-gray-900">{title}</h2>
     </div>
     {children}
   </div>
@@ -476,50 +488,59 @@ const DeltaTag = ({ value, compare, suffix = '%' }) => {
   );
 };
 
-// Flowing page group: forces a new PDF page before sections 2-4 via pageBreakBefore.
-// No fixed heights — content flows naturally, sections keep their natural size.
-// pageBreakInside: 'avoid' on individual cards prevents mid-card splits.
-const PageGroup = ({ breakBefore = false, children }) => (
-  <div style={breakBefore ? { pageBreakBefore: 'always' } : {}}>
+// Content flows naturally across pages. pageBreakInside: 'avoid' on each atomic
+// card prevents mid-card splits. PageStrip acts as a visual section divider.
+const PageGroup = ({ children }) => (
+  <div>
     {children}
   </div>
 );
 
 const PageStrip = ({ student, title, period }) => (
-  <div className="mb-2 flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-5 py-3" style={{ pageBreakInside: 'avoid' }}>
-    <div>
-      <p className="text-sm font-black text-gray-900">{title}</p>
-      <p className="text-[11px] font-semibold text-gray-500">{student?.name || 'Student'}{student?.student_code ? ` - ${student.student_code}` : ''}</p>
-    </div>
-    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{periodTitle(period)} - {periodRange(period)}</p>
+  <div className="mt-8 mb-4 border-l-4 border-ink pl-4" style={{ pageBreakInside: 'avoid', pageBreakAfter: 'avoid' }}>
+    <p className="text-base font-black text-gray-900">{title}</p>
+    <p className="text-[11px] font-semibold text-gray-500">
+      {student?.name || 'Student'}{student?.student_code ? ` · ${student.student_code}` : ''} · {periodTitle(period)} · {periodRange(period)}
+    </p>
   </div>
 );
 
-// Header matches the app theme: flat "ink" surface (tailwind `ink` #1A1A1A), no gradients.
-const ReportCardHeader = ({ student, brand, period }) => (
-  <div className="rounded-2xl bg-neutral-900 p-6 text-white" style={{ pageBreakInside: 'avoid' }}>
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        {brand.logoUrl && <img src={brand.logoUrl} alt="Logo" className="h-7 w-7 rounded bg-white p-0.5" crossOrigin="anonymous" />}
-        <span className="text-sm font-bold tracking-wide text-white">{brand.name}</span>
+const ReportCardHeader = ({ student, brand, period, grade, hasScore, scoreBand }) => (
+  <div style={{ pageBreakInside: 'avoid' }}>
+    {/* Brand bar — same style as ExamResultTemplateV3 */}
+    <div className="flex items-center justify-between border-b-2 border-ink pb-4">
+      <div className="flex items-center gap-3">
+        {brand.logoUrl && (
+          <img src={brand.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg bg-white object-contain" crossOrigin="anonymous" />
+        )}
+        <div>
+          <p className="text-lg font-black leading-tight tracking-tight text-gray-950">{brand.name}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Student Report Card</p>
+        </div>
       </div>
-      <div className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold text-white">Student Report Card</div>
+      <div className="rounded-lg bg-ink px-4 py-2 text-xs font-black uppercase tracking-widest text-white">
+        Report Card
+      </div>
     </div>
-    <div className="mt-5 flex items-center gap-5">
-      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-700">
-        {student?.avatar_url
-          ? <img src={student.avatar_url} alt="Profile" className="h-full w-full object-cover" crossOrigin="anonymous" />
-          : <span className="text-2xl font-bold text-white">{(student?.name || 'S').charAt(0).toUpperCase()}</span>}
+    {/* Identity card — same pattern as V3 identity card */}
+    <div className="mt-4 flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-pastel-sky">
+        <img src={resolveAvatarUrl(student?.avatar_url)} alt="Student" className="h-full w-full object-cover" crossOrigin="anonymous" />
       </div>
       <div className="min-w-0 flex-1">
-        <h1 className="break-words text-2xl font-black tracking-tight">{student?.name || 'Student'}</h1>
-        <p className="mt-1 text-xs font-semibold text-neutral-300">
-          {[student?.student_code, student?.standard_name, student?.username ? `@${student.username}` : null].filter(Boolean).join('  -  ')}
+        <p className="text-xl font-black leading-7 tracking-tight text-gray-950">{shortText(student?.name || 'Student', 32)}</p>
+        <p className="mt-0.5 text-xs font-semibold leading-5 text-gray-500">
+          {[student?.student_code, student?.standard_name, student?.username ? `@${student.username}` : null].filter(Boolean).join(' · ')}
         </p>
       </div>
-      <div className="shrink-0 rounded-xl bg-white/10 px-4 py-2 text-right">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-300">{periodTitle(period)}</p>
-        <p className="text-xs font-bold text-white">{periodRange(period)}</p>
+      <div className="shrink-0 text-right">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{periodTitle(period)}</p>
+        <p className="text-xs font-bold text-gray-700">{periodRange(period)}</p>
+        {hasScore && grade && (
+          <div className={`mt-2 inline-flex items-center rounded-full px-3 py-0.5 text-xs font-black text-white ${scoreBand?.fill || 'bg-gray-500'}`}>
+            Grade {grade.grade}
+          </div>
+        )}
       </div>
     </div>
   </div>
@@ -654,7 +675,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
       {/* ── PAGE 1 — The verdict: grade, rank, headline numbers, remark ──── */}
       <PageGroup>
-        <ReportCardHeader student={s} brand={brand} period={period} />
+        <ReportCardHeader student={s} brand={brand} period={period} grade={grade} hasScore={hasScore} scoreBand={scoreBand} />
 
         <div className="mt-6 flex gap-5">
           <div className={`flex w-44 shrink-0 flex-col items-center justify-center rounded-2xl border border-gray-100 p-5 ${hasScore ? scoreBand.bg : 'bg-gray-50'}`} style={{ pageBreakInside: 'avoid' }}>
@@ -721,7 +742,7 @@ const StudentReportTemplate = ({ data, period }) => {
       </PageGroup>
 
       {/* ── PAGE 2 — Marks: subject table, trend chart ──────────────────── */}
-      <PageGroup breakBefore>
+      <PageGroup>
         <PageStrip student={s} title="Marks & Subjects" period={period} />
 
         <Section title="Subject-wise Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} compact>
@@ -769,7 +790,7 @@ const StudentReportTemplate = ({ data, period }) => {
 
         <Section title="Score Trend vs Class" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
           {chartData.length >= 2 ? (
-            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6" style={{ pageBreakInside: 'avoid' }}>
               <LineChart width={620} height={200} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
@@ -804,7 +825,7 @@ const StudentReportTemplate = ({ data, period }) => {
       </PageGroup>
 
       {/* ── PAGE 3 — Test history & discipline: recent tests, attendance ── */}
-      <PageGroup breakBefore>
+      <PageGroup>
         <PageStrip student={s} title="Test History & Attendance" period={period} />
 
         <Section title="Recent Tests" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} compact>
@@ -870,7 +891,7 @@ const StudentReportTemplate = ({ data, period }) => {
       </PageGroup>
 
       {/* ── PAGE 4 — Effort & what next: work done, weak topics, plan ────── */}
-      <PageGroup breakBefore>
+      <PageGroup>
         <PageStrip student={s} title="Effort & Next Steps" period={period} />
 
         <Section title="Work Completed" icon={ClipboardCheck} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
@@ -1670,11 +1691,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
       {/* Identity */}
       <div className="mt-4 flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4" style={{ pageBreakInside: 'avoid' }}>
         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-pastel-sky">
-          {student?.avatar_url ? (
-            <img src={student.avatar_url} alt="Student" className="h-full w-full object-cover" crossOrigin="anonymous" />
-          ) : (
-            <span className="text-xl font-black text-[#2383E2]">{(student?.name || 'S').charAt(0).toUpperCase()}</span>
-          )}
+          <img src={resolveAvatarUrl(student?.avatar_url)} alt="Student" className="h-full w-full object-cover" crossOrigin="anonymous" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xl font-black leading-7 tracking-tight text-gray-950">{shortText(student?.name || 'Student', 30)}</p>
@@ -1782,33 +1799,33 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
 
       {/* ============================== PAGE 2 ============================== */}
       {!cancelled && matrixItems.length > 0 && (
-        <div style={{ pageBreakBefore: 'always' }} className="pt-2">
+        <div className="mt-8">
           <V3PageTitle
             title="Question Results"
             sub="Every question at a glance — green = correct · red = wrong · grey = not attempted (skipped)"
             right={`${student?.name || 'Student'} · ${shortText(testMeta?.title || 'Exam', 30)}`}
           />
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
-            <div className="flex flex-wrap gap-2">
-              {matrixItems.map((item) => {
-                const bg = item.state === 'correct' ? 'bg-emerald-500' : item.state === 'skipped' ? 'bg-gray-300' : 'bg-red-500';
-                return (
-                  <div key={item.index} className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white ${bg}`}>
-                    {item.index + 1}
-                  </div>
-                );
-              })}
+          {/* Matrix + Why marks lost side-by-side */}
+          <div className="flex gap-4" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5">
+              <div className="flex flex-wrap gap-2">
+                {matrixItems.map((item) => {
+                  const bg = item.state === 'correct' ? 'bg-emerald-500' : item.state === 'skipped' ? 'bg-gray-300' : 'bg-red-500';
+                  return (
+                    <div key={item.index} className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white ${bg}`}>
+                      {item.index + 1}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex gap-5 border-t border-gray-100 pt-3 text-[11px] font-semibold text-gray-500">
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-emerald-500" /> Correct ({correctCount})</span>
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-red-500" /> Wrong ({wrongCount})</span>
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-gray-300" /> Skipped ({skippedCount})</span>
+              </div>
             </div>
-            <div className="mt-4 flex gap-5 border-t border-gray-100 pt-3 text-[11px] font-semibold text-gray-500">
-              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-emerald-500" /> Correct ({correctCount})</span>
-              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-red-500" /> Wrong ({wrongCount})</span>
-              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-gray-300" /> Skipped ({skippedCount})</span>
-            </div>
-          </div>
-
-          <div className="mt-4 flex gap-4">
-            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
+            <div className="w-56 shrink-0 rounded-xl border border-gray-200 bg-white p-5">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
                 <Target className="h-4 w-4 text-red-500" /> Why marks were lost
               </h3>
@@ -1817,21 +1834,23 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
                 <V3CompareBar label="Attempted" value={completionPct} barColor="bg-blue-500" />
               </div>
               <p className="mt-3 text-xs leading-5 text-gray-500">
-                Correct rate = right answers out of {answeredCount} attempted. Attempted = {answeredCount} of {totalQuestions} questions answered.
+                {correctCount} of {answeredCount} attempted were correct. {answeredCount} of {totalQuestions} answered.
               </p>
             </div>
-            <div className="flex-1 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
-              <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
-                <Brain className="h-4 w-4 text-[#2383E2]" /> How to Help at Home
-              </h3>
-              <div className="space-y-2.5">
-                {tips.map((tip, i) => (
-                  <div key={i} className="flex gap-2.5">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-pastel-sky text-[10px] font-black text-[#2383E2]">{i + 1}</span>
-                    <p className="text-xs leading-5 text-gray-700">{tip}</p>
-                  </div>
-                ))}
-              </div>
+          </div>
+
+          {/* How to Help at Home — full width, tips in 2-column grid for ≥2 tips */}
+          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5" style={{ pageBreakInside: 'avoid' }}>
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
+              <Brain className="h-4 w-4 text-[#2383E2]" /> How to Help at Home
+            </h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 20, rowGap: 10 }}>
+              {tips.map((tip, i) => (
+                <div key={i} style={{ width: tips.length > 1 ? 'calc(50% - 10px)' : '100%', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-pastel-sky text-[10px] font-black text-[#2383E2]">{i + 1}</span>
+                  <p className="text-xs leading-5 text-gray-700">{tip}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -1839,7 +1858,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
 
       {/* ============================== PAGE 3+ ============================== */}
       {!cancelled && qs.length > 0 && (
-        <div style={{ pageBreakBefore: 'always' }} className="pt-2">
+        <div className="mt-8">
           <V3PageTitle
             title="Question Review"
             sub="Each question with the given answer and the correct answer"

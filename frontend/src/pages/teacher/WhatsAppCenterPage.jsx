@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   History, MessagesSquare, Clock, LayoutTemplate, Settings as SettingsIcon,
   ArrowLeft, ChevronRight, QrCode, CheckCircle2, Loader2, Send,
@@ -123,46 +124,58 @@ export default function WhatsAppCenterPage() {
 
         {loading ? (
           <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}</div>
-        ) : isTask ? (
-          <SendWizard
-            key={`${taskId}-${examId || ''}`}
-            task={taskId}
-            groups={groups}
-            templates={templates}
-            variables={variables}
-            provider={provider}
-            configured={connection?.connected}
-            rates={rates}
-            currency={currency}
-            reloadRecipients={loadRecipients}
-            initialExamId={taskId === 'exam' ? examId : undefined}
-            onExit={goHome}
-            onShowHistory={() => setScreen('history')}
-            onGoToTemplates={() => setScreen('templates')}
-          />
-        ) : sub ? (
-          <div>
-            <h2 className="font-semibold text-lg text-neutral-900 mb-4 flex items-center gap-2">
-              <sub.icon size={18} className="text-whatsapp-green-fg" /> {sub.title}
-            </h2>
-            {screen === 'history' && <HistoryTab />}
-            {screen === 'inbox' && <ChatsTab connection={connection} groups={groups} onUnreadChange={setInboxUnread} />}
-            {screen === 'automation' && <AutomationTab templates={templates} groups={groups} />}
-            {screen === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} variables={variables} provider={provider} />}
-            {screen === 'settings' && <SettingsScreen config={config} reload={loadConfig} onConnected={loadConnection} />}
-          </div>
         ) : (
-          <HomeScreen
-            connection={connection}
-            parentCount={parentCount}
-            inboxUnread={inboxUnread}
-            currency={currency}
-            onTask={(id) => setScreen(`task:${id}`)}
-            onScreen={setScreen}
-            onReviewExam={(id) => { setExamId(id); setScreen('task:exam'); }}
-            onSent={loadRecipients}
-            onOpenGuide={() => setGuideOpen(true)}
-          />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={screen}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {isTask ? (
+                <SendWizard
+                  key={`${taskId}-${examId || ''}`}
+                  task={taskId}
+                  groups={groups}
+                  templates={templates}
+                  variables={variables}
+                  provider={provider}
+                  configured={connection?.connected}
+                  rates={rates}
+                  currency={currency}
+                  reloadRecipients={loadRecipients}
+                  initialExamId={taskId === 'exam' ? examId : undefined}
+                  onExit={goHome}
+                  onShowHistory={() => setScreen('history')}
+                  onGoToTemplates={() => setScreen('templates')}
+                />
+              ) : sub ? (
+                <div>
+                  <h2 className="font-semibold text-lg text-neutral-900 mb-4 flex items-center gap-2">
+                    <sub.icon size={18} className="text-whatsapp-green-fg" /> {sub.title}
+                  </h2>
+                  {screen === 'history' && <HistoryTab />}
+                  {screen === 'inbox' && <ChatsTab connection={connection} groups={groups} onUnreadChange={setInboxUnread} />}
+                  {screen === 'automation' && <AutomationTab templates={templates} groups={groups} />}
+                  {screen === 'templates' && <TemplatesTab templates={templates} reload={loadTemplates} variables={variables} provider={provider} />}
+                  {screen === 'settings' && <SettingsScreen config={config} reload={loadConfig} onConnected={loadConnection} />}
+                </div>
+              ) : (
+                <HomeScreen
+                  connection={connection}
+                  parentCount={parentCount}
+                  inboxUnread={inboxUnread}
+                  currency={currency}
+                  onTask={(id) => setScreen(`task:${id}`)}
+                  onScreen={setScreen}
+                  onReviewExam={(id) => { setExamId(id); setScreen('task:exam'); }}
+                  onSent={loadRecipients}
+                  onOpenGuide={() => setGuideOpen(true)}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         )}
       </div>
     </div>
@@ -264,36 +277,6 @@ function HomeScreen({ connection, parentCount, inboxUnread, onTask, onScreen, on
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* Small at-a-glance numbers for the laptop right rail (best-effort). */
-function StatsRail({ currency = 'INR' }) {
-  const [stats, setStats] = useState(null);
-  useEffect(() => {
-    whatsappApi.getStats().then(setStats).catch(() => {});
-  }, []);
-  if (!stats) return null;
-  const totals = stats.totals || {};
-  const spend = stats.spend || {};
-  const rows = [
-    ['Messages sent', totals.total ?? 0],
-    ['Delivered', totals.delivered ?? 0],
-    ['Read', totals.read ?? 0],
-    ['Spend this month', `${currency === 'INR' ? '₹' : ''}${Number(spend.month || 0).toFixed(2)}`],
-  ];
-  return (
-    <div className="glass-panel border border-[#EBEAE7] rounded-2xl p-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-3">At a glance</h2>
-      <div className="space-y-2">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex items-center justify-between text-sm">
-            <span className="text-neutral-500 text-xs">{label}</span>
-            <span className="font-semibold text-neutral-800 tabular-nums">{value}</span>
-          </div>
-        ))}
       </div>
     </div>
   );

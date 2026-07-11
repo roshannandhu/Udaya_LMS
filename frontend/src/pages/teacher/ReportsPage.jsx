@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Trophy, Download, AlertTriangle, Users, BookOpen, Clock, CheckCircle, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ScatterChart, Scatter, Cell, ReferenceLine } from 'recharts';
 import { Avatar, Btn, Skeleton } from '../../components/ui';
@@ -192,20 +193,30 @@ export default function ReportsPage() {
         ) : analytics ? (
           <>
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard title="Total Students" value={overview.total_students} icon={Users} color="bg-blue-100 text-blue-700" />
-              <StatCard title="Avg Score" value={`${overview.avg_score}%`} icon={Trophy} color="bg-emerald-100 text-emerald-700" />
-              <StatCard title="Avg Attendance" value={`${overview.avg_attendance}%`} icon={CheckCircle} color="bg-violet-100 text-violet-700" />
-              <div className="glass-panel p-4 rounded-2xl flex flex-col justify-between border border-red-100 bg-red-50/30 relative overflow-hidden">
-                <div className="flex items-center justify-between z-10">
-                  <p className="text-sm font-medium text-red-800">At-Risk Students</p>
-                  <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
-                    <AlertTriangle size={16} />
+            <motion.div
+              className="grid grid-cols-2 md:grid-cols-4 gap-4"
+              initial="hidden" animate="show"
+              variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08 } } }}
+            >
+              {[
+                <StatCard key="students" title="Total Students" value={overview.total_students} icon={Users} color="bg-blue-100 text-blue-700" />,
+                <StatCard key="score" title="Avg Score" value={`${overview.avg_score}%`} icon={Trophy} color="bg-emerald-100 text-emerald-700" />,
+                <StatCard key="attend" title="Avg Attendance" value={`${overview.avg_attendance}%`} icon={CheckCircle} color="bg-violet-100 text-violet-700" />,
+                <div key="risk" className="glass-panel p-4 rounded-2xl flex flex-col justify-between border border-red-100 bg-red-50/30 relative overflow-hidden">
+                  <div className="flex items-center justify-between z-10">
+                    <p className="text-sm font-medium text-red-800">At-Risk Students</p>
+                    <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                      <AlertTriangle size={16} />
+                    </div>
                   </div>
-                </div>
-                <h3 className="text-2xl font-bold text-red-700 mt-2 z-10">{atRiskCount}</h3>
-              </div>
-            </div>
+                  <h3 className="text-2xl font-bold text-red-700 mt-2 z-10">{atRiskCount}</h3>
+                </div>,
+              ].map((card, i) => (
+                <motion.div key={i} variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}>
+                  {card}
+                </motion.div>
+              ))}
+            </motion.div>
 
             {/* At-risk student cards */}
             {atRiskCount > 0 && (

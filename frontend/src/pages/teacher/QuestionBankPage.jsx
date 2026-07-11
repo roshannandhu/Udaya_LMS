@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, X, Search, Database, Loader2, BookOpen } from 'lucide-react';
 import { Btn, Input } from '../../components/ui';
 import { apiClient } from '../../lib/api';
@@ -130,9 +131,17 @@ export default function QuestionBankPage() {
             {!search && <Btn variant="default" size="sm" icon={Plus} onClick={() => setShowForm(true)} className="mt-3">Add your first question</Btn>}
           </div>
         ) : (
-          <div className="space-y-2">
+          <motion.div
+            className="space-y-2"
+            initial="hidden" animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+          >
             {filtered.map((q, i) => (
-              <div key={q.id} className="glass-panel border-white/60 shadow-sm rounded-xl p-4 relative group">
+              <motion.div
+                key={q.id}
+                variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.22,1,0.36,1] } } }}
+                className="glass-panel border-white/60 shadow-sm rounded-xl p-4 relative group"
+              >
                 <div className="flex items-start gap-3">
                   <span className="text-xs text-neutral-400 font-mono mt-1">{questions.indexOf(q) + 1}.</span>
                   <div className="flex-1 min-w-0">
@@ -167,9 +176,9 @@ export default function QuestionBankPage() {
                     )}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

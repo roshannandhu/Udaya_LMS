@@ -63,8 +63,12 @@ export default function HistoryTab() {
     setLoading(true);
     try {
       const r = await whatsappApi.clearMessages(option.filters());
-      await load();
-      if (r?.deleted === 0) alert('Nothing matched — no reports were deleted.');
+      if ((r?.deleted ?? 1) === 0) {
+        alert('Nothing matched — no reports were deleted.');
+        setLoading(false);
+      } else {
+        await load();
+      }
     } catch (e) {
       alert(e?.message || 'Could not clear delivery reports.');
       setLoading(false);

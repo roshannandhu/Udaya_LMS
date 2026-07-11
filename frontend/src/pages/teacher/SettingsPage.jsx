@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { MdArrowBack, MdVisibility, MdVisibilityOff, MdAddPhotoAlternate, MdClose, MdPeople, MdGppBad, MdDelete, MdLoop, MdPersonAdd, MdCheck, MdCheckCircle, MdFavorite, MdBackup, MdDownload } from 'react-icons/md';
 import { Toggle, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
@@ -384,7 +385,11 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="px-3 md:px-8 py-6 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-6 max-w-5xl mx-auto">
+      <motion.div
+        className="px-3 md:px-8 py-6 pb-[calc(6rem_+_env(safe-area-inset-bottom))] lg:pb-6 max-w-5xl mx-auto"
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      >
 
         {/* Team Members */}
         <div className="mb-6">
@@ -780,7 +785,7 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-center text-xs text-neutral-400 flex items-center justify-center gap-1">Udaya v{import.meta.env.VITE_APP_VERSION || '1.1.7'} · Built with <MdFavorite className="w-3.5 h-3.5 text-red-500" /></p>
-      </div>
+      </motion.div>
     </div>
   );
 }

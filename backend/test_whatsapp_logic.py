@@ -134,3 +134,22 @@ def test_normalize_in_rejects_invalid_and_accepts_common_formats():
     assert wpr.normalize_in("12345") == ""            # garbage
     assert wpr.normalize_in("4915112345678") == ""    # non-Indian country code
     assert wpr.normalize_in("") == ""
+
+
+def test_send_input_has_media_name_and_wa_send_passes_it_through():
+    """WhatsAppSendInput must have a media_name field, and wa_send must forward it
+    to _wa_send_and_log in BOTH the test-to-self path and the bulk path.
+    Regression: the field was missing, causing PDF/image filenames to be silently
+    dropped on every announcement send that included an attachment."""
+    import inspect
+    # The Pydantic model must accept media_name.
+    obj = main.WhatsAppSendInput(
+        mode="freeform", body_text="hi",
+        media_url="https://x/r.pdf", media_type="application/pdf",
+        media_name="Aarav_Report.pdf",
+    )
+    assert obj.media_name == "Aarav_Report.pdf"
+
+    # wa_send must forward it — check both call sites in the source.
+    source = inspect.getsource(main.wa_send)
+    assert source.count("media_name=data.media_name") >= 2

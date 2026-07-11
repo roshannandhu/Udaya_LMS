@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, FileQuestion, Clock, Loader2, ListChecks, Edit2, Trash2 } from 'lucide-react';
 import { Btn, Tag, Skeleton } from '../../components/ui';
 import NewTestModal from '../../components/teacher/NewTestModal';
@@ -131,14 +132,24 @@ export default function TestsPage() {
             <Btn variant="primary" size="sm" icon={Plus} onClick={() => { setEditTestId(null); setNewTestOpen(true); }} className="rounded-full shadow-sm">Create test</Btn>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            initial="hidden" animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }}
+          >
             {filtered.map((t, idx) => {
               const sub = subjects.find(x => String(x.id) === String(t.class_id));
               const std = standards.find(x => String(x.id) === String(sub?.standard_id));
               const theme = CARD_COLORS[idx % CARD_COLORS.length];
 
               return (
-                <div key={t.id} className={`rounded-[32px] ${theme.bg} p-5 flex flex-col hover:-translate-y-1 hover:shadow-md transition-all h-full`}>
+                <motion.div
+                  key={t.id}
+                  variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22,1,0.36,1] } } }}
+                  whileHover={{ y: -4, boxShadow: '0 8px 24px rgba(0,0,0,0.10)' }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+                  className={`rounded-[32px] ${theme.bg} p-5 flex flex-col h-full`}
+                >
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -190,10 +201,10 @@ export default function TestsPage() {
                       <Clock size={12} /> Scheduled: {fmtSchedule(t.scheduled_for)}
                     </div>
                   )}
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </div>
 

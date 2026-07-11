@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Search, ChevronRight, Users, Upload, Download, CheckCircle2, Loader2, List, Table2, ListChecks, CheckSquare, Square, X } from 'lucide-react';
 import TopBar from '../../components/shared/TopBar';
 import { Avatar, Tag, Skeleton, Btn } from '../../components/ui';
@@ -192,7 +193,11 @@ export default function StudentsPage() {
             {selectMode && (
               <StudentBulkActions selectedRows={selectedRows} standards={standards} onClear={() => setSelected(new Set())} />
             )}
-          <div className="glass-panel rounded-2xl overflow-hidden">
+          <motion.div
+            className="glass-panel rounded-2xl overflow-hidden"
+            initial="hidden" animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04, delayChildren: 0.03 } } }}
+          >
             {selectMode && (
               <button onClick={toggleAll}
                 className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-[#EFEDEA] bg-[#F1F1EF] text-xs font-semibold text-neutral-600 hover:bg-[#F4F2EF] transition-colors">
@@ -205,8 +210,12 @@ export default function StudentsPage() {
               const attendLow = (s.attendance_pct ?? 100) < 75;
               const isSel = selected.has(s.id);
               return (
-                <button key={s.id} onClick={() => (selectMode ? toggleOne(s.id) : navigate(`/teacher/students/${s.id}`))}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 transition-colors text-left ${isSel ? 'bg-indigo-50/70' : 'hover:bg-[#F4F2EF]'} ${i > 0 ? 'border-t border-white/40' : ''}`}>
+                <motion.button
+                  key={s.id}
+                  variants={{ hidden: { opacity: 0, x: -10 }, show: { opacity: 1, x: 0, transition: { duration: 0.28, ease: [0.22,1,0.36,1] } } }}
+                  onClick={() => (selectMode ? toggleOne(s.id) : navigate(`/teacher/students/${s.id}`))}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 transition-colors text-left ${isSel ? 'bg-indigo-50/70' : 'hover:bg-[#F4F2EF]'} ${i > 0 ? 'border-t border-white/40' : ''}`}
+                >
                   {selectMode && (isSel
                     ? <CheckSquare size={18} className="text-indigo-600 flex-shrink-0" />
                     : <Square size={18} className="text-neutral-300 flex-shrink-0" />)}
@@ -243,10 +252,10 @@ export default function StudentsPage() {
                     ))}
                   </div>
                   {!selectMode && <ChevronRight size={14} className="text-neutral-400 flex-shrink-0" />}
-                </button>
+                </motion.button>
               );
             })}
-          </div>
+          </motion.div>
           </>
         )}
       </div>

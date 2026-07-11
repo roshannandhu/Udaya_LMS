@@ -132,6 +132,7 @@ export default function SendWizard({
     mode: (provider === 'meta' && count > 1) ? 'template' : msg.mode,
     template_name: msg.template_name, manual_values: msg.manual_values,
     body_text: msg.body_text, media_url: msg.media_url, media_type: msg.media_type,
+    media_name: msg.media_name,
     category: msg.category,
   });
 
