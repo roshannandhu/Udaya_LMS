@@ -2009,12 +2009,13 @@ def _login_impl(request: LoginRequest):
         # ── Two-step verification (teachers only, new devices only) ──
         # Sub-teachers: OTP is mandatory (hard-enforced, not toggleable).
         # Primary teacher: OTP only when "security_two_step_verification" is on.
-        _teacher_type_val = user_metadata.get("teacher_type", "primary")
+        _teacher_type_val = user_metadata.get("teacher_type")  # None if key absent
         _is_sub = role == "teacher" and _teacher_type_val == "sub"
 
-        # Fallback: some accounts may have been created without teacher_type in metadata.
-        # Confirm sub status by checking the sub_teachers table directly.
-        if role == "teacher" and not _is_sub and service_supabase:
+        # Fallback: only for accounts where teacher_type is truly absent from metadata
+        # (never re-check when it's explicitly set to "primary" — that would misidentify
+        # the primary teacher if their UUID somehow appears in sub_teachers).
+        if role == "teacher" and _teacher_type_val is None and service_supabase:
             try:
                 _sub_check = service_supabase.table("sub_teachers").select("id").eq("id", user.id).limit(1).execute()
                 if _sub_check.data:
@@ -2022,6 +2023,9 @@ def _login_impl(request: LoginRequest):
                     _teacher_type_val = "sub"
             except Exception:
                 pass
+
+        if _teacher_type_val is None:
+            _teacher_type_val = "primary"
 
         # Now that _teacher_type_val is final, embed it in user_info so the frontend
         # correctly identifies primary vs sub teachers on every login.
