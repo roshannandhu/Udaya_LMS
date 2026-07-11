@@ -279,7 +279,7 @@ const LoginScreen = ({ onLogin }) => {
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 mb-10 justify-center">
           <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center"><GraduationCap size={18} className="text-white" /></div>
-          <span className="font-semibold tracking-tight text-lg">Tutoria</span>
+          <span className="font-semibold tracking-tight text-lg">Udaya</span>
         </div>
 
         <div className="bg-white rounded-xl border border-neutral-200 p-8 shadow-sm">
@@ -318,7 +318,7 @@ const LoginScreen = ({ onLogin }) => {
           )}
         </div>
 
-        <p className="text-center text-xs text-neutral-400 mt-6">Tutoria · A learning platform built for tuition</p>
+        <p className="text-center text-xs text-neutral-400 mt-6">Udaya · A learning platform built for tuition</p>
       </div>
     </div>
   );
@@ -1614,7 +1614,7 @@ const MoreScreen = ({ navigate, onLogout }) => {
           <span className="text-sm font-medium">Sign out</span>
         </button>
 
-        <p className="text-center text-xs text-neutral-400 mt-6">Tutoria v1.0 Beta</p>
+        <p className="text-center text-xs text-neutral-400 mt-6">Udaya v1.0 Beta</p>
       </div>
 
       <Modal open={profileEdit} onClose={() => setProfileEdit(false)} title="Edit profile">
@@ -1916,7 +1916,7 @@ const SettingsScreen = ({ navigate, goBack }) => {
 // ============================================================
 const InviteModal = ({ open, onClose, standard }) => {
   const [copied, setCopied] = useState(false);
-  const link = `tutoria.app/join/${standard?.short || 'std'}-abc123`;
+  const link = `udaya.app/join/${standard?.short || 'std'}-abc123`;
   return (
     <Modal open={open} onClose={onClose} title="Invite students">
       <p className="text-sm text-neutral-600 mb-2">
@@ -2258,7 +2258,7 @@ const StudentHome = ({ me, std, myClasses, myBroadcasts, navigate }) => {
 
   return (
     <>
-      <TopBar title="Tutoria" subtitle={`Hi, ${me.name.split(' ')[0]} · ${std?.name}`} showSearch={false} />
+      <TopBar title="Udaya" subtitle={`Hi, ${me.name.split(' ')[0]} · ${std?.name}`} showSearch={false} />
       <div className="px-5 md:px-8 py-6 max-w-2xl mx-auto">
         <h2 className="text-xl font-semibold mb-1">Good afternoon</h2>
         <p className="text-sm text-neutral-500 mb-6">Keep going. You're doing well.</p>

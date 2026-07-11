@@ -1,6 +1,6 @@
-# Tutoria LMS
+# Udaya LMS
 
-Welcome to the Tutoria LMS repository! This project consists of a React (Vite) frontend and a Python (FastAPI) backend.
+Welcome to the Udaya LMS repository! This project consists of a React (Vite) frontend and a Python (FastAPI) backend.
 
 ## Prerequisites
 Before you begin, ensure you have the following installed on your machine:

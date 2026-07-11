@@ -20,7 +20,7 @@ export async function clearStaleAppCaches() {
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((key) => /workbox|precache|vite|udaya|tutoria/i.test(key))
+          .filter((key) => /workbox|precache|vite|udaya|udaya/i.test(key))
           .map((key) => caches.delete(key))
       );
     }

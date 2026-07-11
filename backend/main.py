@@ -1379,8 +1379,8 @@ def _invalidate_auth_cache_for_user(user_id: str):
         _auth_cache.pop(t, None)
 
 
-STUDENT_AUTH_DOMAIN = "tutoria.local"
-LEGACY_STUDENT_AUTH_DOMAIN = "tutoria.internal"
+STUDENT_AUTH_DOMAIN = "udaya.local"
+LEGACY_STUDENT_AUTH_DOMAIN = "udaya.internal"
 
 
 def _clean_optional_text(value) -> str:
@@ -1425,9 +1425,9 @@ def _append_unique(items: list, value: Optional[str]):
 def _student_login_email_candidates(row: Optional[dict]) -> List[str]:
     """Auth emails to try for a student profile row.
 
-    The canonical synthetic address is username@tutoria.local. A short-lived
+    The canonical synthetic address is username@udaya.local. A short-lived
     compatibility fallback keeps older bulk-created accounts working after they
-    were accidentally created as username@tutoria.internal.
+    were accidentally created as username@udaya.internal.
     """
     if not row:
         return []
@@ -1805,7 +1805,7 @@ def _login_impl(request: LoginRequest):
 
         # 2. Try username lookup (case-insensitive). Teachers create students
         #    with a username like "aarav.p"; the auth email is
-        #    "aarav.p@tutoria.local".
+        #    "aarav.p@udaya.local".
         if "@" not in email_to_use:
             try:
                 normalized_identifier = _normalize_student_username(identifier)
@@ -6769,7 +6769,7 @@ def create_demo_accounts(user = Depends(verify_token)):
 
     try:
         teacher_response = service_supabase.auth.admin.create_user({
-            "email": "teacher@tutoria.com",
+            "email": "teacher@udaya.com",
             "password": "teacher123",
             "email_confirm": True,
             "user_metadata": {"role": "teacher", "name": "Priya Sharma"}
@@ -6778,7 +6778,7 @@ def create_demo_accounts(user = Depends(verify_token)):
         if teacher_response.user:
             results.append({
                 "role": "teacher",
-                "email": "teacher@tutoria.com",
+                "email": "teacher@udaya.com",
                 "password": "teacher123",
                 "name": "Priya Sharma"
             })

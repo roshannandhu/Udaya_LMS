@@ -1,4 +1,4 @@
-# Tutoria LMS — AGENTS.md
+# Udaya LMS — AGENTS.md
 
 ## Project state
 

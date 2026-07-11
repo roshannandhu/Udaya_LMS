@@ -1,4 +1,4 @@
-# Tutoria LMS — Database Reference
+# Udaya LMS — Database Reference
 
 All tables live in Supabase (PostgreSQL). The full DDL is in `backend/schema.sql` — run it in the Supabase SQL Editor to create/migrate tables.
 

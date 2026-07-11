@@ -38,7 +38,7 @@ def create_demo_accounts():
         print("LOGIN INSTRUCTIONS")
         print("="*60)
         print("\nTEACHER LOGIN:")
-        print("  Email: teacher@tutoria.com")
+        print("  Email: teacher@udaya.com")
         print("  Password: teacher123")
         print("\nSTUDENT LOGIN:")
         print("  Use any username from the list above")
@@ -65,7 +65,7 @@ def list_accounts():
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("TUTORIA LMS - Demo Account Creator")
+    print("UDAYA LMS - Demo Account Creator")
     print("="*60)
     print("\nMake sure the backend is running first:")
     print("  cd backend && python main.py")

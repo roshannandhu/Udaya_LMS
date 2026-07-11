@@ -142,7 +142,7 @@ Add to the `testApi` object:
 
 ```js
 generateFromPdf: async (file, numQuestions = 10, subjectHint = '') => {
-  const token = localStorage.getItem('tutoria_token');
+  const token = localStorage.getItem('udaya_token');
   const form = new FormData();
   form.append('file', file);
   form.append('num_questions', numQuestions);

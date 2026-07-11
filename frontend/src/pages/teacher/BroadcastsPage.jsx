@@ -236,7 +236,7 @@ export default function BroadcastsPage() {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-neutral-500">
               <MessageSquare size={48} className="mb-4 text-neutral-300" strokeWidth={1} />
-              <p className="text-lg font-medium text-neutral-600">Tutoria Broadcasts</p>
+              <p className="text-lg font-medium text-neutral-600">Udaya Broadcasts</p>
               <p className="text-sm text-neutral-400 mt-2">Select a class to send messages, assignments, and announcements.</p>
             </div>
           )}

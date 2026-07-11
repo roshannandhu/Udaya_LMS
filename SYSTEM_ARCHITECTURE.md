@@ -1,4 +1,4 @@
-# Tutoria LMS — System Architecture & Developer Reference
+# Udaya LMS — System Architecture & Developer Reference
 
 > **For AI agents**: Read this entire document before touching any file. Section 19 (AI Rules) is mandatory. Every endpoint, table, and component listed here is real and tested — do not invent alternatives.
 
@@ -6,7 +6,7 @@
 
 ## 1. Project Overview
 
-**Tutoria** is a two-portal LMS for private tuition teachers and their students.
+**Udaya** is a two-portal LMS for private tuition teachers and their students.
 
 - **Teacher Portal** — Dashboard, Classes, Subjects, Students, Tests, Broadcasts, Attendance, Reports, Reminders
 - **Student Portal** — Dashboard, Subjects, Video Player, Tests, Broadcasts, Profile, Leaderboard
@@ -90,7 +90,7 @@ backend/
 1. Client POSTs to `POST /api/auth/login` with `email_or_username`, `password`, `device_fingerprint`
 2. Backend resolves username→email if needed (queries `students` table), then calls `supabase.auth.sign_in_with_password`
 3. On success, backend upserts `student_sessions` (student only) and returns `{ token, user: { id, name, role, email, username, must_change_pwd } }`
-4. Token stored in `localStorage` as `tutoria_token`; role as `tutoria_user_role`
+4. Token stored in `localStorage` as `udaya_token`; role as `udaya_user_role`
 5. All subsequent API calls send `Authorization: Bearer <token>` header
 6. `verify_token` FastAPI dependency validates via `supabase.auth.get_user(token)` — returns `{ user_id, role, email }`
 
@@ -596,7 +596,7 @@ verifyWithBackend() → calls GET /api/auth/me, sets user/role
 enforceSingleDevice(userId) → calls POST /api/auth/verify-device, force-logs out if not allowed
 changePassword(newPwd) → calls POST /api/auth/change-password
 ```
-Persists: `tutoria_token`, `tutoria_user_role` in localStorage.
+Persists: `udaya_token`, `udaya_user_role` in localStorage.
 
 ### `useAppCache` (`src/store.js`)
 Global data cache with 2-minute TTL. Hydrates instantly from localStorage on reload.
@@ -611,7 +611,7 @@ getStudentsFor(stdId) → filtered selector
 invalidate()          → clears all TTLs (call after any create/delete)
 invalidateStudents()  → clears only students TTL
 ```
-Persists to localStorage key `tutoria-app-cache`.
+Persists to localStorage key `udaya-app-cache`.
 
 ### `useSettingsStore` (`src/store.js`)
 Teacher preferences, persisted.
@@ -619,7 +619,7 @@ Teacher preferences, persisted.
 { defaultStudentPassword: '' }
 setDefaultStudentPassword(pwd)
 ```
-Persists to localStorage key `tutoria-settings`.
+Persists to localStorage key `udaya-settings`.
 Used by: `BulkImportModal` (passed to `parseImportFile`), `AddStudentModal` in `StandardDetailPage` (pre-fills password field).
 
 ### `useStore` (`src/store.js`)

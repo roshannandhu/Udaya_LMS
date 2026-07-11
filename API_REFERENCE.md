@@ -1,4 +1,4 @@
-# Tutoria LMS — API Reference
+# Udaya LMS — API Reference
 
 Base URL: `http://localhost:8001/api` (dev) | configure via `VITE_API_URL`
 

@@ -1,6 +1,6 @@
 # WhatsApp Module — Full Working Reference (Architecture · UI · Logic)
 
-> Parent-messaging console for the Tutoria/Udaya LMS. This document explains the **whole**
+> Parent-messaging console for the Udaya/Udaya LMS. This document explains the **whole**
 > module after the beginner-friendly rebuild: the idea, the architecture, the UI, every
 > endpoint, the database — and the **actual logic/algorithms** behind each flow.
 >
@@ -595,7 +595,7 @@ missing columns and degrades gracefully (no crash).
   registry as source of truth.
 - **No approval jargon** on the simple path; Meta's approval/pending/24h-window only surfaces
   when the Meta provider is selected.
-- **`{Institute Name}` / `{Login Link}`** were hardcoded ("Tutoria LMS"/"udaya.app") — now from settings.
+- **`{Institute Name}` / `{Login Link}`** were hardcoded ("Udaya LMS"/"udaya.app") — now from settings.
 - **Template editing** was impossible (create/delete only) — added `PUT /templates/{id}`.
 - **Missing/broken placeholders** — validated on save + before send; unknown/empty tags stripped.
 - **Setup was developer-grade** (paste tokens/URLs) — replaced with **scan-a-QR** pairing.

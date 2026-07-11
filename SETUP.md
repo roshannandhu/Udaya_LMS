@@ -1,4 +1,4 @@
-# Setup — Run Tutoria / Udaya LMS Locally
+# Setup — Run Udaya / Udaya LMS Locally
 
 This repo is configured for **clone-and-run**. The `.env` files (with the shared
 Supabase credentials) are committed, so you do **not** need to create them.

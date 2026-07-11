@@ -1,5 +1,5 @@
 -- ============================================================
--- Tutoria LMS — Row Level Security Policies
+-- Udaya LMS — Row Level Security Policies
 -- Run this in Supabase SQL Editor AFTER schema.sql
 -- ============================================================
 -- NOTE: Backend uses service role key → bypasses RLS (correct).

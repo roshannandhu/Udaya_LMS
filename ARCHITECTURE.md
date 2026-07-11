@@ -1,4 +1,4 @@
-# Tutoria LMS — Architecture Reference
+# Udaya LMS — Architecture Reference
 
 ## Stack (Exact, No Hallucinations)
 
@@ -111,8 +111,8 @@ Backend → supabase.auth.sign_in_with_password({ email, password })
         → returns Supabase JWT
 Backend → upserts student_sessions for student role (device enforcement)
 Backend → returns { token: <supabase_jwt>, user: { id, name, role, email, username, must_change_pwd } }
-Client → stores token in localStorage as "tutoria_token"
-Client → stores role in localStorage as "tutoria_user_role"
+Client → stores token in localStorage as "udaya_token"
+Client → stores role in localStorage as "udaya_user_role"
 
 All subsequent requests → Authorization: Bearer <token>
 Backend verify_token() → supabase.auth.get_user(token)
@@ -153,7 +153,7 @@ getToken()
 ```
 
 ### `useAppCache` — `src/store.js`
-Persisted to `localStorage` key `tutoria-app-cache`. 2-minute TTL.
+Persisted to `localStorage` key `udaya-app-cache`. 2-minute TTL.
 ```
 standards[], subjects[], students[]        ← cached arrays
 prefetchAll()                              ← parallel fetch on app start
@@ -165,7 +165,7 @@ invalidateStudents()                       ← clear only students TTL
 ```
 
 ### `useSettingsStore` — `src/store.js`
-Persisted to `localStorage` key `tutoria-settings`.
+Persisted to `localStorage` key `udaya-settings`.
 ```
 defaultStudentPassword: ''
 setDefaultStudentPassword(pwd)

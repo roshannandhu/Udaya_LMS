@@ -77,18 +77,18 @@ class _FakeAuth:
         password = payload["password"]
         self.emails.append(email)
         self.attempts.append((email, password))
-        if email == "aarav.p@tutoria.local":
+        if email == "aarav.p@udaya.local":
             raise Exception("Invalid login credentials")
         if email == "parent@example.com":
             raise Exception("Invalid login credentials")
         if password != "secret":
             raise Exception("Invalid login credentials")
-        if email == "candidate.test@tutoria.local":
+        if email == "candidate.test@udaya.local":
             user_id = "student-2"
             name = "Candidate Test"
             username = "candidate.test"
         else:
-            assert email == "aarav.p@tutoria.internal"
+            assert email == "aarav.p@udaya.internal"
             user_id = "student-1"
             name = "Aarav Patel"
             username = "aarav.p"
@@ -109,11 +109,11 @@ class _FakeSupabase:
 
 def run():
     assert main._normalize_student_username(" Aarav P ") == "aarav.p"
-    assert main._student_auth_email("Aarav P") == "aarav.p@tutoria.local"
+    assert main._student_auth_email("Aarav P") == "aarav.p@udaya.local"
 
     assert (
         main._student_auth_email_for_create("Aarav P", None)
-        == "aarav.p@tutoria.local"
+        == "aarav.p@udaya.local"
     )
     assert (
         main._student_auth_email_for_create("ignored", "Student@Example.COM")
@@ -126,15 +126,15 @@ def run():
 
     no_email_row = {"email": None, "username": "Aarav P"}
     assert main._student_login_email_candidates(no_email_row) == [
-        "aarav.p@tutoria.local",
-        "aarav.p@tutoria.internal",
+        "aarav.p@udaya.local",
+        "aarav.p@udaya.internal",
     ]
 
     real_email_row = {"email": "student@example.com", "username": "aarav.p"}
     assert main._student_login_email_candidates(real_email_row) == [
         "student@example.com",
-        "aarav.p@tutoria.local",
-        "aarav.p@tutoria.internal",
+        "aarav.p@udaya.local",
+        "aarav.p@udaya.internal",
     ]
 
     email_username_row = {"email": None, "username": "Student@Example.COM"}
@@ -155,9 +155,9 @@ def run():
         )
 
         assert fake_supabase.auth.attempts == [
-            ("aarav.p@tutoria.local", "secret"),
-            ("aarav.p@tutoria.local", "secret "),
-            ("aarav.p@tutoria.internal", "secret"),
+            ("aarav.p@udaya.local", "secret"),
+            ("aarav.p@udaya.local", "secret "),
+            ("aarav.p@udaya.internal", "secret"),
         ]
         assert result["token"] == "token"
         assert result["user"]["student_id"] == "student-1"
@@ -171,10 +171,10 @@ def run():
         )
 
         assert fake_supabase.auth.attempts == [
-            ("aarav.p@tutoria.local", "secret "),
-            ("aarav.p@tutoria.local", "secret"),
-            ("aarav.p@tutoria.internal", "secret "),
-            ("aarav.p@tutoria.internal", "secret"),
+            ("aarav.p@udaya.local", "secret "),
+            ("aarav.p@udaya.local", "secret"),
+            ("aarav.p@udaya.internal", "secret "),
+            ("aarav.p@udaya.internal", "secret"),
         ]
         assert result["token"] == "token"
         assert result["user"]["student_id"] == "student-1"
@@ -190,7 +190,7 @@ def run():
         assert fake_supabase.auth.attempts == [
             ("parent@example.com", "secret"),
             ("parent@example.com", "secret "),
-            ("candidate.test@tutoria.local", "secret"),
+            ("candidate.test@udaya.local", "secret"),
         ]
         assert result["token"] == "token"
         assert result["user"]["student_id"] == "student-2"

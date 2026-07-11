@@ -1,4 +1,4 @@
--- Tutoria LMS Database Schema (Supabase / PostgreSQL)
+-- Udaya LMS Database Schema (Supabase / PostgreSQL)
 -- Uses UUID primary keys. students.id = auth.users.id (set explicitly on insert).
 --
 -- ── PORTABILITY (AWS RDS / plain PostgreSQL) ─────────────────────────────────
