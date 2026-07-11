@@ -703,8 +703,12 @@ CREATE TABLE IF NOT EXISTS sub_teachers (
     name               TEXT NOT NULL,
     email              TEXT,
     phone              TEXT,
+    otp_enabled        BOOLEAN NOT NULL DEFAULT true,
     created_at         TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration for existing installs (safe to re-run)
+ALTER TABLE sub_teachers ADD COLUMN IF NOT EXISTS otp_enabled boolean NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_sub_teachers_primary ON sub_teachers(primary_teacher_id);
 
