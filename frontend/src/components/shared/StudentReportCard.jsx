@@ -192,7 +192,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   const autoOpenTriggeredRef = useRef(false);
   const [tokens, setTokens] = useState(null); // { remaining, limit, unlimited }
   const { user } = useAuthStore();
-  const isStudent = (user?.role ?? localStorage.getItem('tutoria_user_role')) === 'student';
+  const isStudent = (user?.role ?? localStorage.getItem('udaya_user_role')) === 'student';
 
   const {
     student = {},

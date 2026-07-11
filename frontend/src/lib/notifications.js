@@ -40,7 +40,7 @@ export const useNotificationStore = create((set, get) => ({
   error: null,
 
   fetch: async () => {
-    if (!localStorage.getItem('tutoria_token')) {
+    if (!localStorage.getItem('udaya_token')) {
       set({ notifications: [], loading: false, error: null });
       return [];
     }

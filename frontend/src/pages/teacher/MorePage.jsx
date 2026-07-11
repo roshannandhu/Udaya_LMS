@@ -18,7 +18,7 @@ export default function MorePage() {
   const [profileEdit, setProfileEdit] = useState(false);
   const [profile, setProfile] = useState({
     name: user?.name || 'Teacher',
-    email: user?.email || 'teacher@tutoria.com',
+    email: user?.email || 'teacher@udaya-learn.com',
   });
   const [editForm, setEditForm] = useState(profile);
   const [editSaving, setEditSaving] = useState(false);

@@ -27,7 +27,7 @@ export default function useBroadcastSocket(standardId, onMessage) {
     let mounted = true;
 
     const connect = () => {
-      const token = localStorage.getItem('tutoria_token') || '';
+      const token = localStorage.getItem('udaya_token') || '';
       ws = new WebSocket(`${wsBase}/ws/broadcasts/${standardId}?token=${encodeURIComponent(token)}`);
 
       ws.onmessage = (event) => {

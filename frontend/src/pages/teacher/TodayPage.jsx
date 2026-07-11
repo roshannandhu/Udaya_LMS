@@ -202,8 +202,8 @@ export default function TodayPage() {
       refreshStudents:  s.refreshStudents,
     })));
 
-  const [overview, setOverview] = useState(() => readCache('tutoria_dash_overview'));
-  const [loading, setLoading]   = useState(!readCache('tutoria_dash_overview'));
+  const [overview, setOverview] = useState(() => readCache('udaya_dash_overview'));
+  const [loading, setLoading]   = useState(!readCache('udaya_dash_overview'));
   const [busyJoin, setBusyJoin] = useState({});
 
   const now = new Date();
@@ -217,7 +217,7 @@ export default function TodayPage() {
     try {
       const ov = await dashboardApi.getOverview();
       setOverview(ov);
-      writeCache('tutoria_dash_overview', ov);
+      writeCache('udaya_dash_overview', ov);
     } catch (err) {
       console.error('Dashboard error:', err);
     } finally {
@@ -236,7 +236,7 @@ export default function TodayPage() {
         if (!prev) return prev;
         const items = (prev.join_requests?.items || []).filter(r => r.id !== req.id);
         const next = { ...prev, join_requests: { count: Math.max(0, (prev.join_requests?.count || 1) - 1), items } };
-        writeCache('tutoria_dash_overview', next);
+        writeCache('udaya_dash_overview', next);
         return next;
       });
       if (action === 'approve') refreshStudents?.();

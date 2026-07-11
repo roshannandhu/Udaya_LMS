@@ -69,7 +69,7 @@ export function NewSubjectModal({ open, onClose, standardId }) {
 
 export function InviteModal({ open, onClose, standard }) {
   const [copied, setCopied] = useState(false);
-  const link = `tutoria.app/join/${standard?.short || 'std'}-abc123`;
+  const link = `udaya-learn.com/join/${standard?.short || 'std'}-abc123`;
   return (
     <Modal open={open} onClose={onClose} title="Invite students">
       <p className="text-sm text-neutral-600 mb-2">

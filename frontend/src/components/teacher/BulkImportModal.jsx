@@ -162,7 +162,7 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
 
     const wsData = [
       ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Parent Phone', 'Login URL'],
-      ...rows.map(r => [r.student_code, r.name, r.username, r.temp_password, r.standard, r.email, r.phone, r.parent_phone, 'https://tutoria.app/login']),
+      ...rows.map(r => [r.student_code, r.name, r.username, r.temp_password, r.standard, r.email, r.phone, r.parent_phone, 'https://udaya-learn.com/login']),
     ];
 
     await downloadAoaWorkbook(wsData, {

@@ -4,20 +4,20 @@ import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
 import { useSettingsStore, useAppCache, useWhatsNew } from '../store';
 
 const API_BASE         = getApiBaseUrl();
-const ROLE_KEY         = 'tutoria_user_role';
-const TOKEN_KEY        = 'tutoria_token';
-const REFRESH_KEY      = 'tutoria_refresh_token';
-const NAME_KEY         = 'tutoria_user_name';
-const TEACHER_TYPE_KEY = 'tutoria_teacher_type';
+const ROLE_KEY         = 'udaya_user_role';
+const TOKEN_KEY        = 'udaya_token';
+const REFRESH_KEY      = 'udaya_refresh_token';
+const NAME_KEY         = 'udaya_user_name';
+const TEACHER_TYPE_KEY = 'udaya_teacher_type';
 
 const generateDeviceFingerprint = () => {
-  const stored = localStorage.getItem('tutoria_device_id');
+  const stored = localStorage.getItem('udaya_device_id');
   if (stored) return stored;
   // Unique per browser install — a random token, NOT derived from device specs, so two
   // identical phones never produce the same id (which would silently defeat single-device
   // enforcement). Existing installs keep their stored id, so no one is logged out.
   const id = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  localStorage.setItem('tutoria_device_id', id);
+  localStorage.setItem('udaya_device_id', id);
   return id;
 };
 
@@ -265,7 +265,7 @@ export const useAuthStore = create((set, get) => ({
       if (!data.allowed) {
         const message = 'You were logged out because your account was opened on another device.';
         // Stash a reason so the login screen can explain what happened (cleared after shown).
-        try { localStorage.setItem('tutoria_logout_reason', message); } catch {}
+        try { localStorage.setItem('udaya_logout_reason', message); } catch {}
         get().clearAuth();
         return { allowed: false, message };
       }

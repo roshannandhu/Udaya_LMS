@@ -78,7 +78,7 @@ export default function StudentProfilePage() {
     try {
       const form = new FormData();
       form.append('file', file, safeFileName(file, 'avatar'));
-      const token = localStorage.getItem('tutoria_token');
+      const token = localStorage.getItem('udaya_token');
       const { getApiBaseUrl } = await import('../../lib/api');
       const { xhrUpload } = await import('../../lib/xhrUpload');
       const apiBase = getApiBaseUrl();

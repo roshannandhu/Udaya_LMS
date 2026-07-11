@@ -20,7 +20,7 @@ export default function useWaInboxSocket(onMessage, enabled = true) {
     let mounted = true;
 
     const connect = () => {
-      const token = localStorage.getItem('tutoria_token') || '';
+      const token = localStorage.getItem('udaya_token') || '';
       ws = new WebSocket(`${wsBase}/ws/whatsapp/inbox?token=${encodeURIComponent(token)}`);
 
       ws.onmessage = (event) => {

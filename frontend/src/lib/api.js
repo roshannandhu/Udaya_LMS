@@ -21,8 +21,8 @@ const API_BASE = (
         : `http://${hostname}:${port}/api`
     )
 ).replace(/\/$/, '');
-const TOKEN_KEY    = 'tutoria_token';
-const REFRESH_KEY  = 'tutoria_refresh_token';
+const TOKEN_KEY    = 'udaya_token';
+const REFRESH_KEY  = 'udaya_refresh_token';
 
 // In-memory GET cache — 120s TTL; busted on any mutation. Lets quick revisits to a
 // page render instantly from cache instead of re-showing a loading skeleton.
@@ -118,8 +118,8 @@ export async function apiClient(endpoint, options = {}) {
     // → session is genuinely expired → force logout
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem('tutoria_user_role');
-    localStorage.removeItem('tutoria_user_name');
+    localStorage.removeItem('udaya_user_role');
+    localStorage.removeItem('udaya_user_name');
     _cache.clear();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('auth:logout'));
@@ -129,8 +129,8 @@ export async function apiClient(endpoint, options = {}) {
     // If the retried request ALSO returns 401, force logout immediately.
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem('tutoria_user_role');
-    localStorage.removeItem('tutoria_user_name');
+    localStorage.removeItem('udaya_user_role');
+    localStorage.removeItem('udaya_user_name');
     _cache.clear();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('auth:logout'));

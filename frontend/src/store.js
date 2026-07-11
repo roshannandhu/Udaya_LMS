@@ -150,7 +150,7 @@ export const useSettingsStore = create(
         lmsLogo: lms_logo ? lms_logo : (lms_logo === '' ? null : s.lmsLogo),
       })),
     }),
-    { name: 'tutoria-settings', storage: createJSONStorage(() => localStorage) }
+    { name: 'udaya-settings', storage: createJSONStorage(() => localStorage) }
   )
 );
 
@@ -270,7 +270,7 @@ export const useAppCache = create(
       }),
     }),
     {
-      name: 'tutoria-app-cache',               // localStorage key
+      name: 'udaya-app-cache',               // localStorage key
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({                    // only persist data, not functions
         standards:      s.standards,

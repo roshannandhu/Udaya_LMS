@@ -12,7 +12,7 @@ function patchDisplayMedia() {
   if (_displayMediaPatched || !navigator.mediaDevices?.getDisplayMedia) return;
   _displayMediaPatched = true;
   navigator.mediaDevices.getDisplayMedia = async (...args) => {
-    window.dispatchEvent(new CustomEvent('tutoria:screenshare-attempt'));
+    window.dispatchEvent(new CustomEvent('udaya:screenshare-attempt'));
     throw new DOMException('Screen capture is not permitted.', 'NotAllowedError');
   };
 }
@@ -96,13 +96,13 @@ export default function ScreenshotGuard({
 
     patchDisplayMedia();  // only active while a student-guarded component is mounted
     document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('tutoria:screenshare-attempt', onShareAttempt);
+    window.addEventListener('udaya:screenshare-attempt', onShareAttempt);
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       unpatchDisplayMedia();
       document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('tutoria:screenshare-attempt', onShareAttempt);
+      window.removeEventListener('udaya:screenshare-attempt', onShareAttempt);
       document.removeEventListener('visibilitychange', onVisibility);
       clearTimeout(printTimerRef.current);
       clearTimeout(shareTimerRef.current);

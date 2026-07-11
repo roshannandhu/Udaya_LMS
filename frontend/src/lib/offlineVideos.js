@@ -1,5 +1,5 @@
-const CACHE_NAME = 'tutoria-offline-videos-v1';
-const SAVED_KEY = 'tutoria_saved_video_ids';
+const CACHE_NAME = 'udaya-offline-videos-v1';
+const SAVED_KEY = 'udaya_saved_video_ids';
 
 export function getSavedVideoIds() {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); }

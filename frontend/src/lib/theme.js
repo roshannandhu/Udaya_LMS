@@ -4,7 +4,7 @@ import { create } from 'zustand';
 // index.css `html.dark` overrides do the visual flip) and persists the choice.
 // Defaults to LIGHT for everyone — it only goes dark when a user explicitly
 // toggles (the choice is then remembered per-browser). Purely visual.
-const STORAGE_KEY = 'tutoria-theme';
+const STORAGE_KEY = 'udaya-theme';
 
 function apply(dark) {
   if (typeof document === 'undefined') return;

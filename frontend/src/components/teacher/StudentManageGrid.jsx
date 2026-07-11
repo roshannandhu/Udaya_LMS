@@ -177,7 +177,7 @@ export default function StudentManageGrid({ search = '', stdFilter = 'all', stan
     if (!rs.length) return;
     const aoa = [
       ['Student ID', 'Name', 'Username', 'Temporary Password', 'Standard', 'Email', 'Phone', 'Parent Phone', 'Login URL'],
-      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', r.parent_phone || '', 'https://tutoria.app/login']),
+      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', r.parent_phone || '', 'https://udaya-learn.com/login']),
     ];
     downloadAoaWorkbook(aoa, {
       filename: `New_Students_${new Date().toISOString().split('T')[0]}`,

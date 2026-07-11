@@ -42,10 +42,10 @@ export default function LoginPage() {
 
   // If the student was auto-logged-out (account opened on another device), explain why.
   useEffect(() => {
-    const reason = localStorage.getItem('tutoria_logout_reason');
+    const reason = localStorage.getItem('udaya_logout_reason');
     if (reason) {
       setNotice(reason);
-      localStorage.removeItem('tutoria_logout_reason');
+      localStorage.removeItem('udaya_logout_reason');
     }
   }, []);
 

@@ -10,7 +10,29 @@
     <script>
       (function () {
         try {
-          if (localStorage.getItem('tutoria-theme') === 'dark') {
+          // Migrate old tutoria-* localStorage keys to udaya-* once
+          var _km = {
+            'tutoria-theme': 'udaya-theme',
+            'tutoria_token': 'udaya_token',
+            'tutoria_refresh_token': 'udaya_refresh_token',
+            'tutoria_user_role': 'udaya_user_role',
+            'tutoria_user_name': 'udaya_user_name',
+            'tutoria_teacher_type': 'udaya_teacher_type',
+            'tutoria_device_id': 'udaya_device_id',
+            'tutoria_logout_reason': 'udaya_logout_reason',
+            'tutoria-settings': 'udaya-settings',
+            'tutoria-app-cache': 'udaya-app-cache',
+            'tutoria_dash_overview': 'udaya_dash_overview',
+            'tutoria_saved_video_ids': 'udaya_saved_video_ids',
+          };
+          Object.keys(_km).forEach(function(old) {
+            var val = localStorage.getItem(old);
+            if (val !== null && localStorage.getItem(_km[old]) === null) {
+              localStorage.setItem(_km[old], val);
+              localStorage.removeItem(old);
+            }
+          });
+          if (localStorage.getItem('udaya-theme') === 'dark') {
             document.documentElement.classList.add('dark');
             document.documentElement.style.colorScheme = 'dark';
           }

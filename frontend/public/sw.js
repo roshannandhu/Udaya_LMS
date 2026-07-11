@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tutoria-v1';
+const CACHE_NAME = 'udaya-v1';
 const OFFLINE_URL = '/offline.html';
 
 const urlsToCache = [
@@ -170,7 +170,7 @@ async function deleteVideoCache(videoId) {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('tutoria-cache', 1);
+    const request = indexedDB.open('udaya-cache', 1);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
     request.onupgradeneeded = (event) => {

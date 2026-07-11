@@ -47,7 +47,7 @@ export default function StudentBulkActions({ selectedRows = [], standards = [], 
     if (!rs?.length) return;
     const aoa = [
       ['Student ID', 'Name', 'Username', 'Password', 'Standard', 'Email', 'Phone', 'Login URL'],
-      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', 'https://tutoria.app/login']),
+      ...rs.map(r => [r.student_code || '', r.name || '', r.username || '', r.plain_password || '', stdName(r.standard_id), r.email || '', r.phone || '', 'https://udaya-learn.com/login']),
     ];
     downloadAoaWorkbook(aoa, {
       filename: `${prefix}_${new Date().toISOString().split('T')[0]}`,

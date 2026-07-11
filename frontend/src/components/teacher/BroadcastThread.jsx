@@ -186,7 +186,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
     const formData = new FormData();
     formData.append('file', file, safeFileName(file, 'broadcast'));
     try {
-      const token = localStorage.getItem('tutoria_token');
+      const token = localStorage.getItem('udaya_token');
       const apiBase = getApiBaseUrl();
       const data = await xhrUpload(`${apiBase}/upload`, formData, token);
       setAttachments([...attachments, { url: data.url, type: data.type, name: data.filename }]);
@@ -259,7 +259,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
         const formData = new FormData();
         formData.append('file', blob, `voicenote.${ext}`);
         try {
-          const token = localStorage.getItem('tutoria_token');
+          const token = localStorage.getItem('udaya_token');
           const apiBase = getApiBaseUrl();
           const data = await xhrUpload(`${apiBase}/upload`, formData, token);
           const payload = {
