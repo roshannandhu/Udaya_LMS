@@ -2,7 +2,7 @@
 // Tests all avatar types: preset:male, preset:female, null (neutral), and real URL.
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { buildStudentReportPdf, buildExamResultPdf } from './lib/reportPdf';
+import { buildStudentReportPdf, buildExamResultPdf, ExamResultTemplateV3, StudentReportTemplate } from './lib/reportPdf';
 import './index.css';
 
 const daysAgo = (n) => {
@@ -127,6 +127,7 @@ const shortResult = { ...mockResult, score: 30, total_marks: 40, percentage: 75,
 
 function Harness() {
   const [status, setStatus] = useState('idle');
+  const [preview, setPreview] = useState(null); // 'exam' | 'report'
 
   const run = async (label, fn) => {
     setStatus(`generating ${label}...`);
@@ -175,6 +176,34 @@ function Harness() {
         {btn('gen-exam-pass', 'Exam PDF — Passing (72%)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: mockAnswers }, result: { ...mockResult, percentage: 72 }, student: mockStudent, testMeta: mockTestMeta }))}
         {btn('gen-exam-fail', 'Exam PDF — Failed (28%)', () => buildExamResultPdf({ reviewData: { questions: mockQuestions, answers: { q1: 1, q2: 2, q3: 1 } }, result: { ...mockResult, score: 12, percentage: 28, correct_count: 3, wrong_count: 3, marks_deducted: 3 }, student: mockStudent, testMeta: mockTestMeta }))}
       </div>
+
+      <h2 style={{ fontSize: 16, marginTop: 28 }}>Inline Preview (renders template directly — no PDF)</h2>
+      <div style={{ marginBottom: 12 }}>
+        <button onClick={() => setPreview(preview === 'exam' ? null : 'exam')} style={{ padding: '8px 16px', marginRight: 8, background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+          {preview === 'exam' ? 'Hide' : 'Show'} Exam Preview (boy avatar)
+        </button>
+        <button onClick={() => setPreview(preview === 'report' ? null : 'report')} style={{ padding: '8px 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+          {preview === 'report' ? 'Hide' : 'Show'} Report Preview (girl avatar)
+        </button>
+      </div>
+      {preview === 'exam' && (
+        <div id="preview-exam" style={{ border: '2px solid #4f46e5', borderRadius: 8, overflow: 'auto', background: '#fff', width: 720 }}>
+          <ExamResultTemplateV3
+            reviewData={{ questions: mockQuestions, answers: mockAnswers }}
+            result={mockResult}
+            student={{ ...mockStudent, avatar_url: 'preset:male' }}
+            testMeta={mockTestMeta}
+          />
+        </div>
+      )}
+      {preview === 'report' && (
+        <div id="preview-report" style={{ border: '2px solid #059669', borderRadius: 8, overflow: 'auto', background: '#fff', width: 720 }}>
+          <StudentReportTemplate
+            data={{ ...mockReportData, student: { ...mockStudent, avatar_url: 'preset:female' } }}
+            period="overall"
+          />
+        </div>
+      )}
     </div>
   );
 }

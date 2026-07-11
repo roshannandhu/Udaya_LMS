@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MdArrowBack, MdVisibility, MdVisibilityOff, MdAddPhotoAlternate, MdClose, MdPeople, MdGppBad, MdDelete, MdLoop, MdPersonAdd, MdCheck, MdCheckCircle, MdFavorite, MdBackup, MdDownload } from 'react-icons/md';
+import { MdArrowBack, MdVisibility, MdVisibilityOff, MdAddPhotoAlternate, MdClose, MdGppBad, MdDelete, MdLoop, MdPersonAdd, MdCheck, MdCheckCircle, MdFavorite, MdBackup, MdDownload, MdExpandMore } from 'react-icons/md';
 import { Toggle, Btn, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../lib/auth';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../../store';
@@ -115,7 +115,6 @@ export default function SettingsPage() {
     lmsName, setLmsName, lmsLogo, setLmsLogo,
     defaultStudentPassword, setDefaultStudentPassword,
     terminationPin, setTerminationPin,
-    notifTestSubmission, notifNewStudent, notifBroadcastReply, notifWeeklyReport, setNotif,
     securitySingleDevice, securityAutoLogout, securityTwoStepVerification, otpEmailReady, setSecurityPref,
     studentsCanViewReport, setStudentsCanViewReport,
     studentsCanUploadFiles, setStudentsCanUploadFiles,
@@ -132,6 +131,7 @@ export default function SettingsPage() {
   const [pinSaved, setPinSaved] = useState(false);
 
   // Backups: cadence setting + manual run + recent list
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [backupFreq, setBackupFreq] = useState('daily');
   const [freqSaved, setFreqSaved] = useState(false);
   const [backupRun, setBackupRun] = useState({ loading: false, msg: '' });
@@ -521,18 +521,6 @@ export default function SettingsPage() {
                       </Btn>
                     )}
                   </div>
-                  {profilePhoto && !profilePhotoFile && (
-                    <button onClick={async () => {
-                        setProfilePhotoSaving(true);
-                        try {
-                          const res = await teacherApi.uploadProfilePhoto(new File([], 'empty')); 
-                          // Wait, my backend implementation doesn't handle deleting file if size is 0.
-                          // Let's just allow uploading a transparent/empty one, or better yet, we can skip delete for now
-                        } catch(e){}
-                        setProfilePhotoSaving(false);
-                      }} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 w-fit hidden">
-                    </button>
-                  )}
                 </div>
                 <input ref={profilePhotoInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoFile} />
               </div>
@@ -604,14 +592,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Notifications — now persisted */}
-        <Section title="Notifications">
-          <Row label="Test submissions" sub="When a student submits a test" checked={notifTestSubmission} onChange={v => setNotif('notifTestSubmission', v)} />
-          <Row label="New student joined" checked={notifNewStudent} onChange={v => setNotif('notifNewStudent', v)} />
-          <Row label="Broadcast replies" sub="Student replies to announcements" checked={notifBroadcastReply} onChange={v => setNotif('notifBroadcastReply', v)} />
-          <Row label="Weekly report" sub="Every Monday morning" checked={notifWeeklyReport} onChange={v => setNotif('notifWeeklyReport', v)} />
-        </Section>
-
         {/* Student Portal */}
         <Section title="Student Portal">
           <Row label="Students can view their report card" sub="If off, the Report Card button is hidden from students" checked={studentsCanViewReport} onChange={setStudentsCanViewReport} />
@@ -675,32 +655,6 @@ export default function SettingsPage() {
               </p>
             )}
 
-            {/* Student ID backfill — one-time for students created before this feature */}
-            <div className="mt-5 pt-4 border-t border-white/40">
-              <p className="text-sm font-medium mb-0.5">Student IDs</p>
-              <p className="text-xs text-neutral-500 mb-3">New students get an ID automatically. Run this once to generate IDs for students added earlier.</p>
-              <Btn variant="default" size="sm" onClick={handleBackfillCodes} disabled={backfill.loading}>
-                {backfill.loading ? <><MdLoop className="w-3.5 h-3.5 animate-spin mr-1" />Generating…</> : 'Generate IDs for existing students'}
-              </Btn>
-              {backfill.msg && (
-                <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
-                  <MdCheckCircle className="w-3.5 h-3.5" /> {backfill.msg}
-                </p>
-              )}
-
-              {/* Force-regenerate all IDs into the new format — changes login IDs */}
-              <div className="mt-4 pt-4 border-t border-white/40">
-                <p className="text-xs text-neutral-500 mb-3">Changed the ID format? Rewrite every student's ID to the new format. This changes their login ID — you'll need to share the new IDs.</p>
-                <Btn variant="default" size="sm" onClick={handleRegenerateCodes} disabled={regen.loading}>
-                  {regen.loading ? <><MdLoop className="w-3.5 h-3.5 animate-spin mr-1" />Regenerating…</> : 'Regenerate all Student IDs (new format)'}
-                </Btn>
-                {regen.msg && (
-                  <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
-                    <MdCheckCircle className="w-3.5 h-3.5" /> {regen.msg}
-                  </p>
-                )}
-              </div>
-            </div>
           </div>
         </div>
 
@@ -771,17 +725,50 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Data */}
+        {/* Advanced — maintenance actions, rarely needed */}
         <div className="mb-6">
-          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Data</p>
-          <div className="glass-panel border-white/60 shadow-sm rounded-xl overflow-hidden divide-y divide-white/40">
-            <button className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-[#F4F2EF] transition-colors text-left">
-              <span>Export all data</span><span className="text-xs text-neutral-400">CSV / JSON</span>
-            </button>
-            <button className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-red-50/50 transition-colors text-left text-red-600">
-              <span>Delete account</span><span className="text-xs text-red-400">Irreversible</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setAdvancedOpen(v => !v)}
+            className="flex items-center gap-2 text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3 hover:text-neutral-600 transition-colors"
+          >
+            <MdExpandMore className={`w-3.5 h-3.5 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} />
+            Advanced
+          </button>
+          {advancedOpen && (
+            <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4 space-y-4">
+              <div>
+                <p className="text-sm font-medium mb-0.5">Student IDs</p>
+                <p className="text-xs text-neutral-500 mb-3">New students get an ID automatically. Run this once to generate IDs for students added before this feature existed.</p>
+                <Btn variant="default" size="sm" onClick={handleBackfillCodes} disabled={backfill.loading}>
+                  {backfill.loading ? <><MdLoop className="w-3.5 h-3.5 animate-spin mr-1" />Generating…</> : 'Generate IDs for existing students'}
+                </Btn>
+                {backfill.msg && (
+                  <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
+                    <MdCheckCircle className="w-3.5 h-3.5" /> {backfill.msg}
+                  </p>
+                )}
+              </div>
+              <div className="pt-4 border-t border-white/40">
+                <p className="text-sm font-medium mb-0.5">Regenerate all Student IDs</p>
+                <p className="text-xs text-neutral-500 mb-3">Changed the ID format? Rewrites every student's ID. Their login ID changes — share new IDs with them after running.</p>
+                <Btn variant="default" size="sm" onClick={handleRegenerateCodes} disabled={regen.loading}>
+                  {regen.loading ? <><MdLoop className="w-3.5 h-3.5 animate-spin mr-1" />Regenerating…</> : 'Regenerate all Student IDs'}
+                </Btn>
+                {regen.msg && (
+                  <p className="text-[11px] text-green-700 mt-2 flex items-center gap-1">
+                    <MdCheckCircle className="w-3.5 h-3.5" /> {regen.msg}
+                  </p>
+                )}
+              </div>
+              <div className="pt-4 border-t border-white/40">
+                <p className="text-sm font-medium mb-0.5 text-red-600">Delete account</p>
+                <p className="text-xs text-neutral-500 mb-3">Permanently deletes your account and all data. This cannot be undone.</p>
+                <Btn variant="default" size="sm" onClick={() => navigate('/delete-account')} className="text-red-600 border-red-200 hover:bg-red-50">
+                  Delete account
+                </Btn>
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="text-center text-xs text-neutral-400 flex items-center justify-center gap-1">Udaya v{import.meta.env.VITE_APP_VERSION || '1.1.7'} · Built with <MdFavorite className="w-3.5 h-3.5 text-red-500" /></p>

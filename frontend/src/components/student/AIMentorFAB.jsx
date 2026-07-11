@@ -3,6 +3,29 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Sparkles, X, ChevronRight, Target, Zap, TrendingUp, Users, BarChart3, Brain } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth';
+import { aiApi } from '../../lib/api';
+import { extractMentorHeadline } from '../shared/MentorReportView';
+
+function useMidnightCountdown(active) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    if (!active) return;
+    function tick() {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      const ms = midnight - now;
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      setText(h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return text;
+}
 
 // ── Message pools per role ─────────────────────────────────────────────────────
 const STUDENT_MESSAGES = [
@@ -79,18 +102,25 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
   const [open, setOpen]       = useState(false);
   const [msgDone, setMsgDone] = useState(false);
   const [message, setMessage] = useState('');
+  const [realAdvice, setRealAdvice] = useState(null);
+  const [tokens, setTokens]   = useState(null);
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const reduce   = useReducedMotion();
 
   const isTeacher = type === 'teacher';
   const pool      = isTeacher ? TEACHER_MESSAGES : STUDENT_MESSAGES;
+  const outOfUses = !isTeacher && tokens && !tokens.unlimited && tokens.remaining === 0;
+  const countdown = useMidnightCountdown(open && outOfUses);
 
-  // Pick a fresh random message each time the card opens
+  // Pick a fresh random message + fetch token count each time the card opens
   useEffect(() => {
     if (open) {
       setMsgDone(false);
       setMessage(pool[Math.floor(Math.random() * pool.length)]);
+      if (!isTeacher) {
+        aiApi.getTokens().then(setTokens).catch(() => {});
+      }
     }
   }, [open]);
 
@@ -100,6 +130,22 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Students: pull the last cached mentor analysis (free — no LLM call) and
+  // surface its headline in the bubble instead of a canned line.
+  useEffect(() => {
+    if (isTeacher) return;
+    const sid = user?.student_id || user?.id;
+    if (!sid) return;
+    aiApi.getCachedInsights(sid, 'overall')
+      .then((res) => {
+        if (res?.insights) {
+          const headline = extractMentorHeadline(res.insights);
+          if (headline) setRealAdvice(headline);
+        }
+      })
+      .catch(() => {});
+  }, [isTeacher, user?.student_id, user?.id]);
+
   if (hidden) return null;
 
   const name     = user?.name?.split(' ')[0] || (isTeacher ? 'Teacher' : 'there');
@@ -107,7 +153,7 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
 
   const greeting = isTeacher
     ? `Hi ${name}! ${message}`
-    : `Hey ${name}! ${message}`;
+    : `Hey ${name}! ${realAdvice || message}`;
 
   const handleClose  = () => setOpen(false);
   const handleCTA    = () => {
@@ -125,7 +171,7 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
       <Chip key="c" icon={Brain}    label="AI Insights" color="emerald" />,
     ],
   } : {
-    subtitle:   'Personalised for you',
+    subtitle:   realAdvice ? 'From your latest report' : 'Personalised for you',
     ctaLabel:   'See my full report',
     chips: [
       avgScore != null
@@ -233,15 +279,44 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
                 {cfg.chips}
               </motion.div>
 
+              {/* Token counter + countdown (students only) */}
+              {!isTeacher && tokens && !tokens.unlimited && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: msgDone ? 1 : 0, y: msgDone ? 0 : 4 }}
+                  transition={{ duration: 0.3, delay: 0.04, ease: 'easeOut' }}
+                  className={`mb-3 flex items-center justify-between px-3 py-2 rounded-2xl text-[11px] font-bold ${
+                    outOfUses
+                      ? 'bg-amber-50 border border-amber-200 text-amber-700'
+                      : 'bg-neutral-50 border border-neutral-100 text-neutral-500'
+                  }`}
+                >
+                  <span>
+                    {outOfUses
+                      ? '⚡ Daily limit reached'
+                      : `⚡ ${tokens.remaining} of ${tokens.limit} AI uses left today`}
+                  </span>
+                  {outOfUses && countdown
+                    ? <span className="tabular-nums text-amber-600 font-black">Resets in {countdown}</span>
+                    : <span className="text-neutral-400">Resets at midnight</span>
+                  }
+                </motion.div>
+              )}
+
               {/* CTA button */}
               <motion.button
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: msgDone ? 1 : 0, y: msgDone ? 0 : 6 }}
                 transition={{ duration: 0.35, delay: 0.08, ease: 'easeOut' }}
-                onClick={handleCTA}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-neutral-900 text-white font-bold text-[13px] shadow-sm hover:bg-neutral-800 active:scale-[0.98] transition-all"
+                onClick={outOfUses ? undefined : handleCTA}
+                disabled={outOfUses}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-bold text-[13px] shadow-sm transition-all ${
+                  outOfUses
+                    ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+                    : 'bg-neutral-900 text-white hover:bg-neutral-800 active:scale-[0.98]'
+                }`}
               >
-                <span>{cfg.ctaLabel}</span>
+                <span>{outOfUses ? 'Try again after midnight' : cfg.ctaLabel}</span>
                 <ChevronRight size={16} />
               </motion.button>
             </div>

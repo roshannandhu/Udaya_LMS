@@ -156,11 +156,11 @@ async function waitForAssets(container) {
       }), 1800);
     }
 
-    // If the image still has no pixels (CORS block or any load failure), fall back to
-    // the local neutral avatar so html2canvas never captures a blank avatar box.
+    // If image still has no pixels (CORS block, load failure, or SVG without explicit dimensions),
+    // fall back to the local neutral avatar so html2canvas never captures a blank avatar box.
     if (img.naturalWidth === 0) {
       const src = img.getAttribute('src') || '';
-      if (src.startsWith('http://') || src.startsWith('https://')) {
+      if (src !== '/avatar-neutral.svg') {
         img.removeAttribute('crossorigin');
         img.src = '/avatar-neutral.svg';
         await withTimeout(new Promise(r => { img.onload = r; img.onerror = r; }), 1000);
@@ -490,8 +490,8 @@ const DeltaTag = ({ value, compare, suffix = '%' }) => {
 
 // Content flows naturally across pages. pageBreakInside: 'avoid' on each atomic
 // card prevents mid-card splits. PageStrip acts as a visual section divider.
-const PageGroup = ({ children }) => (
-  <div>
+const PageGroup = ({ children, newPage = false }) => (
+  <div style={newPage ? { pageBreakBefore: 'always' } : {}}>
     {children}
   </div>
 );
@@ -562,7 +562,7 @@ const HeadlineStat = ({ icon: Icon, label, value, band, children, className = ''
 // Report 1: student report card — 4 fixed pages.
 // Page 1 verdict, page 2 marks, page 3 effort, page 4 next steps. Every chart
 // carries a one-line takeaway; every headline number carries a class comparison.
-const StudentReportTemplate = ({ data, period }) => {
+export const StudentReportTemplate = ({ data, period }) => {
   const s = data.student || {};
   const brand = getBranding();
 
@@ -742,7 +742,7 @@ const StudentReportTemplate = ({ data, period }) => {
       </PageGroup>
 
       {/* ── PAGE 2 — Marks: subject table, trend chart ──────────────────── */}
-      <PageGroup>
+      <PageGroup newPage>
         <PageStrip student={s} title="Marks & Subjects" period={period} />
 
         <Section title="Subject-wise Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} compact>
@@ -825,7 +825,7 @@ const StudentReportTemplate = ({ data, period }) => {
       </PageGroup>
 
       {/* ── PAGE 3 — Test history & discipline: recent tests, attendance ── */}
-      <PageGroup>
+      <PageGroup newPage>
         <PageStrip student={s} title="Test History & Attendance" period={period} />
 
         <Section title="Recent Tests" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} compact>
@@ -891,7 +891,7 @@ const StudentReportTemplate = ({ data, period }) => {
       </PageGroup>
 
       {/* ── PAGE 4 — Effort & what next: work done, weak topics, plan ────── */}
-      <PageGroup>
+      <PageGroup newPage>
         <PageStrip student={s} title="Effort & Next Steps" period={period} />
 
         <Section title="Work Completed" icon={ClipboardCheck} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
@@ -1519,7 +1519,7 @@ const V3ParentSummary = ({ name, passed, cancelled, score, totalMarks, scorePct,
     <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-amber-700">For Parents</p>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <span style={{ marginTop: 1, fontSize: 13, fontWeight: 900, lineHeight: 1, color: cancelled ? '#c2410c' : passed ? '#059669' : '#dc2626', flexShrink: 0 }}>{cancelled ? '⚠' : passed ? '✓' : '✗'}</span>
+        <span style={{ marginTop: 1, fontSize: 13, fontWeight: 900, lineHeight: 1, color: cancelled ? '#c2410c' : passed ? '#059669' : '#dc2626', flexShrink: 0 }}>{cancelled ? '[!]' : passed ? '✓' : '✗'}</span>
         <p style={{ fontSize: 13, fontWeight: 700, lineHeight: '20px', color: '#111827', margin: 0 }}>
           {cancelled
             ? `${name}'s exam was cancelled — a rule violation was detected. Please contact the teacher.`
@@ -1652,7 +1652,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
         <div>
           <p className="text-sm font-bold text-gray-800">{brand.name}</p>
           <p className="mt-0.5 text-[10px] font-medium text-gray-400">Result generated on {fmtDate(new Date().toISOString())} · This is a computer-generated document.</p>
-          <p className="mt-1 text-[10px] font-semibold text-gray-500">📄 Page 2 — question results map · Page 3 — full question-by-question answer review</p>
+          <p className="mt-1 text-[10px] font-semibold text-gray-500">Page 2 — question results map · Page 3 — full question-by-question answer review</p>
           <p className="mt-1 text-[9px] font-medium text-gray-400">{V3_GRADE_LEGEND}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -1799,7 +1799,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
 
       {/* ============================== PAGE 2 ============================== */}
       {!cancelled && matrixItems.length > 0 && (
-        <div className="mt-8">
+        <div className="mt-8" style={{ pageBreakBefore: 'always' }}>
           <V3PageTitle
             title="Question Results"
             sub="Every question at a glance — green = correct · red = wrong · grey = not attempted (skipped)"
@@ -1858,7 +1858,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
 
       {/* ============================== PAGE 3+ ============================== */}
       {!cancelled && qs.length > 0 && (
-        <div className="mt-8">
+        <div className="mt-8" style={{ pageBreakBefore: 'always' }}>
           <V3PageTitle
             title="Question Review"
             sub="Each question with the given answer and the correct answer"

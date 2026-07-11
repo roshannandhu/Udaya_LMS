@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Award, Bot, CalendarDays, Download, Loader2, Share2, Sparkles, TrendingUp } from 'lucide-react';
+import { Award, Bot, CalendarDays, Download, Loader2, RefreshCw, Share2, Sparkles, TrendingUp, X } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { aiApi } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
+import MentorReportView from './MentorReportView';
 
 // --- Premium Graph Imports ---
 import SubjectProgressionLineChart from './graphs/SubjectProgressionLineChart';
@@ -24,6 +26,63 @@ import TestQuadrantChart from './graphs/TestQuadrantChart';
 import TopicPolarArea from './graphs/TopicPolarArea';
 import ActivityStepper from './graphs/ActivityStepper';
 import TimeAllocationDonut from './graphs/TimeAllocationDonut';
+
+function useMidnightCountdown() {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    function tick() {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      const ms = midnight - now;
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      setText(h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return text;
+}
+
+const AI_LOADING_STEPS = [
+  'Reading your scores and attendance...',
+  'Comparing you with the class...',
+  'Spotting strengths and weak topics...',
+  'Building your weekly study plan...',
+  'Writing your mentor report...',
+];
+
+function AiLoadingState() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setStep(s => Math.min(s + 1, AI_LOADING_STEPS.length - 1)), 2200);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="py-6">
+      <div className="flex flex-col items-center gap-3 mb-8 text-center">
+        <Loader2 size={30} className="animate-spin text-cyan-500" />
+        <p className="font-extrabold text-sm text-slate-700" aria-live="polite">{AI_LOADING_STEPS[step]}</p>
+        <p className="text-[11px] font-bold text-slate-400">Usually takes 10–20 seconds</p>
+      </div>
+      <div className="space-y-5" aria-hidden="true">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-slate-100 animate-pulse" />
+              <div className="h-3 w-36 rounded-full bg-slate-100 animate-pulse" />
+            </div>
+            <div className="h-10 rounded-xl bg-slate-50 border border-slate-100 animate-pulse" />
+            <div className="h-10 rounded-xl bg-slate-50 border border-slate-100 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const cardTone = {
   blue: 'border-l-[#2563EB]',
@@ -125,8 +184,9 @@ function useCountUp(target, duration = 700) {
 }
 
 export default function StudentReportCard({ data, period, onPeriodChange, onDownloadPDF, showHeader = true, autoOpenAI = false }) {
-  const [aiResult, setAiResult] = useState({ key: null, report: '', error: '' });
+  const [aiResult, setAiResult] = useState({ key: null, report: '', error: '', generatedAt: null });
   const [loadingAiKey, setLoadingAiKey] = useState(null);
+  const [streaming, setStreaming] = useState(false);
   const [showAiModal, setShowAiModal] = useState(autoOpenAI);
   const aiRequestRef = useRef(0);
   const autoOpenTriggeredRef = useRef(false);
@@ -166,8 +226,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
   const aiKey = studentId ? `${studentId}:${reportPeriod}` : '';
   const aiReport = aiResult.key === aiKey ? aiResult.report : '';
   const aiError = aiResult.key === aiKey ? aiResult.error : '';
+  const aiGeneratedAt = aiResult.key === aiKey ? aiResult.generatedAt : null;
   const loadingAi = loadingAiKey === aiKey;
   const isLimitError = !!aiError && aiError.toLowerCase().includes('daily limit');
+  const midnightCountdown = useMidnightCountdown();
 
   const PERIODS = [
     { id: 'overall', label: 'Overall' },
@@ -197,30 +259,44 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     } catch (e) { alert('Failed to generate PDF: ' + e.message); }
   };
 
-  const handleGenerateAI = useCallback(async () => {
-    setShowAiModal(true);
-    if (!studentId) {
-      setAiResult({
-        key: aiKey,
-        report: '',
-        error: 'Report data is still loading. Please try again in a moment.',
-      });
-      return;
-    }
-    if (loadingAi || aiReport) return;
-
+  // Fresh generation — streams the report in live, section by section.
+  // Falls back to the non-streaming endpoint if the stream fails before any
+  // text arrives. Consumes one daily token (backend enforces the limit).
+  const startGenerate = useCallback(async () => {
+    if (!studentId) return;
     const requestId = aiRequestRef.current + 1;
     aiRequestRef.current = requestId;
     setLoadingAiKey(aiKey);
-    setAiResult({ key: aiKey, report: '', error: '' });
+    setAiResult({ key: aiKey, report: '', error: '', generatedAt: null });
+
+    let acc = '';
+    const onChunk = (delta) => {
+      if (aiRequestRef.current !== requestId) return;
+      acc += delta;
+      setLoadingAiKey(null);
+      setStreaming(true);
+      setAiResult({ key: aiKey, report: acc, error: '', generatedAt: null });
+    };
 
     try {
-      const res = await aiApi.generateStudentReport(data, reportPeriod);
+      try {
+        await aiApi.generateInsightsStream(studentId, { period: reportPeriod }, onChunk);
+      } catch (streamErr) {
+        const m = (streamErr?.message || '').toLowerCase();
+        // Real rejections (limit reached, generation in flight) and partial
+        // output are not retried — only a clean pre-stream failure falls back.
+        if (acc || m.includes('daily limit') || m.includes('busy') || m.includes('already being generated')) {
+          throw streamErr;
+        }
+        const res = await aiApi.generateStudentReport(data, reportPeriod);
+        acc = res.report || '';
+      }
       if (aiRequestRef.current !== requestId) return;
       setAiResult({
         key: aiKey,
-        report: res.report || 'Generated insights.',
+        report: acc || 'Generated insights.',
         error: '',
+        generatedAt: new Date().toISOString(),
       });
       // Decrement local token count after a successful call
       setTokens(prev => prev && !prev.unlimited
@@ -230,24 +306,55 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
     } catch (err) {
       if (aiRequestRef.current !== requestId) return;
       const msg = err?.message || 'Failed to generate insights.';
-      setAiResult({
-        key: aiKey,
-        report: '',
-        error: msg,
-      });
-      // If the backend rejected with the daily limit, zero out the counter
-      if (msg.toLowerCase().includes('daily limit')) {
-        setTokens(prev => prev
-          ? { ...prev, remaining: 0 }
-          : { remaining: 0, limit: 3, unlimited: false }
-        );
+      if (acc) {
+        // Stream broke mid-way — keep what we have rather than discarding it.
+        setAiResult({ key: aiKey, report: acc, error: '', generatedAt: new Date().toISOString() });
+      } else {
+        setAiResult({ key: aiKey, report: '', error: msg, generatedAt: null });
+        // If the backend rejected with the daily limit, zero out the counter
+        if (msg.toLowerCase().includes('daily limit')) {
+          setTokens(prev => prev
+            ? { ...prev, remaining: 0 }
+            : { remaining: 0, limit: 3, unlimited: false }
+          );
+        }
       }
     } finally {
       if (aiRequestRef.current === requestId) {
         setLoadingAiKey(null);
+        setStreaming(false);
       }
     }
-  }, [aiKey, aiReport, data, loadingAi, reportPeriod, studentId]);
+  }, [aiKey, data, reportPeriod, studentId]);
+
+  const handleGenerateAI = useCallback(async () => {
+    setShowAiModal(true);
+    if (!studentId) {
+      setAiResult({
+        key: aiKey,
+        report: '',
+        error: 'Report data is still loading. Please try again in a moment.',
+        generatedAt: null,
+      });
+      return;
+    }
+    if (loadingAi || aiReport) return;
+
+    // Cache-first: reopening the mentor is instant and spends no daily token.
+    // A fresh generation only happens on first-ever open or via Regenerate.
+    setLoadingAiKey(aiKey);
+    try {
+      const cached = await aiApi.getCachedInsights(studentId, reportPeriod);
+      if (cached?.insights) {
+        setAiResult({ key: aiKey, report: cached.insights, error: '', generatedAt: cached.generated_at || null });
+        setLoadingAiKey(null);
+        return;
+      }
+    } catch {
+      // cache miss / endpoint failure — fall through to a fresh generation
+    }
+    await startGenerate();
+  }, [aiKey, aiReport, loadingAi, reportPeriod, startGenerate, studentId]);
 
   useEffect(() => {
     if (!autoOpenAI || !studentId || autoOpenTriggeredRef.current) return;
@@ -322,7 +429,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
             </h2>
             <p className="mt-3 max-w-2xl text-sm md:text-base text-blue-50 leading-relaxed">
               {isLimitError
-                ? `You've used all ${tokens?.limit ?? 3} AI insights for today. Your limit resets tomorrow — come back then!`
+                ? `You've used all ${tokens?.limit ?? 3} AI insights for today. Resets in ${midnightCountdown}.`
                 : aiError
                   ? aiError
                   : `Scores, attendance, activity, and subject progress are combined into one focused report.`}
@@ -470,55 +577,96 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
       {/* AI Modal */}
       <AnimatePresence>
         {showAiModal && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:p-4"
             onClick={() => setShowAiModal(false)}
           >
-            <motion.div 
-              initial={{ y: 50, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 50, scale: 0.95 }}
+            <motion.div
+              initial={{ y: 60, scale: 0.97 }} animate={{ y: 0, scale: 1 }} exit={{ y: 60, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
               onClick={e => e.stopPropagation()}
-              className="bg-white rounded-[32px] p-6 md:p-8 w-full max-w-lg shadow-2xl relative"
+              role="dialog" aria-modal="true" aria-label="AI Mentor Report"
+              className="bg-white rounded-t-[28px] sm:rounded-[28px] w-full max-w-2xl shadow-2xl relative flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden"
             >
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-[#FDE047]"><Bot size={24} /></div>
-                <div>
-                  <h2 className="text-xl font-black text-[#112B3C] tracking-tight">AI Mentor Report</h2>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">Personalized insights for {student.name ? student.name.split(' ')[0] : 'Student'}</p>
+              {/* Branded header */}
+              <div className="flex-shrink-0 bg-gradient-to-r from-[#14B8A6] via-[#22C7C9] to-[#635BFF] px-5 md:px-7 pt-5 pb-4 text-white">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                      <Bot size={22} />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-lg md:text-xl font-black tracking-tight leading-tight">AI Mentor Report</h2>
+                      <p className="text-[11px] font-bold text-white/80 uppercase tracking-widest mt-0.5 truncate">
+                        {student.name ? student.name.split(' ')[0] : 'Student'} · {PERIODS.find(p => p.id === reportPeriod)?.label || 'Overall'}
+                        {aiGeneratedAt && !streaming && !loadingAi && (
+                          <span className="normal-case tracking-normal"> · updated {formatDistanceToNow(new Date(aiGeneratedAt), { addSuffix: true })}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAiModal(false)}
+                    aria-label="Close AI Mentor report"
+                    className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
               </div>
-              
-              <div className="min-h-[200px] max-h-[60vh] overflow-y-auto text-sm text-gray-700 leading-relaxed pr-2">
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 md:px-7 py-5">
                 {loadingAi ? (
-                  <div className="flex flex-col items-center justify-center h-40 text-gray-400 space-y-4">
-                    <Loader2 size={32} className="animate-spin text-[#FDE047]" />
-                    <p className="font-bold text-xs uppercase tracking-widest">Analyzing algorithms...</p>
-                  </div>
+                  <AiLoadingState />
                 ) : isLimitError ? (
                   <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
                     <span className="text-4xl">⏳</span>
                     <p className="font-black text-base text-amber-900">Daily limit reached</p>
                     <p className="text-sm text-amber-700 leading-relaxed">
-                      You've used all <strong>{tokens?.limit ?? 3}</strong> AI insights for today.<br />
-                      Your limit resets at midnight — come back tomorrow!
+                      You've used all <strong>{tokens?.limit ?? 3}</strong> AI insights for today.
                     </p>
+                    <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-black">
+                      <span>⏱</span> Resets in <span className="tabular-nums">{midnightCountdown}</span>
+                    </div>
                   </div>
                 ) : aiError ? (
                   <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-700">
                     <p className="font-bold text-sm">Could not generate insights.</p>
-                    <p>{aiError}</p>
+                    <p className="text-sm">{aiError}</p>
                     <button onClick={handleGenerateAI} className="mt-1 px-4 py-2 bg-white hover:bg-red-100 text-red-700 font-black rounded-xl transition-colors text-xs uppercase tracking-widest border border-red-200">
                       Try Again
                     </button>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{aiReport}</div>
+                  <MentorReportView report={aiReport} streaming={streaming} />
                 )}
               </div>
-              
-              <button onClick={() => setShowAiModal(false)} className="mt-6 w-full py-4 bg-gray-50 hover:bg-gray-100 text-[#112B3C] font-black rounded-xl transition-colors text-sm uppercase tracking-widest border border-gray-200">
-                Close Report
-              </button>
+
+              {/* Footer */}
+              <div className="flex-shrink-0 px-5 md:px-7 py-4 border-t border-slate-100 bg-white">
+                <div className="flex gap-2.5">
+                  {aiReport && !loadingAi && (
+                    <button
+                      onClick={startGenerate}
+                      disabled={streaming || (isStudent && tokens && !tokens.unlimited && tokens.remaining === 0)}
+                      className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-3.5 rounded-2xl border border-slate-200 bg-white text-slate-700 font-black text-sm transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
+                    >
+                      <RefreshCw size={15} className={streaming ? 'animate-spin' : ''} />
+                      Regenerate
+                    </button>
+                  )}
+                  <button onClick={() => setShowAiModal(false)} className="flex-1 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-2xl transition-colors text-sm active:scale-[0.99]">
+                    Close Report
+                  </button>
+                </div>
+                {aiReport && !loadingAi && isStudent && tokens && !tokens.unlimited && (
+                  <p className="mt-2 text-center text-[10px] font-bold text-slate-400">
+                    Regenerate uses 1 AI credit · {tokens.remaining} of {tokens.limit} left today
+                  </p>
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}
