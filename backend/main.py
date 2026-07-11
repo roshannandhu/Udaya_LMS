@@ -46,7 +46,7 @@ except ImportError:
 # the extracted text without requiring the browser to re-upload the file.
 _pdf_session_cache: dict = {}
 _PDF_SESSION_TTL: int    = 1800  # 30 minutes
-AI_IMAGE_MAX_MB: int     = 10    # Vision requests are base64-expanded before sending
+AI_IMAGE_MAX_MB: int     = 20    # Vision requests are base64-expanded before sending
 
 def _clean_pdf_cache():
     now = time_module.time()
