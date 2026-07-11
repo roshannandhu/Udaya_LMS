@@ -51,7 +51,7 @@ GROQ_API_KEY=gsk_...
 Add to `backend/main.py` near the existing test routes (~line 6793).
 
 **Request:** `multipart/form-data`
-- `file` — PDF file (max ~10MB recommended)
+- `file` — PDF file (no application-level size cap; images remain capped at 10 MB)
 - `num_questions` — integer, how many MCQs to generate (default 10)
 - `subject_hint` — optional string (e.g. "Mathematics", "Physics") — improves relevance
 
@@ -229,7 +229,7 @@ Step 2: Questions
 | Case | Handling |
 |------|----------|
 | Scanned PDF (image-only, no text) | pdfplumber returns empty → return 400 "Could not extract text" |
-| PDF > 10MB | Reject at upload with clear message |
+| Large PDF | Spool to disk and process without an application-level size rejection |
 | Groq rate limit hit | Return 429 with "AI service busy, try again" |
 | Groq returns malformed JSON | Wrap parse in try/catch → return 500 |
 | PDF has < 100 chars of text | Return 400 before hitting Groq |

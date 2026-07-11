@@ -3,11 +3,12 @@ import { getApiBaseUrl, apiClient, clearApiCache } from './api';
 import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
 import { useSettingsStore, useAppCache, useWhatsNew } from '../store';
 
-const API_BASE    = getApiBaseUrl();
-const ROLE_KEY    = 'tutoria_user_role';
-const TOKEN_KEY   = 'tutoria_token';
-const REFRESH_KEY = 'tutoria_refresh_token';
-const NAME_KEY    = 'tutoria_user_name';
+const API_BASE         = getApiBaseUrl();
+const ROLE_KEY         = 'tutoria_user_role';
+const TOKEN_KEY        = 'tutoria_token';
+const REFRESH_KEY      = 'tutoria_refresh_token';
+const NAME_KEY         = 'tutoria_user_name';
+const TEACHER_TYPE_KEY = 'tutoria_teacher_type';
 
 const generateDeviceFingerprint = () => {
   const stored = localStorage.getItem('tutoria_device_id');
@@ -26,15 +27,16 @@ export const ROLES = {
 };
 
 // ── Instant hydration from localStorage ─────────────────────────
-const _storedToken = localStorage.getItem(TOKEN_KEY);
-const _storedRole  = localStorage.getItem(ROLE_KEY);
-const _storedName  = localStorage.getItem(NAME_KEY);
-const _hasSession  = !!_storedToken && !!_storedRole;
+const _storedToken       = localStorage.getItem(TOKEN_KEY);
+const _storedRole        = localStorage.getItem(ROLE_KEY);
+const _storedName        = localStorage.getItem(NAME_KEY);
+const _storedTeacherType = localStorage.getItem(TEACHER_TYPE_KEY);
+const _hasSession        = !!_storedToken && !!_storedRole;
 
 export const useAuthStore = create((set, get) => ({
   // If we have a saved session, show the app immediately (isLoading: false)
   // verifyWithBackend() will confirm/reject silently in the background
-  user: _hasSession ? { name: _storedName, role: _storedRole } : null,
+  user: _hasSession ? { name: _storedName, role: _storedRole, teacher_type: _storedTeacherType || undefined } : null,
   role: _hasSession ? _storedRole : null,
   isLoading: !_hasSession,   // false if already logged in, true only on first visit
   deviceFingerprint: generateDeviceFingerprint(),
@@ -80,6 +82,8 @@ export const useAuthStore = create((set, get) => ({
     if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
     localStorage.setItem(ROLE_KEY, data.user.role);
     localStorage.setItem(NAME_KEY, data.user.name || '');
+    if (data.user.teacher_type) localStorage.setItem(TEACHER_TYPE_KEY, data.user.teacher_type);
+    else localStorage.removeItem(TEACHER_TYPE_KEY);
 
     useAuthStore.setState({
       user: data.user,
@@ -157,6 +161,8 @@ export const useAuthStore = create((set, get) => ({
       const user = await apiClient('/auth/me');
       localStorage.setItem(ROLE_KEY, user.role || 'student');
       localStorage.setItem(NAME_KEY, user.name || '');
+      if (user.teacher_type) localStorage.setItem(TEACHER_TYPE_KEY, user.teacher_type);
+      else localStorage.removeItem(TEACHER_TYPE_KEY);
       set({ user, role: user.role || 'student', isLoading: false });
       // Re-assert screen capture lock on EVERY app boot — not just fresh login.
       // Students reopen the app with a saved session (this path), where FLAG_SECURE
@@ -228,6 +234,7 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem(NAME_KEY);
+    localStorage.removeItem(TEACHER_TYPE_KEY);
     clearApiCache();
     useAppCache.getState().reset();
     useWhatsNew.getState().reset();
@@ -276,6 +283,7 @@ if (typeof window !== 'undefined') {
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem(NAME_KEY);
+    localStorage.removeItem(TEACHER_TYPE_KEY);
     clearApiCache();
     useAppCache.getState().reset();
     useWhatsNew.getState().reset();

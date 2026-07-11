@@ -132,9 +132,9 @@ export const EmojiTile = ({ emoji, size = 'md', color }) => {
   );
 };
 
-export const Toggle = ({ checked, onChange }) => (
-  <button onClick={() => onChange(!checked)}
-    className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-ink' : 'bg-neutral-300'}`}>
+export const Toggle = ({ checked, onChange, disabled }) => (
+  <button onClick={() => !disabled && onChange(!checked)}
+    className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${checked ? 'bg-ink' : 'bg-neutral-300'}`}>
     <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
   </button>
 );

@@ -616,28 +616,35 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
                 </div>
               </div>
 
-              {/* Scrollable body */}
-              <div className="flex-1 overflow-y-auto overscroll-contain px-5 md:px-7 py-5">
+              {/* Scrollable body — MentorReportView owns its own padding/nav;
+                  other states get px-5 py-5 wrapper so they stay padded.        */}
+              <div className="flex-1 overflow-y-auto overscroll-contain">
                 {loadingAi ? (
-                  <AiLoadingState />
+                  <div className="px-5 md:px-7 py-5">
+                    <AiLoadingState />
+                  </div>
                 ) : isLimitError ? (
-                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
-                    <span className="text-4xl">⏳</span>
-                    <p className="font-black text-base text-amber-900">Daily limit reached</p>
-                    <p className="text-sm text-amber-700 leading-relaxed">
-                      You've used all <strong>{tokens?.limit ?? 3}</strong> AI insights for today.
-                    </p>
-                    <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-black">
-                      <span>⏱</span> Resets in <span className="tabular-nums">{midnightCountdown}</span>
+                  <div className="px-5 md:px-7 py-5">
+                    <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+                      <span className="text-4xl">⏳</span>
+                      <p className="font-black text-base text-amber-900">Daily limit reached</p>
+                      <p className="text-sm text-amber-700 leading-relaxed">
+                        You've used all <strong>{tokens?.limit ?? 3}</strong> AI insights for today.
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-black">
+                        <span>⏱</span> Resets in <span className="tabular-nums">{midnightCountdown}</span>
+                      </div>
                     </div>
                   </div>
                 ) : aiError ? (
-                  <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-700">
-                    <p className="font-bold text-sm">Could not generate insights.</p>
-                    <p className="text-sm">{aiError}</p>
-                    <button onClick={handleGenerateAI} className="mt-1 px-4 py-2 bg-white hover:bg-red-100 text-red-700 font-black rounded-xl transition-colors text-xs uppercase tracking-widest border border-red-200">
-                      Try Again
-                    </button>
+                  <div className="px-5 md:px-7 py-5">
+                    <div className="flex flex-col items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-700">
+                      <p className="font-bold text-sm">Could not generate insights.</p>
+                      <p className="text-sm">{aiError}</p>
+                      <button onClick={handleGenerateAI} className="mt-1 px-4 py-2 bg-white hover:bg-red-100 text-red-700 font-black rounded-xl transition-colors text-xs uppercase tracking-widest border border-red-200">
+                        Try Again
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <MentorReportView report={aiReport} streaming={streaming} />

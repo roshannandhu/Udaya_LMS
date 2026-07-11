@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Literal, Any
 from datetime import date, datetime, timedelta, timezone
 import asyncio
 import csv
-from io import StringIO, BytesIO
+from io import StringIO
 from fastapi.responses import StreamingResponse, Response, FileResponse
 import uuid
 import re
@@ -18,6 +18,10 @@ import hmac
 import time as time_module
 import threading
 import httpx
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -42,11 +46,59 @@ except ImportError:
 # the extracted text without requiring the browser to re-upload the file.
 _pdf_session_cache: dict = {}
 _PDF_SESSION_TTL: int    = 1800  # 30 minutes
+AI_IMAGE_MAX_MB: int     = 10    # Vision requests are base64-expanded before sending
 
 def _clean_pdf_cache():
     now = time_module.time()
     for k in [k for k, v in _pdf_session_cache.items() if v.get("expires", 0) < now]:
         del _pdf_session_cache[k]
+
+
+def _validate_ai_source_size(file_size: int, is_pdf: bool) -> None:
+    """Reject empty inputs; PDFs have no app cap, while vision images stay bounded."""
+    if file_size <= 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    if not is_pdf and file_size > AI_IMAGE_MAX_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image too large. Maximum size is {AI_IMAGE_MAX_MB} MB.",
+        )
+
+
+def _detect_ai_source_type(
+    head: bytes,
+    content_type: str,
+    filename: str,
+) -> Optional[tuple[str, str]]:
+    """Return ``(kind, normalized_mime)`` with magic bytes taking precedence."""
+    ct = (content_type or "").lower()
+    fname = (filename or "").lower()
+    if head.startswith(b"%PDF"):
+        return "pdf", "application/pdf"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image", "image/jpeg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image", "image/png"
+    if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
+        return "image", "image/webp"
+
+    declared_pdf = "pdf" in ct
+    declared_image = ct in {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+    if declared_pdf and not declared_image:
+        return "pdf", "application/pdf"
+    if declared_image and not declared_pdf:
+        normalized_mime = "image/jpeg" if ct == "image/jpg" else ct
+        return "image", normalized_mime
+    if fname.endswith(".pdf"):
+        return "pdf", "application/pdf"
+    if fname.endswith((".jpg", ".jpeg")):
+        return "image", "image/jpeg"
+    if fname.endswith(".png"):
+        return "image", "image/png"
+    if fname.endswith(".webp"):
+        return "image", "image/webp"
+    return None
 
 
 def _resolve_pdf_page_selection(selected_pages: Optional[str], page_count: int) -> List[int]:
@@ -1480,13 +1532,22 @@ def verify_token(authorization: Optional[str] = Header(None)):
 
 # Auth
 # ─── TWO-STEP VERIFICATION (email OTP, teachers only) ───────────────────────
-# Enabled via Settings → Security ("security_two_step_verification" in
-# teacher_settings.json). Codes are emailed through Resend (RESEND_API_KEY in
-# .env). A device that passes OTP once is trusted for 30 days, keyed by the
-# same device_fingerprint the frontend already sends on every login.
+# Sub-teachers ALWAYS require OTP on untrusted devices (hard-enforced).
+# Primary teacher requires OTP only when "security_two_step_verification" is
+# enabled in Settings → Security.
+# Codes are emailed via SMTP (SMTP_HOST/PORT/USER/PASS in .env).
+# A device that passes OTP once is trusted for 30 days, keyed by the same
+# device_fingerprint the frontend already sends on every login.
 
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = os.environ.get("SMTP_PORT", "465").strip()
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASS = os.environ.get("SMTP_PASS", "").strip()
+SMTP_FROM = os.environ.get("SMTP_FROM", "").strip()
+
+# Keep RESEND vars so any existing .env with RESEND_API_KEY doesn't error out
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
-RESEND_FROM = os.environ.get("RESEND_FROM", "").strip() or "onboarding@resend.dev"
+
 TRUSTED_DEVICES_FILE = Path(__file__).resolve().parent / "trusted_devices.json"
 OTP_TTL_SECS = 5 * 60
 OTP_MAX_ATTEMPTS = 5
@@ -1564,36 +1625,48 @@ def _trust_device(user_id: str, fingerprint: str):
     _save_trusted_devices(pruned)
 
 
+def _smtp_ready() -> bool:
+    """True when all required SMTP env vars are set."""
+    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+
+
 def send_otp_email(to_email: str, code: str) -> bool:
-    """Send the 6-digit login code via Resend. Returns False on any failure."""
-    if not RESEND_API_KEY:
+    """Send the 6-digit login code via SMTP. Returns False on any failure."""
+    if not _smtp_ready():
         return False
     lms = (get_teacher_settings().get("lms_name") or "Tutoria").strip() or "Tutoria"
+    from_addr = SMTP_FROM or SMTP_USER
     try:
-        r = httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-            json={
-                "from": f"{lms} <{RESEND_FROM}>",
-                "to": [to_email],
-                "subject": f"{code} is your {lms} login code",
-                "html": (
-                    f"<div style='font-family:sans-serif;max-width:420px'>"
-                    f"<h2 style='margin-bottom:4px'>{lms}</h2>"
-                    f"<p>Your login verification code is:</p>"
-                    f"<p style='font-size:32px;font-weight:bold;letter-spacing:6px;margin:12px 0'>{code}</p>"
-                    f"<p style='color:#666'>It expires in 5 minutes. If you didn't try to log in, you can ignore this email.</p>"
-                    f"</div>"
-                ),
-            },
-            timeout=15,
-        )
-        if r.status_code in (200, 201):
-            return True
-        print(f"[otp] Resend send failed: {r.status_code} {r.text[:200]}")
-        return False
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"{code} is your {lms} login code"
+        msg["From"] = f"{lms} <{from_addr}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(
+            f"<div style='font-family:sans-serif;max-width:420px'>"
+            f"<h2 style='margin-bottom:4px'>{lms}</h2>"
+            f"<p>Your login verification code is:</p>"
+            f"<p style='font-size:32px;font-weight:bold;letter-spacing:6px;margin:12px 0'>{code}</p>"
+            f"<p style='color:#666'>It expires in 5 minutes. If you didn't try to log in, ignore this email.</p>"
+            f"</div>",
+            "html"
+        ))
+        port = int(SMTP_PORT) if SMTP_PORT else 465
+        ctx = ssl.create_default_context()
+        if port == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=15) as srv:
+                srv.login(SMTP_USER, SMTP_PASS)
+                srv.sendmail(from_addr, to_email, msg.as_string())
+        else:
+            # port 587 or any non-465 → STARTTLS
+            with smtplib.SMTP(SMTP_HOST, port, timeout=15) as srv:
+                srv.ehlo()
+                srv.starttls(context=ctx)
+                srv.ehlo()
+                srv.login(SMTP_USER, SMTP_PASS)
+                srv.sendmail(from_addr, to_email, msg.as_string())
+        return True
     except Exception as e:
-        print(f"[otp] Resend send error: {e}")
+        print(f"[otp] SMTP send error: {e}")
         return False
 
 
@@ -1762,8 +1835,31 @@ def _login_impl(request: LoginRequest):
                         resolved = _set_student_login_candidates(s)
                         break
             if not resolved:
-                print(f"[login] unresolved identifier '{identifier}' - {'; '.join(resolution_note) or 'no matching student row'}")
-                raise HTTPException(status_code=401, detail="Invalid credentials")
+                # Not a student — try sub-teacher lookup by name or phone
+                sub_resolved = False
+                if service_supabase:
+                    try:
+                        # Try phone match first (digits-normalized)
+                        digits_only = re.sub(r'\D', '', identifier)
+                        if len(digits_only) >= 7:
+                            st_rows = service_supabase.table("sub_teachers").select("email").not_.is_("phone", "null").execute().data or []
+                            for st in st_rows:
+                                stored_digits = re.sub(r'\D', '', st.get("phone", ""))
+                                if stored_digits and (stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits)):
+                                    email_to_use = st["email"]
+                                    sub_resolved = True
+                                    break
+                        # Try name match (case-insensitive) if phone didn't resolve
+                        if not sub_resolved:
+                            st_rows = service_supabase.table("sub_teachers").select("email").ilike("name", identifier).limit(1).execute().data or []
+                            if st_rows:
+                                email_to_use = st_rows[0]["email"]
+                                sub_resolved = True
+                    except Exception as st_err:
+                        print(f"[login] sub-teacher lookup error: {st_err}")
+                if not sub_resolved:
+                    print(f"[login] unresolved identifier '{identifier}' - {'; '.join(resolution_note) or 'no matching student or teacher row'}")
+                    raise HTTPException(status_code=401, detail="Invalid credentials")
         except HTTPException:
             raise
         except Exception as e:
@@ -1911,10 +2007,51 @@ def _login_impl(request: LoginRequest):
                     print(f"Session tracking failed: {e}")
 
         # ── Two-step verification (teachers only, new devices only) ──
-        if role == "teacher" and get_teacher_settings().get("security_two_step_verification"):
-            if not RESEND_API_KEY:
-                # Never lock the teacher out because email isn't configured.
-                print("[otp] 2FA enabled but RESEND_API_KEY missing — skipping OTP")
+        # Sub-teachers: OTP is mandatory (hard-enforced, not toggleable).
+        # Primary teacher: OTP only when "security_two_step_verification" is on.
+        _teacher_type_val = user_metadata.get("teacher_type", "primary")
+        _is_sub = role == "teacher" and _teacher_type_val == "sub"
+
+        # Fallback: some accounts may have been created without teacher_type in metadata.
+        # Confirm sub status by checking the sub_teachers table directly.
+        if role == "teacher" and not _is_sub and service_supabase:
+            try:
+                _sub_check = service_supabase.table("sub_teachers").select("id").eq("id", user.id).limit(1).execute()
+                if _sub_check.data:
+                    _is_sub = True
+                    _teacher_type_val = "sub"
+            except Exception:
+                pass
+
+        # Now that _teacher_type_val is final, embed it in user_info so the frontend
+        # correctly identifies primary vs sub teachers on every login.
+        user_info["teacher_type"] = _teacher_type_val
+
+        # Per-teacher OTP toggle: primary can disable OTP for a specific sub-teacher,
+        # and sub-teachers can disable it for themselves via Settings.
+        _sub_otp_on = True
+        if _is_sub and service_supabase:
+            try:
+                _st = service_supabase.table("sub_teachers").select("otp_enabled").eq("id", user.id).single().execute()
+                if _st.data and _st.data.get("otp_enabled") is False:
+                    _sub_otp_on = False
+            except Exception:
+                pass  # default to enabled on any error
+
+        _primary_2fa = not _is_sub and role == "teacher" and get_teacher_settings().get("security_two_step_verification")
+        _needs_otp = (_is_sub and _sub_otp_on) or _primary_2fa
+
+        if _needs_otp:
+            if not _smtp_ready():
+                if _is_sub:
+                    # Block sub-teacher login — they cannot bypass OTP verification.
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Login verification requires email (SMTP) to be configured. Please contact the admin."
+                    )
+                else:
+                    # Primary teacher — never lock out if email not configured.
+                    print("[otp] 2FA enabled but SMTP not configured — skipping OTP for primary teacher")
             elif _is_device_trusted(user.id, request.device_fingerprint or ""):
                 pass  # trusted device → normal login
             else:
@@ -2903,6 +3040,8 @@ def update_standard(standard_id: str, updates: StandardUpdate, user = Depends(ve
 async def delete_standard(standard_id: str, pin: Optional[str] = None, user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
+    if user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Only the primary teacher can delete standards")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -4458,6 +4597,8 @@ def backfill_student_codes(force: bool = False, user = Depends(verify_token)):
     standard/year."""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
+    if user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Only the primary teacher can manage student IDs")
     if not service_supabase:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -4504,6 +4645,8 @@ async def backup_now(user = Depends(verify_token)):
     """Teacher-triggered immediate backup (full DB dump + students CSV → R2)."""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
+    if user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Only the primary teacher can trigger backups")
     if not filestore.is_r2_enabled():
         raise HTTPException(status_code=503, detail="Backups require Cloudflare R2 to be configured")
     try:
@@ -6215,6 +6358,19 @@ def delete_test(test_id: str, user = Depends(verify_token)):
     if not existing.data or existing.data.get("created_by") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    # Deduct points each student earned on this test before wiping the attempts
+    attempts_res = service_supabase.table("test_attempts").select("student_id, points_earned").eq("test_id", test_id).execute()
+    for att in (attempts_res.data or []):
+        pts = att.get("points_earned") or 0
+        if pts > 0:
+            try:
+                stu = service_supabase.table("students").select("points").eq("id", att["student_id"]).single().execute()
+                if stu.data:
+                    new_pts = max(0, (stu.data.get("points") or 0) - pts)
+                    service_supabase.table("students").update({"points": new_pts}).eq("id", att["student_id"]).execute()
+            except Exception:
+                pass
+
     # Delete attempts first (no ON DELETE CASCADE on this FK); questions cascade automatically
     service_supabase.table("test_attempts").delete().eq("test_id", test_id).execute()
     service_supabase.table("tests").delete().eq("id", test_id).execute()
@@ -6559,11 +6715,49 @@ def remove_sub_teacher(teacher_id: str, user = Depends(verify_token)):
     return {"message": "Teacher removed"}
 
 
+@app.patch("/api/teachers/me/otp")
+def set_my_otp(enabled: bool, user = Depends(verify_token)):
+    """Sub-teacher enables/disables their own OTP verification."""
+    if user["role"] != "teacher" or user.get("teacher_type") != "sub":
+        raise HTTPException(status_code=403, detail="Sub-teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    service_supabase.table("sub_teachers").update({"otp_enabled": enabled}).eq("id", user["user_id"]).execute()
+    return {"ok": True, "otp_enabled": enabled}
+
+
+@app.get("/api/teachers/me")
+def get_my_teacher_profile(user = Depends(verify_token)):
+    """Sub-teacher fetches their own profile (including otp_enabled)."""
+    if user["role"] != "teacher" or user.get("teacher_type") != "sub":
+        raise HTTPException(status_code=403, detail="Sub-teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    row = service_supabase.table("sub_teachers").select("id, name, email, phone, otp_enabled").eq("id", user["user_id"]).single().execute()
+    return row.data or {}
+
+
+@app.patch("/api/teachers/{teacher_id}/otp")
+def set_teacher_otp(teacher_id: str, enabled: bool, user = Depends(verify_token)):
+    """Primary teacher enables/disables OTP for a specific sub-teacher."""
+    if user["role"] != "teacher" or user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Primary teacher only")
+    if not service_supabase:
+        raise HTTPException(status_code=503, detail="Database not available")
+    existing = service_supabase.table("sub_teachers").select("id").eq("id", teacher_id).eq("primary_teacher_id", user["user_id"]).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    service_supabase.table("sub_teachers").update({"otp_enabled": enabled}).eq("id", teacher_id).execute()
+    return {"ok": True, "otp_enabled": enabled}
+
+
 # Demo accounts — teacher-only, for seeding demo data
 @app.post("/api/demo/create-accounts")
 def create_demo_accounts(user = Depends(verify_token)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Teacher only")
+    if user.get("teacher_type") == "sub":
+        raise HTTPException(status_code=403, detail="Only the primary teacher can create demo accounts")
     if not service_supabase:
         raise HTTPException(status_code=500, detail="Database not available")
 
@@ -6940,6 +7134,287 @@ class SubmitTestRequest(BaseModel):
 class ReattemptRequest(BaseModel):
     reason: Optional[str] = None
 
+# ── MCQ generation helpers (module-level so both PDF and text endpoints share them) ──
+
+def _mcq_normalise(q_list, source_scores=None):
+    out = []
+    for i, q in enumerate(q_list):
+        opts = q.get("options", [])
+        if not isinstance(opts, list) or len(opts) < 2:
+            continue
+        while len(opts) < 4:
+            opts.append("")
+        stem = str(q.get("question", "")).strip()
+        if not stem:
+            continue
+        entry = {
+            "question":    stem,
+            "options":     [str(o).strip() for o in opts[:4]],
+            "correct_idx": max(0, min(3, int(q.get("correct_idx", 0)))),
+            "difficulty":  q.get("difficulty", "medium"),
+        }
+        if "self_score" in q:
+            entry["_self_score"]  = max(1, min(5, int(q.get("self_score", 3))))
+            entry["_remaining"]   = q.get("remaining_issues", [])
+        elif source_scores and i < len(source_scores):
+            entry["_self_score"]  = source_scores[i]
+        out.append(entry)
+    return out
+
+def _mcq_generate(client, text, count, hint):
+    prompt = f"""You are creating MCQ questions for a {hint} class. Target standard: PERFECT quality.
+
+Generate exactly {count} questions from the content below.
+
+NON-NEGOTIABLE RULES (every violation = rejection + replacement loop):
+1. Exactly 4 options per question — no more, no less
+2. Exactly ONE correct answer — mark with correct_idx (0/1/2/3)
+3. ALL 3 wrong options must be plausible — a student who hasn't studied should be unsure
+4. NEVER use "None of the above", "All of the above", or "Cannot be determined"
+5. Every question is based strictly on the content — never invent facts
+6. Each question tests a DISTINCT concept — zero topic overlap with other questions
+7. Difficulty tag: "easy" (pure recall), "medium" (apply/understand), "hard" (analyse/infer)
+8. Generate roughly 30% easy, 40% medium, 30% hard
+
+Return ONLY valid JSON:
+{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium"}}]}}
+
+CONTENT:
+{text}"""
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.45,
+        response_format={"type": "json_object"},
+        max_tokens=6000,
+    )
+    return _mcq_normalise(json.loads(r.choices[0].message.content).get("questions", []))
+
+def _mcq_evaluate(client, questions, content_snippet):
+    q_json = json.dumps(
+        [{"i": i, "q": q["question"], "opts": q["options"],
+          "ans": q["correct_idx"], "diff": q.get("difficulty", "medium")}
+         for i, q in enumerate(questions)], indent=2)
+    prompt = f"""You are a STRICT MCQ examiner. Grade each question 1-5.
+
+SCORE 5 ONLY if ALL of these are true (no exceptions):
+  ✓ Stem is unambiguous — exactly one reading possible
+  ✓ Correct answer is verifiable against the provided content
+  ✓ All 3 wrong options are genuinely plausible — a prepared student could still pick them
+  ✓ No "None/All of the above" or "Cannot be determined"
+  ✓ Tests a concept not covered by any other question in this set
+  Give 4 if there is ANY doubt about even one criterion.
+
+SCORE 4 — good, one minor weakness
+SCORE 3 — fixable single problem
+SCORE 2 — multiple problems or one major flaw
+SCORE 1 — reject: wrong answer, off-topic, ambiguous beyond repair, or exact duplicate
+
+DUPLICATE rule: if two questions test the SAME specific fact/concept, score the weaker one 1
+and set duplicate_of to the index of the stronger one.
+
+Return ONLY JSON:
+{{"evaluations":[{{"i":0,"score":5,"difficulty":"medium","issues":[],"duplicate_of":null}}]}}
+
+CONTENT (ground truth):
+{content_snippet}
+
+QUESTIONS:
+{q_json}"""
+    try:
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+            max_tokens=3500,
+        )
+        evals = json.loads(r.choices[0].message.content).get("evaluations", [])
+        ev_map = {e["i"]: e for e in evals if isinstance(e.get("i"), int)}
+        default = {"score": 3, "difficulty": "medium", "issues": [], "duplicate_of": None}
+        return [{"i": i, **{**default, **ev_map.get(i, {})}} for i in range(len(questions))]
+    except Exception:
+        return [{"i": i, "score": 3, "difficulty": q.get("difficulty", "medium"),
+                 "issues": [], "duplicate_of": None}
+                for i, q in enumerate(questions)]
+
+def _mcq_improve(client, to_fix, verified_topics, text):
+    lines = []
+    for idx, (q, ev) in enumerate(to_fix):
+        score  = ev.get("score", 2)
+        issues = ev.get("issues", [])
+        dup_of = ev.get("duplicate_of")
+        if dup_of is not None:
+            action = (f"FULL REPLACEMENT — duplicates question #{dup_of}. Write a completely new question on a different topic.")
+        elif score >= 4:
+            action = (f"MICRO-FIX — change ONLY the ONE identified issue. Issue: {'; '.join(issues) or 'minor polish'}")
+        elif score == 3:
+            action = (f"TARGETED FIX — fix: {'; '.join(issues)}")
+        else:
+            action = (f"FULL REPLACEMENT — flawed. Reasons: {'; '.join(issues) or 'low quality'}.")
+        lines.append(
+            f"[{idx}] score={score} | {action}\n"
+            f"    Q: {q['question'][:140]}\n"
+            f"    opts: {q['options']} | correct_idx: {q['correct_idx']}"
+        )
+    avoid = "\n".join(f"- {t}" for t in verified_topics[:25]) or "none"
+    prompt = f"""You are improving {len(to_fix)} MCQ question(s). Follow each instruction exactly.
+
+After each fix, SELF-EVALUATE:
+  self_score 5 — CERTAIN this is perfect
+  self_score 4 — good but ONE thing slightly imperfect
+  self_score 3 or below — still has problems (list in remaining_issues)
+
+Topics already verified (for FULL REPLACEMENT — choose DIFFERENT topic):
+{avoid}
+
+Return exactly {len(to_fix)} results:
+{{"questions":[{{"question":"...","options":["...","...","...","..."],"correct_idx":0,"difficulty":"medium","self_score":5,"remaining_issues":[]}}]}}
+
+QUESTIONS TO IMPROVE:
+{chr(10).join(lines)}
+
+CONTENT:
+{text[:10000]}"""
+    try:
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.15,
+            response_format={"type": "json_object"},
+            max_tokens=5000,
+        )
+        raw = json.loads(r.choices[0].message.content).get("questions", [])
+        improved = _mcq_normalise(raw)
+        originals = [q for q, _ in to_fix]
+        while len(improved) < len(to_fix):
+            orig = originals[len(improved)]
+            improved.append({**orig, "_self_score": 3, "_remaining": ["not improved — used original"]})
+        return improved[:len(to_fix)]
+    except Exception:
+        return [{**q, "_self_score": 3, "_remaining": ["improvement call failed"]} for q, _ in to_fix]
+
+def _mcq_balance(verified_pool, target_n):
+    by_diff = {"easy": [], "medium": [], "hard": []}
+    for q in verified_pool:
+        by_diff.setdefault(q.get("difficulty", "medium"), []).append(q)
+    t_easy   = max(1, round(target_n * 0.30))
+    t_hard   = max(1, round(target_n * 0.30))
+    t_medium = target_n - t_easy - t_hard
+    selected = (by_diff["easy"][:t_easy] + by_diff["medium"][:t_medium] + by_diff["hard"][:t_hard])
+    if len(selected) < target_n:
+        used = {id(q) for q in selected}
+        remaining = [q for q in verified_pool if id(q) not in used]
+        selected += remaining[:target_n - len(selected)]
+    return selected[:target_n]
+
+def _run_mcq_generation(groq_key: str, text: str, num_questions: int, hint: str) -> dict:
+    """Core MCQ quality loop — shared by PDF and text endpoints."""
+    text = text[:12000]
+    hint = hint.strip() or "general"
+    client = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
+
+    initial_count = num_questions * 2
+    current_batch = _mcq_generate(client, text, initial_count, hint)
+    if not current_batch:
+        raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer file.")
+
+    verified_pool: list = []
+    MAX_ITERATIONS = 6
+    iterations_done = 0
+
+    for iteration in range(MAX_ITERATIONS):
+        iterations_done = iteration + 1
+        if not current_batch:
+            break
+        evals = _mcq_evaluate(client, current_batch, text[:5000])
+        scored = list(zip(current_batch, evals))
+        perfect    = [(q, e) for q, e in scored if e.get("score") == 5 and not e.get("duplicate_of")]
+        sub_thresh = [(q, e) for q, e in scored if e.get("score", 3) < 5 or e.get("duplicate_of")]
+        verified_pool.extend(q for q, _ in perfect)
+        if len(verified_pool) >= num_questions:
+            break
+        if iteration == MAX_ITERATIONS - 1:
+            near = sorted(sub_thresh, key=lambda x: x[1].get("score", 0), reverse=True)
+            for q, _ in near:
+                if len(verified_pool) >= num_questions:
+                    break
+                verified_pool.append(q)
+            break
+        verified_topics = [q["question"][:80] for q in verified_pool]
+        improved = _mcq_improve(client, sub_thresh, verified_topics, text)
+        next_batch = []
+        for q in improved:
+            if q.get("_self_score", 3) == 5:
+                clean = {k: v for k, v in q.items() if not k.startswith("_")}
+                verified_pool.append(clean)
+            else:
+                next_batch.append(q)
+        current_batch = next_batch
+
+    final_qs = _mcq_balance(verified_pool, num_questions)
+    final = [{k: v for k, v in {**q, "order_num": i + 1}.items() if not k.startswith("_")}
+             for i, q in enumerate(final_qs)]
+    if not final:
+        raise HTTPException(status_code=500, detail="Could not generate valid questions. Please try again.")
+
+    verified_count = min(len(final), len(verified_pool))
+    quality_10 = round((verified_count / len(final)) * 10, 1) if final else 0.0
+    diff_counts = {"easy": 0, "medium": 0, "hard": 0}
+    for q in final:
+        d = q.get("difficulty", "medium")
+        diff_counts[d] = diff_counts.get(d, 0) + 1
+
+    _clean_pdf_cache()
+    session_id = uuid.uuid4().hex
+    _pdf_session_cache[session_id] = {
+        "text": text,
+        "selected_pages": [],
+        "page_count": 0,
+        "expires": time_module.time() + _PDF_SESSION_TTL,
+    }
+    return {
+        "session_id":              session_id,
+        "questions":               final,
+        "iterations":              iterations_done,
+        "avg_quality":             5.0 if quality_10 == 10.0 else round(quality_10 / 2, 1),
+        "quality_out_of_10":       quality_10,
+        "difficulty_distribution": diff_counts,
+    }
+
+
+class GenerateFromTextRequest(BaseModel):
+    text: str
+    num_questions: int = 10
+    subject_hint: str = ""
+
+
+@app.post("/api/tests/generate-from-text")
+async def generate_test_from_text(
+    req: GenerateFromTextRequest,
+    user: dict = Depends(verify_token),
+):
+    """Generate MCQ questions from pre-extracted text (client-side PDF extraction).
+    Accepts plain JSON — no file upload — so Cloudflare's 100 MB body limit never applies."""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher only")
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(status_code=503, detail="AI generation not configured. Add GROQ_API_KEY to server .env.")
+    if not _groq_ok:
+        raise HTTPException(status_code=503, detail="AI client not available on this server.")
+
+    text = (req.text or "").strip()
+    if len(text) < 150:
+        raise HTTPException(
+            status_code=400,
+            detail="Extracted text is too short. This PDF may be image-only or password-protected — "
+                   "try uploading the page as an image (JPG/PNG) instead.",
+        )
+    num_questions = max(3, min(30, req.num_questions))
+    return await asyncio.to_thread(_run_mcq_generation, groq_key, text, num_questions, req.subject_hint)
+
+
 @app.post("/api/tests/generate-from-pdf")
 async def generate_test_from_pdf(
     file: UploadFile = File(...),
@@ -6958,24 +7433,44 @@ async def generate_test_from_pdf(
 
     num_questions = max(3, min(30, num_questions))
 
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-    ct    = (file.content_type or "").lower()
+    ct = (file.content_type or "").lower()
     fname = (file.filename or "").lower()
-    _IMG_CT   = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-    _IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
-    is_pdf   = "pdf" in ct or fname.endswith(".pdf")
-    is_image = ct in _IMG_CT or any(fname.endswith(e) for e in _IMG_EXTS)
+    await file.seek(0)
+    head = await file.read(16)
+    await file.seek(0)
+    detected_source = _detect_ai_source_type(head, ct, fname)
+    source_kind, source_mime = detected_source or (None, None)
+    is_pdf = source_kind == "pdf"
+    is_image = source_kind == "image"
 
     if not is_pdf and not is_image:
         raise HTTPException(status_code=400, detail="Upload a PDF or an image file (JPG, PNG, WEBP).")
     if is_pdf and not _pdfplumber_ok:
         raise HTTPException(status_code=503, detail="PDF extraction not available on this server.")
 
-    # Alias so existing helpers that reference pdf_bytes still work
-    pdf_bytes = file_bytes
+    # Starlette tracks multipart size while spooling large uploads to disk.
+    # Validate it before extraction, then keep PDFs in that seekable spool rather
+    # than copying a large document into an additional bytes object.
+    file_size = getattr(file, "size", None)
+    if file_size is None:
+        await file.seek(0)
+        file_size = await asyncio.to_thread(lambda: file.file.seek(0, os.SEEK_END))
+    _validate_ai_source_size(int(file_size or 0), is_pdf)
+    await file.seek(0)
+
+    # Images must be materialized for the vision API's base64 payload. PDFs are
+    # read directly from UploadFile's spool by pdfplumber inside the worker thread.
+    source_bytes = await file.read() if is_image else None
+    if is_image and not source_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if is_pdf:
+        file.file.flush()
+        file.file.seek(0)
+        # The extraction thread owns this duplicated descriptor. FastAPI may close
+        # the request's UploadFile on disconnect/cancellation without invalidating it.
+        pdf_stream = os.fdopen(os.dup(file.file.fileno()), "rb")
+    else:
+        pdf_stream = None
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -7226,21 +7721,28 @@ CONTENT:
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_loop():
-        client = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
 
-        # ── Extract text ────────────────────────────────────────────────────
+        # ── Extract text from PDF or image ──────────────────────────────────
         if is_pdf:
-            with _pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-                page_count = len(pdf.pages)
-                selected_page_numbers = _resolve_pdf_page_selection(selected_pages, page_count)
-                raw_text, readable_text = _extract_selected_pdf_text(pdf, selected_page_numbers)
+            with pdf_stream:
+                pdf_stream.seek(0)
+                with _pdfplumber.open(pdf_stream) as pdf:
+                    page_count = len(pdf.pages)
+                    selected_page_numbers = _resolve_pdf_page_selection(selected_pages, page_count)
+                    raw_text, readable_text = _extract_selected_pdf_text(pdf, selected_page_numbers)
             source_type = "pdf"
         else:
             page_count = 1
             selected_page_numbers = [1]
-            raw_text   = _extract_from_image(client, pdf_bytes, ct)
-            readable_text = raw_text
+            raw_text = None
+            readable_text = None
             source_type = "image"
+
+        # Create client after PDF is closed (owns its descriptor). Image uses vision.
+        client = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
+        if source_type == "image":
+            raw_text = _extract_from_image(client, source_bytes, source_mime)
+            readable_text = raw_text
 
         if len(readable_text) < 80:
             if source_type == "image":
@@ -7255,109 +7757,31 @@ CONTENT:
                        "try uploading the page as an image (JPG/PNG) instead.",
             )
 
-        text = raw_text[:12000]
-        hint = subject_hint.strip() or "general"
-
-        # Generate 2× — wide initial pool so the loop can be selective without running long
-        initial_count = num_questions * 2
-        current_batch = _generate(client, text, initial_count, hint)
-        if not current_batch:
-            raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer file.")
-
-        # verified_pool: questions confirmed 5/5. Never re-evaluated — locked in.
-        verified_pool: list = []
-        MAX_ITERATIONS = 6
-        iterations_done = 0
-
-        for iteration in range(MAX_ITERATIONS):
-            iterations_done = iteration + 1
-
-            if not current_batch:
-                break
-
-            # ── 1. Strict evaluation of the current unverified batch ────────
-            evals = _evaluate_and_dedup(client, current_batch, text[:5000])
-            scored = list(zip(current_batch, evals))
-
-            perfect    = [(q, e) for q, e in scored if e.get("score") == 5 and not e.get("duplicate_of")]
-            sub_thresh = [(q, e) for q, e in scored if e.get("score", 3) < 5 or e.get("duplicate_of")]
-
-            # Lock in newly confirmed 5/5 questions
-            verified_pool.extend(q for q, _ in perfect)
-
-            # Enough perfect questions — done
-            if len(verified_pool) >= num_questions:
-                break
-
-            # Last iteration — accept best available to reach target count
-            if iteration == MAX_ITERATIONS - 1:
-                # Fill from 4/5 sub-threshold (nearest to perfect)
-                near = sorted(sub_thresh, key=lambda x: x[1].get("score", 0), reverse=True)
-                for q, _ in near:
-                    if len(verified_pool) >= num_questions:
-                        break
-                    verified_pool.append(q)
-                break
-
-            # ── 2. Improve sub-threshold questions + immediate self-verification ──
-            verified_topics = [q["question"][:80] for q in verified_pool]
-            improved = _improve_and_verify(client, sub_thresh, verified_topics, text)
-
-            # Accept self-verified 5/5 into the pool immediately
-            next_batch = []
-            for q in improved:
-                ss = q.get("_self_score", 3)
-                if ss == 5:
-                    # Strip internal metadata before storing
-                    clean = {k: v for k, v in q.items() if not k.startswith("_")}
-                    verified_pool.append(clean)
-                else:
-                    # Self-score < 5: feed back as next batch with remaining_issues as eval context
-                    next_batch.append(q)
-
-            current_batch = next_batch
-
-        # ── Final selection with difficulty balance ───────────────────────────
-        final_qs = _difficulty_balance(verified_pool, num_questions)
-
-        # Strip internal metadata fields
-        final = [{k: v for k, v in {**q, "order_num": i + 1}.items() if not k.startswith("_")}
-                 for i, q in enumerate(final_qs)]
-
-        if not final:
-            raise HTTPException(status_code=500, detail="Could not generate valid questions. Please try again.")
-
-        # All verified questions score 5/5; fallback (last-iteration fill) may include 4s.
-        # Report quality_out_of_10 = fraction of verified-5 × 10
-        verified_count = min(len(final), len(verified_pool))
-        quality_10 = round((verified_count / len(final)) * 10, 1) if final else 0.0
-
-        diff_counts = {"easy": 0, "medium": 0, "hard": 0}
-        for q in final:
-            d = q.get("difficulty", "medium")
-            diff_counts[d] = diff_counts.get(d, 0) + 1
-
-        # Cache text for regenerate-flagged
-        _clean_pdf_cache()
-        session_id = uuid.uuid4().hex
-        _pdf_session_cache[session_id] = {
-            "text": text,
-            "selected_pages": selected_page_numbers,
-            "page_count": page_count,
-            "expires": time_module.time() + _PDF_SESSION_TTL,
-        }
-
+        # ── Delegate to shared generation loop ──────────────────────────────
+        result = _run_mcq_generation(groq_key, raw_text, num_questions, subject_hint)
+        # Augment with PDF-specific metadata the text endpoint doesn't have
+        result.update({
+            "page_count":          page_count,
+            "selected_pages":      selected_page_numbers,
+            "selected_page_count": len(selected_page_numbers),
+            "chars_extracted":     len(readable_text),
+        })
+        # Patch the session cache entry with PDF-specific page metadata
+        sid = result["session_id"]
+        if sid in _pdf_session_cache:
+            _pdf_session_cache[sid]["selected_pages"] = selected_page_numbers
+            _pdf_session_cache[sid]["page_count"]     = page_count
         return {
-            "session_id":              session_id,
-            "questions":               final,
+            "session_id":              result["session_id"],
+            "questions":               result["questions"],
             "page_count":              page_count,
             "selected_pages":          selected_page_numbers,
             "selected_page_count":     len(selected_page_numbers),
             "chars_extracted":         len(readable_text),
-            "iterations":              iterations_done,
-            "avg_quality":             5.0 if quality_10 == 10.0 else round(quality_10 / 2, 1),
-            "quality_out_of_10":       quality_10,
-            "difficulty_distribution": diff_counts,
+            "iterations":              result["iterations"],
+            "avg_quality":             result["avg_quality"],
+            "quality_out_of_10":       result["quality_out_of_10"],
+            "difficulty_distribution": result["difficulty_distribution"],
         }
 
     return await asyncio.to_thread(_run_loop)
@@ -11516,7 +11940,7 @@ def get_settings(user: dict = Depends(get_current_user)):
     settings.pop("ai_api_key", None)
     settings.pop("ai_provider", None)
     # Read-only hint for the Security UI: OTP emails need RESEND_API_KEY in .env.
-    settings["otp_email_ready"] = bool(RESEND_API_KEY)
+    settings["otp_email_ready"] = _smtp_ready()
     settings.setdefault("backup_frequency", "daily")
     return settings
 
@@ -11524,6 +11948,9 @@ def get_settings(user: dict = Depends(get_current_user)):
 def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current_user)):
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Not authorized")
+    # Sub-teachers can change most settings but not the termination PIN
+    if user.get("teacher_type") == "sub" and data.termination_pin is not None:
+        raise HTTPException(status_code=403, detail="Only the primary teacher can change the termination PIN")
     settings = get_teacher_settings()
     # Persist only the fields the client actually sent. exclude_unset lets the
     # caller clear a value by sending "" (omitted fields are left untouched).

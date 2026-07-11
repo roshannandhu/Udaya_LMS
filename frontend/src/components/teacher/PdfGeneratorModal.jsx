@@ -10,6 +10,16 @@ const isImageFile = (f) => f && IMG_EXTS.some(e => f.name.toLowerCase().endsWith
 const isPdfFile = (f) => f && (
   f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
 );
+const IMAGE_MAX_MB = 20;
+const sourceFileError = (file) => {
+  if (!file || isPdfFile(file)) return '';
+  return file.size > IMAGE_MAX_MB * 1024 * 1024
+    ? `Image too large. Maximum size is ${IMAGE_MAX_MB} MB.`
+    : '';
+};
+const formatSourceSize = (bytes) => bytes >= 1024 * 1024
+  ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 import { Modal, Btn } from '../ui';
 import { testApi } from '../../lib/api';
 
@@ -243,6 +253,7 @@ function PdfPageSelector({ file, selectedPages, onSelectedPagesChange, onPageCou
   useEffect(() => {
     let cancelled = false;
     let loadingTask;
+    let objectUrl;
     setDoc(null);
     setPageCount(0);
     setLoading(true);
@@ -252,9 +263,8 @@ function PdfPageSelector({ file, selectedPages, onSelectedPagesChange, onPageCou
 
     (async () => {
       try {
-        const buffer = await file.arrayBuffer();
-        if (cancelled) return;
-        loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+        objectUrl = URL.createObjectURL(file);
+        loadingTask = pdfjsLib.getDocument({ url: objectUrl });
         const nextDoc = await loadingTask.promise;
         if (cancelled) return;
         setDoc(nextDoc);
@@ -273,6 +283,7 @@ function PdfPageSelector({ file, selectedPages, onSelectedPagesChange, onPageCou
     return () => {
       cancelled = true;
       if (loadingTask) void loadingTask.destroy().catch(() => {});
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [file, onPageCountChange]);
 
@@ -475,10 +486,34 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
     setFlagged(new Set());
     setStatusIdx(0);
     try {
-      const selectedPageList = isPdfFile(pdfFile)
-        ? [...selectedPages].sort((a, b) => a - b)
-        : [];
-      const data = await testApi.generateFromPdf(pdfFile, count, subjectHint, selectedPageList);
+      let data;
+      if (isPdfFile(pdfFile)) {
+        // Extract text client-side so the PDF binary never crosses Cloudflare's 100 MB limit.
+        const selectedPageList = [...selectedPages].sort((a, b) => a - b);
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pagesToRead = selectedPageList.length
+          ? selectedPageList
+          : Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1);
+        const parts = [];
+        for (const pageNum of pagesToRead) {
+          if (pageNum < 1 || pageNum > pdfDoc.numPages) continue;
+          const page = await pdfDoc.getPage(pageNum);
+          const tc = await page.getTextContent();
+          parts.push(tc.items.map(it => it.str).join(' '));
+        }
+        const extractedText = parts.join('\n\n').trim();
+        if (extractedText.length < 150) {
+          throw new Error(
+            'This PDF appears to be image-only (scanned). No selectable text was found. ' +
+            'Try uploading a page as an image (JPG/PNG) instead.'
+          );
+        }
+        data = await testApi.generateFromText(extractedText, count, subjectHint);
+      } else {
+        // Image file — use the binary multipart upload + vision API path.
+        data = await testApi.generateFromPdf(pdfFile, count, subjectHint, []);
+      }
       setQuestions(data.questions || []);
       setSessionId(data.session_id || '');
       setQuality({
@@ -589,7 +624,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
                       : <FileText size={28} className="mx-auto text-neutral-600" />}
                     <p className="text-sm font-medium text-neutral-800">{pdfFile.name}</p>
                     <p className="text-xs text-neutral-400">
-                      {(pdfFile.size / 1024).toFixed(0)} KB · Click to change
+                      {formatSourceSize(pdfFile.size)} · Click to change
                     </p>
                   </>
                 ) : (
@@ -599,7 +634,7 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
                       Drop a PDF or image here, or click to browse
                     </p>
                     <p className="text-xs text-neutral-400">
-                      PDF · JPG · PNG · WEBP
+                      PDF (any size) · Images up to 20 MB
                     </p>
                   </>
                 )}
@@ -610,10 +645,18 @@ export default function PdfGeneratorModal({ open, onClose, onQuestionsReady, sub
                 accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={e => {
-                  setPdfFile(e.target.files[0] || null);
+                  const nextFile = e.target.files[0] || null;
                   setPageSelectorOpen(false);
                   setSelectedPages(new Set());
                   setPdfPageCount(0);
+                  const nextError = sourceFileError(nextFile);
+                  if (nextError) {
+                    setPdfFile(null);
+                    setError(nextError);
+                    e.target.value = '';
+                    return;
+                  }
+                  setPdfFile(nextFile);
                   setError('');
                 }}
               />

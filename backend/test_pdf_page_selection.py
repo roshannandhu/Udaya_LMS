@@ -52,6 +52,47 @@ def test_extremely_long_numeric_page_is_rejected_as_bad_request():
     assert "too long" in exc_info.value.detail
 
 
+@pytest.mark.parametrize("size_mb", [10.1, 39, 50, 101, 500])
+def test_pdf_sources_over_old_10_mb_limit_are_accepted(size_mb):
+    main._validate_ai_source_size(int(size_mb * 1024 * 1024), is_pdf=True)
+
+
+def test_image_source_keeps_10_mb_vision_limit():
+    with pytest.raises(HTTPException) as exc_info:
+        main._validate_ai_source_size(10 * 1024 * 1024 + 1, is_pdf=False)
+
+    assert exc_info.value.status_code == 413
+    assert "Image too large" in exc_info.value.detail
+
+
+@pytest.mark.parametrize("head", [b"%PDF-1.7", b"%PDF-2.0"])
+def test_pdf_magic_wins_over_image_metadata(head):
+    assert main._detect_ai_source_type(head, "image/jpeg", "renamed.jpg") == (
+        "pdf", "application/pdf"
+    )
+
+
+@pytest.mark.parametrize(("head", "expected_mime"), [
+    (b"\xff\xd8\xff\xe0jpeg", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\nrest", "image/png"),
+    (b"RIFF1234WEBPrest", "image/webp"),
+])
+def test_image_magic_wins_over_pdf_filename_and_normalizes_mime(head, expected_mime):
+    assert main._detect_ai_source_type(head, "application/pdf", "renamed.pdf") == (
+        "image", expected_mime
+    )
+
+
+def test_image_metadata_normalizes_nonstandard_jpg_mime():
+    assert main._detect_ai_source_type(b"", "image/jpg", "photo") == (
+        "image", "image/jpeg"
+    )
+
+
+def test_unknown_ai_source_type_is_rejected_by_classifier():
+    assert main._detect_ai_source_type(b"not a document", "text/plain", "notes.txt") is None
+
+
 def test_zero_page_pdf_is_rejected_even_without_selection():
     with pytest.raises(HTTPException) as exc_info:
         main._resolve_pdf_page_selection(None, 0)

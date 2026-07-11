@@ -266,6 +266,11 @@ export const testApi = {
     }
     return res.json();
   },
+  generateFromText: (text, numQuestions = 10, subjectHint = '') =>
+    apiClient('/tests/generate-from-text', {
+      method: 'POST',
+      body: JSON.stringify({ text, num_questions: numQuestions, subject_hint: subjectHint }),
+    }),
   regenerateFlagged: async (sessionId, flaggedQuestions, goodStems, subjectHint = '') => {
     const token = localStorage.getItem(TOKEN_KEY);
     const res = await fetch(`${API_BASE}/tests/regenerate-flagged`, {
@@ -436,6 +441,9 @@ export const teacherApi = {
   list:   ()    => apiClient('/teachers'),
   create: (data) => apiClient('/teachers', { method: 'POST', body: JSON.stringify(data) }),
   remove: (id)  => apiClient(`/teachers/${id}`, { method: 'DELETE' }),
+  setOtp: (id, enabled) => apiClient(`/teachers/${id}/otp?enabled=${enabled}`, { method: 'PATCH' }),
+  setMyOtp: (enabled) => apiClient(`/teachers/me/otp?enabled=${enabled}`, { method: 'PATCH' }),
+  getMe:  () => apiClient('/teachers/me'),
   getSettings: () => apiClient('/teacher/settings'),
   updateSettings: (data) => apiClient('/teacher/settings', { method: 'POST', body: JSON.stringify(data) }),
 

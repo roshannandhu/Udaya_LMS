@@ -144,6 +144,11 @@ export default function SettingsPage() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
+  const [otpToggles, setOtpToggles] = useState({}); // { [teacher_id]: boolean }
+
+  // Sub-teacher own OTP state
+  const [myOtpEnabled, setMyOtpEnabled] = useState(true);
+  const [myOtpLoading, setMyOtpLoading] = useState(false);
 
   // Live-class auto-thumbnail (universal base image + blank-side preference)
   const thumbInputRef = useRef(null);
@@ -162,12 +167,23 @@ export default function SettingsPage() {
   const [profilePhotoSaved, setProfilePhotoSaved] = useState(false);
 
   useEffect(() => {
-    if (!isPrimary) return;
-    setTeamLoading(true);
-    teacherApi.list()
-      .then(setSubTeachers)
-      .catch(() => {})
-      .finally(() => setTeamLoading(false));
+    if (isPrimary) {
+      setTeamLoading(true);
+      teacherApi.list()
+        .then(list => {
+          setSubTeachers(list);
+          const map = {};
+          list.forEach(t => { map[t.id] = t.otp_enabled !== false; });
+          setOtpToggles(map);
+        })
+        .catch(() => {})
+        .finally(() => setTeamLoading(false));
+    } else {
+      // Sub-teacher: load own OTP setting
+      teacherApi.getMe()
+        .then(me => setMyOtpEnabled(me.otp_enabled !== false))
+        .catch(() => {});
+    }
 
     teacherApi.getThumbnail()
       .then(res => {
@@ -208,24 +224,29 @@ export default function SettingsPage() {
     }
   };
 
-  // Block sub-teachers from accessing settings
-  if (!isPrimary) {
-    return (
-      <div>
-        <div className="sticky top-0 z-30 bg-canvas border-b border-[#EFEDEA]">
-          <div className="px-3 md:px-8 py-3 flex items-center gap-3 max-w-5xl mx-auto">
-            <button onClick={() => navigate('/teacher/more')} className="p-2 -ml-2 text-neutral-500 hover:text-neutral-900 hover:bg-[#F4F2EF] rounded-md"><MdArrowBack className="w-4 h-4" /></button>
-            <h1 className="text-lg md:text-xl font-semibold flex-1">Settings</h1>
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-neutral-400">
-          <MdGppBad className="w-9 h-9 text-neutral-300" />
-          <p className="text-sm font-medium text-neutral-500">Settings are only available to the primary teacher.</p>
-          <p className="text-xs text-neutral-400">Contact your primary teacher to change app settings.</p>
-        </div>
-      </div>
-    );
-  }
+  const handleToggleTeacherOtp = async (id, enabled) => {
+    setOtpToggles(prev => ({ ...prev, [id]: enabled }));
+    try {
+      await teacherApi.setOtp(id, enabled);
+    } catch (e) {
+      setOtpToggles(prev => ({ ...prev, [id]: !enabled }));
+      alert(e.message || 'Failed to update OTP setting.');
+    }
+  };
+
+  const handleToggleMyOtp = async (enabled) => {
+    setMyOtpLoading(true);
+    try {
+      await teacherApi.setMyOtp(enabled);
+      setMyOtpEnabled(enabled);
+    } catch (e) {
+      alert(e.message || 'Failed to update OTP setting.');
+    } finally {
+      setMyOtpLoading(false);
+    }
+  };
+
+  // (Sub-teachers now see full settings except Team Members, Termination PIN, and Advanced)
 
   const handleSaveName = () => {
     setLmsName(nameInput.trim() || 'Udaya Learn');
@@ -391,8 +412,8 @@ export default function SettingsPage() {
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       >
 
-        {/* Team Members */}
-        <div className="mb-6">
+        {/* Team Members — primary only */}
+        {isPrimary && <div className="mb-6">
           <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Team Members</p>
           <div className="glass-panel border-white/60 shadow-sm rounded-xl p-4 space-y-4">
 
@@ -414,10 +435,19 @@ export default function SettingsPage() {
                         <p className="text-xs text-neutral-500 truncate">{t.email}{t.phone ? ` · ${t.phone}` : ''}</p>
                       </div>
                     </div>
-                    <button onClick={() => handleRemoveTeacher(t.id, t.name)}
-                      className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0" title="Remove teacher">
-                      <MdDelete className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Toggle
+                          checked={otpToggles[t.id] !== false}
+                          onChange={v => handleToggleTeacherOtp(t.id, v)}
+                        />
+                        <span className="text-[10px] text-neutral-400">OTP</span>
+                      </div>
+                      <button onClick={() => handleRemoveTeacher(t.id, t.name)}
+                        className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Remove teacher">
+                        <MdDelete className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -443,11 +473,11 @@ export default function SettingsPage() {
               <Btn variant="primary" size="sm" onClick={handleAddTeacher} disabled={addLoading}>
                 {addLoading ? <><MdLoop className="w-3.5 h-3.5 animate-spin mr-1" />Creating…</> : 'Create Teacher Account'}
               </Btn>
-              <p className="text-[11px] text-neutral-400">New teachers can access everything except Settings. Share their email + password directly.</p>
+              <p className="text-[11px] text-neutral-400">New teachers can access everything except Advanced settings. Share their email + password directly.</p>
             </div>
 
           </div>
-        </div>
+        </div>}
 
         {/* Branding */}
         <div className="mb-6">
@@ -605,12 +635,23 @@ export default function SettingsPage() {
           <Row label="Two-step verification" sub="Email teachers a 6-digit code when logging in on a new device" checked={securityTwoStepVerification} onChange={v => setSecurityPref('securityTwoStepVerification', v)} />
           {securityTwoStepVerification && !otpEmailReady && (
             <p className="px-4 pb-2 -mt-1 text-[11px] text-amber-600">
-              Email isn't configured yet — add <code className="bg-amber-50 px-1 rounded">RESEND_API_KEY</code> to backend/.env and restart the backend. Until then, logins skip the code.
+              Email isn't configured yet — add <code className="bg-amber-50 px-1 rounded">SMTP_HOST</code>, <code className="bg-amber-50 px-1 rounded">SMTP_USER</code> and <code className="bg-amber-50 px-1 rounded">SMTP_PASS</code> to backend/.env and restart the backend. Until then, logins skip the code.
             </p>
           )}
 
-          {/* Termination PIN — with eye toggle + currently-set indicator */}
-          <div className="px-4 py-3">
+          {/* Sub-teacher OTP self-toggle */}
+          {!isPrimary && (
+            <div className="flex items-center justify-between px-4 py-3 gap-4">
+              <div>
+                <p className="text-sm font-medium">OTP verification for my account</p>
+                <p className="text-xs text-neutral-500">Require a one-time code when logging in on a new device</p>
+              </div>
+              <Toggle checked={myOtpEnabled} onChange={handleToggleMyOtp} disabled={myOtpLoading} />
+            </div>
+          )}
+
+          {/* Termination PIN — primary only */}
+          {isPrimary && <div className="px-4 py-3">
             <p className="text-sm font-medium mb-0.5">Termination PIN</p>
             <p className="text-xs text-neutral-500 mb-2">Required to permanently delete a standard and all its data.</p>
             <div className="flex gap-2">
@@ -630,7 +671,7 @@ export default function SettingsPage() {
                 <MdCheckCircle className="w-3.5 h-3.5" /> PIN is set — click the eye to reveal it
               </p>
             )}
-          </div>
+          </div>}
         </Section>
 
         {/* Default student password — with eye toggle + currently-set indicator */}
@@ -725,8 +766,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Advanced — maintenance actions, rarely needed */}
-        <div className="mb-6">
+        {/* Advanced — maintenance actions, primary only */}
+        {isPrimary && <div className="mb-6">
           <button
             onClick={() => setAdvancedOpen(v => !v)}
             className="flex items-center gap-2 text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3 hover:text-neutral-600 transition-colors"
@@ -769,7 +810,7 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         <p className="text-center text-xs text-neutral-400 flex items-center justify-center gap-1">Udaya v{import.meta.env.VITE_APP_VERSION || '1.1.7'} · Built with <MdFavorite className="w-3.5 h-3.5 text-red-500" /></p>
       </motion.div>

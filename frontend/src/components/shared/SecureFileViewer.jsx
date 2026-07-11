@@ -173,7 +173,7 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
   const [savedSize, setSavedSize] = useState(null);
 
   const objUrlRef = useRef(null);
-  const pdfRef    = useRef(null);
+  const pdfTaskRef = useRef(null);
 
   useEffect(() => {
     const on = () => setIsOnline(true), off = () => setIsOnline(false);
@@ -221,9 +221,10 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
 
       try {
         if (isPdf && buf) {
-          const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+          const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buf) });
+          pdfTaskRef.current = loadingTask;
+          const doc = await loadingTask.promise;
           if (cancelled) return;
-          pdfRef.current = doc;
           setPdf(doc); setKind('pdf');
         } else if (t.startsWith('image/')) {
           const url = URL.createObjectURL(blob);
@@ -250,8 +251,9 @@ export default function SecureFileViewer({ open, onClose, endpoint, title = 'Doc
     return () => {
       cancelled = true;
       if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null; }
-      try { pdfRef.current?.destroy?.(); } catch { /* ignore */ }
-      pdfRef.current = null;
+      const task = pdfTaskRef.current;
+      pdfTaskRef.current = null;
+      if (task) void task.destroy().catch(() => {});
     };
   }, [open, endpoint, mustUseApp, canOffline, saved, offlineKey, isOnline]);
 
