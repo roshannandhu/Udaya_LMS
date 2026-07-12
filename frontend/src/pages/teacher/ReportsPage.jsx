@@ -186,7 +186,7 @@ export default function ReportsPage() {
             <div className="md:hidden space-y-3">
 
               {/* 1. KPI chips row — scrollable, compact */}
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
                 {[
                   { label: 'Students',   value: overview.total_students,       bg: 'bg-blue-50',    fg: 'text-blue-700' },
                   { label: 'Avg Score',  value: `${overview.avg_score}%`,      bg: 'bg-emerald-50', fg: 'text-emerald-700' },

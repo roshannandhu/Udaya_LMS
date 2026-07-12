@@ -751,11 +751,11 @@ export const StudentReportTemplate = ({ data, period }) => {
               <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
                   <col />
-                  <col style={{ width: 54 }} />
-                  <col style={{ width: 82 }} />
                   <col style={{ width: 68 }} />
-                  <col style={{ width: 88 }} />
-                  <col style={{ width: 68 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 116 }} />
+                  <col style={{ width: 78 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
@@ -852,7 +852,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Test</th>
                     <th className="px-4 py-3 text-center">Score</th>
-                    <th className="px-4 py-3 text-center">Class Avg</th>
+                    <th className="px-4 py-3 text-center">Cls Avg</th>
                     <th className="px-4 py-3 text-center">Rank</th>
                   </tr>
                 </thead>
@@ -2014,7 +2014,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
               <th className="px-2 py-2.5 text-center">Rank</th>
               <th className="px-2 py-2.5">Student ID</th>
               <th className="px-3 py-2.5">Name</th>
-              <th className="px-2 py-2.5 text-center">Score/{totalM}</th>
+              <th className="px-2 py-2.5 text-center">Score</th>
               <th className="px-2 py-2.5 text-center">%</th>
               <th className="px-2 py-2.5 text-center">Grade</th>
               <th className="px-2 py-2.5 text-center">Correct</th>
@@ -2091,7 +2091,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                 <th className="px-2 py-2.5 text-center">Rank</th>
                 <th className="px-2 py-2.5">Student ID</th>
                 <th className="px-3 py-2.5">Name</th>
-                <th className="px-2 py-2.5 text-center">Score/{totalM}</th>
+                <th className="px-2 py-2.5 text-center">Score</th>
                 <th className="px-2 py-2.5 text-center">%</th>
                 <th className="px-2 py-2.5 text-center">Events</th>
                 <th className="px-3 py-2.5">Event Details</th>
