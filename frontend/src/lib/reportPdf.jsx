@@ -2220,8 +2220,8 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
             <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
               <colgroup>
                 <col />
-                <col style={{ width: 100 }} />
-                <col style={{ width: 105 }} />
+                <col style={{ width: 104 }} />
+                <col style={{ width: 112 }} />
                 <col style={{ width: 78 }} />
               </colgroup>
               <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
