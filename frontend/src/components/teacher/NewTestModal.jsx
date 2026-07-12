@@ -16,8 +16,8 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
   // Step 1: Settings
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(30);
-  const [totalMarks, setTotalMarks] = useState(50);
-  const [negativeMarking, setNegativeMarking] = useState(false);
+  const [marksPerQuestion, setMarksPerQuestion] = useState(1);
+  const [negativeMarking, setNegativeMarking] = useState(true);
   const [penalty, setPenalty] = useState(0.25);
   const [scheduledFor, setScheduledFor] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
@@ -57,8 +57,10 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
           const t = data.test;
           setTitle(t.title);
           setDuration(t.duration_mins);
-          setTotalMarks(t.total_marks);
-          setNegativeMarking(t.negative_marking);
+          // Back-derive marks per question from total_marks ÷ question count
+          const qCount = data.questions?.length || 1;
+          setMarksPerQuestion(t.total_marks > 0 ? parseFloat((t.total_marks / qCount).toFixed(2)) : 1);
+          setNegativeMarking(t.negative_marking ?? true);
           setPenalty(t.penalty || 0.25);
           
           const fmtDate = (d) => {
@@ -89,8 +91,8 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       } else {
         setTitle('');
         setDuration(30);
-        setTotalMarks(50);
-        setNegativeMarking(false);
+        setMarksPerQuestion(1);
+        setNegativeMarking(true);
         setPenalty(0.25);
         setScheduledFor('');
         setExpiresAt('');
@@ -179,7 +181,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
         class_id: classId,
         title,
         duration_mins: parseInt(duration) || 30,
-        total_marks: parseFloat(totalMarks) || 50,
+        total_marks: totalMarks,
         negative_marking: negativeMarking,
         penalty: negativeMarking ? (parseFloat(penalty) || 0.25) : 0,
         status: scheduledFor ? 'scheduled' : 'active',
@@ -203,6 +205,10 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       setLoading(false);
     }
   };
+
+  // Live-computed total = questions × marks-per-question
+  const mpq = parseFloat(marksPerQuestion) || 1;
+  const totalMarks = parseFloat((questions.length * mpq).toFixed(2));
 
   return (
     <Modal open={open} onClose={onClose} title={editTestId ? "Edit Test" : "Create New Test"} size="lg">
@@ -233,7 +239,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
             
             <div className="grid grid-cols-2 gap-3">
               <Input label="Duration (mins)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
-              <Input label="Total marks" type="number" value={totalMarks} onChange={(e) => setTotalMarks(e.target.value)} />
+              <Input label="Marks per question" type="number" step="0.25" min="0.25" value={marksPerQuestion} onChange={(e) => setMarksPerQuestion(e.target.value)} />
             </div>
 
             <div className="flex items-center justify-between p-3 glass-panel rounded-md">
@@ -264,6 +270,15 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
           </div>
         ) : (
           <div className="space-y-4">
+
+            {/* Live marks summary */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-neutral-50 border border-neutral-100 rounded-xl text-sm">
+              <span className="text-neutral-500">
+                {questions.length} {questions.length === 1 ? 'question' : 'questions'} × {mpq} {mpq === 1 ? 'mark' : 'marks'}
+                {negativeMarking && <span className="text-red-500 ml-2">· −{penalty} per wrong</span>}
+              </span>
+              <span className="font-bold text-neutral-900">{totalMarks} total marks</span>
+            </div>
 
             {/* ── PDF Generator trigger ────────────────────────────────── */}
             <div className="flex items-center gap-2">
