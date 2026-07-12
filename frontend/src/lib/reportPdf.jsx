@@ -304,7 +304,7 @@ const ScoreRing = ({ value, label, sublabel, color = '#4f46e5', size = 136 }) =>
   const circumference = 2 * Math.PI * radius;
   const dash = (pct / 100) * circumference;
   return (
-    <div className="flex flex-col items-center justify-center text-center" style={{ width: size }}>
+    <div className="flex flex-col items-center justify-center text-center" style={{ minWidth: size }}>
       <div className="relative" style={{ width: size, height: size }}>
         <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
@@ -1846,7 +1846,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
                 <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-gray-300" /> Skipped ({skippedCount})</span>
               </div>
             </div>
-            <div className="w-56 shrink-0 rounded-xl border border-gray-200 bg-white p-5">
+            <div className="w-72 shrink-0 rounded-xl border border-gray-200 bg-white p-5">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-gray-800">
                 <Target className="h-4 w-4 text-red-500" /> Why marks were lost
               </h3>
@@ -2091,7 +2091,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                 <th className="px-2 py-2.5 text-center">Rank</th>
                 <th className="px-2 py-2.5">Student ID</th>
                 <th className="px-3 py-2.5">Name</th>
-                <th className="px-2 py-2.5 text-center">Score</th>
+                <th className="px-2 py-2.5 text-center">Score/{totalM}</th>
                 <th className="px-2 py-2.5 text-center">%</th>
                 <th className="px-2 py-2.5 text-center">Events</th>
                 <th className="px-3 py-2.5">Event Details</th>
@@ -2110,7 +2110,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-gray-500">{a.rank || '-'}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-[10px] font-mono text-gray-500">{shortText(student.student_code || '-', 12)}</td>
                     <td className="border-b border-red-100 px-3 py-2 text-xs font-semibold text-gray-800">{shortText(student.name || 'Unknown', 20)}</td>
-                    <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold">{fmtMarks(a.score)}/{totalM}</td>
+                    <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold">{fmtMarks(a.score)}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{pct}%</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{events.length || (a.terminated ? 1 : 0)}</td>
                     <td className="border-b border-red-100 px-3 py-2 text-[9px] leading-4 text-gray-600">{shortText(details, 90)}</td>
