@@ -942,7 +942,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                   <col />
                   <col style={{ width: 118 }} />
                   <col style={{ width: 80 }} />
-                  <col style={{ width: 90 }} />
+                  <col style={{ width: 130 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
