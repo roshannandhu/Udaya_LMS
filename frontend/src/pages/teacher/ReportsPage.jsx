@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Trophy, Download, AlertTriangle, Users, BookOpen, Clock, CheckCircle, BarChart3 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import QuadrantScatter from '../../components/shared/QuadrantScatter';
 import { Avatar, Btn, Skeleton } from '../../components/ui';
 import StatCard from '../../components/cards/StatCard';
@@ -217,10 +217,10 @@ export default function ReportsPage() {
                   <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">{atRiskCount}</span>
                   <span className="ml-auto text-xs text-neutral-400">Click to open student report</span>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
                   {students.filter(isAtRisk).slice(0, 6).map((s) => (
                     <div key={s.id} onClick={() => setReportStudentId(s.id)}
-                      className="flex items-center gap-2 md:gap-3 p-2 md:p-3 bg-white rounded-xl border border-red-100 cursor-pointer hover:shadow-sm hover:border-red-200 transition-all">
+                      className="flex items-center gap-2 md:gap-3 p-2.5 md:p-3 bg-white rounded-xl border border-red-100 cursor-pointer hover:shadow-sm hover:border-red-200 transition-all">
                       <Avatar src={s.avatar_url} name={s.name} size="sm" />
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm text-neutral-900 truncate">{s.name}</p>
@@ -310,7 +310,7 @@ export default function ReportsPage() {
 
             {/* Class analytics row: score distribution + score vs attendance scatter */}
             {students.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
                 {/* Score distribution histogram */}
                 <div className="glass-panel p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/60">
                   <div className="flex items-center gap-1 md:gap-2 mb-3 md:mb-4 flex-wrap">
@@ -318,7 +318,7 @@ export default function ReportsPage() {
                     <h2 className="font-semibold text-xs md:text-base">Score Dist.</h2>
                     <span className="ml-auto text-[10px] md:text-xs text-neutral-400">{students.filter((s) => s.has_tests).length} students</span>
                   </div>
-                  <div className="h-36 md:h-52">
+                  <div className="h-44 md:h-52">
                     {students.filter((s) => s.has_tests).length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={scoreBands} barSize={44} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -348,7 +348,7 @@ export default function ReportsPage() {
                     <h2 className="font-semibold text-xs md:text-base">Score vs Attendance</h2>
                     <span className="text-[10px] md:text-xs text-neutral-400 ml-1 hidden sm:inline">tap a dot to open report</span>
                   </div>
-                  <div className="flex-1 min-h-[160px] md:min-h-[220px]">
+                  <div className="flex-1 min-h-[240px] md:min-h-[220px]">
                     <QuadrantScatter
                       students={scatterStudents}
                       onSelect={(id) => setReportStudentId(id)}
@@ -372,8 +372,45 @@ export default function ReportsPage() {
               <div className="p-3 md:p-5 border-b border-[#EFEDEA] flex items-center gap-2">
                 <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg"><Users size={16} /></div>
                 <h2 className="font-semibold">Student Roster</h2>
+                <span className="ml-auto text-xs text-neutral-400">{students.length} students</span>
               </div>
-              <div className="overflow-x-auto">
+
+              {/* Mobile card list */}
+              <div className="md:hidden divide-y divide-[#EFEDEA]">
+                {[...students].sort((a,b) => (b.avg_score||0) - (a.avg_score||0)).map((s) => (
+                  <div key={s.id} onClick={() => setReportStudentId(s.id)}
+                    className="flex items-center gap-3 px-3 py-2.5 active:bg-neutral-50 cursor-pointer">
+                    <Avatar src={s.avatar_url} name={s.name} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-neutral-900 truncate">{s.name}</p>
+                      {isAtRisk(s) && (
+                        <p className="text-[10px] font-semibold text-red-500">Needs attention</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {s.has_tests ? (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                          (s.avg_score||0) >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                          (s.avg_score||0) >= 40 ? 'bg-neutral-100 text-neutral-600' : 'bg-red-100 text-red-700'
+                        }`}>{Math.round(s.avg_score||0)}%</span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-neutral-50 text-neutral-400">—</span>
+                      )}
+                      {s.has_attendance ? (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                          (s.attendance_pct||0) >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                          (s.attendance_pct||0) >= 75 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                        }`}>{Math.round(s.attendance_pct||0)}%</span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-neutral-50 text-neutral-400">—</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-[#F8F7F5] border-b border-[#EFEDEA]">
@@ -407,7 +444,7 @@ export default function ReportsPage() {
                               {Math.round(s.avg_score||0)}%
                             </span>
                           ) : (
-                            <span className="inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md bg-neutral-50 text-neutral-400" title="No tests taken yet">—</span>
+                            <span className="inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md bg-neutral-50 text-neutral-400">—</span>
                           )}
                         </td>
                         <td className="py-3 px-5 text-center">
@@ -419,7 +456,7 @@ export default function ReportsPage() {
                               {Math.round(s.attendance_pct||0)}%
                             </span>
                           ) : (
-                            <span className="inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md bg-neutral-50 text-neutral-400" title="No attendance marked yet">—</span>
+                            <span className="inline-flex items-center justify-center w-10 h-6 text-xs font-bold rounded-md bg-neutral-50 text-neutral-400">—</span>
                           )}
                         </td>
                         <td className="py-3 px-5 text-right">
