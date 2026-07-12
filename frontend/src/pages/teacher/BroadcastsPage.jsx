@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Settings, X, Check } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import TopBar from '../../components/shared/TopBar';
@@ -92,11 +92,17 @@ export default function BroadcastsPage() {
     refreshStudents();
   }, []);
 
-  // WhatsApp-style back: opening a class thread on mobile pushes a history entry
-  // so the device/browser Back button returns to the standards list instead of
-  // leaving the Broadcasts page. The in-app back arrow routes through the same
-  // path (history.back) so history stays consistent either way.
-  const isMobile = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+  // Reactive mobile flag — drives both the history-push logic and the pane slide animation.
+  const [isMobileView, setIsMobileView] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e) => setIsMobileView(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  const isMobile = () => isMobileView;
 
   const openThread = (id) => {
     setActiveStdId(id);
@@ -221,26 +227,48 @@ export default function BroadcastsPage() {
           </motion.div>
         </div>
 
-        {/* Thread pane (Chat Area) */}
-        <div className={`${showThread ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-w-0 min-h-0 bg-[#efeae2] relative`}>
-          {std ? (
-            <BroadcastThread
-              key={activeStdId}
-              std={std}
-              broadcasts={broadcastsByStandard[std.id] || []}
-              onUpdate={updater => updateBroadcasts(std.id, updater)}
-              onBack={closeThread}
-              showBackBtn={showThread}
-              studentCount={studentCounts[std.id] || 0}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-neutral-500">
-              <MessageSquare size={48} className="mb-4 text-neutral-300" strokeWidth={1} />
-              <p className="text-lg font-medium text-neutral-600">Udaya Broadcasts</p>
-              <p className="text-sm text-neutral-400 mt-2">Select a class to send messages, assignments, and announcements.</p>
-            </div>
-          )}
-        </div>
+        {/* Thread pane (Chat Area)
+            Mobile: absolute overlay that slides in from the right over the list.
+            Desktop (md+): normal flex-1 column, always visible. */}
+        <motion.div
+          className={`flex flex-col min-w-0 min-h-0 bg-[#efeae2] relative ${isMobileView ? 'absolute inset-0 z-10' : 'flex-1 md:flex'}`}
+          initial={false}
+          animate={isMobileView ? { x: showThread ? '0%' : '100%' } : { x: 0 }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <AnimatePresence mode="wait">
+            {std ? (
+              <motion.div
+                key={activeStdId}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="flex flex-col flex-1 min-h-0"
+              >
+                <BroadcastThread
+                  std={std}
+                  broadcasts={broadcastsByStandard[std.id] || []}
+                  onUpdate={updater => updateBroadcasts(std.id, updater)}
+                  onBack={closeThread}
+                  showBackBtn={showThread}
+                  studentCount={studentCounts[std.id] || 0}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex-1 flex flex-col items-center justify-center text-neutral-500"
+              >
+                <MessageSquare size={48} className="mb-4 text-neutral-300" strokeWidth={1} />
+                <p className="text-lg font-medium text-neutral-600">Udaya Broadcasts</p>
+                <p className="text-sm text-neutral-400 mt-2">Select a class to send messages, assignments, and announcements.</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
     </div>
   );
