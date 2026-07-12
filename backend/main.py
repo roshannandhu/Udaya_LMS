@@ -1472,8 +1472,23 @@ def verify_token(authorization: Optional[str] = Header(None)):
         user_metadata = user.user_metadata or {}
         role = user_metadata.get("role", "student")
 
-        teacher_type       = user_metadata.get("teacher_type", "primary")
+        _tt_raw            = user_metadata.get("teacher_type")  # None when key absent
         primary_teacher_id = user_metadata.get("primary_teacher_id")
+
+        # DB fallback: accounts created before teacher_type was added to metadata
+        # must not be silently promoted to primary-teacher access.
+        if role == "teacher" and _tt_raw is None and service_supabase:
+            try:
+                _sub_row = service_supabase.table("sub_teachers").select("id, primary_teacher_id").eq("id", user.id).limit(1).execute()
+                if _sub_row.data:
+                    _tt_raw = "sub"
+                    if not primary_teacher_id:
+                        primary_teacher_id = _sub_row.data[0].get("primary_teacher_id")
+            except Exception:
+                pass
+
+        teacher_type = _tt_raw if _tt_raw is not None else "primary"
+
         # For sub-teachers, teacher_id resolves to the primary teacher's UUID so that
         # all standard/subject ownership checks work transparently.
         effective_teacher_id = (
@@ -1842,7 +1857,7 @@ def _login_impl(request: LoginRequest):
                         # Try phone match first (digits-normalized)
                         digits_only = re.sub(r'\D', '', identifier)
                         if len(digits_only) >= 7:
-                            st_rows = service_supabase.table("sub_teachers").select("email").not_.is_("phone", "null").execute().data or []
+                            st_rows = service_supabase.table("sub_teachers").select("email, phone").not_.is_("phone", "null").execute().data or []
                             for st in st_rows:
                                 stored_digits = re.sub(r'\D', '', st.get("phone", ""))
                                 if stored_digits and (stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits)):
@@ -2047,15 +2062,11 @@ def _login_impl(request: LoginRequest):
 
         if _needs_otp:
             if not _smtp_ready():
-                if _is_sub:
-                    # Block sub-teacher login — they cannot bypass OTP verification.
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Login verification requires email (SMTP) to be configured. Please contact the admin."
-                    )
-                else:
-                    # Primary teacher — never lock out if email not configured.
-                    print("[otp] 2FA enabled but SMTP not configured — skipping OTP for primary teacher")
+                # Block sub-teacher login — they cannot bypass OTP verification.
+                raise HTTPException(
+                    status_code=503,
+                    detail="Login verification requires email (SMTP) to be configured. Please contact the admin."
+                )
             elif _is_device_trusted(user.id, request.device_fingerprint or ""):
                 pass  # trusted device → normal login
             else:
@@ -2100,10 +2111,10 @@ def verify_otp(request: VerifyOtpRequest):
     entry = _otp_pending.get(request.pending_id)
     if not entry:
         raise HTTPException(status_code=400, detail="Code expired. Please log in again.")
-    entry["attempts"] += 1
-    if entry["attempts"] > OTP_MAX_ATTEMPTS:
+    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
         _otp_pending.pop(request.pending_id, None)
         raise HTTPException(status_code=429, detail="Too many attempts. Please log in again.")
+    entry["attempts"] += 1
     if _otp_hash(request.code.strip()) != entry["otp_hash"]:
         raise HTTPException(status_code=401, detail="Incorrect code. Please check your email and try again.")
     # Success — release the held session and trust this device for 30 days.
