@@ -326,8 +326,8 @@ export default function ReportsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-1.5 flex-shrink-0">
                       {[
-                        { label: 'Stars',     count: students.filter(s => (s.avg_score||0) >= 75 && (s.attendance_pct||0) >= 40).length, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-                        { label: 'Need help', count: students.filter(s => (s.avg_score||0) < 40).length,                                  color: 'text-orange-700',  bg: 'bg-orange-50' },
+                        { label: 'Stars',     count: students.filter(s => (s.attendance_pct||0) >= 75 && (s.avg_score||0) >= 40).length, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+                        { label: 'Need help', count: students.filter(isAtRisk).length,                                                    color: 'text-orange-700',  bg: 'bg-orange-50' },
                       ].map(({ label, count, color, bg }) => (
                         <div key={label} className={`${bg} rounded-lg px-2 py-1.5 text-center`}>
                           <p className={`text-sm font-bold ${color}`}>{count}</p>

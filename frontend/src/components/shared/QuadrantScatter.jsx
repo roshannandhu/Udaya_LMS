@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const VW = 280, VH = 170;
 const PAD = { l: 26, r: 10, t: 8, b: 20 };
@@ -51,6 +51,8 @@ export default function QuadrantScatter({ students = [], onSelect, compact = fal
   };
 
   const hide = () => setHovered(null);
+
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
 
   const handleTouchStart = (e, s) => {
     e.stopPropagation();
