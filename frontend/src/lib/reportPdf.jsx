@@ -751,9 +751,9 @@ export const StudentReportTemplate = ({ data, period }) => {
               <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
                   <col />
-                  <col style={{ width: 68 }} />
-                  <col style={{ width: 100 }} />
                   <col style={{ width: 72 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 76 }} />
                   <col style={{ width: 116 }} />
                   <col style={{ width: 78 }} />
                 </colgroup>
