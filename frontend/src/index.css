@@ -427,6 +427,12 @@ html.dark .ring-cyan-300 { --tw-ring-color: rgba(103, 232, 249, 0.22) !important
   }
 }
 
+/* PDF page-break control — used by reportPdf.jsx Section component. */
+.avoid-break {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
 /* Hide scrollbar for Chrome, Safari and Opera */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;

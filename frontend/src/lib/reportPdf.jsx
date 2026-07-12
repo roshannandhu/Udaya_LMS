@@ -623,10 +623,10 @@ export const StudentReportTemplate = ({ data, period }) => {
   const videosCompleted = sumBy(radar, 'video_done');
   const videosAvailable = sumBy(radar, 'video_total');
   const effortRows = [
-    { label: 'Tests attempted', done: timeline.length, total: safeNumber(data.total_tests_in_standard), color: { fill: 'bg-neutral-900' } },
-    { label: 'Assignments submitted', done: submittedAssignments, total: totalAssignments, color: { fill: 'bg-amber-500' } },
-    { label: 'Videos completed', done: videosCompleted, total: videosAvailable, color: { fill: 'bg-blue-500' } },
-    { label: 'Live classes attended', done: safeNumber(liveStats.attended), total: safeNumber(liveStats.total), color: { fill: 'bg-emerald-500' } },
+    { label: 'Tests', done: timeline.length, total: safeNumber(data.total_tests_in_standard), color: { fill: 'bg-neutral-900' } },
+    { label: 'Assignments', done: submittedAssignments, total: totalAssignments, color: { fill: 'bg-amber-500' } },
+    { label: 'Videos', done: videosCompleted, total: videosAvailable, color: { fill: 'bg-blue-500' } },
+    { label: 'Live classes', done: safeNumber(liveStats.attended), total: safeNumber(liveStats.total), color: { fill: 'bg-emerald-500' } },
   ].filter(r => r.total > 0 || r.done > 0);
 
   // ── Weak topics + action plan ─────────────────────────────────────────────
@@ -671,7 +671,7 @@ export const StudentReportTemplate = ({ data, period }) => {
   if (effortBits.length) remarkSentences.push(`On effort, ${effortBits.join(', ')}.`);
 
   return (
-    <div className="bg-white font-sans text-gray-900 p-7" style={{ width: PDF_CANVAS_WIDTH }}>
+    <div className="mx-auto box-border bg-white font-sans text-gray-900 p-7" style={{ width: PDF_CANVAS_WIDTH }}>
 
       {/* ── PAGE 1 — The verdict: grade, rank, headline numbers, remark ──── */}
       <PageGroup>
@@ -748,7 +748,15 @@ export const StudentReportTemplate = ({ data, period }) => {
         <Section title="Subject-wise Performance" icon={Book} color={{ bg: 'bg-violet-100', text: 'text-violet-600' }} compact>
           {subjectRows.length ? (
             <div className="overflow-hidden rounded-xl border border-gray-200">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col />
+                  <col style={{ width: 54 }} />
+                  <col style={{ width: 82 }} />
+                  <col style={{ width: 68 }} />
+                  <col style={{ width: 88 }} />
+                  <col style={{ width: 68 }} />
+                </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
                     <th className="px-4 py-3">Subject</th>
@@ -831,7 +839,14 @@ export const StudentReportTemplate = ({ data, period }) => {
         <Section title="Recent Tests" icon={FileText} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }} compact>
           {recentTests.length ? (
             <div className="overflow-hidden rounded-xl border border-gray-200">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 90 }} />
+                  <col />
+                  <col style={{ width: 74 }} />
+                  <col style={{ width: 82 }} />
+                  <col style={{ width: 72 }} />
+                </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
                     <th className="px-4 py-3">Date</th>
@@ -922,7 +937,13 @@ export const StudentReportTemplate = ({ data, period }) => {
         <Section title="Topics That Need Work" icon={Zap} color={{ bg: 'bg-fuchsia-100', text: 'text-fuchsia-600' }} compact>
           {priorityTopics.length ? (
             <div className="overflow-hidden rounded-xl border border-gray-200">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col />
+                  <col style={{ width: 118 }} />
+                  <col style={{ width: 80 }} />
+                  <col style={{ width: 90 }} />
+                </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
                     <th className="px-4 py-3">Topic</th>
@@ -2196,7 +2217,13 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
       {students.length > 0 && (
         <Section title="Student Roster" icon={Trophy} color={{ bg: 'bg-amber-100', text: 'text-amber-600' }}>
           <div className="overflow-hidden rounded-xl border border-gray-200">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 105 }} />
+                <col style={{ width: 78 }} />
+              </colgroup>
               <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Student</th>
