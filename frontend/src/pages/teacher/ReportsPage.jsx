@@ -321,7 +321,7 @@ export default function ReportsPage() {
                         <h2 className="font-semibold text-[11px]">Score vs Attend.</h2>
                       </div>
                       <div className="flex-1" style={{ minHeight: 120 }}>
-                        <QuadrantScatter students={scatterStudents} onSelect={(id) => setReportStudentId(id)} />
+                        <QuadrantScatter students={scatterStudents} onSelect={(id) => setReportStudentId(id)} compact />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5 flex-shrink-0">
@@ -380,7 +380,7 @@ export default function ReportsPage() {
             </div>
 
             {/* ══ DESKTOP LAYOUT ════════════════════════════════════════════ */}
-            <div className="hidden md:contents">
+            <div className="hidden md:block md:space-y-8">
 
               {/* KPI Cards */}
               <motion.div

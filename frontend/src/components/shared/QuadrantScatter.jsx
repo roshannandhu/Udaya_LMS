@@ -36,7 +36,7 @@ const QUAD_LABELS = [
 const Y_TICKS = [0, 40, 75, 100];
 const X_TICKS = [0, 25, 50, 75, 100];
 
-export default function QuadrantScatter({ students = [], onSelect }) {
+export default function QuadrantScatter({ students = [], onSelect, compact = false }) {
   const [hovered, setHovered] = useState(null);
   const [tipPos, setTipPos]   = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
@@ -186,20 +186,22 @@ export default function QuadrantScatter({ students = [], onSelect }) {
         </div>
       )}
 
-      {/* Legend */}
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1 text-[10px] font-medium text-neutral-500 flex-shrink-0">
-        {[
-          { c: '#10B981', l: 'Stars (high score + attendance)' },
-          { c: '#F97316', l: 'Needs coaching (low score)' },
-          { c: '#EAB308', l: 'Irregular attendance' },
-          { c: '#EF4444', l: 'At risk (both low)' },
-        ].map(({ c, l }) => (
-          <span key={l} className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c }} />
-            <span className="truncate">{l}</span>
-          </span>
-        ))}
-      </div>
+      {/* Legend — hidden in compact mode */}
+      {!compact && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1 text-[10px] font-medium text-neutral-500 flex-shrink-0">
+          {[
+            { c: '#10B981', l: 'Stars (high score + attendance)' },
+            { c: '#F97316', l: 'Needs coaching (low score)' },
+            { c: '#EAB308', l: 'Irregular attendance' },
+            { c: '#EF4444', l: 'At risk (both low)' },
+          ].map(({ c, l }) => (
+            <span key={l} className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c }} />
+              <span className="truncate">{l}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
