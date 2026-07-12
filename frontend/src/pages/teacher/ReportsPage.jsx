@@ -141,7 +141,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="px-3 md:px-8 py-6 max-w-6xl mx-auto space-y-8 pb-20">
+      <div className="px-3 md:px-8 py-4 md:py-6 max-w-6xl mx-auto space-y-4 md:space-y-8 pb-20">
         
         {/* Standard Selector */}
         {loadingStandards ? (
@@ -175,11 +175,11 @@ export default function ReportsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Skeleton className="lg:col-span-2 h-80 rounded-2xl" />
-              <Skeleton className="h-80 rounded-2xl" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
+              <Skeleton className="md:col-span-2 h-52 md:h-80 rounded-xl md:rounded-2xl" />
+              <Skeleton className="h-52 md:h-80 rounded-xl md:rounded-2xl" />
             </div>
-            <Skeleton className="h-64 rounded-2xl" />
+            <Skeleton className="h-48 md:h-64 rounded-xl md:rounded-2xl" />
           </>
         ) : loadError ? (
           <div className="text-center py-16 glass-panel rounded-2xl border border-red-100">
@@ -199,10 +199,10 @@ export default function ReportsPage() {
               variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08 } } }}
             >
               {[
-                <StatCard key="students" title="Total Students" value={overview.total_students} icon={Users} color="bg-blue-100 text-blue-700" />,
-                <StatCard key="score" title="Avg Score" value={`${overview.avg_score}%`} icon={Trophy} color="bg-emerald-100 text-emerald-700" />,
-                <StatCard key="attend" title="Avg Attendance" value={`${overview.avg_attendance}%`} icon={CheckCircle} color="bg-violet-100 text-violet-700" />,
-                <div key="risk" className="glass-panel p-4 rounded-2xl flex flex-col justify-between border border-red-100 bg-red-50/30 relative overflow-hidden">
+                <StatCard key="students" label="Total Students" value={overview.total_students} icon={Users} color="bg-blue-100 text-blue-700" />,
+                <StatCard key="score" label="Avg Score" value={`${overview.avg_score}%`} icon={Trophy} color="bg-emerald-100 text-emerald-700" />,
+                <StatCard key="attend" label="Avg Attendance" value={`${overview.avg_attendance}%`} icon={CheckCircle} color="bg-violet-100 text-violet-700" />,
+                <div key="risk" className="glass-panel p-3 md:p-4 rounded-xl md:rounded-2xl flex flex-col justify-between border border-red-100 bg-red-50/30 relative overflow-hidden">
                   <div className="flex items-center justify-between z-10">
                     <p className="text-sm font-medium text-red-800">At-Risk Students</p>
                     <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
@@ -227,10 +227,10 @@ export default function ReportsPage() {
                   <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">{atRiskCount}</span>
                   <span className="ml-auto text-xs text-neutral-400">Click to open student report</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
                   {students.filter(isAtRisk).slice(0, 6).map((s) => (
                     <div key={s.id} onClick={() => setReportStudentId(s.id)}
-                      className="flex items-center gap-3 p-3 bg-white rounded-xl border border-red-100 cursor-pointer hover:shadow-sm hover:border-red-200 transition-all">
+                      className="flex items-center gap-2 md:gap-3 p-2 md:p-3 bg-white rounded-xl border border-red-100 cursor-pointer hover:shadow-sm hover:border-red-200 transition-all">
                       <Avatar src={s.avatar_url} name={s.name} size="sm" />
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm text-neutral-900 truncate">{s.name}</p>
@@ -256,14 +256,14 @@ export default function ReportsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
               {/* Chart */}
-              <div className="lg:col-span-2 glass-panel p-5 rounded-2xl border border-white/60">
-                <div className="flex items-center gap-2 mb-6">
+              <div className="md:col-span-2 glass-panel p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/60">
+                <div className="flex items-center gap-2 mb-3 md:mb-6">
                   <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg"><BarChart3 size={16} /></div>
-                  <h2 className="font-semibold">Subject Performance</h2>
+                  <h2 className="font-semibold text-sm md:text-base">Subject Performance</h2>
                 </div>
-                <div className="h-64">
+                <div className="h-44 md:h-64">
                   {subjectPerf.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={subjectPerf} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -286,15 +286,15 @@ export default function ReportsPage() {
               </div>
 
               {/* Recent Assessments */}
-              <div className="glass-panel p-5 rounded-2xl border border-white/60 flex flex-col">
-                <div className="flex items-center gap-2 mb-4">
+              <div className="glass-panel p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/60 flex flex-col">
+                <div className="flex items-center gap-2 mb-3 md:mb-4">
                   <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg"><Clock size={16} /></div>
-                  <h2 className="font-semibold">Recent Assessments</h2>
+                  <h2 className="font-semibold text-sm md:text-base">Recent Assessments</h2>
                 </div>
                 {recentTests.length > 0 ? (
                   <div className="flex-1 space-y-4">
                     {recentTests.map(t => (
-                      <div key={t.test_id} className="p-3 bg-white/50 rounded-xl border border-[#EFEDEA]">
+                      <div key={t.test_id} className="p-2 md:p-3 bg-white/50 rounded-xl border border-[#EFEDEA]">
                         <div className="flex justify-between items-start mb-1">
                           <p className="font-medium text-sm text-neutral-900 truncate pr-2" title={t.title}>{t.title}</p>
                           {t.avg_score == null ? (
@@ -320,15 +320,15 @@ export default function ReportsPage() {
 
             {/* Class analytics row: score distribution + score vs attendance scatter */}
             {students.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-3 md:gap-6">
                 {/* Score distribution histogram */}
-                <div className="glass-panel p-5 rounded-2xl border border-white/60">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-violet-100 text-violet-600 rounded-lg"><BarChart3 size={16} /></div>
-                    <h2 className="font-semibold">Score Distribution</h2>
-                    <span className="ml-auto text-xs text-neutral-400">{students.filter((s) => s.has_tests).length} students with scores</span>
+                <div className="glass-panel p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/60">
+                  <div className="flex items-center gap-1 md:gap-2 mb-3 md:mb-4 flex-wrap">
+                    <div className="p-1 md:p-1.5 bg-violet-100 text-violet-600 rounded-lg"><BarChart3 size={14} /></div>
+                    <h2 className="font-semibold text-xs md:text-base">Score Dist.</h2>
+                    <span className="ml-auto text-[10px] md:text-xs text-neutral-400">{students.filter((s) => s.has_tests).length} students</span>
                   </div>
-                  <div className="h-52">
+                  <div className="h-36 md:h-52">
                     {students.filter((s) => s.has_tests).length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={scoreBands} barSize={44} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -352,13 +352,13 @@ export default function ReportsPage() {
                 </div>
 
                 {/* Score vs Attendance scatter */}
-                <div className="glass-panel p-5 rounded-2xl border border-white/60">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="p-1.5 bg-teal-100 text-teal-600 rounded-lg"><Users size={16} /></div>
-                    <h2 className="font-semibold">Score vs Attendance</h2>
-                    <span className="text-xs text-neutral-400 ml-1">each dot = 1 student</span>
+                <div className="glass-panel p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/60">
+                  <div className="flex items-center gap-1 md:gap-2 mb-1 flex-wrap">
+                    <div className="p-1 md:p-1.5 bg-teal-100 text-teal-600 rounded-lg"><Users size={14} /></div>
+                    <h2 className="font-semibold text-xs md:text-base">Score vs Att.</h2>
+                    <span className="text-[10px] md:text-xs text-neutral-400 ml-1 hidden sm:inline">each dot = 1 student</span>
                   </div>
-                  <div className="h-52">
+                  <div className="h-36 md:h-52">
                     {scatterStudents.length > 1 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <ScatterChart margin={{ top: 10, right: 20, left: -20, bottom: 20 }}>
@@ -391,17 +391,17 @@ export default function ReportsPage() {
             )}
 
             {/* Leaderboard — weekly / monthly / all-time class rankings */}
-            <div className="glass-panel p-5 rounded-2xl border border-white/60">
-              <div className="flex items-center gap-2 mb-4">
+            <div className="glass-panel p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/60">
+              <div className="flex items-center gap-2 mb-3 md:mb-4">
                 <div className="p-1.5 bg-amber-100 text-amber-600 rounded-lg"><Trophy size={16} /></div>
-                <h2 className="font-semibold">Leaderboard</h2>
+                <h2 className="font-semibold text-sm md:text-base">Leaderboard</h2>
               </div>
               <LeaderboardPanel standardId={activeStd} onSelect={(s) => setReportStudentId(s.id)} />
             </div>
 
             {/* Student Roster */}
-            <div className="glass-panel rounded-2xl border border-white/60 overflow-hidden">
-              <div className="p-5 border-b border-[#EFEDEA] flex items-center gap-2">
+            <div className="glass-panel rounded-xl md:rounded-2xl border border-white/60 overflow-hidden">
+              <div className="p-3 md:p-5 border-b border-[#EFEDEA] flex items-center gap-2">
                 <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg"><Users size={16} /></div>
                 <h2 className="font-semibold">Student Roster</h2>
               </div>
