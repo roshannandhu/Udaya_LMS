@@ -1891,7 +1891,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
               <col />
               <col style={{ width: 155 }} />
               <col style={{ width: 155 }} />
-              <col style={{ width: 78 }} />
+              <col style={{ width: 92 }} />
             </colgroup>
             <thead>
               <tr className="bg-gray-50 text-[10px] font-bold uppercase tracking-wide text-gray-500">
