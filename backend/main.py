@@ -7334,47 +7334,77 @@ def _run_mcq_generation(groq_key: str, text: str, num_questions: int, hint: str)
     if not current_batch:
         raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer file.")
 
+    # verified_pool: questions confirmed by _mcq_evaluate (score==5, no duplicate)
+    # fallback_pool: last-resort sub-threshold questions (NOT counted in quality_10)
     verified_pool: list = []
+    fallback_pool: list = []
     MAX_ITERATIONS = 6
     iterations_done = 0
+    eval_ctx = text[:8000]  # more context for evaluator than the old text[:5000]
 
     for iteration in range(MAX_ITERATIONS):
         iterations_done = iteration + 1
         if not current_batch:
             break
-        evals = _mcq_evaluate(client, current_batch, text[:5000])
+        evals = _mcq_evaluate(client, current_batch, eval_ctx)
         scored = list(zip(current_batch, evals))
         perfect    = [(q, e) for q, e in scored if e.get("score") == 5 and not e.get("duplicate_of")]
         sub_thresh = [(q, e) for q, e in scored if e.get("score", 3) < 5 or e.get("duplicate_of")]
+
+        # Mark evaluator-confirmed questions before adding to pool
+        for q, _ in perfect:
+            q["_verified"] = True
         verified_pool.extend(q for q, _ in perfect)
+
         if len(verified_pool) >= num_questions:
             break
+
         if iteration == MAX_ITERATIONS - 1:
+            # Last resort: collect near-perfect fallbacks without marking them verified
             near = sorted(sub_thresh, key=lambda x: x[1].get("score", 0), reverse=True)
             for q, _ in near:
-                if len(verified_pool) >= num_questions:
+                if len(verified_pool) + len(fallback_pool) >= num_questions:
                     break
-                verified_pool.append(q)
+                fallback_pool.append(q)
             break
+
         verified_topics = [q["question"][:80] for q in verified_pool]
         improved = _mcq_improve(client, sub_thresh, verified_topics, text)
-        next_batch = []
-        for q in improved:
-            if q.get("_self_score", 3) == 5:
-                clean = {k: v for k, v in q.items() if not k.startswith("_")}
-                verified_pool.append(clean)
-            else:
-                next_batch.append(q)
+
+        # Split into self-reported perfect vs still-imperfect
+        self_perfect = [{k: v for k, v in q.items() if not k.startswith("_")}
+                        for q in improved if q.get("_self_score", 3) >= 5]
+        next_batch   = [q for q in improved if q.get("_self_score", 3) < 5]
+
+        if self_perfect:
+            # Re-evaluate self-reported perfect questions with the strict grader —
+            # trust but verify rather than taking the LLM's word for 5/5.
+            re_evals = _mcq_evaluate(client, self_perfect, eval_ctx)
+            for q, ev in zip(self_perfect, re_evals):
+                if ev.get("score") == 5 and not ev.get("duplicate_of"):
+                    q["_verified"] = True
+                    verified_pool.append(q)
+                else:
+                    # Self-reported 5/5 but evaluator disagrees — retry next round
+                    next_batch.append(q)
+
+            if len(verified_pool) >= num_questions:
+                break
+
         current_batch = next_batch
 
-    final_qs = _mcq_balance(verified_pool, num_questions)
+    # Use verified first, fill remainder from fallback only if necessary
+    combined = verified_pool + fallback_pool
+    final_qs = _mcq_balance(combined, num_questions)
     final = [{k: v for k, v in {**q, "order_num": i + 1}.items() if not k.startswith("_")}
              for i, q in enumerate(final_qs)]
     if not final:
         raise HTTPException(status_code=500, detail="Could not generate valid questions. Please try again.")
 
-    verified_count = min(len(final), len(verified_pool))
-    quality_10 = round((verified_count / len(final)) * 10, 1) if final else 0.0
+    # Accurate quality: only questions confirmed by _mcq_evaluate count as verified
+    truly_verified = sum(1 for q in final_qs if q.get("_verified"))
+    quality_10 = round((truly_verified / len(final)) * 10, 1) if final else 0.0
+
     diff_counts = {"easy": 0, "medium": 0, "hard": 0}
     for q in final:
         d = q.get("difficulty", "medium")
@@ -7862,8 +7892,9 @@ async def regenerate_flagged_questions(
         rejected = "\n".join(
             f"[{i+1}] {q.get('question', '')[:100]}" for i, q in enumerate(req.flagged)
         )
+        eval_ctx = text[:8000]
 
-        # Generate with self-verification in one call (same standard as the main loop)
+        # Generate replacements with self-evaluation
         prompt = f"""A teacher has flagged {n} MCQ question(s) as unsatisfactory.
 Generate {n} REPLACEMENT questions for a {hint} class — TARGET QUALITY: PERFECT (5/5).
 
@@ -7901,16 +7932,41 @@ CONTENT:
         raw = json.loads(r.choices[0].message.content).get("questions", [])
         out = _normalise_q(raw)
 
-        # Pad with originals if model returned fewer than needed
         while len(out) < n:
             out.append({**req.flagged[len(out)], "_self_score": 3})
 
-        final = out[:n]
-        verified = sum(1 for q in final if q.get("_self_score") == 5)
-        quality_10 = round((verified / len(final)) * 10, 1) if final else 0.0
+        current = [{k: v for k, v in q.items() if not k.startswith("_")} for q in out[:n]]
+
+        # Re-evaluate with the strict grader (don't just trust self-score)
+        evals = _mcq_evaluate(client, current, eval_ctx)
+        needs_fix = [(current[i], evals[i]) for i in range(len(current))
+                     if evals[i].get("score", 3) < 5 or evals[i].get("duplicate_of")]
+
+        if needs_fix:
+            # One improvement round for questions that didn't pass the evaluator
+            good_stems_2 = list(req.good_stems) + [
+                current[i]["question"][:80] for i in range(len(current))
+                if not (evals[i].get("score", 3) < 5 or evals[i].get("duplicate_of"))
+            ]
+            fixed = _mcq_improve(client, needs_fix, good_stems_2[:30], text)
+            fix_clean = [{k: v for k, v in q.items() if not k.startswith("_")} for q in fixed]
+
+            # Merge fixes back into current list
+            fi = 0
+            for i in range(len(current)):
+                if evals[i].get("score", 3) < 5 or evals[i].get("duplicate_of"):
+                    if fi < len(fix_clean):
+                        current[i] = fix_clean[fi]
+                    fi += 1
+
+            # Final evaluation pass for the merged result
+            evals = _mcq_evaluate(client, current, eval_ctx)
+
+        truly_verified = sum(1 for ev in evals if ev.get("score") == 5 and not ev.get("duplicate_of"))
+        quality_10 = round((truly_verified / len(current)) * 10, 1) if current else 0.0
 
         return {
-            "questions":         [{k: v for k, v in q.items() if not k.startswith("_")} for q in final],
+            "questions":         current,
             "quality_out_of_10": quality_10,
         }
 
