@@ -124,7 +124,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center py-8 px-6 bg-[#F4F7F6] relative overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="min-h-screen flex flex-col items-center justify-center py-8 px-6 bg-[#F4F7F6] relative overflow-hidden"
+    >
       
       {/* Decorative Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#F8E1FB] rounded-full mix-blend-multiply filter blur-[80px] opacity-70 animate-pulse" style={{ animationDuration: '8s' }} />
@@ -291,6 +296,6 @@ export default function LoginPage() {
           </a>
         )}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }
