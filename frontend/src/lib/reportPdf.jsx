@@ -2236,7 +2236,7 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
               <tbody className="divide-y divide-gray-100">
                 {[...students].sort((a, b) => (b.avg_score || 0) - (a.avg_score || 0)).map((s, i) => (
                   <tr key={s.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
-                    <td className="px-4 py-3 font-medium">{s.name || 'Student'}</td>
+                    <td className="px-4 py-3 font-medium">{shortText(s.name || 'Student', 40)}</td>
                     <td className="px-4 py-3 text-center font-bold">{s.has_tests ? `${Math.round(s.avg_score || 0)}%` : '-'}</td>
                     <td className="px-4 py-3 text-center font-bold">{s.has_attendance ? `${Math.round(s.attendance_pct || 0)}%` : '-'}</td>
                     <td className="px-4 py-3 text-right">{s.points || 0}</td>
