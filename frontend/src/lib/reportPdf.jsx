@@ -799,7 +799,7 @@ export const StudentReportTemplate = ({ data, period }) => {
         <Section title="Score Trend vs Class" icon={Activity} color={{ bg: 'bg-blue-100', text: 'text-blue-600' }} compact>
           {chartData.length >= 2 ? (
             <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-4 pt-6" style={{ pageBreakInside: 'avoid' }}>
-              <LineChart width={620} height={200} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <LineChart width={560} height={200} data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6b7280' }} domain={[0, 100]} />
