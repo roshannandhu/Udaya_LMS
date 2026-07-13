@@ -2082,7 +2082,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
               <col style={{ width: 86 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 64 }} />
-              <col style={{ width: 52 }} />
+              <col style={{ width: 56 }} />
               <col style={{ width: 48 }} />
               <col />
             </colgroup>
