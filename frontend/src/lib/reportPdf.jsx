@@ -751,11 +751,11 @@ export const StudentReportTemplate = ({ data, period }) => {
               <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
                   <col />
-                  <col style={{ width: 72 }} />
-                  <col style={{ width: 100 }} />
+                  <col style={{ width: 76 }} />
+                  <col style={{ width: 104 }} />
                   <col style={{ width: 76 }} />
                   <col style={{ width: 116 }} />
-                  <col style={{ width: 78 }} />
+                  <col style={{ width: 82 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
