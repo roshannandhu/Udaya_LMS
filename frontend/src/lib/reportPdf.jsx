@@ -780,7 +780,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                           <div style={{ display: 'flex', justifyContent: 'center' }}>
                             {tested
                               ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{gradeFor(r.test_avg).grade}</span>
-                              : <span className="text-xs text-gray-400">No tests</span>}
+                              : <span className="text-xs text-gray-400">-</span>}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center text-gray-500">{r.attendance_pct !== undefined && r.attendance_pct !== null ? pctText(r.attendance_pct) : '-'}</td>
