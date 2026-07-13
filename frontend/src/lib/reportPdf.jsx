@@ -941,7 +941,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                 <colgroup>
                   <col />
                   <col style={{ width: 118 }} />
-                  <col style={{ width: 80 }} />
+                  <col style={{ width: 86 }} />
                   <col style={{ width: 130 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
@@ -957,8 +957,8 @@ export const StudentReportTemplate = ({ data, period }) => {
                     const band = bandFor(t.score_pct);
                     return (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{t.topic || 'Concept'}</td>
-                        <td className="px-4 py-2.5 text-gray-500">{t.subject}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{shortText(t.topic || 'Concept', 36)}</td>
+                        <td className="px-4 py-2.5 text-gray-500">{shortText(t.subject || '-', 11)}</td>
                         <td className="px-4 py-2.5 text-center">
                           <div style={{ display: 'flex', justifyContent: 'center' }}>
                             <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${band.bg} ${band.text}`}>{Math.round(safeNumber(t.score_pct))}%</span>
@@ -2038,7 +2038,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                     {shortText(student.student_code || '-', 12)}
                   </td>
                   <td className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-800">
-                    {shortText(student.name || 'Unknown', 22)}
+                    {shortText(student.name || 'Unknown', a.flagged ? 14 : 18)}
                     {a.flagged && <span className="ml-1.5 text-[9px] font-bold text-red-600 uppercase">Flag</span>}
                   </td>
                   <td className="border-b border-gray-100 px-2 py-2 text-center text-xs font-bold text-gray-900">
@@ -2109,7 +2109,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                   <tr key={a.id || i} className={i % 2 === 0 ? 'bg-red-50' : 'bg-white'} style={{ pageBreakInside: 'avoid' }}>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-gray-500">{a.rank || '-'}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-[10px] font-mono text-gray-500">{shortText(student.student_code || '-', 12)}</td>
-                    <td className="border-b border-red-100 px-3 py-2 text-xs font-semibold text-gray-800">{shortText(student.name || 'Unknown', 20)}</td>
+                    <td className="border-b border-red-100 px-3 py-2 text-xs font-semibold text-gray-800">{shortText(student.name || 'Unknown', 13)}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold">{fmtMarks(a.score)}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{pct}%</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{events.length || (a.terminated ? 1 : 0)}</td>
