@@ -126,13 +126,13 @@ class ReportSectionBoundary extends React.Component {
 }
 
 const GlassCard = ({ title, subtitle, children, className = "", onClick = null, tone = "blue", tall = false }) => (
-  <div 
+  <div
     onClick={onClick}
-    className={`bg-white border border-white/90 border-l-4 ${cardTone[tone] || cardTone.blue} rounded-card p-4 md:p-5 shadow-soft flex flex-col transition-all duration-200 w-full relative z-10 overflow-hidden ${tall ? 'min-h-[340px]' : 'min-h-[280px]'} ${className} ${onClick ? 'cursor-pointer hover:shadow-lift active:scale-[0.995]' : ''}`}
+    className={`bg-white border border-white/90 border-l-4 ${cardTone[tone] || cardTone.blue} rounded-card p-2.5 md:p-5 shadow-soft flex flex-col transition-all duration-200 w-full relative z-10 overflow-hidden ${tall ? 'min-h-[190px] md:min-h-[340px]' : 'min-h-[150px] md:min-h-[280px]'} ${className} ${onClick ? 'cursor-pointer hover:shadow-lift active:scale-[0.995]' : ''}`}
   >
-    <div className="mb-3 md:mb-4 shrink-0 pointer-events-none">
-      <h3 className="text-slate-950 font-extrabold text-base md:text-lg tracking-tight leading-snug">{title}</h3>
-      {subtitle && <p className="text-xs font-semibold text-slate-500 mt-1 leading-snug max-w-[62ch]">{subtitle}</p>}
+    <div className="mb-1.5 md:mb-4 shrink-0 pointer-events-none">
+      <h3 className="text-slate-950 font-extrabold text-[11px] md:text-base md:text-lg tracking-tight leading-snug">{title}</h3>
+      {subtitle && <p className="hidden md:block text-xs font-semibold text-slate-500 mt-1 leading-snug max-w-[62ch]">{subtitle}</p>}
     </div>
     <div className="w-full flex-1 flex flex-col justify-center relative min-w-0 pointer-events-auto">
       <ReportSectionBoundary>{children}</ReportSectionBoundary>
@@ -160,9 +160,9 @@ const MetricTile = ({ icon: Icon, label, value, accent = "blue" }) => {
 };
 
 const SectionTitle = ({ eyebrow, title }) => (
-  <div className="md:col-span-6 xl:col-span-12 mt-4 first:mt-0">
+  <div className="col-span-2 md:col-span-6 xl:col-span-12 mt-4 first:mt-0">
     <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-700">{eyebrow}</p>
-    <h2 className="mt-1 text-xl md:text-2xl font-black text-slate-950 tracking-tight">{title}</h2>
+    <h2 className="mt-1 text-lg md:text-2xl font-black text-slate-950 tracking-tight">{title}</h2>
   </div>
 );
 
@@ -400,10 +400,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="px-4 md:px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-4 md:gap-5 pb-24"
+        className="px-3 md:px-6 max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-6 xl:grid-cols-12 gap-2 md:gap-5 pb-24"
       >
         <div
-          className={`md:col-span-6 xl:col-span-8 rounded-card bg-gradient-to-br from-[#14B8A6] via-[#22C7C9] to-[#635BFF] text-white p-5 md:p-6 shadow-soft min-h-[220px] flex flex-col justify-between ${isLimitError ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`col-span-2 md:col-span-6 xl:col-span-8 rounded-card bg-gradient-to-br from-[#14B8A6] via-[#22C7C9] to-[#635BFF] text-white p-4 md:p-6 shadow-soft min-h-[180px] md:min-h-[220px] flex flex-col justify-between ${isLimitError ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'}`}
           onClick={isLimitError ? undefined : handleGenerateAI}
         >
           <div>
@@ -444,7 +444,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           </button>
         </div>
 
-        <div className="md:col-span-6 xl:col-span-4 grid grid-cols-2 gap-3 md:gap-4">
+        <div className="col-span-2 md:col-span-6 xl:col-span-4 grid grid-cols-2 gap-2 md:gap-4">
           <MetricTile icon={TrendingUp} label="Avg Score" value={`${animatedScore}%`} accent={avgScore === 0 ? 'blue' : avgScore >= 80 ? 'emerald' : avgScore >= 40 ? 'amber' : 'rose'} />
           <MetricTile icon={CalendarDays} label="Attendance" value={`${animatedAttendance}%`} accent={attendancePct === 0 ? 'blue' : attendancePct >= 90 ? 'emerald' : attendancePct >= 75 ? 'amber' : 'rose'} />
           <MetricTile icon={Award} label={`Rank · ${PERIODS.find(p => p.id === reportPeriod)?.label || 'Overall'}`} value={data?.rank ? `#${data.rank}` : '--'} accent="amber" />
@@ -463,7 +463,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         </div>
 
         {badges.length > 0 && (
-          <div className="md:col-span-6 xl:col-span-12 flex gap-2 flex-wrap">
+          <div className="col-span-2 md:col-span-6 xl:col-span-12 flex gap-2 flex-wrap">
             {badges.map((b, i) => (
               <div key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-100 shadow-soft text-sm font-bold text-slate-700">
                 <span>{b.emoji}</span> {b.label}
@@ -473,7 +473,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         )}
 
         {insightChips.length > 0 && (
-          <div className="md:col-span-6 xl:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="col-span-2 md:col-span-6 xl:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
             {insightChips.map((chip, i) => (
               <div key={i} className="rounded-card p-4 bg-white border border-slate-100 shadow-soft flex flex-col gap-1.5">
                 <span className="text-xl">{chip.emoji}</span>
@@ -486,45 +486,45 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
 
         <SectionTitle eyebrow="Performance" title="Scores, subjects, and class benchmark" />
 
-        <GlassCard className="md:col-span-6 xl:col-span-8" title="Overall Trend" subtitle="Student score compared with class average" tone="blue" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-8" title="Overall Trend" subtitle="Student score compared with class average" tone="blue" tall>
           <GradientAreaTrendChart data={trendData} classAverageLine={true} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Subject Strengths" subtitle="Performance profile across subjects" tone="violet" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-4" title="Subject Strengths" subtitle="Performance profile across subjects" tone="violet" tall>
           <SubjectRadarChart data={radarData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-7" title="Subject Progression" subtitle="How scores moved across recent tests" tone="cyan" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-7" title="Subject Progression" subtitle="How scores moved across recent tests" tone="cyan" tall>
           <SubjectProgressionLineChart data={progressionData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-5" title="Subject Gap Analysis" subtitle="Student level compared with class benchmark" tone="violet" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-5" title="Subject Gap Analysis" subtitle="Student level compared with class benchmark" tone="violet" tall>
           <DumbbellSubjectPlot data={radarData} />
         </GlassCard>
 
         <SectionTitle eyebrow="Consistency" title="Attendance, calendar, and learning activity" />
 
-        <GlassCard className="md:col-span-6 xl:col-span-7" title="Learning Calendar" subtitle="One calendar only: attendance and test days for the current month" tone="emerald" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-7" title="Learning Calendar" subtitle="One calendar only: attendance and test days for the current month" tone="emerald" tall>
           <AttendanceCalendar month={new Date()} daysData={attendanceDays} testDaysData={testDays} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-5" title="Learning Engagement" subtitle="Daily activity intensity across the last four weeks" tone="emerald" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-5" title="Learning Engagement" subtitle="Daily activity intensity across the last four weeks" tone="emerald" tall>
           <EngagementHeatmap data={heatmapData} />
         </GlassCard>
-        <GlassCard className="md:col-span-3 xl:col-span-3" title="Attendance" subtitle="Present days and consistency" tone="emerald">
-          <div className="flex-1 flex items-center justify-center py-4">
-            <LiquidFillGauge percentage={attendancePct} size={150} />
+        <GlassCard className="col-span-1 md:col-span-3 xl:col-span-3" title="Attendance" subtitle="Present days and consistency" tone="emerald">
+          <div className="flex-1 flex items-center justify-center py-2">
+            <LiquidFillGauge percentage={attendancePct} size={110} />
           </div>
         </GlassCard>
-        <GlassCard className="md:col-span-3 xl:col-span-3" title="Score Health" subtitle="Current academic average" tone="amber">
-          <div className="flex-1 flex items-center justify-center py-4">
+        <GlassCard className="col-span-1 md:col-span-3 xl:col-span-3" title="Score Health" subtitle="Current academic average" tone="amber">
+          <div className="flex-1 flex items-center justify-center py-2">
             <NeonProgressGauge percentage={avgScore} label="Average" color="#D97706" />
           </div>
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-6" title="Recent Activity" subtitle="Latest learning events" tone="blue">
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-6" title="Recent Activity" subtitle="Latest learning events" tone="blue">
           <ActivityStepper data={activityData} />
         </GlassCard>
 
         <SectionTitle eyebrow="Assessments" title="Test behavior and class position" />
 
         {classPercentile !== null && classSize > 1 && (
-          <div className="md:col-span-6 xl:col-span-12 rounded-card p-4 md:p-5 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 shadow-soft flex items-center justify-between gap-4">
+          <div className="col-span-2 md:col-span-6 xl:col-span-12 rounded-card p-3 md:p-5 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 shadow-soft flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider text-violet-500">Class percentile</p>
               <p className="text-base md:text-lg font-black text-slate-900 mt-1 leading-snug">
@@ -538,37 +538,37 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           </div>
         )}
 
-        <GlassCard className="md:col-span-6 xl:col-span-6" title="Class Range" subtitle="Student score position inside class spread" tone="blue">
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-6" title="Class Range" subtitle="Student score position inside class spread" tone="blue">
           <QuizRangeChart data={rangeData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-6" title="Test Strategy" subtitle="Time spent versus accuracy" tone="rose">
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-6" title="Test Strategy" subtitle="Time spent versus accuracy" tone="rose">
           <TestQuadrantChart data={quadrantData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Quiz Speed" subtitle="Score and time pattern by attempt" tone="cyan">
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-4" title="Quiz Speed" subtitle="Score and time pattern by attempt" tone="cyan">
           <QuizBubbleScatter data={scatterData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Class Distribution" subtitle="Score distribution with student marker" tone="amber">
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-4" title="Class Distribution" subtitle="Score distribution with student marker" tone="amber">
           <TestBellCurve data={bellData} studentScore={avgScore || 75} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Rank Progression" subtitle="Movement on the leaderboard" tone="amber">
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-4" title="Rank Progression" subtitle="Movement on the leaderboard" tone="amber">
           <LeaderboardBumpChart data={bumpData} />
         </GlassCard>
 
         <SectionTitle eyebrow="Learning Signals" title="Engagement balance, topics, and work completion" />
 
-        <GlassCard className="md:col-span-6 xl:col-span-8" title="Engagement Balance" subtitle="Completion and participation by evidence type" tone="cyan" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-8" title="Engagement Balance" subtitle="Completion and participation by evidence type" tone="cyan" tall>
           <LearningSignalBars data={learningSignalData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Activity Mix" subtitle="How you spent your learning time across all activity types" tone="blue" tall>
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-4" title="Activity Mix" subtitle="How you spent your learning time across all activity types" tone="blue" tall>
           <TimeAllocationDonut data={donutData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Topic Mastery" subtitle="Strong and weak learning areas" tone="amber" tall>
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-4" title="Topic Mastery" subtitle="Strong and weak learning areas" tone="amber" tall>
           <TopicPolarArea data={polarData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Assignments" subtitle="Submitted, pending, and overdue work" tone="violet" tall>
+        <GlassCard className="col-span-1 md:col-span-6 xl:col-span-4" title="Assignments" subtitle="Submitted, pending, and overdue work" tone="violet" tall>
           <AssignmentSpeedometer data={assignmentData} />
         </GlassCard>
-        <GlassCard className="md:col-span-6 xl:col-span-4" title="Study Rhythm" subtitle="Daily activity score with raw video, test, and assignment counts" tone="emerald" tall>
+        <GlassCard className="col-span-2 md:col-span-6 xl:col-span-4" title="Study Rhythm" subtitle="Daily activity score with raw video, test, and assignment counts" tone="emerald" tall>
           <StudyRhythmTimeline data={activityFlowData} />
         </GlassCard>
 
