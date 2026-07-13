@@ -2128,8 +2128,9 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
           <p className="text-[9px] text-gray-400">
             {brand.name} · Marksheet generated on {fmtDate(new Date().toISOString())} · {sorted.length} student{sorted.length !== 1 ? 's' : ''} · Pass mark: {V3_PASS_PCT}%
           </p>
-          <p className="text-[9px] text-gray-400">Computer-generated — {V3_GRADE_LEGEND}</p>
+          <p className="text-[9px] text-gray-400">Computer-generated</p>
         </div>
+        <p className="mt-1 text-[9px] text-gray-400">{V3_GRADE_LEGEND}</p>
       </div>
     </div>
   );
