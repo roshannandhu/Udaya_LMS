@@ -2035,7 +2035,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                     {(a.rank || i + 1)}
                   </td>
                   <td className="border-b border-gray-100 px-2 py-2 text-[10px] font-mono text-gray-500">
-                    {shortText(student.student_code || '-', 12)}
+                    {shortText(student.student_code || '-', 11)}
                   </td>
                   <td className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-800">
                     {shortText(student.name || 'Unknown', a.flagged ? 14 : 18)}
@@ -2108,7 +2108,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
                 return (
                   <tr key={a.id || i} className={i % 2 === 0 ? 'bg-red-50' : 'bg-white'} style={{ pageBreakInside: 'avoid' }}>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-gray-500">{a.rank || '-'}</td>
-                    <td className="border-b border-red-100 px-2 py-2 text-[10px] font-mono text-gray-500">{shortText(student.student_code || '-', 12)}</td>
+                    <td className="border-b border-red-100 px-2 py-2 text-[10px] font-mono text-gray-500">{shortText(student.student_code || '-', 11)}</td>
                     <td className="border-b border-red-100 px-3 py-2 text-xs font-semibold text-gray-800">{shortText(student.name || 'Unknown', 13)}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold">{fmtMarks(a.score)}</td>
                     <td className="border-b border-red-100 px-2 py-2 text-center text-xs font-bold text-red-700">{pct}%</td>
@@ -2221,9 +2221,9 @@ const ClassAnalyticsTemplate = ({ analytics, standardName }) => {
             <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
               <colgroup>
                 <col />
-                <col style={{ width: 104 }} />
+                <col style={{ width: 110 }} />
                 <col style={{ width: 112 }} />
-                <col style={{ width: 78 }} />
+                <col style={{ width: 84 }} />
               </colgroup>
               <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                 <tr>
