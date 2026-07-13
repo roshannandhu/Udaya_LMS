@@ -1663,7 +1663,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
   const identityRows = [
     { label: 'Student ID', value: student?.student_code || '-' },
     { label: 'Exam date', value: examDate },
-    ...(testMeta?.topic_tag ? [{ label: 'Topic', value: shortText(testMeta.topic_tag, 30) }] : []),
+    ...(testMeta?.topic_tag ? [{ label: 'Topic', value: shortText(testMeta.topic_tag, 20) }] : []),
     { label: 'Duration', value: durationMins ? `${durationMins} min` : '-' },
   ];
 
