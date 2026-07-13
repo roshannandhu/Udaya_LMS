@@ -773,7 +773,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                     const band = bandFor(r.test_avg);
                     return (
                       <tr key={r.subject_id || r.subject || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
-                        <td className="px-4 py-3 font-semibold text-gray-800">{r.subject || 'Subject'}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{shortText(r.subject || 'Subject', 15)}</td>
                         <td className="px-4 py-3 text-center text-gray-500">{safeNumber(r.test_count)}</td>
                         <td className="px-4 py-3 text-center font-bold text-gray-900">{tested ? pctText(r.test_avg) : '-'}</td>
                         <td className="px-4 py-3 text-center">
