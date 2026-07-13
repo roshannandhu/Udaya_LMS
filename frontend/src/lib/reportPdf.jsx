@@ -941,8 +941,8 @@ export const StudentReportTemplate = ({ data, period }) => {
                 <colgroup>
                   <col />
                   <col style={{ width: 118 }} />
-                  <col style={{ width: 86 }} />
-                  <col style={{ width: 130 }} />
+                  <col style={{ width: 92 }} />
+                  <col style={{ width: 124 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
@@ -957,7 +957,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                     const band = bandFor(t.score_pct);
                     return (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{shortText(t.topic || 'Concept', 36)}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{shortText(t.topic || 'Concept', 30)}</td>
                         <td className="px-4 py-2.5 text-gray-500">{shortText(t.subject || '-', 11)}</td>
                         <td className="px-4 py-2.5 text-center">
                           <div style={{ display: 'flex', justifyContent: 'center' }}>
