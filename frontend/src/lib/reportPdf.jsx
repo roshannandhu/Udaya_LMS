@@ -844,7 +844,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                   <col style={{ width: 106 }} />
                   <col />
                   <col style={{ width: 74 }} />
-                  <col style={{ width: 82 }} />
+                  <col style={{ width: 88 }} />
                   <col style={{ width: 72 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
@@ -860,7 +860,7 @@ export const StudentReportTemplate = ({ data, period }) => {
                   {recentTests.map((t, i) => (
                     <tr key={t.test_id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} style={{ pageBreakInside: 'avoid' }}>
                       <td className="px-4 py-3 text-gray-500">{fmtDate(t.date)}</td>
-                      <td className="px-4 py-3 font-medium text-gray-800">{shortText(t.test_title, 34)}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">{shortText(t.test_title, 30)}</td>
                       <td className="px-4 py-3 text-center font-bold text-gray-900">{Math.round(clampPct(t.score_pct))}%</td>
                       <td className="px-4 py-3 text-center text-gray-500">{t.class_avg_score_pct !== undefined && t.class_avg_score_pct !== null ? `${Math.round(clampPct(t.class_avg_score_pct))}%` : '-'}</td>
                       <td className="px-4 py-3 text-center text-gray-500">{t.rank ? `${t.rank}/${t.total_attempts}` : '-'}</td>
