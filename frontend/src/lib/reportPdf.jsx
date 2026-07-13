@@ -841,11 +841,11 @@ export const StudentReportTemplate = ({ data, period }) => {
             <div className="overflow-hidden rounded-xl border border-gray-200">
               <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: 106 }} />
+                  <col style={{ width: 122 }} />
                   <col />
                   <col style={{ width: 74 }} />
                   <col style={{ width: 88 }} />
-                  <col style={{ width: 72 }} />
+                  <col style={{ width: 84 }} />
                 </colgroup>
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
