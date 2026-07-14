@@ -149,12 +149,12 @@ const MetricTile = ({ icon: Icon, label, value, accent = "blue" }) => {
     rose: 'bg-rose-50 text-rose-700 ring-rose-100',
   };
   return (
-    <div className={`rounded-card p-4 ring-1 bg-white shadow-soft ${styles[accent] || styles.blue}`}>
-      <div className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500">
-        <Icon size={15} />
-        <span>{label}</span>
+    <div className={`rounded-card p-2.5 md:p-4 ring-1 bg-white shadow-soft ${styles[accent] || styles.blue}`}>
+      <div className="flex items-center gap-1.5 text-[10px] md:text-xs font-bold uppercase text-slate-500">
+        <Icon size={13} />
+        <span className="truncate">{label}</span>
       </div>
-      <div className="mt-2 text-2xl md:text-3xl font-black text-slate-950 tabular-nums leading-none">{value}</div>
+      <div className="mt-1.5 text-xl md:text-3xl font-black text-slate-950 tabular-nums leading-none">{value}</div>
     </div>
   );
 };
@@ -448,16 +448,16 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           <MetricTile icon={TrendingUp} label="Avg Score" value={`${animatedScore}%`} accent={avgScore === 0 ? 'blue' : avgScore >= 80 ? 'emerald' : avgScore >= 40 ? 'amber' : 'rose'} />
           <MetricTile icon={CalendarDays} label="Attendance" value={`${animatedAttendance}%`} accent={attendancePct === 0 ? 'blue' : attendancePct >= 90 ? 'emerald' : attendancePct >= 75 ? 'amber' : 'rose'} />
           <MetricTile icon={Award} label={`Rank · ${PERIODS.find(p => p.id === reportPeriod)?.label || 'Overall'}`} value={data?.rank ? `#${data.rank}` : '--'} accent="amber" />
-          <div className="rounded-card p-4 ring-1 bg-gradient-to-br from-orange-50 to-amber-50 ring-orange-100 shadow-soft">
-            <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-orange-400">
+          <div className="rounded-card p-2.5 md:p-4 ring-1 bg-gradient-to-br from-orange-50 to-amber-50 ring-orange-100 shadow-soft">
+            <div className="flex items-center gap-1 text-[10px] md:text-xs font-bold uppercase text-orange-400">
               <span>🔥</span> Streak
             </div>
-            <div className="mt-2 text-2xl md:text-3xl font-black text-slate-950 tabular-nums leading-none">
+            <div className="mt-1.5 text-xl md:text-3xl font-black text-slate-950 tabular-nums leading-none">
               {animatedStreak}
               <span className="text-sm font-bold text-orange-300 ml-1">days</span>
             </div>
             {(streakData?.best || 0) > 0 && (
-              <div className="text-[11px] font-bold text-slate-400 mt-1">Best {streakData.best}d</div>
+              <div className="text-[10px] font-bold text-slate-400 mt-1">Best {streakData.best}d</div>
             )}
           </div>
         </div>
@@ -475,10 +475,10 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
         {insightChips.length > 0 && (
           <div className="col-span-2 md:col-span-6 xl:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
             {insightChips.map((chip, i) => (
-              <div key={i} className="rounded-card p-4 bg-white border border-slate-100 shadow-soft flex flex-col gap-1.5">
-                <span className="text-xl">{chip.emoji}</span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{chip.title}</span>
-                <span className="text-sm font-extrabold text-slate-800 leading-snug">{chip.desc}</span>
+              <div key={i} className="rounded-card p-2.5 md:p-4 bg-white border border-slate-100 shadow-soft flex flex-col gap-1">
+                <span className="text-lg md:text-xl">{chip.emoji}</span>
+                <span className="text-[9px] md:text-[10px] font-black uppercase tracking-wider text-slate-400">{chip.title}</span>
+                <span className="text-xs md:text-sm font-extrabold text-slate-800 leading-snug">{chip.desc}</span>
               </div>
             ))}
           </div>
@@ -508,13 +508,15 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           <EngagementHeatmap data={heatmapData} />
         </GlassCard>
         <GlassCard className="col-span-1 md:col-span-3 xl:col-span-3" title="Attendance" subtitle="Present days and consistency" tone="emerald">
-          <div className="flex-1 flex items-center justify-center py-2">
-            <LiquidFillGauge percentage={attendancePct} size={110} />
+          <div className="flex-1 flex items-center justify-center py-1 md:py-4">
+            <div className="md:hidden"><LiquidFillGauge percentage={attendancePct} size={100} /></div>
+            <div className="hidden md:block"><LiquidFillGauge percentage={attendancePct} size={150} /></div>
           </div>
         </GlassCard>
         <GlassCard className="col-span-1 md:col-span-3 xl:col-span-3" title="Score Health" subtitle="Current academic average" tone="amber">
-          <div className="flex-1 flex items-center justify-center py-2">
-            <NeonProgressGauge percentage={avgScore} label="Average" color="#D97706" />
+          <div className="flex-1 flex items-center justify-center py-1 md:py-4">
+            <div className="md:hidden"><NeonProgressGauge percentage={avgScore} label="Average" color="#D97706" compact /></div>
+            <div className="hidden md:block"><NeonProgressGauge percentage={avgScore} label="Average" color="#D97706" /></div>
           </div>
         </GlassCard>
         <GlassCard className="col-span-2 md:col-span-6 xl:col-span-6" title="Recent Activity" subtitle="Latest learning events" tone="blue">
