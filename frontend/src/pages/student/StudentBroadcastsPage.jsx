@@ -7,7 +7,6 @@ import { apiClient, broadcastApi } from '../../lib/api';
 import VoiceNotePlayer from '../../components/shared/VoiceNotePlayer';
 import SubjectIcon from '../../components/shared/SubjectIcon';
 import SecureFileViewer from '../../components/shared/SecureFileViewer';
-import useBroadcastSocket from '../../hooks/useBroadcastSocket';
 import { fmtTime, fmtChatDate } from '../../lib/datetime';
 
 const formatChatDate = fmtChatDate;
@@ -42,30 +41,43 @@ export default function StudentBroadcastsPage() {
     }
   }, [user?.standard_id, user?.standard_name, user?.standard_emoji]);
 
-  // Fast first paint: pull history over plain HTTP the moment we know the
-  // standard, in parallel with the WebSocket. HTTP reuses the warm keep-alive
-  // connection, so messages show up well before the WS handshake completes; the
-  // WS then takes over for live updates.
+  // Poll for new broadcasts every 20 seconds instead of holding a persistent
+  // WebSocket — announcements tolerate a short delay, and polling uses zero
+  // server memory between requests (vs. 300 open sockets on EC2 t2.micro).
   useEffect(() => {
     if (!standardId) return;
     let cancelled = false;
-    apiClient(`/broadcasts?standard_id=${standardId}`)
-      .then(rows => {
-        if (cancelled || !Array.isArray(rows)) return;
-        const now = new Date();
-        const formatted = rows
-          .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
-          .map(mapBroadcast);
-        // Don't clobber a longer list the WS may have already delivered.
-        setBroadcasts(prev => (formatted.length >= prev.length ? formatted : prev));
-        const unseen = formatted.map(b => b.id).filter(id => id && !markedReadRef.current.has(id));
-        if (unseen.length > 0) {
-          broadcastApi.markRead(unseen).catch(() => {});
-          unseen.forEach(id => markedReadRef.current.add(id));
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+
+    const fetchBroadcasts = () => {
+      apiClient(`/broadcasts?standard_id=${standardId}`)
+        .then(rows => {
+          if (cancelled || !Array.isArray(rows)) return;
+          const now = new Date();
+          const formatted = rows
+            .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
+            .map(mapBroadcast);
+          setBroadcasts(formatted);
+          const unseen = formatted.map(b => b.id).filter(id => id && !markedReadRef.current.has(id));
+          if (unseen.length > 0) {
+            broadcastApi.markRead(unseen).catch(() => {});
+            unseen.forEach(id => markedReadRef.current.add(id));
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchBroadcasts(); // immediate on mount
+    const pollId = setInterval(fetchBroadcasts, 20000); // then every 20 s
+
+    // Also refresh instantly when the student switches back to this tab.
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchBroadcasts(); };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [standardId]);
 
   // Keep the module cache in sync with the rendered list for instant re-opens.
@@ -83,40 +95,6 @@ export default function StudentBroadcastsPage() {
     return () => cancelAnimationFrame(frame);
   }, [broadcasts.length]);
 
-  // Live updates over an auto-reconnecting WebSocket (see useBroadcastSocket).
-  useBroadcastSocket(standard?.id, (data) => {
-    if (data.type === 'history') {
-      const now = new Date();
-      const formatted = data.data
-        .filter(b => !b.deleted && !(b.scheduled_for && new Date(b.scheduled_for) > now))
-        .map(mapBroadcast);
-      setBroadcasts(formatted);
-      const ids = formatted.map(b => b.id).filter(Boolean);
-      const unseen = ids.filter(id => !markedReadRef.current.has(id));
-      if (unseen.length > 0) {
-        broadcastApi.markRead(unseen).catch(() => {});
-        unseen.forEach(id => markedReadRef.current.add(id));
-      }
-    } else if (data.type === 'new_broadcast') {
-      const b = data.data;
-      if (b.deleted) return;
-      if (b.scheduled_for && new Date(b.scheduled_for) > new Date()) return;
-      const newMsg = mapBroadcast(b);
-      setBroadcasts(prev => {
-        if (prev.some(x => x.id === newMsg.id)) return prev;
-        return [...prev, newMsg];
-      });
-      if (b.id && !markedReadRef.current.has(b.id)) {
-        broadcastApi.markRead([b.id]).catch(() => {});
-        markedReadRef.current.add(b.id);
-      }
-    } else if (data.type === 'delete_broadcast') {
-      setBroadcasts(prev => prev.filter(b => b.id !== data.id));
-    } else if (data.type === 'edit_broadcast') {
-      const b = data.data;
-      setBroadcasts(prev => prev.map(x => x.id === b.id ? { ...x, text: b.message, edited: true } : x));
-    }
-  });
 
   function mapBroadcast(b) {
     return {
