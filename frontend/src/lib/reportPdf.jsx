@@ -1887,7 +1887,7 @@ export const ExamResultTemplateV3 = ({ reviewData, result, student, testMeta }) 
           />
           <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 30 }} />
+              <col style={{ width: 38 }} />
               <col />
               <col style={{ width: 155 }} />
               <col style={{ width: 155 }} />
@@ -1998,7 +1998,7 @@ const ClassMarksheetTemplate = ({ test, attempts, stats }) => {
       <div className="mt-4">
         <table className="w-full border-collapse text-left" style={{ tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 36 }} />
+            <col style={{ width: 44 }} />
             <col style={{ width: 86 }} />
             <col />
             <col style={{ width: 64 }} />
