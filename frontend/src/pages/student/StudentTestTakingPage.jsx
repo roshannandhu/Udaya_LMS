@@ -89,16 +89,25 @@ export default function StudentTestTakingPage() {
   const [remaining, setRemaining] = useState(persisted?.deadline ? computeRemaining() : totalSecs);
 
   // Tick from the deadline once started; auto-submit when it hits 0.
+  // A random 0–3 s jitter is added before calling submit so that all students
+  // in the same exam don't hit the server simultaneously when the timer expires.
+  const jitterFired = useRef(false);
   useEffect(() => {
     if (!hasStarted || submitted) return;
+    jitterFired.current = false;
+    let jitterTimer = null;
     const tick = () => {
       const r = computeRemaining();
       setRemaining(r);
-      if (r <= 0) { submitRef.current?.(true); }
+      if (r <= 0 && !jitterFired.current) {
+        jitterFired.current = true;
+        const delay = Math.random() * 3000; // spread 300 students over 3 s
+        jitterTimer = setTimeout(() => submitRef.current?.(true), delay);
+      }
     };
     tick();
     const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    return () => { clearInterval(id); clearTimeout(jitterTimer); };
   }, [hasStarted, submitted]);
 
   // Auto-submit on 3rd warning (outside state updater to avoid strict-mode double-fire)
