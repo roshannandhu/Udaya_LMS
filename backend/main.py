@@ -7196,14 +7196,17 @@ Return ONLY valid JSON:
 
 CONTENT:
 {text}"""
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.45,
-        response_format={"type": "json_object"},
-        max_tokens=6000,
-    )
-    return _mcq_normalise(json.loads(r.choices[0].message.content).get("questions", []))
+    try:
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.45,
+            response_format={"type": "json_object"},
+            max_tokens=6000,
+        )
+        return _mcq_normalise(json.loads(r.choices[0].message.content).get("questions", []))
+    except Exception:
+        return []
 
 def _mcq_evaluate(client, questions, content_snippet):
     q_json = json.dumps(
@@ -7338,7 +7341,7 @@ def _run_mcq_generation(groq_key: str, text: str, num_questions: int, hint: str)
     # fallback_pool: last-resort sub-threshold questions (NOT counted in quality_10)
     verified_pool: list = []
     fallback_pool: list = []
-    MAX_ITERATIONS = 6
+    MAX_ITERATIONS = 3
     iterations_done = 0
     eval_ctx = text[:8000]  # more context for evaluator than the old text[:5000]
 
