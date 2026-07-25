@@ -77,10 +77,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     
-    <!-- Storage/Media: file uploads & attachments -->
+    <!-- Storage/Media: file uploads & attachments (READ_MEDIA_IMAGES/VIDEO removed; WebView uses system picker) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
     <!-- Camera + microphone: live classes (Zoom), photo/video capture, voice notes. -->
