@@ -168,12 +168,12 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-neutral-900/40" onClick={onClose}>
       <motion.div onClick={(e) => e.stopPropagation()}
         variants={popIn} initial="hidden" animate="show"
-        className={`w-full ${sizes[size]} max-h-[95vh] sm:max-h-[90vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-2xl shadow-xl border border-[#EFEDEA]`}>
-        <div className="px-5 py-4 border-b border-[#EFEDEA] flex items-center justify-between sticky top-0 z-10 bg-white rounded-t-3xl sm:rounded-t-2xl">
+        className={`w-full ${sizes[size]} max-h-[95vh] sm:max-h-[90vh] bg-white rounded-t-3xl sm:rounded-2xl shadow-xl border border-[#EFEDEA] flex flex-col`}>
+        <div className="px-5 py-4 border-b border-[#EFEDEA] flex items-center justify-between flex-shrink-0 bg-white rounded-t-3xl sm:rounded-t-2xl z-10">
           <h2 className="text-sm font-semibold">{title}</h2>
           <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded-lg hover:bg-[#F4F2EF] dark:hover:bg-white/10"><X size={16} /></button>
         </div>
-        <div className="p-4 sm:p-5">{children}</div>
+        <div className="p-4 sm:p-5 flex-1 overflow-y-auto">{children}</div>
       </motion.div>
     </motion.div>
   );

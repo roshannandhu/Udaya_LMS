@@ -10,6 +10,8 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
   const [error, setError] = useState('');
 
   // Subject selector (used when no defaultClassId is provided)
+  const [standards, setStandards] = useState([]);
+  const [selectedStandardId, setSelectedStandardId] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
 
@@ -48,7 +50,9 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       setStep(1);
       setError('');
       if (!defaultClassId) {
-        apiClient('/subjects').then(data => setSubjects(Array.isArray(data) ? data : [])).catch(() => {});
+        setSelectedStandardId('');
+        setSubjects([]);
+        apiClient('/standards').then(data => setStandards(Array.isArray(data) ? data : [])).catch(() => {});
       }
       
       if (editTestId) {
@@ -101,6 +105,15 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       }
     }
   }, [open, defaultClassId, editTestId]);
+
+  // Load subjects whenever standard changes (only when no defaultClassId)
+  useEffect(() => {
+    if (defaultClassId || !selectedStandardId) { setSubjects([]); setSelectedClassId(''); return; }
+    apiClient(`/subjects?standard_id=${selectedStandardId}`)
+      .then(data => setSubjects(Array.isArray(data) ? data : []))
+      .catch(() => setSubjects([]));
+    setSelectedClassId('');
+  }, [selectedStandardId, defaultClassId]);
 
   const classId = defaultClassId || selectedClassId;
 
@@ -215,24 +228,40 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
       {fetchingTest ? (
         <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-neutral-400" /></div>
       ) : (
-      <div className="space-y-3 max-h-[82vh] overflow-y-auto pr-1 custom-scrollbar">
+      <div className="space-y-3">
         {error && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-md font-medium sticky top-0 z-10">{error}</div>}
 
         {step === 1 ? (
           <div className="space-y-3">
             {!defaultClassId && (
-              <div>
-                <label className="block text-xs font-medium text-neutral-600 mb-1">Subject</label>
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md bg-white/50 border border-white/60 focus:border-neutral-400 outline-none text-sm"
-                >
-                  <option value="">— select a subject —</option>
-                  {subjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-600 mb-1">Standard</label>
+                  <select
+                    value={selectedStandardId}
+                    onChange={(e) => setSelectedStandardId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-white/50 border border-white/60 focus:border-neutral-400 outline-none text-sm"
+                  >
+                    <option value="">— select standard —</option>
+                    {standards.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-600 mb-1">Subject</label>
+                  <select
+                    value={selectedClassId}
+                    onChange={(e) => setSelectedClassId(e.target.value)}
+                    disabled={!selectedStandardId}
+                    className="w-full px-3 py-2 rounded-md bg-white/50 border border-white/60 focus:border-neutral-400 outline-none text-sm disabled:opacity-40"
+                  >
+                    <option value="">— select subject —</option>
+                    {subjects.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             <Input label="Test title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Weekly Quiz 1" />
@@ -367,7 +396,7 @@ export default function NewTestModal({ open, onClose, defaultClassId, onSuccess,
               <Plus size={16} className="mr-1.5" /> Add Question
             </Btn>
 
-            <div className="flex gap-3 pt-3 border-t border-white/40 sticky bottom-0 bg-white/80 backdrop-blur-md p-3 -mx-1 rounded-xl">
+            <div className="flex gap-3 border-t border-[#EFEDEA] sticky bottom-0 bg-white/95 backdrop-blur-md px-4 py-3 -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 rounded-b-3xl sm:rounded-b-2xl">
               <Btn onClick={() => setStep(1)} variant="ghost" icon={ArrowLeft}>Back</Btn>
               <Btn variant="primary" onClick={handleSubmit} disabled={loading} className="flex-1">
                 {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : <Check size={16} className="mr-2" />}
