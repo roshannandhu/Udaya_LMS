@@ -7176,8 +7176,36 @@ def _mcq_normalise(q_list, source_scores=None):
         out.append(entry)
     return out
 
-def _mcq_generate(client, text, count, hint):
-    prompt = f"""You are creating MCQ questions for a {hint} class. Target standard: PERFECT quality.
+# ── MCQ AI Guard ─────────────────────────────────────────────────────────────
+# Circuit breaker: if Groq 429s, skip it for 60 s and route to Gemini.
+_groq_circuit: dict = {"tripped_at": None, "reset_after": 60}
+
+def _groq_circuit_open() -> bool:
+    t = _groq_circuit["tripped_at"]
+    if t is None:
+        return False
+    if time_module.time() - t > _groq_circuit["reset_after"]:
+        _groq_circuit["tripped_at"] = None
+        return False
+    return True
+
+def _trip_groq_circuit():
+    _groq_circuit["tripped_at"] = time_module.time()
+
+# PII sanitizer: strip phone/email/Aadhaar from any text before it leaves the server.
+_PII_PATTERNS = [
+    (re.compile(r'\b[6-9]\d{9}\b'), '[PHONE]'),
+    (re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'), '[EMAIL]'),
+    (re.compile(r'\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b'), '[AADHAAR]'),
+]
+
+def _sanitize_pii(text: str) -> str:
+    for pat, rep in _PII_PATTERNS:
+        text = pat.sub(rep, text)
+    return text
+
+def _build_mcq_prompt(text: str, count: int, hint: str) -> str:
+    return f"""You are creating MCQ questions for a {hint} class. Target standard: PERFECT quality.
 
 Generate exactly {count} questions from the content below.
 
@@ -7196,6 +7224,42 @@ Return ONLY valid JSON:
 
 CONTENT:
 {text}"""
+
+def _mcq_generate_gemini(text: str, count: int, hint: str) -> list:
+    """Single-pass MCQ generation via Gemini — used when Groq circuit is open."""
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    if not gemini_key:
+        return []
+    prompt = _build_mcq_prompt(text, count, hint)
+    try:
+        with httpx.Client(timeout=50) as client:
+            for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+                url = (f"https://generativelanguage.googleapis.com/v1beta/models"
+                       f"/{model}:generateContent?key={gemini_key}")
+                resp = client.post(url, json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.45,
+                        "maxOutputTokens": 6000,
+                        "responseMimeType": "application/json",
+                    },
+                })
+                if resp.status_code == 404:
+                    continue
+                if not resp.is_success:
+                    return []
+                raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+                return _mcq_normalise(json.loads(raw).get("questions", []))
+    except Exception:
+        return []
+    return []
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _mcq_generate(client, text, count, hint):
+    prompt = _build_mcq_prompt(text, count, hint)
     try:
         r = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -7205,7 +7269,10 @@ CONTENT:
             max_tokens=6000,
         )
         return _mcq_normalise(json.loads(r.choices[0].message.content).get("questions", []))
-    except Exception:
+    except Exception as e:
+        err = str(e).lower()
+        if "429" in err or "rate_limit" in err or "quota" in err or "too many" in err:
+            raise  # caller trips the circuit
         return []
 
 def _mcq_evaluate(client, questions, content_snippet):
@@ -7327,13 +7394,48 @@ def _mcq_balance(verified_pool, target_n):
     return selected[:target_n]
 
 def _run_mcq_generation(groq_key: str, text: str, num_questions: int, hint: str) -> dict:
-    """Core MCQ quality loop — shared by PDF and text endpoints."""
-    text = text[:12000]
+    """Core MCQ quality loop — shared by PDF and text endpoints.
+    Guard: PII sanitized before leaving server; Groq→Gemini circuit-breaker fallback."""
+    text = _sanitize_pii(text[:12000])
     hint = hint.strip() or "general"
-    client = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
 
-    initial_count = num_questions * 2
-    current_batch = _mcq_generate(client, text, initial_count, hint)
+    # Route: use Groq quality loop when healthy; fall to Gemini single-pass otherwise.
+    use_gemini = _groq_circuit_open() or not groq_key
+    if not use_gemini:
+        try:
+            client = _GroqClient(api_key=groq_key, default_headers={"X-Groq-No-Store": "true"})
+            initial_count = num_questions * 2
+            current_batch = _mcq_generate(client, text, initial_count, hint)
+        except Exception as e:
+            err = str(e).lower()
+            if "429" in err or "rate_limit" in err or "quota" in err or "too many" in err:
+                _trip_groq_circuit()
+            use_gemini = True
+            current_batch = []
+
+    if use_gemini:
+        gemini_qs = _mcq_generate_gemini(text, num_questions, hint)
+        if not gemini_qs:
+            raise HTTPException(status_code=503, detail="AI generation temporarily unavailable. Please try again in a moment.")
+        # Gemini single-pass: skip quality loop, wrap directly into final format
+        final = [{**{k: v for k, v in q.items() if not k.startswith("_")}, "order_num": i + 1}
+                 for i, q in enumerate(gemini_qs[:num_questions])]
+        _clean_pdf_cache()
+        session_id = uuid.uuid4().hex
+        _pdf_session_cache[session_id] = {
+            "text": text, "selected_pages": [], "page_count": 0,
+            "expires": time_module.time() + _PDF_SESSION_TTL,
+        }
+        diff_counts = {"easy": 0, "medium": 0, "hard": 0}
+        for q in final:
+            d = q.get("difficulty", "medium")
+            diff_counts[d] = diff_counts.get(d, 0) + 1
+        return {
+            "session_id": session_id, "questions": final, "iterations": 1,
+            "avg_quality": 4.0, "quality_10": 8.0,
+            "difficulty_distribution": diff_counts, "provider": "gemini",
+        }
+
     if not current_batch:
         raise HTTPException(status_code=500, detail="AI returned no questions. Try a longer or clearer file.")
 
@@ -7428,6 +7530,7 @@ def _run_mcq_generation(groq_key: str, text: str, num_questions: int, hint: str)
         "avg_quality":             5.0 if quality_10 == 10.0 else round(quality_10 / 2, 1),
         "quality_out_of_10":       quality_10,
         "difficulty_distribution": diff_counts,
+        "provider":                "groq",
     }
 
 
