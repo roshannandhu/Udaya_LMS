@@ -455,14 +455,12 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
-        {/* The YouTube embed renders its OWN centre play/pause button that we can't
-            remove from the cross-origin iframe. We make the iframe non-interactive
-            (only Vidstack's controls/gestures drive playback) and, when paused,
-            cover that centre button with our own overlay — so the user only ever
-            sees ONE button. Also hide Vidstack's flashing keyboard-action display. */}
         <style>{`
-          .udaya-player [data-provider="youtube"] iframe, .udaya-player iframe[src*="youtube"] { pointer-events: none !important; }
           .udaya-player .vds-kb-action { display: none !important; }
+          ${isYouTube ? `
+            .udaya-player .vds-controls { display: none !important; }
+            .udaya-player .vds-gesture { display: none !important; }
+          ` : ''}
         `}</style>
         <div ref={playerBoxRef} className="udaya-player relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
           {fileSrc ? (
