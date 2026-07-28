@@ -34,8 +34,9 @@ export default function StudentVideoPlayerPage() {
   const navigate = useNavigate();
   const user = useAuthStore(s => s.user);
 
-  const playerRef = useRef(null);       // Vidstack player ref (all sources)
-  const playerBoxRef = useRef(null);    // container — to reach the YouTube iframe + settings menu
+  const playerRef = useRef(null);       // Vidstack player ref (file sources)
+  const playerBoxRef = useRef(null);    // container div
+  const ytIframeRef = useRef(null);     // proxy <iframe> pointing to our backend
 
   const [video, setVideo]         = useState(null);
   const [videos, setVideos]       = useState([]);   // all class videos (for "Up next")
@@ -69,10 +70,6 @@ export default function StudentVideoPlayerPage() {
 
   // Captions (best-effort toggle on the YouTube embed)
   const [cc, setCc] = useState(false);
-
-  // Paused flag (starts true = pre-play). Drives the overlay that COVERS YouTube's
-  // own centre play/pause button so the user never sees a duplicate.
-  const [isPaused, setIsPaused] = useState(true);
 
   // Playback state (drives chapter highlight + progress save + completion)
   const [chapterActive, setChapterActive] = useState(-1);
@@ -151,6 +148,7 @@ export default function StudentVideoPlayerPage() {
         }
       });
   }, [video?.source_type, videoId]);
+
 
   // When going offline, load blob URL if video is saved
   useEffect(() => {
@@ -289,58 +287,48 @@ export default function StudentVideoPlayerPage() {
     if (!completed && dur > 0 && watchedRef.current >= dur * 0.9) markComplete();
   };
 
-  // YouTube watch-tracking poll. Vidstack's YouTube provider emits timeupdate
-  // sparsely and frequently reports duration 0, so polling the player ~1s while it
-  // plays is what actually drives watch %, the 8s progress save, auto-complete and
-  // the one-time resume seek (which the provider ignores at canplay). File sources
-  // use the richer onTimeUpdate event instead.
+  // YouTube watch-tracking: the proxy iframe's YT.Player posts tick data via
+  // postMessage. File sources use Vidstack's onTimeUpdate instead.
   useEffect(() => {
     if (video?.source_type !== 'youtube') return;
-    const id = setInterval(() => {
-      const p = playerRef.current;
-      if (!p || p.paused) return;
-      const t = p.currentTime || 0;
-      const dur = p.duration || video?.duration_secs || 0;
-      // Apply the resume seek once the YT player is actually reporting time.
+    const onMsg = (e) => {
+      const d = e.data;
+      if (!d || typeof d !== 'object' || d.type !== 'yt-tick') return;
+      const { t, dur, state } = d;
+      if (state !== 1) return; // 1 = playing
       if (!resumedRef.current && t > 0) {
         resumedRef.current = true;
         const resume = video?.progress_secs || 0;
         if (resume > 10 && Math.abs(resume - t) > 2) {
-          try { p.currentTime = resume; lastTickRef.current = resume; return; } catch { /* ignore */ }
+          ytIframeRef.current?.contentWindow?.postMessage({ type: 'yt-seek', secs: resume }, '*');
+          lastTickRef.current = resume;
+          return;
         }
       }
       handleTick(t, dur);
-    }, 1000);
-    return () => clearInterval(id);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
   }, [video?.id]);
 
   const isYouTube = video?.source_type === 'youtube';
 
-  // Chapter click → seek whichever player is active.
   const seekTo = (secs) => {
+    if (isYouTube) {
+      const win = ytIframeRef.current?.contentWindow;
+      win?.postMessage({ type: 'yt-seek', secs }, '*');
+      win?.postMessage({ type: 'yt-play' }, '*');
+      return;
+    }
     const p = playerRef.current;
     if (!p) return;
     try { p.currentTime = secs; p.play?.(); } catch { /* ignore */ }
   };
 
-  // Best-effort captions toggle for the YouTube embed. Vidstack's YouTube provider
-  // doesn't surface caption tracks, so we drive YouTube's caption module directly
-  // via postMessage. Works only when the video actually has captions.
   const toggleCaptions = () => {
-    const iframe = playerBoxRef.current?.querySelector('iframe');
-    const win = iframe?.contentWindow;
     const next = !cc;
     setCc(next);
-    if (!win) return;
-    const send = (func, args) => {
-      try { win.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch { /* ignore */ }
-    };
-    if (next) {
-      send('loadModule', ['captions']);
-      send('setOption', ['captions', 'track', {}]);
-    } else {
-      send('unloadModule', ['captions']);
-    }
+    ytIframeRef.current?.contentWindow?.postMessage({ type: 'yt-captions', on: next }, '*');
   };
 
   const toggleLike = async () => {
@@ -417,20 +405,15 @@ export default function StudentVideoPlayerPage() {
   const isStorageUrl = video.cloudflare_video_id?.startsWith('https://');
   const showOffline  = !isOnline && blobUrl;
 
-  // Resolve source for Vidstack
+  // Resolve source for Vidstack (file sources only — YouTube uses a raw <iframe>)
   let fileSrc = null;
   if (showOffline) {
     fileSrc = { src: blobUrl, type: 'video/mp4' };
   } else if (isOnline && isStorageUrl) {
     fileSrc = { src: video.cloudflare_video_id, type: 'video/mp4' };
-  } else if (isOnline && video.cloudflare_video_id && !isStorageUrl && !isYouTube) {
+  } else if (isOnline && !isYouTube && video.cloudflare_video_id && !isStorageUrl) {
     fileSrc = { src: `https://videodelivery.net/${video.cloudflare_video_id}/manifest/video.m3u8`, type: 'application/x-mpegurl' };
-  } else if (isOnline && isYouTube && ytToken && !ytError) {
-    fileSrc = `youtube/${ytToken}`;
   }
-
-  const showYouTubeLoading    = isOnline && isYouTube && !ytToken && !ytError;
-  const showOfflineUnavailable = !isOnline && !blobUrl;
   const guardLabel = user?.username || user?.name || 'student';
 
   return (
@@ -455,15 +438,42 @@ export default function StudentVideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto">
         {/* ── Player (fixed 16/9; same on phone & laptop) ── */}
-        <style>{`
-          .udaya-player .vds-kb-action { display: none !important; }
-          ${isYouTube ? `
-            .udaya-player .vds-controls { display: none !important; }
-            .udaya-player .vds-gesture { display: none !important; }
-          ` : ''}
-        `}</style>
+        <style>{`.udaya-player .vds-kb-action { display: none !important; }`}</style>
         <div ref={playerBoxRef} className="udaya-player relative bg-black w-full overflow-hidden md:rounded-b-xl" style={{ aspectRatio: '16 / 9' }}>
-          {fileSrc ? (
+          {isYouTube ? (
+            ytError ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
+                <AlertTriangle size={28} className="text-white/40" />
+                <p className="text-white/70 text-sm">{ytError}</p>
+                <button onClick={() => navigate(-1)} className="text-white/50 text-xs underline mt-1">Go back</button>
+              </div>
+            ) : !ytToken ? (
+              <div className="absolute inset-0 flex items-center justify-center gap-2 text-white/60 text-sm">
+                <Loader2 className="animate-spin" size={18} /> Loading video…
+              </div>
+            ) : (
+              <>
+                <iframe
+                  ref={ytIframeRef}
+                  src={`${import.meta.env.VITE_API_URL}/videos/embed/${ytToken}`}
+                  className="absolute inset-0 w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                  title={video.title}
+                />
+                <button
+                  type="button"
+                  onClick={toggleCaptions}
+                  aria-label="Captions"
+                  aria-pressed={cc}
+                  title={cc ? 'Turn off captions' : 'Turn on captions'}
+                  className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/60 text-white hover:bg-black/80 transition-colors"
+                >
+                  {cc ? <Captions size={18} /> : <CaptionsOff size={18} />}
+                </button>
+              </>
+            )
+          ) : fileSrc ? (
             <MediaPlayer
               ref={playerRef}
               src={fileSrc}
@@ -476,42 +486,11 @@ export default function StudentVideoPlayerPage() {
               onCanPlay={onCanPlay}
               onTimeUpdate={onTimeUpdate}
               onEnded={onEnded}
-              onPlay={() => setIsPaused(false)}
-              onPlaying={() => setIsPaused(false)}
-              onPause={() => setIsPaused(true)}
             >
               <MediaProvider />
-              <DefaultVideoLayout
-                icons={defaultLayoutIcons}
-                slots={isYouTube ? {
-                  // CC lives INSIDE the player's top controls so it shows in
-                  // fullscreen too (an outside overlay would vanish there).
-                  topControlsGroupEnd: (
-                    <button
-                      type="button"
-                      className="vds-button"
-                      onClick={toggleCaptions}
-                      aria-label="Captions"
-                      aria-pressed={cc}
-                      title={cc ? 'Turn off captions' : 'Turn on captions'}
-                    >
-                      {cc ? <Captions size={24} /> : <CaptionsOff size={24} />}
-                    </button>
-                  ),
-                } : undefined}
-              />
+              <DefaultVideoLayout icons={defaultLayoutIcons} />
             </MediaPlayer>
-          ) : ytError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
-              <AlertTriangle size={28} className="text-white/40" />
-              <p className="text-white/70 text-sm">{ytError}</p>
-              <button onClick={() => navigate(-1)} className="text-white/50 text-xs underline mt-1">Go back</button>
-            </div>
-          ) : showYouTubeLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 text-white/60 text-sm">
-              <Loader2 className="animate-spin" size={18} /> Loading video…
-            </div>
-          ) : showOfflineUnavailable ? (
+          ) : !isOnline && !blobUrl ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/70 px-8 text-center">
               <WifiOff size={40} className="text-white/40" />
               <p className="text-sm font-medium text-white/80">You're offline</p>
@@ -526,7 +505,6 @@ export default function StudentVideoPlayerPage() {
               <p>No video available for this lesson.</p>
             </div>
           )}
-
         </div>
 
         {/* ── Info panel ── */}

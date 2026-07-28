@@ -204,6 +204,15 @@ ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get("ZOOM_WEBHOOK_SECRET_TOKEN", "")
 
 _zoom_token_cache: dict = {"token": None, "expires_at": 0.0}
 
+# Opaque embed tokens for YouTube videos — maps UUID → {yt_id, expires_at}.
+# The YouTube video ID never leaves the backend; the frontend only gets the UUID.
+_yt_embed_tokens: dict = {}
+
+FRONTEND_ORIGINS = os.getenv(
+    "FRONTEND_URL",
+    "https://udaya-learn.com https://www.udaya-learn.com http://localhost:3001 http://localhost:3002 http://localhost:3003",
+)
+
 supabase: Optional[Client] = None
 service_supabase: Optional[Client] = None
 
@@ -6222,11 +6231,84 @@ async def get_video_token(video_id: str, user=Depends(verify_token)):
         if not student_check.data or student_check.data.get("blocked"):
             raise HTTPException(status_code=403, detail="Account blocked")
 
+    # Issue an opaque embed token — the YouTube ID never reaches the client.
+    now = time_module.time()
+    expired = [k for k, v in _yt_embed_tokens.items() if v["expires_at"] < now]
+    for k in expired:
+        del _yt_embed_tokens[k]
+    embed_token = str(uuid.uuid4())
+    _yt_embed_tokens[embed_token] = {"yt_id": yt_id, "expires_at": now + 7200}
+
     return {
-        "token": yt_id,
+        "token": embed_token,
         "source_type": "youtube",
         "title": video["title"],
     }
+
+
+@app.get("/api/videos/embed/{embed_token}")
+async def youtube_embed_proxy(embed_token: str):
+    """Serves a self-contained HTML page that embeds the YouTube player.
+    The YouTube video ID never appears in the client-facing URL or DOM."""
+    entry = _yt_embed_tokens.get(embed_token)
+    if not entry or entry["expires_at"] < time_module.time():
+        return Response("Expired or invalid token.", status_code=403, media_type="text/plain")
+
+    yt_id = entry["yt_id"]
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>*{{margin:0;padding:0}}body{{background:#000;overflow:hidden}}#p{{position:fixed;top:0;left:0;width:100%;height:100%}}</style>
+</head>
+<body>
+<div id="p"></div>
+<script>
+(function(){{
+var s=document.createElement('script');
+s.src='https://www.youtube.com/iframe_api';
+document.head.appendChild(s);
+var pl;
+window.onYouTubeIframeAPIReady=function(){{
+  pl=new YT.Player('p',{{
+    videoId:'{yt_id}',
+    width:'100%',height:'100%',
+    playerVars:{{rel:0,modestbranding:1,playsinline:1}},
+    events:{{
+      onReady:function(){{
+        setInterval(function(){{
+          if(!pl||typeof pl.getCurrentTime!=='function')return;
+          window.parent.postMessage({{type:'yt-tick',t:pl.getCurrentTime(),dur:pl.getDuration(),state:pl.getPlayerState()}},'*');
+        }},1000);
+      }},
+      onStateChange:function(e){{window.parent.postMessage({{type:'yt-state',state:e.data}},'*');}}
+    }}
+  }});
+}};
+window.addEventListener('message',function(e){{
+  if(!pl)return;
+  var d=e.data;if(!d||typeof d!=='object')return;
+  if(d.type==='yt-seek')pl.seekTo(d.secs,true);
+  if(d.type==='yt-play')pl.playVideo();
+  if(d.type==='yt-captions'){{
+    try{{if(d.on){{pl.loadModule('captions');pl.setOption('captions','track',{{}});}}else pl.unloadModule('captions');}}catch(ex){{}}
+  }}
+}});
+}})();
+</script>
+</body>
+</html>"""
+
+    return Response(
+        content=html,
+        media_type="text/html",
+        headers={
+            "Cache-Control": "no-store, no-cache",
+            "Content-Security-Policy": f"frame-ancestors {FRONTEND_ORIGINS}",
+        },
+    )
 
 
 @app.get("/api/videos/{video_id}/thumbnail")
