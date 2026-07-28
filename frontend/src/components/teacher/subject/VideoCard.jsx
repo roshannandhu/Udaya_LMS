@@ -52,10 +52,12 @@ export default function VideoCard({ video, thumbnail, studentsCount, onView, onM
           </span>
         )}
 
-        {/* 3-dot button */}
+        {/* 3-dot button — always visible so it works on touch/mobile (no hover);
+            hover just deepens it. Was opacity-0 group-hover → unusable on phones. */}
         <button
           onClick={e => { e.stopPropagation(); onMenu(video.id, e); }}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-black/70 z-10"
+          aria-label="Video options"
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm text-white flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity duration-150 hover:bg-black/70 z-10"
         >
           <MoreVertical size={12} />
         </button>
