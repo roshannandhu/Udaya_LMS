@@ -135,10 +135,19 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStart() {
         super.onStart();
-        // Lock Android WebView font scaling to 100% to prevent OS-level 
-        // accessibility font sizes from breaking the web UI layouts.
         if (getBridge() != null && getBridge().getWebView() != null) {
-            getBridge().getWebView().getSettings().setTextZoom(100);
+            android.webkit.WebView wv = getBridge().getWebView();
+            // Lock Android WebView font scaling to 100% to prevent OS-level
+            // accessibility font sizes from breaking the web UI layouts.
+            wv.getSettings().setTextZoom(100);
+            // Kill the WebView's native long-press context menu ("Copy link",
+            // "Share…") EVERYWHERE — including inside the cross-origin YouTube
+            // <iframe>. Long-press is handled by the host WebView above the
+            // iframe origin boundary, so this reaches where page JS cannot,
+            // blocking the only way to lift a video URL on the phone app.
+            wv.setLongClickable(false);
+            wv.setOnLongClickListener(v -> true);
+            wv.setHapticFeedbackEnabled(false);
         }
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, WifiOff, Wifi, Heart, Loader2, Trash2, AlertTriangle, Clock, Play, Captions, CaptionsOff } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, WifiOff, Wifi, Heart, Loader2, Trash2, AlertTriangle, Clock, Play } from 'lucide-react';
 import { MediaPlayer, MediaProvider } from '@vidstack/react';
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/default/theme.css';
@@ -67,9 +67,6 @@ export default function StudentVideoPlayerPage() {
   // YouTube source needs a per-request token (the raw YT id is never sent in the list)
   const [ytToken, setYtToken]     = useState(null);
   const [ytError, setYtError]     = useState(null);
-
-  // Captions (best-effort toggle on the YouTube embed)
-  const [cc, setCc] = useState(false);
 
   // Playback state (drives chapter highlight + progress save + completion)
   const [chapterActive, setChapterActive] = useState(-1);
@@ -169,7 +166,6 @@ export default function StudentVideoPlayerPage() {
     lastTickRef.current = 0;
     lastSavedRef.current = 0;
     setWatchedPct(0);
-    setCc(false);
     cancelAutoNext();   // stop any pending auto-advance from the previous video
     return () => cancelAutoNext();
   }, [video?.id]);
@@ -325,12 +321,6 @@ export default function StudentVideoPlayerPage() {
     try { p.currentTime = secs; p.play?.(); } catch { /* ignore */ }
   };
 
-  const toggleCaptions = () => {
-    const next = !cc;
-    setCc(next);
-    ytIframeRef.current?.contentWindow?.postMessage({ type: 'yt-captions', on: next }, '*');
-  };
-
   const toggleLike = async () => {
     if (likeBusy) return;
     setLikeBusy(true);
@@ -452,26 +442,14 @@ export default function StudentVideoPlayerPage() {
                 <Loader2 className="animate-spin" size={18} /> Loading video…
               </div>
             ) : (
-              <>
-                <iframe
-                  ref={ytIframeRef}
-                  src={`${import.meta.env.VITE_API_URL}/videos/embed/${ytToken}`}
-                  className="absolute inset-0 w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                  allowFullScreen
-                  title={video.title}
-                />
-                <button
-                  type="button"
-                  onClick={toggleCaptions}
-                  aria-label="Captions"
-                  aria-pressed={cc}
-                  title={cc ? 'Turn off captions' : 'Turn on captions'}
-                  className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/60 text-white hover:bg-black/80 transition-colors"
-                >
-                  {cc ? <Captions size={18} /> : <CaptionsOff size={18} />}
-                </button>
-              </>
+              <iframe
+                ref={ytIframeRef}
+                src={`${import.meta.env.VITE_API_URL}/videos/embed/${ytToken}`}
+                className="absolute inset-0 w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                allowFullScreen
+                title={video.title}
+              />
             )
           ) : fileSrc ? (
             <MediaPlayer
