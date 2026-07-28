@@ -6261,32 +6261,155 @@ async def youtube_embed_proxy(embed_token: str):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>*{{margin:0;padding:0}}body{{background:#000;overflow:hidden}}#p{{position:fixed;top:0;left:0;width:100%;height:100%}}</style>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none}}
+body{{background:#000;overflow:hidden;font-family:sans-serif}}
+#p{{position:fixed;top:0;left:0;width:100%;height:100%}}
+#ov{{position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;cursor:pointer}}
+#bar{{position:fixed;bottom:0;left:0;right:0;z-index:20;padding:0 14px 12px;
+  background:linear-gradient(transparent,rgba(0,0,0,.8));
+  opacity:0;transition:opacity .25s;pointer-events:none}}
+#bar.on{{opacity:1;pointer-events:all}}
+#prog{{width:100%;height:4px;-webkit-appearance:none;appearance:none;
+  background:#ffffff44;border-radius:2px;cursor:pointer;outline:none;
+  margin-bottom:10px;display:block}}
+#prog::-webkit-slider-thumb{{-webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:#fff;cursor:pointer;margin-top:-5px}}
+#prog::-webkit-slider-runnable-track{{height:4px;border-radius:2px}}
+#row{{display:flex;align-items:center;gap:12px}}
+.btn{{background:none;border:none;cursor:pointer;padding:2px;line-height:0;color:#fff}}
+.btn svg{{width:22px;height:22px;fill:#fff}}
+#tm{{color:#fff;font-size:12px;white-space:nowrap;opacity:.9}}
+#vol{{width:70px;height:4px;-webkit-appearance:none;appearance:none;
+  background:#ffffff44;border-radius:2px;cursor:pointer;outline:none}}
+#vol::-webkit-slider-thumb{{-webkit-appearance:none;width:11px;height:11px;
+  border-radius:50%;background:#fff;cursor:pointer}}
+#fs{{margin-left:auto}}
+</style>
 </head>
 <body>
 <div id="p"></div>
+<div id="ov"></div>
+<div id="bar">
+  <input type="range" id="prog" min="0" max="1000" value="0" step="1">
+  <div id="row">
+    <button class="btn" id="pp" title="Play / Pause">
+      <svg id="si" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="sp" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
+    <span id="tm">0:00 / 0:00</span>
+    <input type="range" id="vol" min="0" max="100" value="100" title="Volume">
+    <button class="btn" id="fs" title="Fullscreen">
+      <svg id="fs-in" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+      <svg id="fs-out" viewBox="0 0 24 24" style="display:none"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+    </button>
+  </div>
+</div>
 <script>
+if(window===window.top){{document.documentElement.innerHTML='Access denied.';}}
 (function(){{
-var s=document.createElement('script');
-s.src='https://www.youtube.com/iframe_api';
-document.head.appendChild(s);
-var pl;
+var bar=document.getElementById('bar'),
+    ov=document.getElementById('ov'),
+    prog=document.getElementById('prog'),
+    pp=document.getElementById('pp'),
+    si=document.getElementById('si'),sp=document.getElementById('sp'),
+    tm=document.getElementById('tm'),
+    vol=document.getElementById('vol'),
+    fsbtn=document.getElementById('fs'),
+    fsin=document.getElementById('fs-in'),fsout=document.getElementById('fs-out');
+var pl,dur=0,seeking=false,hideT;
+
+// Block ALL right-click on this page
+document.addEventListener('contextmenu',function(e){{e.preventDefault();return false;}},true);
+
+// Show/hide control bar
+function show(){{bar.classList.add('on');clearTimeout(hideT);hideT=setTimeout(function(){{bar.classList.remove('on');}},3500);}}
+document.addEventListener('mousemove',show);
+document.addEventListener('touchstart',show,{{passive:true}});
+show();
+
+function fmt(s){{s=Math.floor(s||0);var m=Math.floor(s/60),sec=s%60;return m+':'+(sec<10?'0':'')+sec;}}
+
+function tick(t){{
+  tm.textContent=fmt(t)+' / '+fmt(dur);
+  if(!seeking&&dur>0){{
+    var v=Math.round((t/dur)*1000);
+    prog.value=v;
+    prog.style.background='linear-gradient(to right,#fff '+v/10+'%,#ffffff44 '+v/10+'%)';
+  }}
+}}
+
+function setPlaying(yes){{si.style.display=yes?'none':'';sp.style.display=yes?'':'none';}}
+
+// Load YT IFrame API
+var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
+
 window.onYouTubeIframeAPIReady=function(){{
   pl=new YT.Player('p',{{
     videoId:'{yt_id}',
     width:'100%',height:'100%',
-    playerVars:{{rel:0,modestbranding:1,playsinline:1}},
+    playerVars:{{rel:0,modestbranding:1,playsinline:1,controls:0,disablekb:1,iv_load_policy:3,fs:0}},
     events:{{
       onReady:function(){{
+        dur=pl.getDuration()||0;
         setInterval(function(){{
           if(!pl||typeof pl.getCurrentTime!=='function')return;
-          window.parent.postMessage({{type:'yt-tick',t:pl.getCurrentTime(),dur:pl.getDuration(),state:pl.getPlayerState()}},'*');
+          var t=pl.getCurrentTime(),d=pl.getDuration(),st=pl.getPlayerState();
+          if(d)dur=d;
+          tick(t);
+          window.parent.postMessage({{type:'yt-tick',t:t,dur:d,state:st}},'*');
         }},1000);
       }},
-      onStateChange:function(e){{window.parent.postMessage({{type:'yt-state',state:e.data}},'*');}}
+      onStateChange:function(e){{
+        setPlaying(e.data===1);
+        window.parent.postMessage({{type:'yt-state',state:e.data}},'*');
+      }}
     }}
   }});
 }};
+
+// Overlay: click = play/pause, right-click = blocked
+ov.addEventListener('click',function(){{if(!pl)return;if(pl.getPlayerState()===1)pl.pauseVideo();else pl.playVideo();}});
+ov.addEventListener('dblclick',function(){{
+  if(!document.fullscreenElement)document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();
+  else document.exitFullscreen&&document.exitFullscreen();
+}});
+
+// Play/pause button
+pp.addEventListener('click',function(){{if(!pl)return;if(pl.getPlayerState()===1)pl.pauseVideo();else pl.playVideo();}});
+
+// Seek bar
+prog.addEventListener('mousedown',function(){{seeking=true;}});
+prog.addEventListener('touchstart',function(){{seeking=true;}},{{passive:true}});
+prog.addEventListener('input',function(){{if(dur>0)tick((prog.value/1000)*dur);}});
+prog.addEventListener('change',function(){{if(pl&&dur>0)pl.seekTo((prog.value/1000)*dur,true);seeking=false;}});
+prog.addEventListener('touchend',function(){{if(pl&&dur>0)pl.seekTo((prog.value/1000)*dur,true);seeking=false;}});
+
+// Volume
+vol.addEventListener('input',function(){{if(pl)pl.setVolume(this.value);}});
+
+// Fullscreen button
+fsbtn.addEventListener('click',function(){{
+  if(!document.fullscreenElement){{
+    document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();
+  }}else{{document.exitFullscreen&&document.exitFullscreen();}}
+}});
+document.addEventListener('fullscreenchange',function(){{
+  var full=!!document.fullscreenElement;
+  fsin.style.display=full?'none':'';fsout.style.display=full?'':'none';
+}});
+
+// Keyboard shortcuts
+document.addEventListener('keydown',function(e){{
+  if(!pl)return;
+  if(e.code==='Space'){{e.preventDefault();if(pl.getPlayerState()===1)pl.pauseVideo();else pl.playVideo();}}
+  if(e.code==='ArrowRight'){{e.preventDefault();pl.seekTo(Math.min(dur,pl.getCurrentTime()+10),true);}}
+  if(e.code==='ArrowLeft'){{e.preventDefault();pl.seekTo(Math.max(0,pl.getCurrentTime()-10),true);}}
+  if(e.code==='ArrowUp'){{e.preventDefault();pl.setVolume(Math.min(100,(pl.getVolume()||0)+10));}}
+  if(e.code==='ArrowDown'){{e.preventDefault();pl.setVolume(Math.max(0,(pl.getVolume()||0)-10));}}
+}});
+
+// Commands from parent app (seek from chapter click, captions toggle)
 window.addEventListener('message',function(e){{
   if(!pl)return;
   var d=e.data;if(!d||typeof d!=='object')return;
