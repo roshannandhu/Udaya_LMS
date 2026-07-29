@@ -6492,6 +6492,7 @@ window.onYouTubeIframeAPIReady=function(){
     events:{
       onReady:function(){
         dur=pl.getDuration()||0;render();
+        pl.unMute();pl.setVolume(100);muted=false;vOn.style.display='';vOff.style.display='none';
         try{var tl=pl.getOption('captions','tracklist');if(tl&&tl.length)cc.style.display='';}catch(x){}
         setInterval(poll,1000);showControls();
       },

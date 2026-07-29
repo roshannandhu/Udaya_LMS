@@ -2,6 +2,7 @@ package com.udayalearn.lms;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -149,6 +150,18 @@ public class MainActivity extends BridgeActivity {
             wv.setOnLongClickListener(v -> true);
             wv.setHapticFeedbackEnabled(false);
         }
+    }
+
+    @Override
+    public void startActivity(Intent intent) {
+        Uri data = intent.getData();
+        if (data != null) {
+            String host = data.getHost();
+            if (host != null && (host.contains("youtube.com") || host.contains("youtu.be"))) {
+                return; // block "Watch on YouTube" redirect
+            }
+        }
+        super.startActivity(intent);
     }
 
     @Override
