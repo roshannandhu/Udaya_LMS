@@ -6258,7 +6258,12 @@ async def youtube_embed_proxy(embed_token: str):
     The YouTube video ID never appears in the client-facing URL or DOM."""
     entry = _yt_embed_tokens.get(embed_token)
     if not entry or entry["expires_at"] < time_module.time():
-        return Response("Expired or invalid token.", status_code=403, media_type="text/plain")
+        return Response(
+            "Expired or invalid token.",
+            status_code=403,
+            media_type="text/plain",
+            headers={"Content-Security-Policy": f"frame-ancestors {FRONTEND_ORIGINS}"},
+        )
 
     yt_id = entry["yt_id"]
 
