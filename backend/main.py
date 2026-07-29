@@ -6272,270 +6272,68 @@ async def youtube_embed_proxy(embed_token: str):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-#p{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
-#ov{position:fixed;inset:0;z-index:10;cursor:pointer}
-/* center transport (skip / play / skip) */
-#center{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:34px;
-  opacity:0;pointer-events:none;transition:opacity .18s}
-#center.on{opacity:1;pointer-events:auto}
-.cbtn{background:rgba(0,0,0,.38);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  color:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent}
-#cpp{width:64px;height:64px}
-#cpp svg{width:34px;height:34px;fill:#fff}
-.skip{width:48px;height:48px;position:relative}
-.skip svg{width:26px;height:26px;fill:#fff}
-.skip span{position:absolute;font-size:9px;font-weight:700;color:#fff;bottom:12px;width:100%;text-align:center}
-/* bottom bar */
-#bar{position:fixed;left:0;right:0;bottom:0;z-index:20;padding-top:36px;
-  background:linear-gradient(transparent,rgba(0,0,0,.85));
-  opacity:0;pointer-events:none;transition:opacity .18s}
-#bar.on{opacity:1;pointer-events:auto}
-#track{position:relative;height:26px;margin:0 12px;display:flex;align-items:center;cursor:pointer;touch-action:none}
-#rail{position:absolute;left:0;right:0;height:4px;background:rgba(255,255,255,.3);border-radius:2px}
-#played{position:absolute;left:0;height:4px;width:0;background:#ff3b30;border-radius:2px}
-#knob{position:absolute;left:0;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:#ff3b30;
-  box-shadow:0 0 0 4px rgba(255,59,48,.25)}
-#row{display:flex;align-items:center;gap:2px;padding:2px 8px 10px;color:#fff}
-.btn{background:none;border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  min-width:40px;height:40px;border-radius:6px;-webkit-tap-highlight-color:transparent}
-.btn:active{background:rgba(255,255,255,.15)}
-.btn svg{width:22px;height:22px;fill:#fff}
-#tm{font-size:12px;opacity:.9;white-space:nowrap;padding:0 6px;font-variant-numeric:tabular-nums}
-#spd{font-size:13px;font-weight:700;min-width:44px;padding:0 8px}
-#sp-r{margin-left:auto;display:flex;align-items:center;gap:2px}
-#cc{display:none}
-#flash{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;
-  background:rgba(0,0,0,.6);color:#fff;font-size:15px;font-weight:700;padding:8px 16px;border-radius:20px;
-  opacity:0;transition:opacity .12s;pointer-events:none}
-#flash.on{opacity:1}
-#spin{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:25;display:none;
-  width:40px;height:40px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;
-  border-radius:50%;animation:sp .75s linear infinite;pointer-events:none}
-@keyframes sp{to{transform:translate(-50%,-50%) rotate(360deg)}}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;width:100%;background:#000;overflow:hidden}
+  body{display:flex;align-items:center;justify-content:center}
+  #player{width:100%}
+  /* Brand the player (indigo) and make it fill the 16:9 frame */
+  :root{
+    --plyr-color-main:#4f46e5;
+    --plyr-video-background:#000;
+    --plyr-control-radius:8px;
+  }
+  .plyr{width:100%;height:100%}
+  .plyr__video-wrapper{height:100%}
+  .plyr--full-ui.plyr--youtube .plyr__video-wrapper{height:100%;padding-bottom:0!important}
+  .plyr--youtube .plyr__video-embed iframe{position:absolute;top:0;left:0;width:100%;height:100%}
 </style>
 </head>
 <body>
-<div id="p"></div>
-<div id="ov"></div>
-
-<div id="center">
-  <button class="cbtn skip" id="back" aria-label="Back 10 seconds">
-    <svg viewBox="0 0 24 24"><path d="M12.5 3C8.36 3 5 6.36 5 10.5H2l4 4 4-4H7c0-3.03 2.47-5.5 5.5-5.5S18 7.47 18 10.5 15.53 16 12.5 16v2c4.14 0 7.5-3.36 7.5-7.5S16.64 3 12.5 3z"/></svg>
-    <span>10</span>
-  </button>
-  <button class="cbtn" id="cpp" aria-label="Play/Pause">
-    <svg id="ci-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-    <svg id="ci-pause" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-  </button>
-  <button class="cbtn skip" id="fwd" aria-label="Forward 10 seconds">
-    <svg viewBox="0 0 24 24"><path d="M11.5 3C15.64 3 19 6.36 19 10.5h3l-4 4-4-4h3c0-3.03-2.47-5.5-5.5-5.5S6 7.47 6 10.5 8.47 16 11.5 16v2C7.36 18 4 14.64 4 10.5S7.36 3 11.5 3z"/></svg>
-    <span>10</span>
-  </button>
-</div>
-
-<div id="bar">
-  <div id="track"><div id="rail"></div><div id="played"></div><div id="knob"></div></div>
-  <div id="row">
-    <button class="btn" id="pp" aria-label="Play/Pause">
-      <svg id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-      <svg id="i-pause" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-    </button>
-    <button class="btn" id="mute" aria-label="Mute">
-      <svg id="v-on" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-      <svg id="v-off" viewBox="0 0 24 24" style="display:none"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-    </button>
-    <span id="tm">0:00 / 0:00</span>
-    <div id="sp-r">
-      <button class="btn" id="cc" aria-label="Captions">
-        <svg viewBox="0 0 24 24"><path d="M19 4H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z"/></svg>
-      </button>
-      <button class="btn" id="spd" aria-label="Speed">1x</button>
-      <button class="btn" id="fs" aria-label="Fullscreen">
-        <svg id="f-in" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
-        <svg id="f-out" viewBox="0 0 24 24" style="display:none"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
-      </button>
-    </div>
-  </div>
-</div>
-
-<div id="flash"></div>
-<div id="spin"></div>
-
+<div id="player" data-plyr-provider="youtube" data-plyr-embed-id="__YT_ID__"></div>
+<script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 <script>
+// Opened directly (not embedded in our app) -> blank.
 if(window===window.top){document.documentElement.innerHTML='';}
 (function(){
-var $=function(id){return document.getElementById(id);};
-var ov=$('ov'),center=$('center'),bar=$('bar'),flash=$('flash'),
-    cpp=$('cpp'),ciPlay=$('ci-play'),ciPause=$('ci-pause'),
-    pp=$('pp'),iPlay=$('i-play'),iPause=$('i-pause'),
-    back=$('back'),fwd=$('fwd'),
-    track=$('track'),played=$('played'),knob=$('knob'),
-    tm=$('tm'),spd=$('spd'),cc=$('cc'),fs=$('fs'),fIn=$('f-in'),fOut=$('f-out'),
-    mute=$('mute'),vOn=$('v-on'),vOff=$('v-off'),spin=$('spin');
-var pl,dur=0,cur=0,playing=false,advancing=false,scrubbing=false,scrubFrac=0;
-var hideT,flashT,tapT,lastPoll=0,muted=false,ccOn=false,lastSeekT=0;
-var speeds=[0.5,0.75,1,1.25,1.5,1.75,2],si=2;
+  // No copy: block right-click / long-press menu on our page. On the native app
+  // the real guard is the WebView long-press block in MainActivity.
+  document.addEventListener('contextmenu',function(e){e.preventDefault();return false;},true);
 
-// No copy: block context menu / long-press menu on our page.
-document.addEventListener('contextmenu',function(e){e.preventDefault();return false;},true);
-
-function fmt(s){s=Math.max(0,Math.floor(s||0));var m=Math.floor(s/60),x=s%60;return m+':'+(x<10?'0':'')+x;}
-
-function render(){
-  var frac=scrubbing?scrubFrac:(dur>0?cur/dur:0);
-  if(frac<0)frac=0; if(frac>1)frac=1;
-  played.style.width=(frac*100)+'%';
-  knob.style.left=(frac*100)+'%';
-  tm.textContent=fmt(scrubbing?scrubFrac*dur:cur)+' / '+fmt(dur);
-}
-function setIcon(y){
-  ciPlay.style.display=y?'none':'';ciPause.style.display=y?'':'none';
-  iPlay.style.display=y?'none':'';iPause.style.display=y?'':'none';
-}
-
-// rAF: advance the clock smoothly between the 1s server polls.
-function frame(ts){
-  if(advancing&&!scrubbing&&lastPoll){
-    cur+=(ts-lastPoll)/1000*speeds[si];
-    if(dur)cur=Math.min(cur,dur);
-    render();
-  }
-  lastPoll=ts;
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-
-var idleT;
-function showControls(){
-  bar.classList.add('on');center.classList.add('on');
-  clearTimeout(hideT);
-  if(playing)hideT=setTimeout(hideControls,3000);
-}
-function hideControls(){bar.classList.remove('on');center.classList.remove('on');}
-function toggleControls(){bar.classList.contains('on')?hideControls():showControls();}
-
-function playPause(){
-  if(!pl)return;
-  if(playing){pl.pauseVideo();playing=false;advancing=false;setIcon(false);}
-  else{pl.playVideo();playing=true;advancing=true;setIcon(true);}
-  showControls();
-}
-function flashMsg(t){flash.textContent=t;flash.classList.add('on');clearTimeout(flashT);flashT=setTimeout(function(){flash.classList.remove('on');},450);}
-function seekBy(d){
-  if(!pl)return;
-  lastSeekT=Date.now();
-  cur=Math.max(0,Math.min(dur||1e9,cur+d));
-  pl.seekTo(cur,true);render();
-  flashMsg((d>0?'+':'')+d+'s');showControls();
-}
-function seekFrac(f){
-  if(!pl)return;
-  if(!dur){dur=pl.getDuration()||0;if(!dur)return;}
-  lastSeekT=Date.now();
-  cur=f*dur;pl.seekTo(cur,true);render();
-}
-
-// ---- Overlay: single tap toggles controls, double-tap sides skip ----
-ov.addEventListener('pointerup',function(e){
-  var r=ov.getBoundingClientRect(),x=e.clientX-r.left;
-  if(tapT){ // this is the 2nd tap => double
-    clearTimeout(tapT);tapT=null;
-    if(x<r.width*0.4)seekBy(-10);
-    else if(x>r.width*0.6)seekBy(10);
-    else playPause();
-  }else{
-    tapT=setTimeout(function(){tapT=null;toggleControls();},240);
-  }
-});
-
-// ---- Center transport ----
-function stop(e){e.stopPropagation();}
-cpp.addEventListener('pointerup',function(e){stop(e);playPause();});
-back.addEventListener('pointerup',function(e){stop(e);seekBy(-10);});
-fwd.addEventListener('pointerup',function(e){stop(e);seekBy(10);});
-pp.addEventListener('click',function(e){stop(e);playPause();});
-
-// ---- Seek bar: tap + drag via pointer events (works on touch) ----
-function tf(e){var r=track.getBoundingClientRect();var f=(e.clientX-r.left)/r.width;return f<0?0:f>1?1:f;}
-track.addEventListener('pointerdown',function(e){
-  scrubbing=true;scrubFrac=tf(e);render();
-  try{track.setPointerCapture(e.pointerId);}catch(x){}
-  clearTimeout(hideT);
-});
-track.addEventListener('pointermove',function(e){if(scrubbing){scrubFrac=tf(e);render();}});
-function endScrub(e){if(!scrubbing)return;scrubbing=false;seekFrac(scrubFrac);showControls();}
-track.addEventListener('pointerup',endScrub);
-track.addEventListener('pointercancel',endScrub);
-
-// ---- Mute / Speed / CC / Fullscreen ----
-mute.addEventListener('click',function(e){stop(e);if(!pl)return;
-  muted=!muted;muted?pl.mute():pl.unMute();
-  vOn.style.display=muted?'none':'';vOff.style.display=muted?'':'none';showControls();});
-spd.addEventListener('click',function(e){stop(e);si=(si+1)%speeds.length;var r=speeds[si];
-  if(pl)pl.setPlaybackRate(r);spd.textContent=r+'x';showControls();});
-cc.addEventListener('click',function(e){stop(e);if(!pl)return;ccOn=!ccOn;
-  try{if(ccOn){pl.loadModule('captions');pl.setOption('captions','track',{});}else pl.unloadModule('captions');}catch(x){}
-  cc.style.opacity=ccOn?'1':'.6';showControls();});
-function toggleFS(){if(!document.fullscreenElement){var el=document.documentElement;(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el);}else{(document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document);}}
-fs.addEventListener('click',function(e){stop(e);toggleFS();});
-document.addEventListener('fullscreenchange',function(){var f=!!document.fullscreenElement;fIn.style.display=f?'none':'';fOut.style.display=f?'':'none';});
-
-// ---- Keyboard (desktop) ----
-document.addEventListener('keydown',function(e){
-  if(!pl)return;
-  var k=e.code;
-  if(k==='Space'||k==='KeyK'){e.preventDefault();playPause();}
-  else if(k==='ArrowRight'){e.preventDefault();seekBy(10);}
-  else if(k==='ArrowLeft'){e.preventDefault();seekBy(-10);}
-  else if(k==='KeyF'){e.preventDefault();toggleFS();}
-  else if(k==='KeyM'){e.preventDefault();mute.click();}
-});
-
-// ---- YouTube player ----
-var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
-window.onYouTubeIframeAPIReady=function(){
-  pl=new YT.Player('p',{
-    videoId:'__YT_ID__',width:'100%',height:'100%',
-    playerVars:{rel:0,modestbranding:1,playsinline:1,controls:0,disablekb:1,iv_load_policy:3,fs:0,cc_load_policy:0},
-    events:{
-      onReady:function(){
-        dur=pl.getDuration()||0;render();
-        pl.unMute();pl.setVolume(100);muted=false;vOn.style.display='';vOff.style.display='none';
-        try{var tl=pl.getOption('captions','tracklist');if(tl&&tl.length)cc.style.display='';}catch(x){}
-        setInterval(poll,1000);showControls();
-      },
-      onStateChange:function(e){
-        var st=e.data;
-        advancing=(st===1);
-        if(st===1){playing=true;spin.style.display='none';setIcon(true);showControls();}
-        else if(st===2){playing=false;spin.style.display='none';setIcon(false);showControls();}
-        else if(st===3){spin.style.display='block';} // buffering — show spinner, keep controls
-        else if(st===0){playing=false;advancing=false;spin.style.display='none';setIcon(false);showControls();}
-        window.parent.postMessage({type:'yt-state',state:st},'*');
-      }
-    }
+  var player=new Plyr('#player',{
+    // One clean control layer (YouTube's own UI is hidden by Plyr) -> no double buttons.
+    controls:['play-large','play','rewind','fast-forward','progress','current-time','duration','mute','volume','captions','settings','fullscreen'],
+    settings:['captions','speed'],                 // no 'quality' (YouTube deprecated that API)
+    seekTime:10,
+    speed:{selected:1,options:[0.5,0.75,1,1.25,1.5,1.75,2]},
+    ratio:'16:9',
+    hideControls:true,
+    keyboard:{focused:true,global:true},
+    youtube:{noCookie:true,rel:0,modestbranding:1,iv_load_policy:3,disablekb:1,playsinline:1,showinfo:0}
   });
-};
-function poll(){
-  if(!pl||typeof pl.getCurrentTime!=='function')return;
-  var t=pl.getCurrentTime(),d=pl.getDuration(),st=pl.getPlayerState();
-  if(d)dur=d;
-  // Only resync position from player after seek has settled (1.5s guard prevents
-  // the poll snapping cur back to pre-seek position during buffering)
-  if(!scrubbing&&Date.now()-lastSeekT>1500)cur=t;
-  render();
-  window.parent.postMessage({type:'yt-tick',t:t,dur:d,state:st},'*');
-}
 
-// ---- Commands from the parent app (chapter click, etc.) ----
-window.addEventListener('message',function(e){
-  if(!pl)return;var d=e.data;if(!d||typeof d!=='object')return;
-  if(d.type==='yt-seek'){cur=d.secs;pl.seekTo(d.secs,true);render();}
-  if(d.type==='yt-play')playPause();
-});
+  var dur=0;
+  player.on('ready',function(){ dur=player.duration||0; });
+
+  // Watch tracking -> parent app. Keep the existing contract:
+  // {type:'yt-tick', t, dur, state}  where state 1=playing, 2=paused, 0=ended.
+  setInterval(function(){
+    if(!player||!player.duration)return;
+    var t=player.currentTime||0, d=player.duration||0;
+    dur=d;
+    window.parent.postMessage({type:'yt-tick',t:t,dur:d,state:player.playing?1:2},'*');
+  },1000);
+  player.on('ended',function(){
+    window.parent.postMessage({type:'yt-tick',t:player.currentTime||0,dur:player.duration||0,state:0},'*');
+  });
+
+  // Commands from the parent app (chapter click seek, resume seek).
+  window.addEventListener('message',function(e){
+    var d=e.data;if(!d||typeof d!=='object')return;
+    if(d.type==='yt-seek'){try{player.currentTime=d.secs;}catch(x){}}
+    if(d.type==='yt-play'){try{player.play();}catch(x){}}
+  });
 })();
 </script>
 </body>
