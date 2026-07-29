@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Sparkles, X, ChevronRight, Target, Zap, TrendingUp, Users, BarChart3, Brain } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -182,7 +183,11 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
     ].filter(Boolean),
   };
 
-  return (
+  // Portal to <body>: keeps the fixed FAB + popup anchored to the viewport even
+  // when an ancestor (framer-motion page/stagger wrapper) has a CSS transform,
+  // which otherwise re-bases `position:fixed` to that ancestor — making the FAB
+  // scroll to the page bottom and the popup open off-screen.
+  return createPortal(
     <>
       {/* ── Mobile backdrop (closes popup on outside tap) ─────────────────── */}
       <AnimatePresence>
@@ -364,6 +369,7 @@ export default function AIMentorFAB({ hidden, type = 'student' }) {
           }
         </motion.div>
       </motion.button>
-    </>
+    </>,
+    document.body
   );
 }
