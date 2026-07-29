@@ -6311,6 +6311,16 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,
   background:rgba(0,0,0,.6);color:#fff;font-size:15px;font-weight:700;padding:8px 16px;border-radius:20px;
   opacity:0;transition:opacity .12s;pointer-events:none}
 #flash.on{opacity:1}
+/* Opaque start-poster: masks YouTube's OWN centre play button (which controls:0
+   does NOT hide) so only our button shows. Dismissed on first play. */
+#poster{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;background:radial-gradient(circle at center,#1c1c1c,#000)}
+#poster.hidden{display:none}
+#pbtn{width:78px;height:78px;border-radius:50%;background:rgba(255,255,255,.16);border:none;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:transform .15s,background .15s}
+#pbtn:active{transform:scale(.92);background:rgba(255,255,255,.28)}
+#pbtn svg{width:34px;height:34px;fill:#fff;margin-left:5px}
 </style>
 </head>
 <body>
@@ -6359,6 +6369,8 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,
 
 <div id="flash"></div>
 
+<div id="poster"><button id="pbtn" aria-label="Play video"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+
 <script>
 if(window===window.top){document.documentElement.innerHTML='';}
 (function(){
@@ -6369,9 +6381,9 @@ var ov=$('ov'),center=$('center'),bar=$('bar'),flash=$('flash'),
     back=$('back'),fwd=$('fwd'),
     track=$('track'),played=$('played'),knob=$('knob'),
     tm=$('tm'),spd=$('spd'),cc=$('cc'),fs=$('fs'),fIn=$('f-in'),fOut=$('f-out'),
-    mute=$('mute'),vOn=$('v-on'),vOff=$('v-off');
+    mute=$('mute'),vOn=$('v-on'),vOff=$('v-off'),poster=$('poster');
 var pl,dur=0,cur=0,playing=false,advancing=false,scrubbing=false,scrubFrac=0;
-var hideT,flashT,tapT,lastPoll=0,muted=false,ccOn=false;
+var hideT,flashT,tapT,lastPoll=0,muted=false,ccOn=false,pendingPlay=false;
 var speeds=[0.5,0.75,1,1.25,1.5,1.75,2],si=2;
 
 // No copy: block context menu / long-press menu on our page.
@@ -6447,6 +6459,13 @@ back.addEventListener('pointerup',function(e){stop(e);seekBy(-10);});
 fwd.addEventListener('pointerup',function(e){stop(e);seekBy(10);});
 pp.addEventListener('click',function(e){stop(e);playPause();});
 
+// ---- Start poster: tap masks-away and begins playback (hides YT's own button) ----
+poster.addEventListener('pointerup',function(e){
+  stop(e);
+  poster.classList.add('hidden');
+  if(pl){pl.playVideo();playing=true;setIcon(true);showControls();}else{pendingPlay=true;}
+});
+
 // ---- Seek bar: tap + drag via pointer events (works on touch) ----
 function tf(e){var r=track.getBoundingClientRect();var f=(e.clientX-r.left)/r.width;return f<0?0:f>1?1:f;}
 track.addEventListener('pointerdown',function(e){
@@ -6494,11 +6513,12 @@ window.onYouTubeIframeAPIReady=function(){
         dur=pl.getDuration()||0;render();
         try{var tl=pl.getOption('captions','tracklist');if(tl&&tl.length)cc.style.display='';}catch(x){}
         setInterval(poll,1000);showControls();
+        if(pendingPlay){pendingPlay=false;pl.playVideo();}
       },
       onStateChange:function(e){
         var st=e.data;
         advancing=(st===1);
-        if(st===1){playing=true;setIcon(true);showControls();}
+        if(st===1){playing=true;setIcon(true);showControls();poster.classList.add('hidden');}
         else if(st===2){playing=false;setIcon(false);showControls();}
         else if(st===0){playing=false;advancing=false;setIcon(false);showControls();}
         window.parent.postMessage({type:'yt-state',state:st},'*');
