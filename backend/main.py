@@ -208,10 +208,16 @@ _zoom_token_cache: dict = {"token": None, "expires_at": 0.0}
 # The YouTube video ID never leaves the backend; the frontend only gets the UUID.
 _yt_embed_tokens: dict = {}
 
+# CSP frame-ancestors for the YouTube proxy. The Capacitor app's WebView origin
+# MUST be allowed — with androidScheme:"https" and no custom hostname the Android
+# app runs at https://localhost, so omitting it makes the WebView refuse the proxy
+# iframe (blank player + broken-frame icon). These app origins are appended
+# unconditionally so a FRONTEND_URL override can never re-break the app.
+_APP_WEBVIEW_ORIGINS = "https://localhost capacitor://localhost http://localhost"
 FRONTEND_ORIGINS = os.getenv(
     "FRONTEND_URL",
     "https://udaya-learn.com https://www.udaya-learn.com http://localhost:3001 http://localhost:3002 http://localhost:3003",
-)
+) + " " + _APP_WEBVIEW_ORIGINS
 
 supabase: Optional[Client] = None
 service_supabase: Optional[Client] = None
