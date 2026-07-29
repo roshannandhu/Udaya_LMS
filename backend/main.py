@@ -6280,11 +6280,18 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,
 /* center transport (skip / play / skip) */
 #center{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:34px;
   opacity:0;pointer-events:none;transition:opacity .18s}
-#center.on{opacity:1;pointer-events:auto}
+#center.on{opacity:1}
+#center.on .cbtn{pointer-events:auto}
 .cbtn{background:rgba(0,0,0,.38);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;
   color:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent}
 #cpp{width:64px;height:64px}
 #cpp svg{width:34px;height:34px;fill:#fff}
+/* Paused: enlarge + make #cpp opaque so it fully masks YouTube's OWN centre
+   play button (controls:0 doesn't hide it on pause); hide skips for a clean look.
+   Size is tunable — bump if YT's button still peeks past ours. */
+#center.paused #cpp{width:108px;height:108px;background:#191919}
+#center.paused #cpp svg{width:44px;height:44px}
+#center.paused #back,#center.paused #fwd{display:none}
 .skip{width:48px;height:48px;position:relative}
 .skip svg{width:26px;height:26px;fill:#fff}
 .skip span{position:absolute;font-size:9px;font-weight:700;color:#fff;bottom:12px;width:100%;text-align:center}
@@ -6401,6 +6408,7 @@ function render(){
 function setIcon(y){
   ciPlay.style.display=y?'none':'';ciPause.style.display=y?'':'none';
   iPlay.style.display=y?'none':'';iPause.style.display=y?'':'none';
+  center.classList.toggle('paused',!y);   // enlarge/opaque #cpp to mask YT button when paused
 }
 
 // rAF: advance the clock smoothly between the 1s server polls.
@@ -6421,7 +6429,7 @@ function showControls(){
   clearTimeout(hideT);
   if(playing)hideT=setTimeout(hideControls,3000);
 }
-function hideControls(){bar.classList.remove('on');center.classList.remove('on');}
+function hideControls(){bar.classList.remove('on');if(playing)center.classList.remove('on');}
 function toggleControls(){bar.classList.contains('on')?hideControls():showControls();}
 
 function playPause(){
