@@ -6311,6 +6311,10 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,
   background:rgba(0,0,0,.6);color:#fff;font-size:15px;font-weight:700;padding:8px 16px;border-radius:20px;
   opacity:0;transition:opacity .12s;pointer-events:none}
 #flash.on{opacity:1}
+#spin{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:25;display:none;
+  width:40px;height:40px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;
+  border-radius:50%;animation:sp .75s linear infinite;pointer-events:none}
+@keyframes sp{to{transform:translate(-50%,-50%) rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -6358,6 +6362,7 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,
 </div>
 
 <div id="flash"></div>
+<div id="spin"></div>
 
 <script>
 if(window===window.top){document.documentElement.innerHTML='';}
@@ -6369,9 +6374,9 @@ var ov=$('ov'),center=$('center'),bar=$('bar'),flash=$('flash'),
     back=$('back'),fwd=$('fwd'),
     track=$('track'),played=$('played'),knob=$('knob'),
     tm=$('tm'),spd=$('spd'),cc=$('cc'),fs=$('fs'),fIn=$('f-in'),fOut=$('f-out'),
-    mute=$('mute'),vOn=$('v-on'),vOff=$('v-off');
+    mute=$('mute'),vOn=$('v-on'),vOff=$('v-off'),spin=$('spin');
 var pl,dur=0,cur=0,playing=false,advancing=false,scrubbing=false,scrubFrac=0;
-var hideT,flashT,tapT,lastPoll=0,muted=false,ccOn=false;
+var hideT,flashT,tapT,lastPoll=0,muted=false,ccOn=false,lastSeekT=0;
 var speeds=[0.5,0.75,1,1.25,1.5,1.75,2],si=2;
 
 // No copy: block context menu / long-press menu on our page.
@@ -6415,17 +6420,23 @@ function toggleControls(){bar.classList.contains('on')?hideControls():showContro
 function playPause(){
   if(!pl)return;
   if(playing){pl.pauseVideo();playing=false;advancing=false;setIcon(false);}
-  else{pl.playVideo();playing=true;setIcon(true);}
+  else{pl.playVideo();playing=true;advancing=true;setIcon(true);}
   showControls();
 }
 function flashMsg(t){flash.textContent=t;flash.classList.add('on');clearTimeout(flashT);flashT=setTimeout(function(){flash.classList.remove('on');},450);}
 function seekBy(d){
   if(!pl)return;
+  lastSeekT=Date.now();
   cur=Math.max(0,Math.min(dur||1e9,cur+d));
   pl.seekTo(cur,true);render();
   flashMsg((d>0?'+':'')+d+'s');showControls();
 }
-function seekFrac(f){if(!pl||!dur)return;cur=f*dur;pl.seekTo(cur,true);render();}
+function seekFrac(f){
+  if(!pl)return;
+  if(!dur){dur=pl.getDuration()||0;if(!dur)return;}
+  lastSeekT=Date.now();
+  cur=f*dur;pl.seekTo(cur,true);render();
+}
 
 // ---- Overlay: single tap toggles controls, double-tap sides skip ----
 ov.addEventListener('pointerup',function(e){
@@ -6499,9 +6510,10 @@ window.onYouTubeIframeAPIReady=function(){
       onStateChange:function(e){
         var st=e.data;
         advancing=(st===1);
-        if(st===1){playing=true;setIcon(true);showControls();}
-        else if(st===2){playing=false;setIcon(false);showControls();}
-        else if(st===0){playing=false;advancing=false;setIcon(false);showControls();}
+        if(st===1){playing=true;spin.style.display='none';setIcon(true);showControls();}
+        else if(st===2){playing=false;spin.style.display='none';setIcon(false);showControls();}
+        else if(st===3){spin.style.display='block';} // buffering — show spinner, keep controls
+        else if(st===0){playing=false;advancing=false;spin.style.display='none';setIcon(false);showControls();}
         window.parent.postMessage({type:'yt-state',state:st},'*');
       }
     }
@@ -6511,7 +6523,9 @@ function poll(){
   if(!pl||typeof pl.getCurrentTime!=='function')return;
   var t=pl.getCurrentTime(),d=pl.getDuration(),st=pl.getPlayerState();
   if(d)dur=d;
-  if(!scrubbing)cur=t;   // resync smooth clock to real time each second
+  // Only resync position from player after seek has settled (1.5s guard prevents
+  // the poll snapping cur back to pre-seek position during buffering)
+  if(!scrubbing&&Date.now()-lastSeekT>1500)cur=t;
   render();
   window.parent.postMessage({type:'yt-tick',t:t,dur:d,state:st},'*');
 }
