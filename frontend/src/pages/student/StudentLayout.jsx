@@ -91,7 +91,7 @@ export default function StudentLayout() {
     // bare inset was inert and headers got clipped under the clock/icons. The 28px
     // floor guarantees clearance on the APK; env() wins on devices that report a
     // larger notch. lg:pt-0 keeps desktop flush (the floor never applies there).
-    <div className={`flex flex-col h-[100dvh] overflow-hidden pt-[max(env(safe-area-inset-top),28px)] lg:pt-0 ${isBroadcastRoute ? 'lg:h-[100dvh]' : 'lg:h-auto lg:min-h-screen lg:overflow-visible'}`}>
+    <div className={`isolate flex flex-col h-[100dvh] overflow-hidden pt-[max(env(safe-area-inset-top),28px)] lg:pt-0 ${isBroadcastRoute ? 'lg:h-[100dvh]' : 'lg:h-auto lg:min-h-screen lg:overflow-visible'}`}>
       {!examLocked && <TopNav type="student" badges={badges} />}
       {/* overflow-x-clip stops sideways pan; overflow-y-auto = phone scroll area. */}
       <div

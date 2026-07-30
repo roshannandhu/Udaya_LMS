@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Award, Bot, CalendarDays, Download, Loader2, RefreshCw, Share2, Sparkles, TrendingUp, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -577,6 +578,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
       </motion.div>
 
       {/* AI Modal */}
+      {createPortal(
       <AnimatePresence>
         {showAiModal && (
           <motion.div
@@ -680,6 +682,7 @@ export default function StudentReportCard({ data, period, onPeriodChange, onDown
           </motion.div>
         )}
       </AnimatePresence>
+      , document.body)}
 
     </div>
   );

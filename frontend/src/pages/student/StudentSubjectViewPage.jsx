@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useBackDismissable } from '../../lib/useBackDismissable';
 import { motion } from 'framer-motion';
@@ -765,7 +766,7 @@ export default function StudentSubjectViewPage() {
       />
 
       {/* ── Test re-attempt request modal ── */}
-      {reattemptModal && (
+      {reattemptModal && createPortal(
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm" onClick={() => !reattemptBusy && setReattemptModal(null)}>
           <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 sm:p-7" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 mb-1">
@@ -805,7 +806,7 @@ export default function StudentSubjectViewPage() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

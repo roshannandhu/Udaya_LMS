@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { popIn } from '../lib/motion';
@@ -161,7 +162,9 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
 
   if (!open) return null;
   const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-xl', xl: 'max-w-5xl', '2xl': 'max-w-6xl', '4xl': 'max-w-6xl' };
-  return (
+  // Portal to body: the app-shell wraps pages in a framer-motion (transform)
+  // stacking context, which traps `fixed z-50` below the in-flow BottomNav.
+  return createPortal(
     <motion.div
       variants={{ hidden: { opacity: 0 }, show: { opacity: 1 } }}
       initial="hidden" animate="show"
@@ -175,7 +178,8 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
         </div>
         <div className="p-4 sm:p-5 flex-1 overflow-y-auto min-h-0">{children}</div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 };
 
@@ -194,7 +198,9 @@ export const Sheet = ({ open, onClose, title, children }) => {
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  // Portal to body — see Modal note: escapes the page's transform stacking
+  // context so the sheet paints above the BottomNav.
+  return createPortal(
     <motion.div
       variants={{ hidden: { opacity: 0 }, show: { opacity: 1 } }}
       initial="hidden" animate="show"
@@ -208,6 +214,7 @@ export const Sheet = ({ open, onClose, title, children }) => {
         </div>
         <div className="flex-1 overflow-y-auto p-5">{children}</div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 };

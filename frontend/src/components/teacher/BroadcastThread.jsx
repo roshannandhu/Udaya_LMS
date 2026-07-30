@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useBackDismissable } from '../../lib/useBackDismissable';
 import { Send, Paperclip, Edit2, Trash2, Pin, ArrowLeft, FileText, X, Loader2, Clock, Reply, Search, SmilePlus, Check, CheckCheck, Mic, Square, Copy, MoreVertical, Image as ImageIcon } from 'lucide-react';
 import { apiClient, broadcastApi, getApiBaseUrl } from '../../lib/api';
@@ -721,7 +722,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
       </div>
 
       {/* Read Details Modal */}
-      {readDetailsModal && (
+      {readDetailsModal && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setReadDetailsModal(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 bg-[#f0f2f5]">
@@ -774,7 +775,7 @@ export default function BroadcastThread({ std, broadcasts, onUpdate, onBack, sho
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       <SecureFileViewer
         open={!!viewerBroadcastId}

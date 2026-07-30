@@ -231,77 +231,79 @@ function InviteModal({ open, onClose, standardId }) {
 function AddStudentModal({ open, onClose, standardId, onStudentAdded }) {
   const { defaultStudentPassword } = useSettingsStore();
   const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [parentPhone, setParentPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const [showMore, setShowMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(null);
+  const [created, setCreated] = useState(null);
 
   React.useEffect(() => {
-    if (open) {
-      setName(''); setUsername(''); setEmail('');
-      setPhone(''); setParentPhone('');
-      setPassword(defaultStudentPassword || '');
-      setError(''); setSuccess(null);
-    }
-  }, [open, defaultStudentPassword]);
+    if (open) { setName(''); setPhone(''); setEmail(''); setParentPhone(''); setShowMore(false); setError(''); setCreated(null); }
+  }, [open]);
 
   const handleSubmit = async () => {
-    if (!name.trim() || !username.trim()) {
-      setError('Name and username are required');
-      return;
-    }
-    setLoading(true);
-    setError('');
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (!phone.trim()) { setError('Phone number is required'); return; }
+    setLoading(true); setError('');
+    const rawUser = name.trim().toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+    const username = rawUser || phone.trim().replace(/\D/g, '');
     try {
       const result = await apiClient('/admin/create-student', {
         method: 'POST',
         body: JSON.stringify({
-          name,
-          username: username.toLowerCase().replace(/\s/g, '.'),
-          email: email || undefined,
-          phone: phone || undefined,
-          parent_phone: parentPhone || undefined,
-          password: password || defaultStudentPassword || 'student123',
-          standard_id: standardId
+          name: name.trim(), username,
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          parent_phone: parentPhone.trim() || undefined,
+          password: defaultStudentPassword || 'student123',
+          standard_id: standardId,
         })
       });
-      setSuccess(`Created! Username: ${result.username}  Password: ${result.password}`);
-      setName(''); setUsername(''); setEmail(''); setPhone(''); setParentPhone('');
-      setPassword(defaultStudentPassword || '');
+      setCreated({ username: result.username, password: result.password });
       if (onStudentAdded) onStudentAdded();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
-  const pwdPlaceholder = defaultStudentPassword
-    ? `Default: ${defaultStudentPassword.slice(0, 3)}${'*'.repeat(Math.max(0, defaultStudentPassword.length - 3))}`
-    : 'Leave blank for auto-generated';
+  const reset = () => { setName(''); setPhone(''); setEmail(''); setParentPhone(''); setShowMore(false); setError(''); setCreated(null); };
 
   return (
     <Modal open={open} onClose={onClose} title="Add Student" size="sm">
-      <div className="space-y-4">
-        {error && <div className="text-xs text-red-600 bg-red-50 p-2 rounded">{error}</div>}
-        {success && (
-          <div className="text-xs text-green-700 bg-green-50 border border-green-200 p-3 rounded-lg font-mono whitespace-pre-wrap">{success}</div>
-        )}
-        <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aarav Patel" />
-        <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="aarav.p" />
-        <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@example.com" />
-        <Input label="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
-        <Input label="Parent Phone (optional)" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+91 98765 43210" />
-        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pwdPlaceholder} />
-        <Btn onClick={handleSubmit} disabled={loading} className="w-full" variant="primary">
-          {loading && <Loader2 size={14} className="animate-spin" />}
-          Add Student
-        </Btn>
-      </div>
+      {created ? (
+        <div className="space-y-4">
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-1.5">
+            <p className="text-[11px] font-semibold text-green-700 uppercase tracking-wider mb-2">Student created ✓</p>
+            <p className="font-mono text-sm text-neutral-800"><span className="text-neutral-400 mr-2">Username</span>{created.username}</p>
+            <p className="font-mono text-sm text-neutral-800"><span className="text-neutral-400 mr-2">Password</span>{created.password}</p>
+          </div>
+          <Btn onClick={reset} className="w-full justify-center" variant="default" icon={UserPlus}>Add Another Student</Btn>
+          <button onClick={onClose} className="w-full text-sm text-neutral-400 hover:text-neutral-700 py-1">Done</button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {error && <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-2.5 rounded-lg">{error}</div>}
+          <Input label="Full name" value={name} onChange={e => setName(e.target.value)} placeholder="Aarav Patel" autoFocus />
+          <Input label="Phone number" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210" />
+          <button type="button" onClick={() => setShowMore(v => !v)}
+            className="text-xs text-neutral-400 hover:text-neutral-700 flex items-center gap-1">
+            {showMore ? '▲ Hide' : '▼ More details'} (email, parent phone)
+          </button>
+          {showMore && (
+            <div className="space-y-3">
+              <Input label="Email (optional)" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="student@example.com" />
+              <Input label="Parent's phone (optional)" type="tel" value={parentPhone} onChange={e => setParentPhone(e.target.value)} placeholder="9876543210" />
+            </div>
+          )}
+          <p className="text-[11px] text-neutral-400">
+            Password: {defaultStudentPassword ? `"${defaultStudentPassword}"` : 'auto-generated'} — student changes it on first login
+          </p>
+          <Btn onClick={handleSubmit} disabled={loading || !name.trim() || !phone.trim()} className="w-full justify-center" variant="primary">
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            Add Student
+          </Btn>
+        </div>
+      )}
     </Modal>
   );
 }

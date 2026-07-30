@@ -213,6 +213,17 @@ export default function SubjectDetailPage() {
     } catch(err) { console.error(err); }
   };
 
+  const handleDeleteTest = async (test) => {
+    if (!window.confirm(`Delete "${test.title}"? All student attempts will also be removed.`)) return;
+    try {
+      await apiClient(`/tests/${test.id}`, { method: 'DELETE' });
+      setTests(prev => prev.filter(t => t.id !== test.id));
+      if (selectedTest?.id === test.id) setSelectedTest(null);
+    } catch (err) {
+      alert(err.message || 'Failed to delete test');
+    }
+  };
+
   const fetchAssignmentsData = async () => {
     try {
       const data = await assignmentApi.getByClass(classId);
@@ -495,6 +506,7 @@ export default function SubjectDetailPage() {
                     onCreate={() => { setEditTestId(null); setNewTestOpen(true); }}
                     onEdit={(t) => { setEditTestId(t.id); setNewTestOpen(true); }}
                     onResults={setSelectedTest}
+                    onDelete={handleDeleteTest}
                   />
                 </div>
                 <div>

@@ -1,8 +1,8 @@
 import React from 'react';
-import { FileQuestion, Plus, Edit2, ListChecks } from 'lucide-react';
+import { FileQuestion, Plus, Edit2, ListChecks, Trash2 } from 'lucide-react';
 import { Btn, Tag } from '../../ui';
 
-export default function TestsSection({ tests, onCreate, onEdit, onResults }) {
+export default function TestsSection({ tests, onCreate, onEdit, onResults, onDelete }) {
   if (tests.length === 0) {
     return (
       <div className="text-center py-14 glass-panel border-dashed border-[#D8D6D2] rounded-2xl">
@@ -29,7 +29,7 @@ export default function TestsSection({ tests, onCreate, onEdit, onResults }) {
                 {t.duration_mins} min · {t.total_marks} marks
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
               <Btn size="sm" variant="ghost" icon={Edit2} onClick={() => onEdit(t)}>
                 Edit
               </Btn>
@@ -39,6 +39,15 @@ export default function TestsSection({ tests, onCreate, onEdit, onResults }) {
               <Tag color={t.status === 'completed' ? 'green' : t.status === 'scheduled' ? 'amber' : 'gray'}>
                 {t.status}
               </Tag>
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(t)}
+                  title="Delete test"
+                  className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
           {t.scheduled_for && (

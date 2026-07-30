@@ -81,8 +81,6 @@ h1, h2, h3 {
   color: #ffffff;
   border-radius: 1.5rem;
   box-shadow: 0 10px 30px rgba(17, 24, 39, 0.12);
-  /* GPU layer: the dock magnification + tab transition animate on the compositor */
-  will-change: transform;
   contain: layout style;
 }
 

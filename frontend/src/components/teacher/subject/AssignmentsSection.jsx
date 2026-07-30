@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, Plus, Edit2, Users, CalendarClock, Paperclip } from 'lucide-react';
+import { ClipboardList, Plus, Edit2, Users, CalendarClock, Paperclip, Trash2 } from 'lucide-react';
 import { Btn, Tag } from '../../ui';
 
 export default function AssignmentsSection({ assignments, onCreate, onEdit, onViewSubmissions, onDelete }) {
@@ -39,6 +39,15 @@ export default function AssignmentsSection({ assignments, onCreate, onEdit, onVi
                 <Btn size="sm" variant="ghost" icon={Users} onClick={() => onViewSubmissions(a)}>
                   Submissions
                 </Btn>
+                {onDelete && (
+                  <button
+                    onClick={() => onDelete(a.id)}
+                    title="Delete assignment"
+                    className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -58,14 +67,6 @@ export default function AssignmentsSection({ assignments, onCreate, onEdit, onVi
                   {a.assignment_attachments.length} file{a.assignment_attachments.length !== 1 ? 's' : ''}
                 </span>
               )}
-            </div>
-            <div className="flex justify-end mt-2">
-              <button
-                onClick={() => onDelete(a.id)}
-                className="text-xs text-red-500 hover:text-red-700 transition-colors"
-              >
-                Delete
-              </button>
             </div>
           </div>
         );

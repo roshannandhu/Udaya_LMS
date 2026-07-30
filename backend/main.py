@@ -9962,8 +9962,6 @@ async def create_broadcast(req: BroadcastRequest, user = Depends(verify_token)):
         snippet = (req.message or ("📎 Attachment" if req.attachment_url else "New message"))[:120]
         await asyncio.to_thread(_notify_standard_students, req.standard_id, "broadcast",
             "New message", snippet, {"standard_id": req.standard_id})
-        # Trigger WhatsApp broadcast to parents in the background
-        asyncio.create_task(_send_whatsapp_broadcast(user["teacher_id"], req.standard_id, req.message, req.attachment_url, req.attachment_type))
 
     return {"status": "success", "data": payload}
 

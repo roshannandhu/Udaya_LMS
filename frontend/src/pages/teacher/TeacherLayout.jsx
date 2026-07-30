@@ -64,7 +64,7 @@ export default function TeacherLayout() {
     // inset was inert and headers got clipped under the clock/icons. The 28px
     // floor guarantees clearance on the APK; env() wins on larger-notch devices.
     // lg:pt-0 keeps desktop flush (the floor never applies there).
-    <div className={`flex flex-col h-[100dvh] overflow-hidden pt-[max(env(safe-area-inset-top),28px)] lg:pt-0 ${isBroadcastRoute ? 'lg:h-[100dvh]' : 'lg:h-auto lg:min-h-screen lg:overflow-visible'}`}>
+    <div className={`isolate flex flex-col h-[100dvh] overflow-hidden pt-[max(env(safe-area-inset-top),28px)] lg:pt-0 ${isBroadcastRoute ? 'lg:h-[100dvh]' : 'lg:h-auto lg:min-h-screen lg:overflow-visible'}`}>
       <TopNav type="teacher" />
       {/* overflow-x-clip (not -hidden: that would break position:sticky headers)
           stops sideways pan; overflow-y-auto makes this the phone scroll area. */}
