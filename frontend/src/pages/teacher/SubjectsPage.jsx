@@ -102,32 +102,30 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
   const { invalidateStudents, refreshStudents } = useAppCache();
   const { defaultStudentPassword } = useSettingsStore();
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [parentPhone, setParentPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [showMore, setShowMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null);
 
   useEffect(() => {
-    if (open) { setName(''); setPhone(''); setEmail(''); setParentPhone(''); setShowMore(false); setError(''); setCreated(null); }
+    if (open) { setName(''); setParentPhone(''); setEmail(''); setShowMore(false); setError(''); setCreated(null); }
   }, [open]);
 
   const handleSubmit = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
-    if (!phone.trim()) { setError('Phone number is required'); return; }
+    if (!parentPhone.trim()) { setError('Parent phone is required'); return; }
     setLoading(true); setError('');
     const rawUser = name.trim().toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
-    const username = rawUser || phone.trim().replace(/\D/g, '');
+    const username = rawUser || parentPhone.trim().replace(/\D/g, '');
     try {
       const result = await apiClient('/admin/create-student', {
         method: 'POST',
         body: JSON.stringify({
           name: name.trim(), username,
-          phone: phone.trim(),
+          parent_phone: parentPhone.trim(),
           email: email.trim() || undefined,
-          parent_phone: parentPhone.trim() || undefined,
           password: defaultStudentPassword || 'student123',
           standard_id: standardId,
         })
@@ -137,7 +135,7 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
-  const reset = () => { setName(''); setPhone(''); setEmail(''); setParentPhone(''); setShowMore(false); setError(''); setCreated(null); };
+  const reset = () => { setName(''); setParentPhone(''); setEmail(''); setShowMore(false); setError(''); setCreated(null); };
 
   return (
     <Modal open={open} onClose={onClose} title={`Add Student to ${standardName || 'Class'}`} size="sm">
@@ -155,21 +153,20 @@ function AddStudentModal({ open, onClose, standardId, standardName }) {
         <div className="space-y-3">
           {error && <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-2.5 rounded-lg">{error}</div>}
           <Input label="Full name" value={name} onChange={e => setName(e.target.value)} placeholder="Aarav Patel" autoFocus />
-          <Input label="Phone number" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210" />
+          <Input label="Parent phone" type="tel" value={parentPhone} onChange={e => setParentPhone(e.target.value)} placeholder="9876543210" />
           <button type="button" onClick={() => setShowMore(v => !v)}
             className="text-xs text-neutral-400 hover:text-neutral-700 flex items-center gap-1">
-            {showMore ? '▲ Hide' : '▼ More details'} (email, parent phone)
+            {showMore ? '▲ Hide' : '▼ More details'} (email)
           </button>
           {showMore && (
             <div className="space-y-3">
               <Input label="Email (optional)" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="student@example.com" />
-              <Input label="Parent's phone (optional)" type="tel" value={parentPhone} onChange={e => setParentPhone(e.target.value)} placeholder="9876543210" />
             </div>
           )}
           <p className="text-[11px] text-neutral-400">
             Password: {defaultStudentPassword ? `"${defaultStudentPassword}"` : 'auto-generated'} — student changes it on first login
           </p>
-          <Btn onClick={handleSubmit} disabled={loading || !name.trim() || !phone.trim()} className="w-full justify-center" variant="primary">
+          <Btn onClick={handleSubmit} disabled={loading || !name.trim() || !parentPhone.trim()} className="w-full justify-center" variant="primary">
             {loading && <Loader2 size={14} className="animate-spin" />}
             Add Student
           </Btn>

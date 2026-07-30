@@ -23,7 +23,7 @@ export default function BulkImportModal({ open, onClose, standards, existingStud
     const initStd = initialStandardId ? standards.find(s => s.id === initialStandardId) : null;
     const stdName = initStd ? initStd.name : '10th Standard';
     const wsData = [
-      ['Name', 'Email', 'Phone', 'Parent Phone', 'Standard'],
+      ['Name', 'Parent Phone', 'Email', 'Phone', 'Standard'],
       ['Aarav Patel',  '', '', '', stdName],
       ['Meera Singh',  '', '', '', stdName],
       ['Rohan Kumar',  '', '', '', stdName],
