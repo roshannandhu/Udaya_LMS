@@ -203,6 +203,18 @@ function ProtectedStudentRoute({ children }) {
 
 // Resets the error boundary whenever the route changes, so a one-off page error
 // doesn't trap the user on the fallback screen after they navigate away.
+// Reads auth state that is already synchronously populated from localStorage on module
+// load — no network round-trip needed. On first visit (no session) falls through to
+// /login. On returning visits the correct portal is shown before verifyWithBackend()
+// even runs, eliminating the login-page flash on Android app open.
+function RootRedirect() {
+  const { role, isLoading } = useAuthStore();
+  if (isLoading) return null;
+  if (role === ROLES.TEACHER) return <Navigate to="/teacher" replace />;
+  if (role === ROLES.STUDENT) return <Navigate to="/student" replace />;
+  return <Navigate to="/login" replace />;
+}
+
 function RoutedBoundary({ children }) {
   const location = useLocation();
   return <ErrorBoundary routeKey={location.pathname}>{children}</ErrorBoundary>;
@@ -357,8 +369,8 @@ export default function App() {
           <Route path="report" element={<StudentReportPage />} />
         </Route>
 
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="*" element={<RootRedirect />} />
       </Routes>
       </RoutedBoundary>
       {/* Native-only "update available" banner (no-op on web). */}

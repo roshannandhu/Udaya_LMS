@@ -2082,8 +2082,9 @@ def _login_impl(request: LoginRequest):
             except Exception:
                 pass  # default to enabled on any error
 
-        # Primary teacher never requires OTP — only sub-teachers do.
-        _needs_otp = _is_sub and _sub_otp_on
+        settings = get_teacher_settings()
+        _primary_otp_on = bool(settings.get("security_two_step_verification", False))
+        _needs_otp = (_is_sub and _sub_otp_on) or (not _is_sub and role == "teacher" and _primary_otp_on)
 
         if _needs_otp:
             if not _smtp_ready():
