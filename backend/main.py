@@ -2088,11 +2088,13 @@ def _login_impl(request: LoginRequest):
 
         if _needs_otp:
             if not _smtp_ready():
-                # Block sub-teacher login — they cannot bypass OTP verification.
-                raise HTTPException(
-                    status_code=503,
-                    detail="Login verification requires email (SMTP) to be configured. Please contact the admin."
-                )
+                if _is_sub:
+                    # Sub-teachers must always pass OTP — block if SMTP not configured.
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Login verification requires email (SMTP) to be configured. Please contact the admin."
+                    )
+                # Primary teacher: SMTP not ready → OTP can't be sent, allow login directly.
             elif _is_device_trusted(user.id, request.device_fingerprint or ""):
                 pass  # trusted device → normal login
             else:
