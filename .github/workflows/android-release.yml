@@ -73,14 +73,17 @@ jobs:
 
       - name: Write google-services.json
         run: |
-          # FCM config — gitignored, so CI must materialise it from a secret. WITHOUT
-          # it the google-services plugin is skipped, FirebaseApp never initialises, and
-          # the app CRASHES right after login when push registers. Strip to base64
-          # alphabet for a robust decode (same as the keystore).
-          printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | tr -dc 'A-Za-z0-9+/=' | base64 -d > frontend/android/app/google-services.json
-          echo "google-services.json bytes: $(stat -c%s frontend/android/app/google-services.json)"
-          # Fail loudly if it didn't decode to real JSON — better than a crashing APK.
-          node -e "JSON.parse(require('fs').readFileSync('frontend/android/app/google-services.json','utf8')); console.log('google-services.json: valid')"
+          TARGET="frontend/android/app/google-services.json"
+          SECRET="${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}"
+          if [ -n "$SECRET" ]; then
+            printf '%s' "$SECRET" | tr -dc 'A-Za-z0-9+/=' | base64 -d > "$TARGET"
+            echo "google-services.json: written from secret ($(stat -c%s "$TARGET") bytes)"
+          elif [ -f "$TARGET" ]; then
+            echo "google-services.json: using committed file ($(stat -c%s "$TARGET") bytes)"
+          else
+            echo "ERROR: google-services.json missing — set GOOGLE_SERVICES_JSON_BASE64 secret or commit the file"; exit 1
+          fi
+          node -e "JSON.parse(require('fs').readFileSync('$TARGET','utf8')); console.log('google-services.json: valid')"
 
       - name: Decode keystore
         run: |

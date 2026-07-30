@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "84891876210",
+    "project_id": "udaya-lms",
+    "storage_bucket": "udaya-lms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:84891876210:android:597559b9c84328c089fbeb",
+        "android_client_info": {
+          "package_name": "com.udayalearn.lms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAigJ5hpcTVdG6yjbCTowE6JP-lW2_RN_Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

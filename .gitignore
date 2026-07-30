@@ -64,7 +64,6 @@ subjects_page_redesign.html
 # Losing the keystore (or committing it) means you can never update the app again.
 *.jks
 *.keystore
-google-services.json
 android/app/build/
 android/.gradle/
 
