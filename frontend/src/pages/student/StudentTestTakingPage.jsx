@@ -269,45 +269,46 @@ export default function StudentTestTakingPage() {
     setConfirmSubmit(false);
     setIsSubmitting(true);
 
-    try {
-      const res = await testApi.submitTest(testId, {
-        answers,
-        cheat_events: cheatEvents.current,
-        terminated,
-      });
-
-      try { sessionStorage.removeItem(PKEY); } catch {}
-
-      if (document.fullscreenElement) {
-        await document.exitFullscreen().catch(e => console.error(e));
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
+        const res = await testApi.submitTest(testId, {
+          answers,
+          cheat_events: cheatEvents.current,
+          terminated,
+        });
+        try { sessionStorage.removeItem(PKEY); } catch {}
+        if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+        navigate('/student/tests/result', {
+          replace: true,
+          state: {
+            result: {
+              ...res,
+              total: questions.length,
+              testTitle: test?.title,
+              total_marks: test?.total_marks,
+              auto,
+              cancelled: terminated,
+              test_id: testId,
+            },
+            testMeta: {
+              title:         test?.title,
+              duration_mins: test?.duration_mins,
+              total_marks:   test?.total_marks,
+              scheduled_for: test?.scheduled_for,
+            },
+          },
+        });
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.error(`Submit attempt ${attempt + 1} failed:`, err);
       }
-
-      navigate('/student/tests/result', {
-        replace: true,
-        state: {
-          result: {
-            ...res,
-            total: questions.length,
-            testTitle: test?.title,
-            total_marks: test?.total_marks,
-            auto,
-            cancelled: terminated,
-            test_id: testId,
-          },
-          testMeta: {
-            title:         test?.title,
-            duration_mins: test?.duration_mins,
-            total_marks:   test?.total_marks,
-            scheduled_for: test?.scheduled_for,
-          },
-        },
-      });
-    } catch (err) {
-      console.error(err);
-      alert('Failed to submit test. Please try again.');
-      setSubmitted(false);
-      setIsSubmitting(false);
     }
+    alert('Failed to submit test. Please check your connection and try again.');
+    setSubmitted(false);
+    setIsSubmitting(false);
   }, [submitted, answers, test, testId, navigate, PKEY, questions.length]);
 
   // Screenshot / screen-recording detected → cancel the exam immediately (score 0).

@@ -997,6 +997,7 @@ class GradeSubmissionRequest(BaseModel):
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
+        self._history_lock = threading.Lock()
         self.broadcast_history = []
         self.load_history()
 
@@ -1009,8 +1010,9 @@ class ConnectionManager:
                 pass
 
     def save_history(self):
-        with open("broadcasts.json", "w") as f:
-            json.dump(self.broadcast_history, f)
+        with self._history_lock:
+            with open("broadcasts.json", "w") as f:
+                json.dump(self.broadcast_history, f)
 
     async def connect(self, websocket: WebSocket, standard_id: str):
         await websocket.accept()
@@ -1375,21 +1377,24 @@ def zoom_generate_sdk_signature(meeting_id: str, role: int) -> str:
 _auth_cache: dict = {}
 _AUTH_TTL = 30.0  # seconds — short enough that role/block/standard changes propagate quickly
 
+# Server-side test start times: {(test_id, student_id): unix_timestamp}
+_test_start_times: dict = {}
+_points_lock = threading.Lock()
+
 
 def _prune_auth_cache():
     now = time_module.time()
-    expired = [t for t, v in _auth_cache.items() if v["expires_at"] <= now]
+    snapshot = list(_auth_cache.items())
+    expired = [t for t, v in snapshot if v["expires_at"] <= now]
     for t in expired:
         _auth_cache.pop(t, None)
-    # If still oversized after dropping expired entries, clear the rest (cheap + bounded).
     if len(_auth_cache) > 500:
         _auth_cache.clear()
 
 
 def _invalidate_auth_cache_for_user(user_id: str):
-    # Drop every cached token for this user so flag changes (must_change_pwd,
-    # role, block) are visible on the very next request instead of after TTL.
-    stale = [t for t, v in _auth_cache.items() if v["result"].get("user_id") == user_id]
+    snapshot = list(_auth_cache.items())
+    stale = [t for t, v in snapshot if v["result"].get("user_id") == user_id]
     for t in stale:
         _auth_cache.pop(t, None)
 
@@ -1586,6 +1591,7 @@ OTP_RESEND_COOLDOWN_SECS = 60
 TRUSTED_DEVICE_DAYS = 30
 
 _otp_pending: dict = {}   # pending_id -> {otp_hash, email, expires, attempts, resends, last_sent, token, refresh_token, user_info}
+_otp_lock = threading.Lock()
 
 
 def _otp_hash(code: str) -> str:
@@ -1609,6 +1615,8 @@ def _mask_email(email: str) -> str:
         return email
 
 
+_devices_lock = threading.Lock()
+
 def _load_trusted_devices() -> dict:
     try:
         if TRUSTED_DEVICES_FILE.exists():
@@ -1628,31 +1636,32 @@ def _save_trusted_devices(data: dict):
 def _is_device_trusted(user_id: str, fingerprint: str) -> bool:
     if not fingerprint:
         return False
-    devices = _load_trusted_devices()
-    exp = devices.get(f"{user_id}:{fingerprint}")
-    if not exp:
-        return False
-    try:
-        return datetime.fromisoformat(exp) > datetime.now(timezone.utc)
-    except Exception:
-        return False
+    with _devices_lock:
+        devices = _load_trusted_devices()
+        exp = devices.get(f"{user_id}:{fingerprint}")
+        if not exp:
+            return False
+        try:
+            return datetime.fromisoformat(exp) > datetime.now(timezone.utc)
+        except Exception:
+            return False
 
 
 def _trust_device(user_id: str, fingerprint: str):
     if not fingerprint:
         return
-    devices = _load_trusted_devices()
-    now = datetime.now(timezone.utc)
-    # prune expired entries while we're here
-    pruned = {}
-    for k, v in devices.items():
-        try:
-            if datetime.fromisoformat(v) > now:
-                pruned[k] = v
-        except Exception:
-            pass
-    pruned[f"{user_id}:{fingerprint}"] = (now + timedelta(days=TRUSTED_DEVICE_DAYS)).isoformat()
-    _save_trusted_devices(pruned)
+    with _devices_lock:
+        devices = _load_trusted_devices()
+        now = datetime.now(timezone.utc)
+        pruned = {}
+        for k, v in devices.items():
+            try:
+                if datetime.fromisoformat(v) > now:
+                    pruned[k] = v
+            except Exception:
+                pass
+        pruned[f"{user_id}:{fingerprint}"] = (now + timedelta(days=TRUSTED_DEVICE_DAYS)).isoformat()
+        _save_trusted_devices(pruned)
 
 
 def _smtp_ready() -> bool:
@@ -1857,8 +1866,9 @@ def _login_impl(request: LoginRequest):
                 "phone", identifier).limit(1).execute().data or []
             resolved = _set_student_login_candidates(rows[0]) if rows else False
             if not resolved:
-                # Digits-normalized match (handles +91 prefix variations)
-                all_students = service_supabase.table("students").select("id, email, username, phone").not_.is_("phone", "null").execute()
+                # Digits-normalized match — use last-10-digit LIKE to avoid full scan.
+                last10 = digits_only[-10:] if len(digits_only) >= 10 else digits_only
+                all_students = service_supabase.table("students").select("id, email, username, phone").like("phone", f"%{last10}%").execute()
                 for s in (all_students.data or []):
                     stored_digits = re.sub(r'\D', '', s.get("phone", ""))
                     if stored_digits and (stored_digits.endswith(digits_only) or digits_only.endswith(stored_digits)):
@@ -2122,24 +2132,25 @@ def _login_impl(request: LoginRequest):
 
 @app.post("/api/auth/verify-otp")
 def verify_otp(request: VerifyOtpRequest):
-    _prune_otp_pending()
-    entry = _otp_pending.get(request.pending_id)
-    if not entry:
-        raise HTTPException(status_code=400, detail="Code expired. Please log in again.")
-    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
+    with _otp_lock:
+        _prune_otp_pending()
+        entry = _otp_pending.get(request.pending_id)
+        if not entry:
+            raise HTTPException(status_code=400, detail="Code expired. Please log in again.")
+        if entry["attempts"] >= OTP_MAX_ATTEMPTS:
+            _otp_pending.pop(request.pending_id, None)
+            raise HTTPException(status_code=429, detail="Too many attempts. Please log in again.")
+        entry["attempts"] += 1
+        if _otp_hash(request.code.strip()) != entry["otp_hash"]:
+            raise HTTPException(status_code=401, detail="Incorrect code. Please check your email and try again.")
+        # Success — pop inside the lock so a concurrent request sees it gone.
         _otp_pending.pop(request.pending_id, None)
-        raise HTTPException(status_code=429, detail="Too many attempts. Please log in again.")
-    entry["attempts"] += 1
-    if _otp_hash(request.code.strip()) != entry["otp_hash"]:
-        raise HTTPException(status_code=401, detail="Incorrect code. Please check your email and try again.")
-    # Success — release the held session and trust this device for 30 days.
-    _otp_pending.pop(request.pending_id, None)
-    _trust_device(entry["user_id"], request.device_fingerprint or "")
-    return {
-        "token": entry["token"],
-        "refresh_token": entry["refresh_token"],
-        "user": entry["user_info"],
-    }
+        token = entry["token"]
+        refresh_token = entry["refresh_token"]
+        user_info = entry["user_info"]
+        user_id = entry["user_id"]
+    _trust_device(user_id, request.device_fingerprint or "")
+    return {"token": token, "refresh_token": refresh_token, "user": user_info}
 
 
 @app.post("/api/auth/resend-otp")
@@ -8615,6 +8626,12 @@ def get_test_for_taking(test_id: str, user = Depends(verify_token)):
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
 
+    # Verify student is enrolled in the standard this test belongs to.
+    if test.data.get("class_id") and user.get("standard_id"):
+        subj = service_supabase.table("subject_classes").select("standard_id").eq("id", test.data["class_id"]).single().execute()
+        if not subj.data or str(subj.data.get("standard_id")) != str(user["standard_id"]):
+            raise HTTPException(status_code=403, detail="Test not available for your class")
+
     # A teacher-granted re-attempt may re-open a test whose deadline has passed.
     # The grant is an 'approved' row in test_reattempt_requests (no DB column).
     granted = bool(user.get("student_id") and _reattempt_enabled()
@@ -8632,6 +8649,11 @@ def get_test_for_taking(test_id: str, user = Depends(verify_token)):
 
     # Get questions (without correct answers for students)
     questions = service_supabase.table("questions").select("id, question, options, order_num").eq("test_id", test_id).order("order_num").execute()
+
+    # Record server-side start time for duration enforcement on submit.
+    start_key = (test_id, user.get("student_id"))
+    if start_key not in _test_start_times:
+        _test_start_times[start_key] = time_module.time()
 
     return {
         "test": {
@@ -8680,6 +8702,12 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     if not test.data:
         raise HTTPException(status_code=404, detail="Test not found")
 
+    # Enrollment check: test must belong to student's standard.
+    if test.data.get("class_id") and user.get("standard_id"):
+        subj = service_supabase.table("subject_classes").select("standard_id").eq("id", test.data["class_id"]).single().execute()
+        if not subj.data or str(subj.data.get("standard_id")) != str(user["standard_id"]):
+            raise HTTPException(status_code=403, detail="Test not available for your class")
+
     # Check if already attempted. A teacher-approved re-attempt lets the student
     # submit again — the new attempt OVERWRITES the old row. The grant is an
     # 'approved' row in test_reattempt_requests (source of truth), so this never
@@ -8693,6 +8721,14 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
                      and _has_approved_reattempt(test_id, user["student_id"]))
     if prior and not has_grant:
         raise HTTPException(status_code=400, detail="Test already attempted")
+
+    # Server-side time limit check (2-minute grace for network delays).
+    start_key = (test_id, user["student_id"])
+    started_at = _test_start_times.pop(start_key, None)
+    if started_at and not has_grant and not request.terminated:
+        elapsed_mins = (time_module.time() - started_at) / 60
+        if elapsed_mins > test.data["duration_mins"] + 2:
+            raise HTTPException(status_code=400, detail="Time limit exceeded")
 
     # Get questions with correct answers
     questions = service_supabase.table("questions").select("id, correct_idx, order_num").eq("test_id", test_id).execute()
@@ -8764,11 +8800,14 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
         "submitted_at": datetime.now(timezone.utc).isoformat()
     }
     if prior:
-        # Overwrite the prior attempt (a re-attempt of a test already taken).
         result = service_supabase.table("test_attempts").update(attempt_data).eq("id", prior["id"]).execute()
     else:
-        # First-ever attempt — a normal submission, OR a MISSED test re-opened by a grant.
-        result = service_supabase.table("test_attempts").insert(attempt_data).execute()
+        try:
+            result = service_supabase.table("test_attempts").insert(attempt_data).execute()
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower() or "23505" in str(e):
+                raise HTTPException(status_code=409, detail="Test already submitted.")
+            raise
     if has_grant:
         # Consume the one-shot grant by marking the approved request 'completed'
         # (that status IS the grant — no DB column). Covers BOTH a re-attempt of a
@@ -8791,10 +8830,11 @@ def submit_test(test_id: str, request: SubmitTestRequest, user = Depends(verify_
     # Update student points. On a re-attempt, apply only the DELTA vs the old attempt
     # (which already contributed its points) so totals/leaderboard stay correct.
     points_delta = (points_earned - (prior.get("points_earned") or 0)) if prior else points_earned
-    student = service_supabase.table("students").select("points").eq("id", user["student_id"]).single().execute()
-    if student.data:
-        new_points = (student.data.get("points") or 0) + points_delta
-        service_supabase.table("students").update({"points": new_points}).eq("id", user["student_id"]).execute()
+    with _points_lock:
+        student = service_supabase.table("students").select("points").eq("id", user["student_id"]).single().execute()
+        if student.data:
+            new_points = (student.data.get("points") or 0) + points_delta
+            service_supabase.table("students").update({"points": new_points}).eq("id", user["student_id"]).execute()
 
     # Update avg_score (stored as percentage)
     attempts = service_supabase.table("test_attempts").select("score, tests(total_marks)").eq("student_id", user["student_id"]).execute()
@@ -9822,6 +9862,11 @@ async def websocket_endpoint(websocket: WebSocket, standard_id: str, token: Opti
             valid = False
     if not valid:
         await websocket.close(code=4001)
+        return
+    # Students may only connect to their own standard's channel.
+    cached_user = _auth_cache.get(token, {}).get("result", {})
+    if cached_user.get("role") == "student" and str(cached_user.get("standard_id", "")) != str(standard_id):
+        await websocket.close(code=4003)
         return
     await manager.connect(websocket, standard_id)
 
@@ -11987,14 +12032,19 @@ async def submit_assignment(
         lambda: filestore.signed_url(service_supabase, "assignments", storage_path, 3600)
     )
 
-    row = service_supabase.table("assignment_submissions").insert({
-        "assignment_id": assignment_id,
-        "student_id": student_id,
-        "file_url": str(public_url),
-        "file_name": upload_name,
-        "file_type": ct,
-        "storage_path": storage_path,
-    }).execute()
+    try:
+        row = service_supabase.table("assignment_submissions").insert({
+            "assignment_id": assignment_id,
+            "student_id": student_id,
+            "file_url": str(public_url),
+            "file_name": upload_name,
+            "file_type": ct,
+            "storage_path": storage_path,
+        }).execute()
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower() or "23505" in str(e):
+            raise HTTPException(status_code=409, detail="You have already submitted this assignment.")
+        raise
     return row.data[0] if row.data else {}
 
 
@@ -13262,20 +13312,22 @@ INSIGHTS_COOLDOWN_SECS = 30
 # gets a free extra call that day). Structure: {student_id: {"2026-07-07": n}}
 STUDENT_DAILY_LIMIT = 3
 _student_daily_tokens: dict = {}
+_ai_lock = threading.Lock()
 
 def _tokens_used_today(student_id: str) -> int:
     from datetime import date as _date
     today = _date.today().isoformat()
-    return _student_daily_tokens.get(student_id, {}).get(today, 0)
+    with _ai_lock:
+        return _student_daily_tokens.get(student_id, {}).get(today, 0)
 
 def _consume_student_token(student_id: str):
     from datetime import date as _date
     today = _date.today().isoformat()
-    bucket = _student_daily_tokens.setdefault(student_id, {})
-    bucket[today] = bucket.get(today, 0) + 1
-    # Drop old dates to prevent unbounded growth
-    for old in [d for d in bucket if d != today]:
-        del bucket[old]
+    with _ai_lock:
+        bucket = _student_daily_tokens.setdefault(student_id, {})
+        bucket[today] = bucket.get(today, 0) + 1
+        for old in [d for d in list(bucket) if d != today]:
+            del bucket[old]
 
 AI_BUSY_MSG = "The AI is busy right now — please try again in a minute."
 
@@ -15943,7 +15995,8 @@ class WhatsAppReplyInput(BaseModel):
 
 
 @app.get("/api/dev/debug-messages")
-def dev_debug_messages():
+def dev_debug_messages(user = Depends(verify_token)):
+    _wa_require_teacher(user)
     try:
         rows = service_supabase.table("whatsapp_messages").select("id, status, error, media_url").order("created_at", desc=True).limit(5).execute().data
         return {"messages": rows}
