@@ -167,7 +167,6 @@ export async function parseImportFile(file, existingStandards, existingUsernames
           status = 'error';
         }
         if (!raw_email) warnings.push('Missing Email');
-        if (!raw_phone) warnings.push('Missing Phone');
 
         // Match standard
         let matched_standard_id = null;
