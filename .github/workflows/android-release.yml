@@ -166,12 +166,25 @@ jobs:
           BUCKET: ${{ secrets.R2_PUBLIC_BUCKET }}
         run: |
           APK="${{ steps.stage.outputs.apk_name }}"
+          AAB="${{ steps.stage.outputs.aab_name }}"
+          # Upload current APK + latest alias + version manifest
           aws s3 cp "out/$APK" "s3://$BUCKET/app/$APK" \
             --endpoint-url "$ENDPOINT" --content-type application/vnd.android.package-archive
           aws s3 cp "out/udaya-latest.apk" "s3://$BUCKET/app/udaya-latest.apk" \
             --endpoint-url "$ENDPOINT" --content-type application/vnd.android.package-archive
           aws s3 cp "out/version.json" "s3://$BUCKET/app/version.json" \
             --endpoint-url "$ENDPOINT" --content-type application/json --cache-control "no-cache"
+          # Upload AAB to R2 so it can be downloaded without going through GitHub UI
+          aws s3 cp "out/$AAB" "s3://$BUCKET/app/$AAB" \
+            --endpoint-url "$ENDPOINT" --content-type application/octet-stream
+          # Remove old versioned APKs (keep only the current version + udaya-latest.apk)
+          aws s3 ls "s3://$BUCKET/app/" --endpoint-url "$ENDPOINT" \
+            | awk '{print $4}' | grep '^udaya-.*\.apk$' \
+            | grep -v "^${APK}$" | grep -v '^udaya-latest\.apk$' \
+            | while read f; do
+                echo "Removing old APK: $f"
+                aws s3 rm "s3://$BUCKET/app/$f" --endpoint-url "$ENDPOINT"
+              done
 
       - name: Upload Play Store bundle (.aab) artifact
         # Download this from the workflow run and hand-upload it to Google Play Console
