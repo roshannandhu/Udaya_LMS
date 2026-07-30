@@ -171,7 +171,7 @@ export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4 bg-neutral-900/40" onClick={onClose}>
       <motion.div onClick={(e) => e.stopPropagation()}
         variants={popIn} initial="hidden" animate="show"
-        className={`w-full ${sizes[size]} max-h-[95vh] sm:max-h-[90vh] bg-white rounded-t-3xl sm:rounded-2xl shadow-xl border border-[#EFEDEA] flex flex-col`}>
+        className={`w-full ${sizes[size]} max-h-[calc(100dvh-5.625rem)] lg:max-h-[90vh] bg-white rounded-t-3xl sm:rounded-2xl shadow-xl border border-[#EFEDEA] flex flex-col`}>
         <div className="px-5 py-4 border-b border-[#EFEDEA] flex items-center justify-between flex-shrink-0 bg-white rounded-t-3xl sm:rounded-t-2xl z-10">
           <h2 className="text-sm font-semibold">{title}</h2>
           <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded-lg hover:bg-[#F4F2EF] dark:hover:bg-white/10"><X size={16} /></button>
@@ -207,7 +207,7 @@ export const Sheet = ({ open, onClose, title, children }) => {
       className="fixed inset-0 z-50 flex md:items-center md:justify-end bg-neutral-900/40" onClick={onClose}>
       <motion.div onClick={(e) => e.stopPropagation()}
         initial={{ x: '8%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.22, ease: 'easeOut' }}
-        className="absolute bottom-0 md:bottom-auto md:right-0 md:top-0 w-full md:w-[480px] bg-white shadow-lift md:rounded-l-card rounded-t-card flex flex-col max-h-[92vh] md:max-h-none border-l border-[#EFEDEA]">
+        className="absolute bottom-0 md:bottom-auto md:right-0 md:top-0 w-full md:w-[480px] bg-white shadow-lift md:rounded-l-card rounded-t-card flex flex-col max-h-[calc(100dvh-5.625rem)] md:max-h-none border-l border-[#EFEDEA]">
         <div className="px-5 py-4 border-b border-[#EFEDEA] flex items-center justify-between flex-shrink-0">
           <h2 className="text-sm font-semibold">{title}</h2>
           <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 p-1 rounded-lg hover:bg-[#F4F2EF]"><X size={16} /></button>
