@@ -1665,16 +1665,26 @@ def _trust_device(user_id: str, fingerprint: str):
 
 
 def _smtp_ready() -> bool:
-    """True when all required SMTP env vars are set."""
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+    """True when all required SMTP env vars are set. Re-reads os.environ at call
+    time so env changes (EC2 service vars, .env reload) take effect without restart."""
+    return bool(
+        os.environ.get("SMTP_HOST", "").strip() and
+        os.environ.get("SMTP_USER", "").strip() and
+        os.environ.get("SMTP_PASS", "").strip()
+    )
 
 
 def send_otp_email(to_email: str, code: str) -> bool:
     """Send the 6-digit login code via SMTP. Returns False on any failure."""
     if not _smtp_ready():
         return False
+    _host = os.environ.get("SMTP_HOST", "").strip()
+    _port = os.environ.get("SMTP_PORT", "465").strip()
+    _user = os.environ.get("SMTP_USER", "").strip()
+    _pass = os.environ.get("SMTP_PASS", "").strip()
+    _from = os.environ.get("SMTP_FROM", "").strip() or _user
     lms = (get_teacher_settings().get("lms_name") or "Udaya").strip() or "Udaya"
-    from_addr = SMTP_FROM or SMTP_USER
+    from_addr = _from
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"{code} is your {lms} login code"
@@ -1689,19 +1699,19 @@ def send_otp_email(to_email: str, code: str) -> bool:
             f"</div>",
             "html"
         ))
-        port = int(SMTP_PORT) if SMTP_PORT else 465
+        port = int(_port) if _port else 465
         ctx = ssl.create_default_context()
         if port == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=15) as srv:
-                srv.login(SMTP_USER, SMTP_PASS)
+            with smtplib.SMTP_SSL(_host, port, context=ctx, timeout=15) as srv:
+                srv.login(_user, _pass)
                 srv.sendmail(from_addr, to_email, msg.as_string())
         else:
             # port 587 or any non-465 → STARTTLS
-            with smtplib.SMTP(SMTP_HOST, port, timeout=15) as srv:
+            with smtplib.SMTP(_host, port, timeout=15) as srv:
                 srv.ehlo()
                 srv.starttls(context=ctx)
                 srv.ehlo()
-                srv.login(SMTP_USER, SMTP_PASS)
+                srv.login(_user, _pass)
                 srv.sendmail(from_addr, to_email, msg.as_string())
         return True
     except Exception as e:
