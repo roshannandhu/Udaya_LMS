@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { getApiBaseUrl, apiClient, clearApiCache } from './api';
-import { enableScreenSecurity, disableScreenSecurity } from './secureScreen';
+import { enableScreenSecurity, applyScreenPolicy } from './secureScreen';
 import { useSettingsStore, useAppCache, useWhatsNew } from '../store';
 
 const API_BASE         = getApiBaseUrl();
@@ -98,12 +98,11 @@ export const useAuthStore = create((set, get) => ({
     useAppCache.getState().reset();
     useWhatsNew.getState().reset();
 
-    // Native app: lock screen capture for students, keep open for teachers
-    if (data.user.role === 'student') {
-      enableScreenSecurity();
-    } else {
-      disableScreenSecurity();
-      // Pull server-stored settings (branding, default password, PIN, etc.)
+    // Native app: apply screenshot policy for this role
+    const policy = useSettingsStore.getState().screenshotPolicy;
+    applyScreenPolicy(policy, data.user.role);
+    if (data.user.role !== 'student') {
+      // Pull server-stored settings (branding, default password, PIN, policy, etc.)
       useSettingsStore.getState().hydrateFromServer();
     }
 
@@ -164,16 +163,19 @@ export const useAuthStore = create((set, get) => ({
       if (user.teacher_type) localStorage.setItem(TEACHER_TYPE_KEY, user.teacher_type);
       else localStorage.removeItem(TEACHER_TYPE_KEY);
       set({ user, role: user.role || 'student', isLoading: false });
-      // Re-assert screen capture lock on EVERY app boot — not just fresh login.
-      // Students reopen the app with a saved session (this path), where FLAG_SECURE
-      // was never being set, so screenshots were unblocked after the first launch.
-      if ((user.role || 'student') === 'student') {
-        enableScreenSecurity();
+      const verifiedRole = user.role || 'student';
+      if (verifiedRole === 'student') {
+        // Refresh policy from the public branding endpoint (no auth needed).
+        // applyBranding updates screenshotPolicy in the store → App.jsx effect re-applies.
+        fetch(`${API_BASE}/branding`).then(r => r.json())
+          .then(d => useSettingsStore.getState().applyBranding(d))
+          .catch(() => {});
       } else {
-        disableScreenSecurity();
         // Refresh server-stored settings for teachers on every app boot
         useSettingsStore.getState().hydrateFromServer();
       }
+      // Apply immediately with the cached policy (safe default: block_all)
+      applyScreenPolicy(useSettingsStore.getState().screenshotPolicy, verifiedRole);
     } catch (error) {
       if (error.message === 'Session expired. Please log in again.') {
         // auth:logout event has already cleared localStorage + state
@@ -238,7 +240,7 @@ export const useAuthStore = create((set, get) => ({
     clearApiCache();
     useAppCache.getState().reset();
     useWhatsNew.getState().reset();
-    disableScreenSecurity(); // always unlock on logout
+    enableScreenSecurity(); // lock on logout — safe default until next login sets real policy
     set({ user: null, role: null, isLoading: false });
   },
 

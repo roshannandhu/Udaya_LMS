@@ -68,6 +68,7 @@ const SETTINGS_SERVER_KEYS = {
   otpEmailReady: 'otp_email_ready',   // read-only (server-computed; never POSTed — no setter)
   studentsCanViewReport: 'students_can_view_report',
   studentsCanUploadFiles: 'students_can_upload_files',
+  screenshotPolicy: 'screenshot_policy',
 };
 const SETTINGS_LOCAL_KEYS = Object.fromEntries(
   Object.entries(SETTINGS_SERVER_KEYS).map(([local, server]) => [server, local])
@@ -124,6 +125,10 @@ export const useSettingsStore = create(
       studentsCanUploadFiles: false,
       setStudentsCanUploadFiles: (val) => { set({ studentsCanUploadFiles: val }); persistSettings({ studentsCanUploadFiles: val }); },
 
+      // Screenshot policy (master control — primary teacher only)
+      screenshotPolicy: 'block_all',
+      setScreenshotPolicy: (val) => { set({ screenshotPolicy: val }); persistSettings({ screenshotPolicy: val }); },
+
       // Pull server-stored settings into the store (call after teacher login / on boot).
       // Only overwrites keys the server actually has, so first-run defaults survive.
       hydrateFromServer: async () => {
@@ -145,9 +150,10 @@ export const useSettingsStore = create(
 
       // Apply branding fetched from the PUBLIC /branding endpoint (login page).
       // Does NOT write back to the server — it's a read-only display update.
-      applyBranding: ({ lms_name, lms_logo } = {}) => set((s) => ({
+      applyBranding: ({ lms_name, lms_logo, screenshot_policy } = {}) => set((s) => ({
         lmsName: lms_name || s.lmsName,
         lmsLogo: lms_logo ? lms_logo : (lms_logo === '' ? null : s.lmsLogo),
+        screenshotPolicy: screenshot_policy || s.screenshotPolicy,
       })),
     }),
     { name: 'udaya-settings', storage: createJSONStorage(() => localStorage) }

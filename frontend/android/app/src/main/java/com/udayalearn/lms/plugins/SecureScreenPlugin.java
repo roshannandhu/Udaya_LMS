@@ -27,12 +27,20 @@ public class SecureScreenPlugin extends Plugin {
         call.resolve();
     }
 
-    /** No-op by design. Screenshots are blocked for EVERYONE, always (set natively
-     *  in MainActivity.onCreate), so the flag must never be cleared — not even by
-     *  the legacy teacher-role disable() calls in App.jsx/auth.js. Kept (resolving
-     *  successfully) only so those existing JS calls don't error. */
+    /** Clears FLAG_SECURE — called when the admin policy allows screenshots for this role. */
     @PluginMethod
     public void disable(PluginCall call) {
+        if (getActivity() == null) {
+            call.resolve();
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() != null && getActivity().getWindow() != null) {
+                getActivity().getWindow().clearFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE
+                );
+            }
+        });
         call.resolve();
     }
 }

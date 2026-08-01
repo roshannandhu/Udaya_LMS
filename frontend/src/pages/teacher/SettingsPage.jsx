@@ -118,6 +118,7 @@ export default function SettingsPage() {
     securitySingleDevice, securityAutoLogout, securityTwoStepVerification, otpEmailReady, setSecurityPref,
     studentsCanViewReport, setStudentsCanViewReport,
     studentsCanUploadFiles, setStudentsCanUploadFiles,
+    screenshotPolicy, setScreenshotPolicy,
   } = useSettingsStore();
 
   const logoInputRef = useRef(null);
@@ -648,6 +649,35 @@ export default function SettingsPage() {
               <Toggle checked={myOtpEnabled} onChange={handleToggleMyOtp} disabled={myOtpLoading} />
             </div>
           )}
+
+          {/* Screenshot Policy — primary only */}
+          {isPrimary && <div className="px-4 py-3">
+            <p className="text-sm font-medium mb-0.5">Screenshot &amp; screen recording</p>
+            <p className="text-xs text-neutral-500 mb-3">Controls who can take screenshots or record the screen inside the app.</p>
+            <div className="space-y-2">
+              {[
+                { value: 'block_all', label: 'Block everyone', sub: 'Neither teachers nor students can screenshot' },
+                { value: 'block_students', label: 'Block students only', sub: 'Teachers can screenshot, students cannot' },
+                { value: 'allow_all', label: 'Allow everyone', sub: 'Screenshots allowed for all users' },
+              ].map(opt => (
+                <label key={opt.value} className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="screenshot_policy"
+                    value={opt.value}
+                    checked={screenshotPolicy === opt.value}
+                    onChange={() => setScreenshotPolicy(opt.value)}
+                    className="mt-0.5 accent-neutral-900"
+                  />
+                  <div>
+                    <p className="text-sm font-medium leading-tight">{opt.label}</p>
+                    <p className="text-xs text-neutral-500">{opt.sub}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-amber-600 mt-3">Takes effect on the next app launch after updating.</p>
+          </div>}
 
           {/* Termination PIN — primary only */}
           {isPrimary && <div className="px-4 py-3">

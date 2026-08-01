@@ -3,10 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 
 import LoginPage from './pages/LoginPage';
 import { useAuthStore, ROLES } from './lib/auth';
-import { useAppCache } from './store';
+import { useAppCache, useSettingsStore } from './store';
 import { useTheme } from './lib/theme';
 import useAndroidBackButton from './lib/useAndroidBackButton';
-import { enableScreenSecurity, disableScreenSecurity } from './lib/secureScreen';
+import { enableScreenSecurity, applyScreenPolicy } from './lib/secureScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import SplashScreen from './components/SplashScreen';
 import UpdateBanner from './components/UpdateBanner';
@@ -260,10 +260,11 @@ export default function App() {
     };
   }, [role]);
 
+  const screenshotPolicy = useSettingsStore(s => s.screenshotPolicy);
   useEffect(() => {
-    if (role === ROLES.STUDENT) enableScreenSecurity();
-    else if (role) disableScreenSecurity();
-  }, [role]);
+    if (role) applyScreenPolicy(screenshotPolicy, role);
+    else enableScreenSecurity(); // logged out → safe default
+  }, [role, screenshotPolicy]);
   // Re-assert on app resume (defensive — a backgrounded app returning to foreground).
   useEffect(() => {
     let remove = () => {};
@@ -273,8 +274,10 @@ export default function App() {
         if (Capacitor.getPlatform() !== 'android') return;
         const { App: CapApp } = await import('@capacitor/app');
         const h = await CapApp.addListener('resume', () => {
-          if (useAuthStore.getState().role === ROLES.STUDENT) {
-            enableScreenSecurity();
+          const { role: r } = useAuthStore.getState();
+          const policy = useSettingsStore.getState().screenshotPolicy;
+          if (r) applyScreenPolicy(policy, r);
+          if (r === ROLES.STUDENT) {
             import('./lib/liveAlarms').then(m => m.syncLiveAlarms()).catch(() => {});
           }
         });

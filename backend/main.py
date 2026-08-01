@@ -12459,6 +12459,8 @@ class TeacherSettingsInput(BaseModel):
     students_can_upload_files: Optional[bool] = None
     # Backups — auto-backup cadence: off | daily | weekly | monthly
     backup_frequency: Optional[str] = None
+    # Screenshot policy: block_all | block_students | allow_all
+    screenshot_policy: Optional[str] = None
 
 @app.get("/api/teacher/settings")
 def get_settings(user: dict = Depends(get_current_user)):
@@ -12472,15 +12474,20 @@ def get_settings(user: dict = Depends(get_current_user)):
     # Read-only hint for the Security UI: OTP emails need RESEND_API_KEY in .env.
     settings["otp_email_ready"] = _smtp_ready()
     settings.setdefault("backup_frequency", "daily")
+    settings.setdefault("screenshot_policy", "block_all")
     return settings
 
 @app.post("/api/teacher/settings")
 def update_settings(data: TeacherSettingsInput, user: dict = Depends(get_current_user)):
     if user.get("role") != "teacher":
         raise HTTPException(status_code=403, detail="Not authorized")
-    # Sub-teachers can change most settings but not the termination PIN
+    # Sub-teachers can change most settings but not the termination PIN or screenshot policy
     if user.get("teacher_type") == "sub" and data.termination_pin is not None:
         raise HTTPException(status_code=403, detail="Only the primary teacher can change the termination PIN")
+    if user.get("teacher_type") == "sub" and data.screenshot_policy is not None:
+        raise HTTPException(status_code=403, detail="Only the primary teacher can change the screenshot policy")
+    if data.screenshot_policy is not None and data.screenshot_policy not in {"block_all", "block_students", "allow_all"}:
+        raise HTTPException(status_code=400, detail="Invalid screenshot_policy")
     settings = get_teacher_settings()
     # Persist only the fields the client actually sent. exclude_unset lets the
     # caller clear a value by sending "" (omitted fields are left untouched).
@@ -12505,6 +12512,7 @@ def get_branding():
     return {
         "lms_name": (settings.get("lms_name") or "").strip() or _DEFAULT_INSTITUTE_NAME,
         "lms_logo": settings.get("lms_logo") or "",
+        "screenshot_policy": settings.get("screenshot_policy") or "block_all",
     }
 
 
