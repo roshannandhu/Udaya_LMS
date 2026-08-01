@@ -4,6 +4,7 @@ import html2pdf from 'html2pdf.js';
 import { XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, ReferenceLine } from 'recharts';
 import QRCode from 'react-qr-code';
 import { useSettingsStore, DEFAULT_LMS_LOGO } from '../store';
+import { downloadOrShare } from './fileUtils';
 import { AlertTriangle, Book, Calendar, CheckCircle, Clock, FileText, Target, Trophy, XCircle, Zap, Activity, LayoutGrid, Award, Brain, ClipboardCheck, Layers, ShieldCheck, TrendingUp, TrendingDown, Minus, ListChecks, Gauge } from 'lucide-react';
 
 const PDF_CANVAS_WIDTH = 720;
@@ -126,7 +127,8 @@ async function generatePdf(element, filename) {
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak:    { mode: ['css', 'legacy'] }
   };
-  await html2pdf().set(opt).from(element).save();
+  const blob = await html2pdf().set(opt).from(element).output('blob');
+  await downloadOrShare(blob, filename);
 }
 
 const waitForFrame = () => new Promise(resolve => {

@@ -34,3 +34,38 @@ export function safeFileName(file, fallbackBase = 'file') {
     || 'bin';
   return `${name.replace(/\.+$/, '')}.${ext}`;
 }
+
+// On Android WebView (Capacitor), `a.click()` downloads are silently blocked.
+// Native path: write to cache dir → open native share sheet (Save to Files, etc.)
+// Browser path: standard anchor-click download.
+export async function downloadOrShare(blob, filename) {
+  if (window.Capacitor?.isNativePlatform()) {
+    const [{ Filesystem, Directory }, { Share }] = await Promise.all([
+      import('@capacitor/filesystem'),
+      import('@capacitor/share'),
+    ]);
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
+    const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+    try {
+      await Share.share({ title: filename, files: [uri] });
+    } catch (err) {
+      // user dismissed the share sheet — not an error
+      if (!/cancel/i.test(String(err?.message ?? err))) throw err;
+    }
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

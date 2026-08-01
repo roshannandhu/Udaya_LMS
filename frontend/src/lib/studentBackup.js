@@ -7,6 +7,8 @@
 // load/write (flaky network, mobile-browser quirks) — the teacher never gets stuck
 // without a backup.
 
+import { downloadOrShare } from './fileUtils';
+
 // ── small utilities ──────────────────────────────────────────────────────────
 
 function fmtJoined(iso) {
@@ -44,20 +46,13 @@ function uniqueSheetName(name, used) {
   return candidate;
 }
 
-function downloadCsv(header, rows, filename) {
+async function downloadCsv(header, rows, filename) {
   const all = [header, ...rows];
   const csv = all
     .map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
     .join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  await downloadOrShare(blob, filename);
 }
 
 /**
@@ -75,16 +70,19 @@ function downloadCsv(header, rows, filename) {
 export async function downloadAoaWorkbook(aoa, { filename = 'export', cols = null, sheetName = 'Sheet1' } = {}) {
   const rows2d = Array.isArray(aoa) ? aoa : [];
   try {
-    const XLSX = await import('xlsx');
+    const mod = await import('xlsx');
+    const XLSX = mod.default ?? mod;
     const ws = XLSX.utils.aoa_to_sheet(rows2d);
     if (cols) ws['!cols'] = cols;
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, uniqueSheetName(sheetName, new Set()));
-    XLSX.writeFile(wb, `${filename}.xlsx`);
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    await downloadOrShare(blob, `${filename}.xlsx`);
     return { ok: true, format: 'xlsx' };
   } catch (err) {
     console.error('xlsx write failed, falling back to CSV:', err);
-    downloadCsv(rows2d[0] || [], rows2d.slice(1), `${filename}.csv`);
+    await downloadCsv(rows2d[0] || [], rows2d.slice(1), `${filename}.csv`);
     return { ok: true, format: 'csv' };
   }
 }
