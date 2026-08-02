@@ -6,7 +6,7 @@
   // SPA routing: unmatched paths fall back to index.html so React Router works.
   // To change the backend the app calls, edit VITE_API_URL in frontend/.env.production,
   // commit, and push — Cloudflare auto-deploys.
-  "name": "udaya-learn",
+  "name": "udaya-lms",
   "compatibility_date": "2025-01-01",
   "build": {
     "command": "cd frontend && npm install --legacy-peer-deps && npm run build"
