@@ -236,11 +236,20 @@ const queue = new MessageQueue(rawSend, {
   },
 });
 
+// Files that live in SESSION_DIR but are NOT WhatsApp auth state. Wiping the
+// session to force a fresh QR must not destroy them: queue.json is undelivered
+// messages, dedupe.json stops already-delivered ones being re-sent, and
+// state.json holds the daily counter + warm-up start date. A logout used to
+// take all three with it — so a disconnect mid-batch silently deleted every
+// message still waiting and reset the send cap back to day one.
+const NON_AUTH_FILES = new Set(['queue.json', 'dedupe.json', 'state.json']);
+
 function clearSessionDir() {
   try {
     if (fs.existsSync(SESSION_DIR)) {
       const files = fs.readdirSync(SESSION_DIR);
       for (const file of files) {
+        if (NON_AUTH_FILES.has(file)) continue;
         fs.rmSync(`${SESSION_DIR}/${file}`, { recursive: true, force: true });
       }
     }
