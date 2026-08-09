@@ -13967,6 +13967,29 @@ def _wa_migrate_legacy_body(body: str, labels) -> str:
     return re.sub(r"\{\{\s*(\d+)\s*\}\}", repl, body)
 
 
+def _wa_template_meta(teacher_id: str, template_name: Optional[str]):
+    """(body_text, meta_approved) for one saved template.
+
+    Meta only sends a REAL template when the saved one has an approved provider
+    counterpart; anything else falls back to rendered free-form text, which Meta
+    rejects outside the 24h customer-service window. A caller that forgets to
+    resolve this silently sends free-form to every parent — fine on Baileys,
+    100% failure on Meta.
+    """
+    if not template_name:
+        return None, False
+    try:
+        t = service_supabase.table("whatsapp_templates").select(
+            "body_text, status, provider_template_id").eq(
+            "name", template_name).eq("teacher_id", teacher_id).limit(1).execute().data
+    except Exception:
+        return None, False
+    if not t:
+        return None, False
+    return ((t[0].get("body_text") or ""),
+            bool(t[0].get("provider_template_id")) and t[0].get("status") == "approved")
+
+
 def _wa_fetch_credentials(student_ids: List[str]) -> dict:
     """Map student_id → {student_code, plain_password, must_change_pwd}. Sensitive —
     only used by the credentials/welcome send path. Graceful-degrades."""
@@ -14635,15 +14658,7 @@ async def wa_send(data: WhatsAppSendInput, user = Depends(verify_token)):
     if data.mode == "template":
         if not data.template_name:
             raise HTTPException(status_code=400, detail="Please choose a template first.")
-        try:
-            t = service_supabase.table("whatsapp_templates").select(
-                "body_text, status, provider_template_id").eq(
-                "name", data.template_name).eq("teacher_id", teacher_id).limit(1).execute().data
-            if t:
-                template_body = t[0].get("body_text") or ""
-                meta_approved = bool(t[0].get("provider_template_id")) and t[0].get("status") == "approved"
-        except Exception:
-            pass
+        template_body, meta_approved = _wa_template_meta(teacher_id, data.template_name)
         body_for_check = template_body if template_body is not None else (data.body_text or "")
     else:
         body_for_check = data.body_text or ""
@@ -15488,6 +15503,10 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
     lms = _wa_branding_name()
     cfg = wa.get_wa_config()
     template_name = data.template_name or cfg.get("welcome_template")
+    # Without this the Meta provider never uses a real template here, so every
+    # credentials message goes free-form and Meta rejects the lot (no 24h window
+    # with a parent who has never messaged the school).
+    tpl_body, tpl_approved = _wa_template_meta(teacher_id, template_name)
     default_pwd = ""
     try:
         default_pwd = (get_teacher_settings().get("default_student_password") or "").strip()
@@ -15516,7 +15535,8 @@ async def wa_send_welcome(data: WhatsAppWelcomeInput, user = Depends(verify_toke
                 mode = "template" if template_name else "freeform"
                 res = await _wa_send_and_log(
                     provider, teacher_id, r, mode=mode, template_name=template_name,
-                    body_text=body, category=data.category, standard_id=r["standard_id"])
+                    body_text=body, template_body=tpl_body, meta_approved=tpl_approved,
+                    category=data.category, standard_id=r["standard_id"])
                 results.append(res)
                 _wa_batch_track(batch_id, res)
             except Exception as e:

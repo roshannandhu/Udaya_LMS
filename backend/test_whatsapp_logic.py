@@ -153,3 +153,23 @@ def test_send_input_has_media_name_and_wa_send_passes_it_through():
     # wa_send must forward it — check both call sites in the source.
     source = inspect.getsource(main.wa_send)
     assert source.count("media_name=data.media_name") >= 2
+
+
+def test_welcome_send_resolves_meta_template_approval():
+    """The credentials/welcome send must resolve the saved template's Meta approval
+    and pass it to _wa_send_and_log.
+
+    Regression: only wa_send resolved `meta_approved`; wa_send_welcome never did,
+    so `use_meta_template` was always False there and every credentials message
+    went out free-form. Baileys tolerates that, Meta does not — free-form to a
+    parent outside the 24h window is rejected, so a whole class would fail."""
+    import inspect
+    source = inspect.getsource(main.wa_send_welcome)
+    assert "_wa_template_meta(" in source, "welcome path must resolve the template"
+    assert "meta_approved=" in source, "welcome path must pass meta_approved through"
+    assert "template_body=" in source, "template body is needed to map variables"
+
+    # The shared helper must gate approval on BOTH an approved status and a real
+    # provider-side template id — either alone would send an unusable template.
+    helper = inspect.getsource(main._wa_template_meta)
+    assert "provider_template_id" in helper and "approved" in helper
