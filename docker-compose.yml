@@ -51,10 +51,13 @@ services:
       # with a warmed, established number — or move bulk to the Meta Cloud API.
       - DAILY_MESSAGE_LIMIT=${DAILY_MESSAGE_LIMIT:-50}
       - WARMUP_ENABLED=${WARMUP_ENABLED:-true}
-      # Gap between sends. Raise well above the 4s default (30000+) whenever the
-      # linked number is new or has just been restricted.
-      - SEND_DELAY_MS=${SEND_DELAY_MS:-4000}
-      - SEND_JITTER_MS=${SEND_JITTER_MS:-2500}
+      # Gap between sends. The default is 30s, NOT the 4s this used to ship with:
+      # on 2026-08-09 a class-sized run at ~5s spacing got the number restricted
+      # within ~103 messages, while the same account at 30s+jitter completed 52
+      # consecutive sends cleanly. The safe value has to be the DEFAULT, because
+      # a .env override is not guaranteed to be present.
+      - SEND_DELAY_MS=${SEND_DELAY_MS:-30000}
+      - SEND_JITTER_MS=${SEND_JITTER_MS:-15000}
       - SESSION_DIR=./session
       - LOG_FILE=./logs/messages.log
       # Incoming parent messages + delivery-status callbacks go to the FastAPI
