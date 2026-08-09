@@ -14754,6 +14754,69 @@ def wa_messages(limit: int = 100, status: Optional[str] = None, user = Depends(v
     return {"messages": rows, "spend_total": total, "count": len(rows)}
 
 
+@app.get("/api/teacher/whatsapp/undelivered")
+def wa_undelivered(hours: int = 24, user = Depends(verify_token)):
+    """Students whose MOST RECENT WhatsApp message in the last `hours` never landed
+    (failed / not_configured / still queued). Drives the "resend to whoever didn't
+    get it" action, so a 100-parent batch with stragglers doesn't have to be picked
+    apart by hand.
+
+    Deliberately keyed on the latest message per student regardless of what it was:
+    after a mixed day (credentials, then an announcement) it answers "who is out of
+    touch", which is the question worth retrying on.
+    """
+    _wa_require_teacher(user)
+    since = (datetime.now(timezone.utc) - timedelta(hours=max(1, hours))).isoformat()
+    try:
+        rows = service_supabase.table("whatsapp_messages").select(
+            "student_id, standard_id, status, error, created_at").eq(
+            "teacher_id", user["teacher_id"]).gte(
+            "created_at", since).order("created_at", desc=True).limit(5000).execute().data or []
+    except Exception as e:
+        print(f"[wa] undelivered lookup failed: {e}")
+        return {"students": [], "count": 0}
+
+    latest = {}
+    for r in rows:  # rows are newest-first, so the first hit per student is the latest
+        sid = r.get("student_id")
+        if sid and sid not in latest:
+            latest[sid] = r
+    stuck = {sid: r for sid, r in latest.items()
+             if r.get("status") in ("failed", "not_configured", "queued")}
+    if not stuck:
+        return {"students": [], "count": 0}
+
+    names, stds = {}, {}
+    try:
+        for s in (service_supabase.table("students").select("id, name, parent_phone, phone").in_(
+                "id", list(stuck.keys())).execute().data or []):
+            names[s["id"]] = s
+    except Exception:
+        pass
+    try:
+        for s in (service_supabase.table("standards").select("id, name").eq(
+                "teacher_id", user["teacher_id"]).execute().data or []):
+            stds[s["id"]] = s.get("name")
+    except Exception:
+        pass
+
+    out = []
+    for sid, r in stuck.items():
+        s = names.get(sid) or {}
+        out.append({
+            "student_id": sid,
+            "name": s.get("name") or "",
+            "phone": s.get("parent_phone") or s.get("phone") or "",
+            "standard_id": r.get("standard_id"),
+            "standard_name": stds.get(r.get("standard_id"), ""),
+            "status": r.get("status"),
+            "error": r.get("error"),
+            "at": r.get("created_at"),
+        })
+    out.sort(key=lambda x: (x["standard_name"], x["name"]))
+    return {"students": out, "count": len(out)}
+
+
 @app.delete("/api/teacher/whatsapp/messages")
 def wa_clear_messages(status: Optional[str] = None, before: Optional[str] = None,
                       standard_id: Optional[str] = None, user = Depends(verify_token)):

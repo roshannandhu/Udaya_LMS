@@ -43,10 +43,14 @@ def current_teacher(authorization: Optional[str] = Header(None)) -> dict:
 
 # ── Config / small helpers ─────────────────────────────────────────────────────
 def _daily_limit() -> int:
+    """Spend guard for PAID providers (Meta/WANotifier bill per message). It is a
+    second ceiling on top of the Baileys queue's own warm-up cap, so the default
+    must not sit BELOW it — at 50 it 429'd every bulk parent send for the rest of
+    the day as soon as one full class (100+) had been messaged."""
     try:
-        return max(0, int(os.getenv("DAILY_MESSAGE_LIMIT", "50")))
+        return max(0, int(os.getenv("DAILY_MESSAGE_LIMIT", "500")))
     except (TypeError, ValueError):
-        return 50
+        return 500
 
 
 def normalize_in(raw: Optional[str]) -> str:
@@ -102,8 +106,8 @@ def _enforce_daily_cap(main, teacher_id: str):
     if limit and _today_count(main, teacher_id) >= limit:
         raise HTTPException(
             status_code=429,
-            detail=f"Daily WhatsApp limit reached ({limit}). Try again tomorrow "
-                   f"or raise DAILY_MESSAGE_LIMIT.")
+            detail=f"Daily WhatsApp limit reached ({limit} messages sent today). "
+                   f"Try again tomorrow, or raise DAILY_MESSAGE_LIMIT in backend/.env.")
 
 
 def _teacher_standard_ids(main, teacher_id: str) -> set:

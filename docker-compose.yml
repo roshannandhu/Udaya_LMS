@@ -43,8 +43,18 @@ services:
     environment:
       - PORT=3100
       - SHARED_TOKEN=${SHARED_TOKEN:-}
+      # Deliberately LOW. On 2026-08-09 a ~103-parent credentials run got this
+      # number restricted by WhatsApp for "spam, automated or bulk messaging" —
+      # the linked device was removed mid-batch (stream:error 401 device_removed)
+      # and only 18 messages landed. Baileys is an UNOFFICIAL transport; 100+ new
+      # chats in one burst is exactly the pattern that trips it. Raise these only
+      # with a warmed, established number — or move bulk to the Meta Cloud API.
       - DAILY_MESSAGE_LIMIT=${DAILY_MESSAGE_LIMIT:-50}
       - WARMUP_ENABLED=${WARMUP_ENABLED:-true}
+      # Gap between sends. Raise well above the 4s default (30000+) whenever the
+      # linked number is new or has just been restricted.
+      - SEND_DELAY_MS=${SEND_DELAY_MS:-4000}
+      - SEND_JITTER_MS=${SEND_JITTER_MS:-2500}
       - SESSION_DIR=./session
       - LOG_FILE=./logs/messages.log
       # Incoming parent messages + delivery-status callbacks go to the FastAPI

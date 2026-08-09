@@ -214,12 +214,18 @@ function rememberWaId(waId, queueId) {
 }
 
 const queue = new MessageQueue(rawSend, {
-  delayMs: 4000,
+  // Gap between sends. 4s is fine for a warmed, established number; a FRESH number
+  // sending first-contact messages needs far more (30s+) — a 4s burst of ~100 new
+  // chats is what got the previous number restricted for bulk messaging.
+  delayMs: Number(process.env.SEND_DELAY_MS) || 4000,
+  jitterMs: Number(process.env.SEND_JITTER_MS) || 2500,
   retryMs: 60000,
   warmupEnabled: WARMUP_ENABLED,
   dailyLimit: DAILY_MESSAGE_LIMIT,
   sessionDir: SESSION_DIR,
   logFile: LOG_FILE,
+  // Let the queue pause instead of failing sends while the socket is reconnecting.
+  isConnected: () => connected,
   // Report the real outcome to the backend so the UI's ticks move past "queued".
   onSent: (item, res) => {
     rememberWaId(res?.key?.id, item.id);
@@ -446,6 +452,7 @@ app.get('/status', requireToken, (_req, res) => {
     today_count: queue.todayCount(),
     queue_length: queue.queueLength(),
     warmup_limit: queue.warmupLimit(),
+    held_by_cap: queue.heldByCap(),
   });
 });
 

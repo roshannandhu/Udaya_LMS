@@ -1111,6 +1111,9 @@ export const whatsappApi = {
   // Background batch send progress (large sends are queued server-side)
   getBatch: (batchId) => apiClient(`/teacher/whatsapp/batches/${batchId}`),
 
+  // Students whose last message never landed — powers "resend to who missed it"
+  getUndelivered: (hours = 24) => apiClient(`/teacher/whatsapp/undelivered?hours=${hours}`),
+
   // Pending Actions (auto-detected exam-result notifications)
   getPending:     ()       => apiClient('/teacher/whatsapp/pending'),
   dismissPending: (testId) => apiClient('/teacher/whatsapp/pending/dismiss', { method: 'POST', body: JSON.stringify({ test_id: testId }) }),

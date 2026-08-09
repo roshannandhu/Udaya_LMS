@@ -129,12 +129,27 @@ Bulk endpoints return `{ "queued": true, "batch_id": "…" }` past 10 recipients
 
 ## How the transport behaves (queue.js)
 
-- **4-second gap** between every send.
-- **Warm-up cap** by week since first connect: **50 → 100 → 200 → 500** per day
-  (`DAILY_MESSAGE_LIMIT` sets the week-1 number; `WARMUP_ENABLED=false` uses a flat cap).
-  Past the cap the queue holds; `queue_length` reflects what's waiting.
-- **Dedupe**: the same message (per-recipient content) is never sent twice — persisted to
-  `session/dedupe.json`.
+- **4-second gap** (plus random jitter) between every send. A 100-parent class takes
+  ~10–15 minutes to clear — "still queued" mid-run is pacing, not a failure.
+- **Daily cap**: warm-up ladder **50 → 100 → 200 → 500** by week since first
+  connect (`DAILY_MESSAGE_LIMIT` sets the week-1 rung, never ramps downward).
+  Past the cap the queue holds and `/status` reports `held_by_cap`.
+
+> ⚠️ **Do not raise this to clear a big class in one run.** On 2026-08-09 a
+> ~103-parent credentials send restricted the number for "spam, automated or
+> bulk messaging": WhatsApp removed the linked device mid-batch and only 18
+> messages landed. For 100+ recipients use the **Meta Cloud API** provider, not
+> Baileys. A class bigger than the cap spilling into tomorrow is the safe outcome.
+- **Pauses while disconnected** — a down socket never consumes an item's retries,
+  so a batch resumes by itself instead of mass-failing mid-run.
+- **Dedupe**: a **delivered** message is never re-sent for 24h (`session/dedupe.json`),
+  and an in-flight one can't be queued twice. A message that never went out does
+  *not* burn its key, so re-sending it always works.
+- **Survives restart**: the pending queue persists to `session/queue.json`.
+
+> There is a **second** cap in the backend (`DAILY_MESSAGE_LIMIT` in `backend/.env`,
+> default 500) that guards spend on the *paid* providers. Keep it at or above the
+> transport's cap — set lower, it 429s bulk parent sends for the rest of the day.
 - **Retry**: a failed send is retried **once after 60s**, then logged as `failed`.
 - **Node-down buffer**: if the microservice is briefly unreachable, FastAPI buffers the
   send to `backend/whatsapp_outbox.json` and a background loop delivers it once the

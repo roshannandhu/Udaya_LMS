@@ -85,6 +85,10 @@ export default function SendWizard({
   const [msg, setMsg] = useState({ mode: provider === 'meta' ? 'template' : 'freeform', category: 'utility', manual_values: {}, body_text: '' });
   const [testPhone, setTestPhone] = useState('');
 
+  // Students whose last message never landed — lets the teacher retry just the
+  // stragglers instead of hand-picking them out of a 100-parent class.
+  const [missed, setMissed] = useState([]);
+
   // Sending & result
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);  // {sent,total,cost,configured,failedExample}
@@ -109,6 +113,22 @@ export default function SendWizard({
       .flatMap(g => g.students.filter(s => s.phone && s.phone.trim() !== '' && !s.opted_out).map(s => s.id));
     setSelected(new Set(ids));
   }, [examId, examStandardId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let ignore = false;
+    whatsappApi.getUndelivered()
+      .then(r => { if (!ignore) setMissed(r?.students || []); })
+      .catch(() => { /* retry-helper only — never block the wizard */ });
+    return () => { ignore = true; };
+  }, []);
+
+  // Only the ones we can actually message again (same rule as ClassPicker).
+  const missedIds = useMemo(() => {
+    const ids = new Set(missed.map(m => m.student_id));
+    return visibleGroups.flatMap(g => g.students)
+      .filter(s => ids.has(s.id) && s.phone && s.phone.trim() !== '' && !s.opted_out)
+      .map(s => s.id);
+  }, [missed, visibleGroups]);
 
   const count = selected.size;
   const category = task === 'announcement' ? msg.category : 'utility';
@@ -323,6 +343,18 @@ export default function SendWizard({
               {!examsLoading && exams.length === 0 && <p className="text-[11px] text-neutral-400 mt-1">No exams found yet.</p>}
               {examStandardId && <p className="text-[11px] text-neutral-400 mt-1.5">Results go only to this exam’s class; only students who took it receive one.</p>}
             </div>
+          )}
+          {missedIds.length > 0 && (
+            <button
+              onClick={() => setSelected(new Set(missedIds))}
+              className="w-full text-left glass-panel border border-amber-200 bg-amber-50/60 rounded-2xl px-3.5 py-3 hover:bg-amber-50 transition-colors">
+              <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
+                <History size={14} /> Select only the {missedIds.length} who didn’t get the last message
+              </p>
+              <p className="text-[11px] text-amber-700/80 mt-0.5">
+                Failed or still undelivered in the last 24 hours — tap to retry just these.
+              </p>
+            </button>
           )}
           {(task !== 'exam' || examId) && (
             <ClassPicker groups={visibleGroups} selected={selected} onChange={setSelected} onStudentUpdated={reloadRecipients} />
