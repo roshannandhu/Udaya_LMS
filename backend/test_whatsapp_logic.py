@@ -173,3 +173,18 @@ def test_welcome_send_resolves_meta_template_approval():
     # provider-side template id — either alone would send an unusable template.
     helper = inspect.getsource(main._wa_template_meta)
     assert "provider_template_id" in helper and "approved" in helper
+
+
+def test_student_code_login_tolerates_spaces_and_separators():
+    """A Student ID retyped from WhatsApp often carries an internal space
+    ("26UDAYA 100099"). login() only did .strip(), which removes the ends but not
+    the middle, so the student_code lookup missed and the parent was told
+    "Invalid credentials". Observed live in the login diagnostics."""
+    import inspect
+    import re as _re
+    source = inspect.getsource(main._login_impl)
+    assert "code_candidate" in source, "the code lookup must normalise the identifier"
+
+    # The normalisation itself must collapse spaces, hyphens and underscores.
+    for raw in ("26UDAYA 100099", " 26udaya100099 ", "26-UDAYA-100099", "26_UDAYA_100099"):
+        assert _re.sub(r"[\s\-_]+", "", raw).upper() == "26UDAYA100099", raw

@@ -1844,8 +1844,14 @@ def _login_impl(request: LoginRequest):
         #    rows (possible if the unique index migration never ran), which
         #    silently killed Student-ID login for the affected students.
         try:
+            # Strip ALL whitespace, not just the ends: parents retyping the ID from
+            # a WhatsApp message routinely add a space ("26UDAYA 100099"), and the
+            # outer .strip() leaves an internal one intact, so the lookup missed and
+            # the student was told "Invalid credentials". Hyphens/underscores get the
+            # same treatment — the stored code is a single unbroken token.
+            code_candidate = re.sub(r"[\s\-_]+", "", identifier).upper()
             rows = service_supabase.table("students").select("id, email, username").eq(
-                "student_code", identifier.upper()).limit(1).execute().data or []
+                "student_code", code_candidate).limit(1).execute().data or []
             resolved = _set_student_login_candidates(rows[0]) if rows else False
             if rows and not resolved:
                 resolution_note.append("code row found but no email/username")
