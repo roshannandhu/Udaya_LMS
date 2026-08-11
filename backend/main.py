@@ -1891,6 +1891,34 @@ def _login_impl(request: LoginRequest):
                         resolved = _set_student_login_candidates(s)
                         break
             if not resolved:
+                # Parent-number fallback. Credentials arrive ON the parent's phone,
+                # so parents naturally try that number — the live login log is full
+                # of these, all rejected because only students.phone was searched.
+                # Safe ONLY when the number maps to exactly one student: siblings
+                # share a parent number, and picking one would log the family into
+                # the wrong child's account.
+                try:
+                    p_last10 = digits_only[-10:] if len(digits_only) >= 10 else digits_only
+                    cand = service_supabase.table("students").select(
+                        "id, email, username, parent_phone").like(
+                        "parent_phone", f"%{p_last10}%").execute().data or []
+                    matches = []
+                    for s in cand:
+                        sd = re.sub(r'\D', '', s.get("parent_phone") or "")
+                        if sd and (sd.endswith(digits_only) or digits_only.endswith(sd)):
+                            matches.append(s)
+                    if len(matches) == 1:
+                        resolved = _set_student_login_candidates(matches[0])
+                    elif len(matches) > 1:
+                        raise HTTPException(status_code=401, detail=(
+                            f"This number is registered for {len(matches)} students. "
+                            "Please log in with the Student ID instead (e.g. 26UDAYA100001)."))
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    resolution_note.append(f"parent phone lookup error: {e}")
+
+            if not resolved:
                 # Not a student — try sub-teacher lookup by name or phone
                 sub_resolved = False
                 if service_supabase:
@@ -1915,7 +1943,15 @@ def _login_impl(request: LoginRequest):
                         print(f"[login] sub-teacher lookup error: {st_err}")
                 if not sub_resolved:
                     print(f"[login] unresolved identifier '{identifier}' - {'; '.join(resolution_note) or 'no matching student or teacher row'}")
-                    raise HTTPException(status_code=401, detail="Invalid credentials")
+                    # Say WHICH half failed. A single "Invalid credentials" for both
+                    # a wrong ID and a wrong password left parents retrying the
+                    # password forever when the real problem was a mistyped ID —
+                    # 132 of 169 login attempts failed this way. This does allow
+                    # probing which IDs exist, which is an acceptable trade for
+                    # teacher-issued codes that are already shared with families.
+                    raise HTTPException(status_code=401, detail=(
+                        "No account found with that ID, username or phone number. "
+                        "Student IDs look like 26UDAYA100001 — check it with your teacher."))
         except HTTPException:
             raise
         except Exception as e:
@@ -2145,8 +2181,16 @@ def _login_impl(request: LoginRequest):
         }
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    except Exception as e:
+        # By this point the identifier HAS resolved to a real account, so a
+        # rejection here means the password was wrong — say that instead of a
+        # blanket "Invalid credentials", which sent parents back to re-checking
+        # an ID that was already correct. Anything else (network, Supabase down)
+        # must not be mislabelled as a bad password.
+        if "invalid login credentials" in str(e).lower():
+            raise HTTPException(status_code=401, detail=(
+                "Incorrect password. Ask your teacher to reset it if you've forgotten it."))
+        raise HTTPException(status_code=401, detail="Could not sign in. Please try again.")
 
 
 @app.post("/api/auth/verify-otp")

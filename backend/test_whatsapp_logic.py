@@ -188,3 +188,29 @@ def test_student_code_login_tolerates_spaces_and_separators():
     # The normalisation itself must collapse spaces, hyphens and underscores.
     for raw in ("26UDAYA 100099", " 26udaya100099 ", "26-UDAYA-100099", "26_UDAYA_100099"):
         assert _re.sub(r"[\s\-_]+", "", raw).upper() == "26UDAYA100099", raw
+
+
+def test_login_errors_distinguish_unknown_account_from_wrong_password():
+    """Login must say WHICH half failed.
+
+    Every failure used to return "Invalid credentials", so a parent who mistyped
+    the Student ID kept retrying the password. 132 of 169 live login attempts
+    failed, and the logs show mistyped IDs and parent phone numbers as the cause."""
+    import inspect
+    source = inspect.getsource(main._login_impl)
+    assert "No account found with that ID" in source, "unknown identifier needs its own message"
+    assert "Incorrect password" in source, "wrong password needs its own message"
+    # A non-credential failure (network/Supabase down) must NOT be called a bad password.
+    assert "Could not sign in" in source
+
+
+def test_parent_phone_login_is_allowed_but_never_ambiguous():
+    """A parent's own number should log the student in, since that is where the
+    credentials were delivered — but only when it maps to exactly ONE student.
+    Five parent numbers are shared by siblings; picking one would sign the family
+    into the wrong child's account."""
+    import inspect
+    source = inspect.getsource(main._login_impl)
+    assert "parent_phone" in source, "parent number must be a login fallback"
+    assert "len(matches) == 1" in source, "resolve only on a unique match"
+    assert "registered for" in source, "ambiguous match must ask for the Student ID"
